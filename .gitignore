@@ -1,0 +1,13 @@
+# Claude Code — local/user-specific settings (permission overrides, etc.)
+.claude/settings.local.json
+
+# Windows / macOS metadata
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor state
+.vs/
+*.suo
+*.user
