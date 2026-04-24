@@ -45,7 +45,7 @@ Open `docs/implementation-plan.md` and:
 ```
 ### Left Off — [DATE]
 - **Last completed step**: Step X — [description]
-- **Last completed step**: Step Y — [precise state, e.g. "DimCalendar.sql running in Fabric portal, not yet confirmed"]
+- **In progress**: Step Y — [precise state, e.g. "DimCalendar.sql running in Fabric portal, not yet confirmed"]
 - **Next action**: [exact first thing to do next session]
 - **Blockers**: [anything blocking progress, or "None"]
 ```

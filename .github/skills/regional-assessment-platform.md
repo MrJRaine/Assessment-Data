@@ -124,8 +124,8 @@ description: Technical architecture and implementation guide for a regional stud
 - `DimProgram` - PowerSchool program code reference (GradeBand, ProgramFamily, IsImmersion, SpecialtyType)
 - `DimReadingScale` - Reading level reference values
 
-**Security Tables**:
-- `StaffSchoolAccess` - School-level authorization (auto-rebuilt from staff export, no manual entries)
+**Security Views**:
+- `vw_StaffSchoolAccess` - School-level authorization for admins and regional analysts, derived live from `FactStaffAssignment` at query time (no rebuild step, no drift risk)
 - Teacher-level section access is derived from `FactSectionTeachers` at query time — no separate RLS table
 
 ### Critical Design Principle: Use Surrogate Keys
@@ -169,12 +169,13 @@ CREATE TABLE DimStudent (
     StudentKey          BIGINT NOT NULL IDENTITY,  -- Surrogate key, unique per version
     StudentNumber       BIGINT NOT NULL,           -- Business key: provincial 10-digit student number
     FirstName           VARCHAR(100),
+    MiddleName          VARCHAR(100),              -- Nullable; disambiguates same-name students in the same school/grade
     LastName            VARCHAR(100),
     DateOfBirth         DATE,
     CurrentGrade        VARCHAR(10),               -- Triggers new version
     CurrentSchoolID     INT,                       -- Triggers new version
     ProgramCode         VARCHAR(10),               -- Triggers new version, e.g. 'E015', 'S115'
-    ActiveFlag          BIT,
+    EnrollStatus        INT,                       -- PS Enroll_Status: 1 = enrolled, 0 = inactive, -1 = pre-registered
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,                 -- NULL = current version
     IsCurrent           BIT NOT NULL,              -- 1 = current, 0 = historical
@@ -186,18 +187,21 @@ CREATE TABLE DimStudent (
 **Attributes that trigger new version** (SCD Type 2):
 - `CurrentGrade` - Student promoted
 - `CurrentSchoolID` - Student transferred schools
-- `ProgramCode` - Switched between EN/FR programs
+- `ProgramCode` - Program change (see DimProgram for valid codes)
 
 **Attributes that just update** (SCD Type 1):
-- `FirstName`, `LastName` - Name corrections
+- `FirstName`, `MiddleName`, `LastName` - Name corrections
 - `DateOfBirth` - Data corrections
-- `StudentNumber` - Administrative changes
 
-### DimStaff (SCD Type 2)
+**Note on business key:** `StudentNumber` is the provincial 10-digit student ID (PowerSchool's "Student Number" field). It's more stable than PowerSchool's internal DCID — it follows the student across schools, regions, and re-enrollments. `SourceSystemID` stores the PowerSchool DCID for reference only, not for matching.
 
-**Purpose**: Track staff assignments and roles over time
+### DimStaff (SCD Type 2) + FactStaffAssignment (bridge)
 
-**Schema**:
+**Purpose**: Track staff identity over time, with per-school/per-role detail split into a bridge table. DimStaff is pure person identity; FactStaffAssignment preserves the full PowerSchool export grain (email × school × role).
+
+**Why split?** PS emits one row per staff-school-role combination. A vice-principal who also teaches one class at the same school appears twice; an itinerant specialist at five schools appears five times. Collapsing that to a single "winning" role on DimStaff would lose information. The bridge preserves full grain; DimStaff answers "who is this person?" without lying about their assignments.
+
+**DimStaff schema**:
 ```sql
 -- Conceptual schema. See sql/dimensions/DimStaff.sql for Fabric Warehouse-compatible DDL.
 CREATE TABLE DimStaff (
@@ -205,20 +209,43 @@ CREATE TABLE DimStaff (
     Email               VARCHAR(255) NOT NULL,     -- Business key (Entra ID UPN, lowercased)
     FirstName           VARCHAR(100),
     LastName            VARCHAR(100),
-    RoleCode            VARCHAR(50),               -- Triggers new version
-    HomeSchoolID        INT NULL,                  -- Triggers new version; NULL for itinerant staff
-    ActiveFlag          BIT,
+    ActiveFlag          BIT,                       -- Only Type 2 trigger (import reconciliation)
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,
     IsCurrent           BIT NOT NULL,
-    SourceSystemID      VARCHAR(50),               -- PowerSchool staff record ID (reference only, NOT for matching)
     LastUpdated         DATETIME2(0)
 );
 ```
 
-**Attributes that trigger new version**:
-- `HomeSchoolID` - Teacher transferred
-- `RoleCode` - Role change (Teacher → Admin)
+No `RoleCode`, `HomeSchoolID`, or `SourceSystemID` on DimStaff — those moved to `FactStaffAssignment` (or are inapplicable because of the collapse).
+
+**FactStaffAssignment schema** (one row per distinct email × school × role):
+```sql
+CREATE TABLE FactStaffAssignment (
+    StaffAssignmentID   BIGINT NOT NULL IDENTITY,
+    StaffKey            BIGINT NOT NULL,           -- FK to DimStaff
+    SchoolID            VARCHAR(10) NOT NULL,
+    RoleCode            VARCHAR(50) NOT NULL,      -- 'Teacher', 'Administrator', 'Specialist', 'RegionalAnalyst'
+    EffectiveStartDate  DATE NOT NULL,
+    EffectiveEndDate    DATE NULL,                 -- NULL = currently held
+    IsCurrent           BIT NOT NULL,
+    SourceSystemID      VARCHAR(50),               -- PS staff record ID for this specific triple
+    LastUpdated         DATETIME2(0)
+);
+```
+
+**SCD semantics — both tables need reconciliation**:
+
+| Event | DimStaff | FactStaffAssignment |
+|---|---|---|
+| New email in import | INSERT with ActiveFlag=1 | INSERT one row per school×role |
+| Existing, still present | Type 1 update (name) | No-op if triple unchanged; otherwise upsert |
+| Existing, absent from import | Type 2 close + new inactive (ActiveFlag=0) | Type 2 close all current rows for that StaffKey |
+| Returning (inactive → present) | Type 2 close + new active (ActiveFlag=1) | Fresh INSERTs for current school×role triples |
+
+**ActiveFlag lifecycle**: `ActiveFlag` is NOT pulled from PowerSchool — the staff export comes from a PS report pre-filtered to currently active staff (teachers + specialists + admins). Inclusion implies active. The merge procedure derives `ActiveFlag` via anti-join reconciliation. "Inactive" does NOT mean "no longer employed" — it means the person dropped out of the active-staff report this cycle (on leave, sabbatical, retired, role change, left region).
+
+**Note on business key:** `Email` is the business key, not a PowerSchool ID. There's no `SourceSystemID` on DimStaff because multiple PS records can collapse into one DimStaff row — the PS record ID is preserved per-row on FactStaffAssignment instead.
 
 ### DimSection (SCD Type 2)
 
@@ -631,32 +658,34 @@ SELECT
     adm.Email AS AdminEmail
 FROM DimStudent s
 JOIN DimSchool sch ON s.CurrentSchoolID = sch.SchoolID
-CROSS JOIN DimStaff adm
-JOIN RLS_UserSchoolAccess access 
-    ON adm.Email = access.UserEmail 
-    AND s.CurrentSchoolID = access.SchoolID
+JOIN vw_StaffSchoolAccess access
+    ON s.CurrentSchoolID = access.SchoolID
 WHERE s.IsCurrent = 1
-  AND adm.RoleCode = 'Administrator';
+  AND access.AccessLevel IN ('Administrator', 'RegionalAnalyst');
 ```
 
-### RLS Mapping Tables
+### RLS Derivation (no manual tables)
 
-**RLS_UserSchoolAccess**:
+Access is derived live — there are no RLS junction tables that need to be maintained or rebuilt:
+
+**School-level access** — `sql/security/vw_StaffSchoolAccess.sql`:
 ```sql
-CREATE TABLE RLS_UserSchoolAccess (
-    UserEmail NVARCHAR(255),
-    SchoolID INT,
-    PRIMARY KEY (UserEmail, SchoolID)
-);
+CREATE VIEW vw_StaffSchoolAccess AS
+SELECT fsa.StaffKey, ds.Email, fsa.SchoolID, fsa.RoleCode AS AccessLevel
+FROM FactStaffAssignment fsa
+JOIN DimStaff ds ON ds.StaffKey = fsa.StaffKey
+WHERE fsa.IsCurrent = 1
+  AND ds.IsCurrent = 1
+  AND ds.ActiveFlag = 1
+  AND fsa.RoleCode IN ('Administrator', 'RegionalAnalyst');
 ```
 
-**RLS_UserSectionAccess** (alternative to joining through FactEnrollment):
+**Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`:
 ```sql
-CREATE TABLE RLS_UserSectionAccess (
-    UserEmail NVARCHAR(255),
-    SectionKey INT,
-    PRIMARY KEY (UserEmail, SectionKey)
-);
+-- Pattern used in vw_TeacherStudents
+JOIN FactSectionTeachers fst ON fst.SectionKey = e.SectionKey AND fst.IsCurrent = 1
+JOIN DimStaff t ON t.StaffKey = fst.StaffKey AND t.IsCurrent = 1
+WHERE t.Email = USERPRINCIPALNAME()
 ```
 
 ---
