@@ -209,6 +209,9 @@ CREATE TABLE DimStaff (
     Email               VARCHAR(255) NOT NULL,     -- Business key (Entra ID UPN, lowercased)
     FirstName           VARCHAR(100),
     LastName            VARCHAR(100),
+    HomeSchoolID        VARCHAR(10) NULL,          -- Type 1; primary school (NULL for itinerant staff)
+    CanChangeSchool     VARCHAR(255) NULL,         -- Type 1; raw PS semicolon-separated school list
+    IsDistrictLevel     BIT,                       -- Type 1; derived (1 if '0' present in CanChangeSchool)
     ActiveFlag          BIT,                       -- Only Type 2 trigger (import reconciliation)
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,
@@ -217,7 +220,7 @@ CREATE TABLE DimStaff (
 );
 ```
 
-No `RoleCode`, `HomeSchoolID`, or `SourceSystemID` on DimStaff — those moved to `FactStaffAssignment` (or are inapplicable because of the collapse).
+`RoleCode` and `SourceSystemID` are NOT on DimStaff — those moved to `FactStaffAssignment` (or are inapplicable because of the collapse). The three per-person access columns (`HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`) live here because they describe the person, not a specific assignment — PS sources them from a joined table and emits the same values on every row of a multi-row staff member.
 
 **FactStaffAssignment schema** (one row per distinct email × school × role):
 ```sql
@@ -669,16 +672,21 @@ WHERE s.IsCurrent = 1
 Access is derived live — there are no RLS junction tables that need to be maintained or rebuilt:
 
 **School-level access** — `sql/security/vw_StaffSchoolAccess.sql`:
-```sql
-CREATE VIEW vw_StaffSchoolAccess AS
-SELECT fsa.StaffKey, ds.Email, fsa.SchoolID, fsa.RoleCode AS AccessLevel
-FROM FactStaffAssignment fsa
-JOIN DimStaff ds ON ds.StaffKey = fsa.StaffKey
-WHERE fsa.IsCurrent = 1
-  AND ds.IsCurrent = 1
-  AND ds.ActiveFlag = 1
-  AND fsa.RoleCode IN ('Administrator', 'RegionalAnalyst');
+
+Driven by PS-native fields `HomeSchoolID` and `CanChangeSchool` on DimStaff, role-gated to non-teaching staff via `FactStaffAssignment`. Output schema:
 ```
+StaffKey | Email | SchoolID | AccessLevel
+```
+
+Parse rules for `CanChangeSchool` (semicolon-separated list):
+- `999999` (graduates pseudo-school) → stripped
+- `0` (district-level tier marker) → emitted as `'0000'` aggregate-row marker
+- Any other integer → zero-padded to 4 chars (e.g. `79` → `'0079'`)
+
+`AccessLevel` is the staff member's highest-priority current non-teaching role
+(`Administrator > RegionalAnalyst > Specialist`) — same value across all rows for that StaffKey. It's a person-tier indicator, not a per-school role claim.
+
+Teachers are excluded entirely — their RLS comes from FactSectionTeachers (section-level). The `'0000'` aggregate row only surfaces for non-teaching staff who have `'0'` in their CanChangeSchool list.
 
 **Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`:
 ```sql

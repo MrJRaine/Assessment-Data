@@ -45,10 +45,12 @@ The ingest splits each raw row into two destinations:
 | CSV Column | Type | Feeds | Description | PowerSchool Field |
 |---|---|---|---|---|
 | Email | VARCHAR(255) | `DimStaff.Email` (dedupe key) + `FactStaffAssignment.StaffKey` lookup | **Business key** — Entra ID UPN. Must match exactly what the user signs into Teams with. Will be lowercased during ingest | Email_Addr |
-| FirstName | VARCHAR(100) | `DimStaff.FirstName` | | |
-| LastName | VARCHAR(100) | `DimStaff.LastName` | | |
-| SchoolID | VARCHAR(10) | `FactStaffAssignment.SchoolID` | 4-digit provincial school number (leading zeros normalized during ingest) | |
-| RoleCode | VARCHAR(50) | `FactStaffAssignment.RoleCode` | Expected values: `Teacher`, `Administrator`, `Specialist`, `RegionalAnalyst`. PowerSchool's equivalent label goes here; we'll map during ingest | |
+| FirstName | VARCHAR(100) | `DimStaff.FirstName` | | First_Name |
+| LastName | VARCHAR(100) | `DimStaff.LastName` | | Last_Name |
+| HomeSchoolID | VARCHAR(10) | `DimStaff.HomeSchoolID` | Per-person primary/home school (4-digit provincial number). Sourced from a joined PS table; same value on every row of a multi-row staff member. Leave blank for itinerant staff with no single home school | HomeSchoolID |
+| CanChangeSchool | VARCHAR(255) | `DimStaff.CanChangeSchool` | Per-person semicolon-separated list of school IDs the user can navigate to in PS (e.g. `0;79;167;1199;999999`). Sourced from a joined PS table; same value on every row of a multi-row staff member. Populated only for staff with multi-school access; leave blank otherwise. Special markers: `0` = district-level tier, `999999` = graduates pseudo-school | CanChangeSchool |
+| SchoolID | VARCHAR(10) | `FactStaffAssignment.SchoolID` | 4-digit provincial school number for **this row's** assignment (leading zeros normalized during ingest). Different from HomeSchoolID — this varies per row when staff appear multiple times | SchoolID |
+| RoleCode | VARCHAR(50) | `FactStaffAssignment.RoleCode` | Expected values: `Teacher`, `Administrator`, `Specialist`, `RegionalAnalyst`. PowerSchool's equivalent label goes here; we'll map during ingest | Group |
 | ID | VARCHAR(50) | `FactStaffAssignment.SourceSystemID` | PowerSchool staff record ID for this specific email×school×role row. Reference/debug only, NOT used for matching | ID |
 
 ### `ActiveFlag` derivation (not a CSV column)
@@ -71,37 +73,63 @@ Because of this logic, **no `Status` / active-flag column is needed in the CSV**
 
 **Schools are not requested from PowerSchool.** `DimSchool` is seeded directly from the Nova Scotia Department of Education 2024-2025 Directory of Public Schools (see [sql/scripts/seed_DimSchool_TCRCE.sql](../sql/scripts/seed_DimSchool_TCRCE.sql)). This is the authoritative provincial source.
 
-**What PowerSchool must still match**: the `SchoolID` values used in Students.CurrentSchoolID, Staff.HomeSchoolID, and Sections.SchoolID must all be the **4-digit provincial school number** (e.g. `'0079'`, `'0167'`). If PowerSchool strips leading zeros on export, that's fine — the ingest will zero-pad. But the number itself must be the provincial 4-digit code, not a PowerSchool-internal ID.
+**What PowerSchool must still match**: the `SchoolID` values used in `Students.CurrentSchoolID`, `FactStaffAssignment.SchoolID` (sourced from the Staff export), and `Sections.SchoolID` must all be the **4-digit provincial school number** (e.g. `'0079'`, `'0167'`). If PowerSchool strips leading zeros on export, that's fine — the ingest will zero-pad. But the number itself must be the provincial 4-digit code, not a PowerSchool-internal ID.
 
 ---
 
-## Export 4 — Sections (→ `DimSection`)
+## Export 4 — Sections (→ `DimSection` + `FactSectionTeachers`)
 
-One row per instructional section in the pilot schools. For now we only need the **primary teacher of record**; co-teaching fields handled in Export 5 below if available.
+One row per instructional section in the pilot schools. The primary teacher's email feeds **both** targets:
+- `DimSection.TeacherStaffKey` — canonical teacher-of-record on the section dim
+- One `FactSectionTeachers` row per section with `TeacherRole = 'Primary'`
+
+Co-teaching arrangements (if PS tracks them) are handled by Export 5 below — **do not** include co-teachers here.
 
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
-| SectionID | VARCHAR(50) | **Business key** — region-unique identifier per section | |
-| SchoolID | VARCHAR(10) | 4-digit provincial school number the section is in | |
+| SectionID | VARCHAR(50) | **Business key** — region-unique identifier per section | ID |
+| SchoolID | VARCHAR(10) | 4-digit provincial school number the section is in | SchoolID |
 | TermID | INT | PS 4-digit TermID (e.g. `3501` = 2025-2026 Semester 1). Format: `YY` = year-1990, `TT` = 00 Year Long / 01 S1 / 02 S2. Joins to `DimTerm` to decode school year + term | TermID |
-| CourseCode | VARCHAR(50) | Course identifier (e.g. 'MATH-3-FR') | |
-| TeacherEmail | VARCHAR(255) | **SCD Type 2 trigger** — the teacher-of-record's email (we'll look up the StaffKey during ingest via email match) | |
+| CourseCode | VARCHAR(50) | Course identifier (e.g. 'MATH-3-FR') | Course_Number |
+| PrimaryTeacherEmail | VARCHAR(255) | The teacher-of-record's email. On ingest: looked up against `DimStaff.Email` to resolve `StaffKey`, then written to (a) `DimSection.TeacherStaffKey` and (b) one `FactSectionTeachers` row per section with `TeacherRole = 'Primary'`. **SCD Type 2 trigger for DimSection** — a change here closes the current section row and opens a new version | [39]Email_Addr |
+
+### SCD lifecycle (warehouse-derived, NOT pulled from PS)
+
+`EffectiveStartDate` and `EffectiveEndDate` are not columns in this export — the merge procedure derives them at ingest from the import date.
+
+**`DimSection` SCD Type 2:**
+- New `SectionID` → INSERT row with `EffectiveStartDate = import_date`, `IsCurrent = 1`
+- Existing `SectionID` with **same** `PrimaryTeacherEmail` → Type 1 update only (CourseCode, etc.)
+- Existing `SectionID` with **different** `PrimaryTeacherEmail` → close current row (`EffectiveEndDate = import_date - 1`, `IsCurrent = 0`) and INSERT new version (`EffectiveStartDate = import_date`, `IsCurrent = 1`)
+- `SectionID` no longer in import → close current row (`IsCurrent = 0`); do not insert a replacement
+
+**`FactSectionTeachers` Primary rows** seeded from this export:
+- New (`SectionKey`, primary `StaffKey`) → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`, `TeacherRole = 'Primary'`
+- Same triple still appears → no-op (touch `LastUpdated`)
+- Triple drops out (primary teacher changed, or section retired) → close current row (`EffectiveEndDate = import_date`, `IsCurrent = 0`)
 
 ---
 
-## Export 5 — Section Teachers (→ `FactSectionTeachers`) — *if available*
+## Export 5 — Co-Teachers (→ `FactSectionTeachers`) — *if PS tracks them*
 
-One row per teacher-section assignment. Include the primary teacher AND any co-teachers/support teachers for that section.
+**Purpose:** capture additional non-primary teachers (co-teachers, support staff, substitutes) per section. **Do NOT include the primary teacher** — they're already covered by Export 4.
 
-If PowerSchool **only** exports the primary teacher per section (no co-teachers), skip this export — the ingest will fall back to using `DimSection.TeacherStaffID` as the sole entry.
+If PS doesn't track co-teaching at all, **skip this export entirely**. `FactSectionTeachers` will end up populated with primary-teacher rows from Export 4 alone, and that's the complete picture.
 
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
-| SectionID | VARCHAR(50) | Must match a SectionID from Sections export | |
-| TeacherEmail | VARCHAR(255) | The teacher's email (matches `Email` in the Staff export) | |
-| TeacherRole | VARCHAR(50) | Expected values: 'Primary', 'CoTeacher', 'Support', 'Substitute'. PowerSchool's equivalent label goes here; we'll map during ingest | |
-| EffectiveStartDate | DATE | When this teacher's assignment to the section began (or school year start if not tracked) | |
-| EffectiveEndDate | DATE | When this teacher's assignment ended, or blank/NULL if still active | |
+| SectionID | VARCHAR(50) | Must match a `SectionID` from the Sections export | ID |
+| TeacherEmail | VARCHAR(255) | The non-primary teacher's email (matches `Email` in the Staff export). On ingest: looked up against `DimStaff.Email` to resolve `StaffKey` | [39]Email_Addr |
+| TeacherRole | VARCHAR(50) | Expected values: `CoTeacher`, `Support`, `Substitute`. **NOT `Primary`** — that role is reserved for Export 4. PS's equivalent label goes here; we'll map during ingest | Role |
+
+### SCD lifecycle (warehouse-derived, NOT pulled from PS)
+
+Same pattern as the Primary rows from Export 4 — `EffectiveStartDate` and `EffectiveEndDate` are derived at ingest:
+- New (`SectionKey`, `StaffKey`, `TeacherRole`) triple → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`
+- Same triple still appears in this import → no-op (touch `LastUpdated`)
+- Triple drops out (co-teacher removed, or assignment ended) → close current row (`EffectiveEndDate = import_date`, `IsCurrent = 0`)
+
+The merge procedure reconciles primary and non-primary rows independently within `FactSectionTeachers` — a co-teacher leaving doesn't affect the primary row, and vice versa.
 
 ---
 
@@ -166,4 +194,4 @@ For reference, these warehouse tables get their data from other sources (no Powe
 - `DimReadingScale` — static reference data (reading level benchmarks)
 - `FactAssessmentReading` / `FactAssessmentWriting` — populated by teachers via Power Apps
 - `FactSubmissionAudit` — populated automatically by ingestion and Power Apps
-- `StaffSchoolAccess` — derived automatically from `DimStaff` during the staff ingest
+- `vw_StaffSchoolAccess` — view derived live from `FactStaffAssignment` (no rebuild step, no PS data needed beyond what already feeds the Staff export)

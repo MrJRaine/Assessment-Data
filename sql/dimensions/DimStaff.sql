@@ -19,11 +19,17 @@
  *                       bridge. DimStaff is now pure person identity. Dropped
  *                       columns: RoleCode, HomeSchoolID, SourceSystemID.
  *                       ActiveFlag is now the ONLY Type 2 trigger.
+ *            2026-04-27 - Added per-person access attributes (all Type 1):
+ *                       HomeSchoolID, CanChangeSchool, IsDistrictLevel.
+ *                       Sourced from PS staff record (joined into the staff
+ *                       export). Drives vw_StaffSchoolAccess for non-teaching
+ *                       staff school-level RLS.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
 -- Type 2 attributes (trigger a new version): ActiveFlag
--- Type 1 attributes (update in place): FirstName, LastName
+-- Type 1 attributes (update in place): FirstName, LastName, HomeSchoolID,
+--                                      CanChangeSchool, IsDistrictLevel
 --
 -- Business key: Email (normalized to lowercase during ingest)
 -- Surrogate key: StaffKey (warehouse-generated, unique per SCD version)
@@ -34,6 +40,20 @@
 -- in FactStaffAssignment (email x school x role bridge), not here. There is no
 -- SourceSystemID on this table because multiple PS records collapse to one
 -- DimStaff row — the PS record ID is preserved on each FactStaffAssignment row.
+--
+-- Per-person access attributes (added 2026-04-27):
+--   * HomeSchoolID     — primary/home school. NULL for itinerant staff with no
+--                        single primary school.
+--   * CanChangeSchool  — raw PS field, semicolon-separated list of provincial
+--                        school IDs the user can navigate to in PS. Populated
+--                        only when the user has multi-school access. Includes
+--                        special markers: '0' (district-level tier), '999999'
+--                        (graduates pseudo-school — should not appear for staff).
+--                        Parsed live by vw_StaffSchoolAccess.
+--   * IsDistrictLevel  — derived flag set at ingest: 1 if '0' appears in the
+--                        CanChangeSchool list, else 0. Drives whether the
+--                        '0000' aggregate row surfaces for the user in
+--                        vw_StaffSchoolAccess.
 --
 -- ActiveFlag lifecycle (import-driven, not pulled from PowerSchool):
 --   Staff are exported from a PowerSchool report that filters to currently active
@@ -57,6 +77,9 @@ CREATE TABLE DimStaff (
     Email               VARCHAR(255)    NOT NULL,           -- Business key (Entra ID UPN, lowercased)
     FirstName           VARCHAR(100)    NOT NULL,
     LastName            VARCHAR(100)    NOT NULL,
+    HomeSchoolID        VARCHAR(10)     NULL,               -- Primary school; NULL for itinerant staff
+    CanChangeSchool     VARCHAR(255)    NULL,               -- Raw PS semicolon-separated school list
+    IsDistrictLevel     BIT             NOT NULL,           -- Derived: '0' present in CanChangeSchool
     ActiveFlag          BIT             NOT NULL,           -- Type 2 trigger; derived via import reconciliation
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,               -- NULL = current version

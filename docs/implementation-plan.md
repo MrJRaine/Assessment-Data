@@ -93,19 +93,26 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Fabric Warehouse T-SQL limitations**: No `DEFAULT` constraints, no `PRIMARY KEY`/`FOREIGN KEY` in `CREATE TABLE`, no `NVARCHAR` (use `VARCHAR`), no `DATETIME` (use `DATETIME2(0)`), `DATETIME2` requires explicit precision 0–6, `IDENTITY` columns must be `BIGINT` not `INT`, `IDENTITY` takes no seed/increment parameters, `CREATE INDEX` not supported (columnstore is automatic). Data integrity is enforced through ETL procedures, not database constraints. FK relationships must be defined manually in the Power BI semantic model. Full reference in `/fabric-warehouse-sql` skill.
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5,844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 
-### Left Off — 2026-04-24 (afternoon session)
-- **Last completed step**: Step 5. All schema for Phase 1 now deployed in `Assessment_Warehouse`. Initial commit pushed to GitHub ([MrJRaine/Assessment-Data](https://github.com/MrJRaine/Assessment-Data)).
-- **Step 6 in progress**: Field mapping doc ([docs/powerschool-field-mapping.md](powerschool-field-mapping.md)) partially filled — Students export (most PS field names mapped), partial Staff (Email_Addr, ID), Sections (TermID). Section-Teachers and Enrollments still mostly blank. Ready to continue filling or send to PS admin for completion.
-- **Warehouse schema changes applied this session** (all tables were empty, so all are rebuilds, not migrations):
-  - `DimStudent`: added `MiddleName VARCHAR(100) NULL` (same-name disambiguation); `ActiveFlag BIT` → `EnrollStatus INT` (preserves PS tri-state: `1`/`0`/`-1` pre-registered)
-  - `DimTerm`: new reference dim, 63 rows seeded (2015-2016 → 2035-2036 × 3 terms). Decodes PS `TermID` YYTT convention.
-  - `DimSection`: added `TermID INT NOT NULL` (joins to DimTerm)
-  - **DimStaff redesigned as pure person identity** — dropped `RoleCode`, `HomeSchoolID`, `SourceSystemID`. Only `ActiveFlag` remains as Type 2 trigger. Per-school/per-role detail now lives in new `FactStaffAssignment` bridge (email × school × role grain).
-  - `StaffSchoolAccess` **table dropped**, replaced by `vw_StaffSchoolAccess` **view** at [sql/security/vw_StaffSchoolAccess.sql](../sql/security/vw_StaffSchoolAccess.sql). Single source of truth, no rebuild step.
-- **Key decisions this session**:
-  - DimStaff.ActiveFlag is import-driven (via reconciliation anti-join), not pulled from PS. PS report already filters to active staff; the report scope includes teachers + school specialists + admins.
-  - "Inactive" ≠ "no longer employed" — it just means dropped out of the active-staff report (leave, sabbatical, retired, role change). Rows retained forever so fact joins don't break.
-  - PS `Status` column **not** requested — inclusion in the CSV implies active.
-  - "PS" = PowerSchool in chat shorthand (memory saved).
-- **Next action**: Two parallel tracks possible — (a) finish filling PS field names in the mapping doc and send to PS admin, or (b) start Step 8 (merge procedures) while waiting. Step 8 needs TWO reconciliation passes for staff: upsert + anti-join on DimStaff, then upsert + anti-join on FactStaffAssignment.
-- **Blockers**: None. Schema is stable and pushed.
+### Left Off — 2026-04-27
+- **Last completed step**: Step 5 (still). Step 6 (field mapping) is essentially done bar 4 enrollment fields.
+- **Step 6 status**: Field mapping doc ([docs/powerschool-field-mapping.md](powerschool-field-mapping.md)) ~95% complete:
+  - **Students**: 10/10 fields mapped ✓
+  - **Staff**: 9/9 fields mapped ✓ (RoleCode = PS `Group`)
+  - **Sections**: 5/5 fields mapped ✓
+  - **Co-Teachers**: 3/3 fields mapped ✓ (assumes PS tracks them — confirm with PS admin)
+  - **Enrollments**: 1/5 mapped — still need PS field names for `SectionID`, `StartDate`, `EndDate`, `ActiveFlag`
+  - Doc is essentially ready to send to PS admin once Enrollments is finished.
+- **Warehouse schema changes this session** (DimStaff drop/recreate, view drop/recreate):
+  - DimStaff gained 3 per-person access columns (all Type 1): `HomeSchoolID VARCHAR(10) NULL`, `CanChangeSchool VARCHAR(255) NULL`, `IsDistrictLevel BIT NOT NULL`. Now 12-column shape.
+  - `vw_StaffSchoolAccess` rewritten — derives access live from PS-native fields (HomeSchoolID + parsed CanChangeSchool list), role-gated to non-teaching staff via FactStaffAssignment. Parses `0` → `'0000'` aggregate-row marker, strips `999999`, zero-pads everything else.
+- **Design decisions this session**:
+  - PS-native access fields (HomeSchoolID, CanChangeSchool) preferred over deriving access from FactStaffAssignment — single source of truth, avoids PS-vs-warehouse drift.
+  - `0` in CanChangeSchool ≠ "access to all schools" — it's a job-tier marker that surfaces an "All assigned schools" aggregate filter for the user, gated to non-teaching staff.
+  - Sections export feeds **both** DimSection.TeacherStaffKey AND a FactSectionTeachers Primary row — one source row, two write targets. `TeacherEmail` column renamed to `PrimaryTeacherEmail` to self-document.
+  - Co-Teachers export is delta-only (non-primary teachers only) — primary is already in Sections. Skip the export entirely if PS doesn't track co-teaching.
+  - DimSection SCD Type 2 still triggers ONLY on primary teacher change — co-teacher changes are tracked in FactSectionTeachers (its own SCD lifecycle), not via new DimSection versions. Both layers carry effective dates so point-in-time queries work cleanly against either.
+  - `EffectiveStartDate` / `EffectiveEndDate` on DimSection and FactSectionTeachers are warehouse-derived (set at ingest from import date) — NOT pulled from PS.
+  - Section/teacher join key = email (not PS teacher number) — matches DimStaff business key, avoids 2-hop lookup.
+- **Step 8 implementation note (cascade)**: When DimSection Type 2 versions (primary teacher change), the merge must close all existing FactSectionTeachers rows for the OLD SectionKey before opening new rows for the NEW SectionKey. Otherwise IsCurrent=1 teacher rows would orphan against IsCurrent=0 section versions.
+- **Next action**: Either finish the 4 Enrollments fields + send field mapping doc to PS admin, OR start Step 8 (merge procedures) while waiting on PS exports.
+- **Blockers**: None.
