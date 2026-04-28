@@ -8,6 +8,14 @@
  * Modified: 2026-04-24 - Initial creation. Replaces per-school/per-role columns
  *                       that used to live on DimStaff and replaces StaffSchoolAccess
  *                       as the source of truth for admin/analyst school access.
+ *            2026-04-28 - SourceSystemID is now a versioning trigger. A change in
+ *                       PS record ID for a previously-seen (StaffKey, SchoolID,
+ *                       RoleCode) triple closes the existing row and opens a new
+ *                       one. Detects email-reuse collisions (e.g. a retiring
+ *                       teacher's first.last@tcrce.ca getting reassigned to a
+ *                       new hire with the same name) — without this, the new
+ *                       person would silently inherit the old person's
+ *                       FactStaffAssignment history.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
@@ -28,10 +36,17 @@
 -- (driven by the sections export, not the staff export).
 --
 -- Rebuild rules on staff ingest:
---   Pass 1 — for each (StaffKey, SchoolID, RoleCode) triple in the staging load:
---     * If the exact triple is already IsCurrent=1 -> leave alone, touch LastUpdated
---     * If new                                    -> INSERT with EffectiveStartDate
---                                                    = import date, IsCurrent=1
+--   Pass 1 — for each (StaffKey, SchoolID, RoleCode, SourceSystemID) row in the
+--   staging load, match against IsCurrent=1 rows by (StaffKey, SchoolID, RoleCode):
+--     * Match found, SourceSystemID matches    -> leave alone, touch LastUpdated
+--     * Match found, SourceSystemID DIFFERS    -> close existing row (Effective
+--                                                 EndDate = import date - 1,
+--                                                 IsCurrent=0), INSERT new row
+--                                                 with new SourceSystemID. This
+--                                                 indicates likely email reuse —
+--                                                 audit-flag the run for review.
+--     * No match (new triple)                  -> INSERT with EffectiveStartDate
+--                                                 = import date, IsCurrent=1
 --   Pass 2 — anti-join: triples currently IsCurrent=1 but absent from staging:
 --     * UPDATE to set EffectiveEndDate = import date - 1, IsCurrent = 0
 --   Rows are never deleted.
@@ -44,6 +59,6 @@ CREATE TABLE FactStaffAssignment (
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,               -- NULL = currently held
     IsCurrent           BIT             NOT NULL,
-    SourceSystemID      VARCHAR(50)     NULL,               -- PowerSchool staff record ID for this specific email x school x role row
+    SourceSystemID      VARCHAR(50)     NULL,               -- PS staff record ID for this email x school x role row; CHANGE in this value triggers a new SCD version (collision detection — see header)
     LastUpdated         DATETIME2(0)    NOT NULL
 );

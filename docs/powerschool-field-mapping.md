@@ -12,6 +12,8 @@
 
 One row per student enrolled in the French Immersion program. The business key is the provincial **Student Number** (not PowerSchool's DCID) because it survives re-enrollments — if a student leaves and returns they keep the same Student Number but may get a new PowerSchool record.
 
+**SCD policy:** every business attribute below is a **Type 2 trigger** — any change creates a new versioned row. Rationale: reports often cite point-in-time values, and we don't want a later re-query to silently produce different numbers because a student's homeroom, name, or IPP status changed in the meantime. Only `StudentKey`, `StudentNumber`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `SourceSystemID`, and `LastUpdated` are exempt from versioning.
+
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
 | StudentNumber | BIGINT | **Business key** — provincial 10-digit student number (PowerSchool's "Student Number" field). Stable across re-enrollments and region transfers; follows the student for life | Student_Number |
@@ -19,10 +21,16 @@ One row per student enrolled in the French Immersion program. The business key i
 | MiddleName | VARCHAR(100) | Nullable — include where present. Helps distinguish students with identical first + last names in the same school/grade (common locally) | Middle_Name |
 | LastName | VARCHAR(100) | | Last_Name |
 | DateOfBirth | DATE | Optional but recommended | DOB |
-| CurrentGrade | VARCHAR(10) | **SCD Type 2 trigger** — values like 'P', '1', '2', ... '12' | Grade_Level |
-| CurrentSchoolID | VARCHAR(10) | **SCD Type 2 trigger** — 4-digit provincial school number (e.g. `'0167'`). Leading zeros are normalized during ingest | SchoolID |
-| ProgramCode | VARCHAR(10) | **SCD Type 2 trigger** — PowerSchool program code (e.g. 'E005', 'J015', 'S120'). 4-character format: letter (grade band) + 3 digits. See "Pilot Program Code Filter" section below | NS_Program |
-| EnrollStatus | INT | PS tri-state value stored verbatim: `1` = currently enrolled, `0` = inactive, `-1` = pre-registered (registered but not yet started at the school) | Enroll_Status |
+| CurrentGrade | VARCHAR(10) | Values like 'P', '1', '2', ... '12' | Grade_Level |
+| CurrentSchoolID | VARCHAR(10) | 4-digit provincial school number (e.g. `'0167'`). Leading zeros are normalized during ingest | SchoolID |
+| ProgramCode | VARCHAR(10) | PowerSchool program code (e.g. 'E005', 'J015', 'S120'). 4-character format: letter (grade band) + 3 digits. See "Pilot Program Code Filter" section below | NS_Program |
+| EnrollStatus | INT | PS value stored verbatim: `0` = Active, `2` = Inactive, `3` = Graduated, `-1` = Pre-Enrolled (registered but not yet started at the school) | Enroll_Status |
+| Homeroom | VARCHAR(50) | Student's current homeroom (nullable) | Home_Room |
+| Gender | VARCHAR(10) | Student's gender — only required field of this group | Gender |
+| SelfIDAfrican | BIT | Student self-identifies as being of African descent. PS sends `"Yes"`/`"No"`/NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_AssignIdentity_African |
+| SelfIDIndigenous | BIT | Student self-identifies as being of Indigenous descent. PS sends `"1"` (Yes) / `"2"` (No) / NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_aboriginal |
+| CurrentIPP | BIT | Student currently has at least one IPP. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentIPP |
+| CurrentAdap | BIT | Student currently has adaptations. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentAdap |
 | SourceSystemID | VARCHAR(50) | PowerSchool DCID (internal database ID). Stored for reference/debugging only — NOT used for record matching | ID |
 
 ---
@@ -37,7 +45,7 @@ One row per student enrolled in the French Immersion program. The business key i
 
 The ingest splits each raw row into two destinations:
 
-- **`DimStaff`** — person-level identity, one row per unique email (collapsed). Versioned by SCD Type 2 only when a person goes active↔inactive.
+- **`DimStaff`** — person-level identity, one row per unique email (collapsed). **All business attributes are SCD Type 2 triggers** — any change to FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel, or ActiveFlag creates a new versioned row. Same rationale as `DimStudent`: reports cite point-in-time values and must be reproducible.
 - **`FactStaffAssignment`** — the bridge, preserves the full email×school×role grain. Versioned by effective dates; never collapses.
 
 ### Fields required in the CSV
@@ -47,11 +55,12 @@ The ingest splits each raw row into two destinations:
 | Email | VARCHAR(255) | `DimStaff.Email` (dedupe key) + `FactStaffAssignment.StaffKey` lookup | **Business key** — Entra ID UPN. Must match exactly what the user signs into Teams with. Will be lowercased during ingest | Email_Addr |
 | FirstName | VARCHAR(100) | `DimStaff.FirstName` | | First_Name |
 | LastName | VARCHAR(100) | `DimStaff.LastName` | | Last_Name |
+| Title | VARCHAR(100) | `DimStaff.Title` | Job title (e.g. "Vice Principal", "Educational Assistant"). Per-person value, same across all rows of a multi-row staff member. Nullable for staff with no title set | Title |
 | HomeSchoolID | VARCHAR(10) | `DimStaff.HomeSchoolID` | Per-person primary/home school (4-digit provincial number). Sourced from a joined PS table; same value on every row of a multi-row staff member. Leave blank for itinerant staff with no single home school | HomeSchoolID |
 | CanChangeSchool | VARCHAR(255) | `DimStaff.CanChangeSchool` | Per-person semicolon-separated list of school IDs the user can navigate to in PS (e.g. `0;79;167;1199;999999`). Sourced from a joined PS table; same value on every row of a multi-row staff member. Populated only for staff with multi-school access; leave blank otherwise. Special markers: `0` = district-level tier, `999999` = graduates pseudo-school | CanChangeSchool |
 | SchoolID | VARCHAR(10) | `FactStaffAssignment.SchoolID` | 4-digit provincial school number for **this row's** assignment (leading zeros normalized during ingest). Different from HomeSchoolID — this varies per row when staff appear multiple times | SchoolID |
 | RoleCode | VARCHAR(50) | `FactStaffAssignment.RoleCode` | Expected values: `Teacher`, `Administrator`, `Specialist`, `RegionalAnalyst`. PowerSchool's equivalent label goes here; we'll map during ingest | Group |
-| ID | VARCHAR(50) | `FactStaffAssignment.SourceSystemID` | PowerSchool staff record ID for this specific email×school×role row. Reference/debug only, NOT used for matching | ID |
+| ID | VARCHAR(50) | `FactStaffAssignment.SourceSystemID` | PowerSchool staff record ID for this specific email×school×role row. Used for matching by triple `(StaffKey, SchoolID, RoleCode)`, but a **change in this value for an existing triple triggers a new SCD version** — this catches email-reuse collisions where a retiring staffer's `first.last@tcrce.ca` gets handed to a new hire with the same name. Audit-flag any import where this fires | ID |
 
 ### `ActiveFlag` derivation (not a CSV column)
 

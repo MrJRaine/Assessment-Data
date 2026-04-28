@@ -179,7 +179,13 @@ CREATE TABLE DimStudent (
     CurrentGrade        VARCHAR(10),               -- Triggers new version
     CurrentSchoolID     INT,                       -- Triggers new version
     ProgramCode         VARCHAR(10),               -- Triggers new version, e.g. 'E015', 'S115'
-    EnrollStatus        INT,                       -- PS Enroll_Status: 1 = enrolled, 0 = inactive, -1 = pre-registered
+    EnrollStatus        INT,                       -- PS Enroll_Status: 0 = Active, 2 = Inactive, 3 = Graduated, -1 = Pre-Enrolled
+    Homeroom            VARCHAR(50),               -- PS Home_Room
+    Gender              VARCHAR(10) NOT NULL,      -- PS Gender
+    SelfIDAfrican       BIT,                       -- PS NS_AssignIdentity_African — student self-ID as African descent
+    SelfIDIndigenous    BIT,                       -- PS NS_aboriginal — student self-ID as Indigenous descent
+    CurrentIPP          BIT,                       -- PS CurrentIPP — has at least one IPP
+    CurrentAdap         BIT,                       -- PS CurrentAdap — has adaptations
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,                 -- NULL = current version
     IsCurrent           BIT NOT NULL,              -- 1 = current, 0 = historical
@@ -188,14 +194,21 @@ CREATE TABLE DimStudent (
 );
 ```
 
-**Attributes that trigger new version** (SCD Type 2):
+**SCD policy: every business attribute is Type 2.** Any change creates a new versioned row. The only fields exempt from versioning are the lifecycle/audit columns: `StudentKey`, `StudentNumber`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `SourceSystemID`, `LastUpdated`.
+
+**Rationale:** reports often cite point-in-time values (e.g. "X students with IPPs in Q3 2025"). Without Type 2 on these attributes, a later re-run would produce different numbers when names, homerooms, IPP statuses, etc. change — sending stakeholders chasing phantom discrepancies. Treating every business field as Type 2 makes any historical query reproducible.
+
+**Type 2 trigger fields:**
 - `CurrentGrade` - Student promoted
 - `CurrentSchoolID` - Student transferred schools
 - `ProgramCode` - Program change (see DimProgram for valid codes)
-
-**Attributes that just update** (SCD Type 1):
-- `FirstName`, `MiddleName`, `LastName` - Name corrections
+- `EnrollStatus` - Active/Inactive/Graduated/Pre-Enrolled state changes
+- `FirstName`, `MiddleName`, `LastName` - Name changes or corrections
 - `DateOfBirth` - Data corrections
+- `Homeroom` - Homeroom reassignment
+- `Gender` - Gender update
+- `SelfIDAfrican`, `SelfIDIndigenous` - Self-ID flag updates
+- `CurrentIPP`, `CurrentAdap` - IPP/adaptations status changes
 
 **Note on business key:** `StudentNumber` is the provincial 10-digit student ID (PowerSchool's "Student Number" field). It's more stable than PowerSchool's internal DCID — it follows the student across schools, regions, and re-enrollments. `SourceSystemID` stores the PowerSchool DCID for reference only, not for matching.
 
@@ -213,16 +226,19 @@ CREATE TABLE DimStaff (
     Email               VARCHAR(255) NOT NULL,     -- Business key (Entra ID UPN, lowercased)
     FirstName           VARCHAR(100),
     LastName            VARCHAR(100),
-    HomeSchoolID        VARCHAR(10) NULL,          -- Type 1; primary school (NULL for itinerant staff)
-    CanChangeSchool     VARCHAR(255) NULL,         -- Type 1; raw PS semicolon-separated school list
-    IsDistrictLevel     BIT,                       -- Type 1; derived (1 if '0' present in CanChangeSchool)
-    ActiveFlag          BIT,                       -- Only Type 2 trigger (import reconciliation)
+    Title               VARCHAR(100) NULL,         -- PS Title (e.g. "Vice Principal")
+    HomeSchoolID        VARCHAR(10) NULL,          -- Primary school (NULL for itinerant staff)
+    CanChangeSchool     VARCHAR(255) NULL,         -- Raw PS semicolon-separated school list
+    IsDistrictLevel     BIT,                       -- Derived (1 if '0' present in CanChangeSchool)
+    ActiveFlag          BIT,                       -- Derived at ingest via import reconciliation
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,
     IsCurrent           BIT NOT NULL,
     LastUpdated         DATETIME2(0)
 );
 ```
+
+**SCD policy: every business attribute is Type 2.** Any change to `FirstName`, `LastName`, `Title`, `HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`, or `ActiveFlag` creates a new versioned row. The only fields exempt are `StaffKey`, `Email`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `LastUpdated`. Same rationale as `DimStudent`: reports cite point-in-time values and must be reproducible regardless of intervening name corrections, school reassignments, or access changes.
 
 `RoleCode` and `SourceSystemID` are NOT on DimStaff — those moved to `FactStaffAssignment` (or are inapplicable because of the collapse). The three per-person access columns (`HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`) live here because they describe the person, not a specific assignment — PS sources them from a joined table and emits the same values on every row of a multi-row staff member.
 
@@ -236,7 +252,7 @@ CREATE TABLE FactStaffAssignment (
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,                 -- NULL = currently held
     IsCurrent           BIT NOT NULL,
-    SourceSystemID      VARCHAR(50),               -- PS staff record ID for this specific triple
+    SourceSystemID      VARCHAR(50),               -- PS staff record ID; CHANGE here triggers a new version (email-reuse collision detection)
     LastUpdated         DATETIME2(0)
 );
 ```
@@ -246,7 +262,8 @@ CREATE TABLE FactStaffAssignment (
 | Event | DimStaff | FactStaffAssignment |
 |---|---|---|
 | New email in import | INSERT with ActiveFlag=1 | INSERT one row per school×role |
-| Existing, still present | Type 1 update (name) | No-op if triple unchanged; otherwise upsert |
+| Existing, present, all business fields match | No-op (touch LastUpdated) | No-op if triple unchanged AND SourceSystemID matches; otherwise reconcile |
+| Existing, present, ANY business field differs (name correction, HomeSchoolID change, access list change, etc.) | Type 2 close + new version with updated values | Reconcile triples independently; SourceSystemID change on an existing triple closes + reopens (collision detection) |
 | Existing, absent from import | Type 2 close + new inactive (ActiveFlag=0) | Type 2 close all current rows for that StaffKey |
 | Returning (inactive → present) | Type 2 close + new active (ActiveFlag=1) | Fresh INSERTs for current school×role triples |
 

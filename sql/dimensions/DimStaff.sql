@@ -24,12 +24,23 @@
  *                       Sourced from PS staff record (joined into the staff
  *                       export). Drives vw_StaffSchoolAccess for non-teaching
  *                       staff school-level RLS.
+ *            2026-04-28 - SCD policy change: ALL business attributes are now Type 2
+ *                       triggers (FirstName, LastName, HomeSchoolID, CanChangeSchool,
+ *                       IsDistrictLevel, ActiveFlag). Same rationale as DimStudent:
+ *                       reports cite point-in-time values, and a later re-query
+ *                       must reproduce the original numbers regardless of intervening
+ *                       name corrections, school reassignments, or access changes.
+ *            2026-04-28 - Added Title column (VARCHAR(100) NULL). Pulled from PS
+ *                       Title field. Also a Type 2 trigger per the policy above.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
--- Type 2 attributes (trigger a new version): ActiveFlag
--- Type 1 attributes (update in place): FirstName, LastName, HomeSchoolID,
---                                      CanChangeSchool, IsDistrictLevel
+-- SCD policy: ALL business attributes trigger a new version (Type 2).
+-- The only fields that DON'T are the lifecycle/audit columns:
+--   StaffKey, Email, EffectiveStartDate, EffectiveEndDate, IsCurrent, LastUpdated
+--
+-- Type 2 trigger fields (any change creates a new SCD version):
+--   FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel, ActiveFlag
 --
 -- Business key: Email (normalized to lowercase during ingest)
 -- Surrogate key: StaffKey (warehouse-generated, unique per SCD version)
@@ -59,12 +70,14 @@
 --   Staff are exported from a PowerSchool report that filters to currently active
 --   staff only (teachers, school specialists, and administrators). Every row in
 --   the import is active by definition. The merge procedure derives ActiveFlag
---   via reconciliation against prior DimStaff state:
---     * In current import & not in warehouse          -> INSERT new row, ActiveFlag = 1
---     * In current import & currently active          -> Type 1 update for name only
---     * In current import & currently inactive        -> returning staff;
---                                                        close inactive row, INSERT
---                                                        new version with ActiveFlag = 1
+--   via reconciliation against prior DimStaff state. Combined with the
+--   all-Type-2 policy, the merge logic per email is:
+--     * Email not in warehouse                        -> INSERT new row, ActiveFlag = 1
+--     * Email in warehouse & current row matches all  -> no-op (touch LastUpdated)
+--       fields in import (incl. ActiveFlag = 1)
+--     * Email in warehouse & ANY business field       -> close current row, INSERT
+--       differs (name correction, HomeSchoolID,          new version with updated values
+--       access list, returning from inactive, etc.)      and ActiveFlag = 1
 --     * NOT in current import & currently active      -> close active row, INSERT
 --                                                        new version with ActiveFlag = 0
 --     * NOT in current import & currently inactive    -> no change
@@ -77,10 +90,11 @@ CREATE TABLE DimStaff (
     Email               VARCHAR(255)    NOT NULL,           -- Business key (Entra ID UPN, lowercased)
     FirstName           VARCHAR(100)    NOT NULL,
     LastName            VARCHAR(100)    NOT NULL,
+    Title               VARCHAR(100)    NULL,               -- PS Title (e.g. "Vice Principal", "Educational Assistant")
     HomeSchoolID        VARCHAR(10)     NULL,               -- Primary school; NULL for itinerant staff
     CanChangeSchool     VARCHAR(255)    NULL,               -- Raw PS semicolon-separated school list
     IsDistrictLevel     BIT             NOT NULL,           -- Derived: '0' present in CanChangeSchool
-    ActiveFlag          BIT             NOT NULL,           -- Type 2 trigger; derived via import reconciliation
+    ActiveFlag          BIT             NOT NULL,           -- Derived at ingest via import reconciliation
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,               -- NULL = current version
     IsCurrent           BIT             NOT NULL,
