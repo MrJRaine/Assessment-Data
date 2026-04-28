@@ -11,3 +11,7 @@ Desktop.ini
 .vs/
 *.suo
 *.user
+
+# PowerSchool CSV drop zone — student/staff PII, must not be committed
+data/imports/*
+!data/imports/README.md
