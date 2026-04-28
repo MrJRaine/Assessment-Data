@@ -135,15 +135,29 @@ The merge procedure reconciles primary and non-primary rows independently within
 
 ## Export 6 — Enrollments (→ `FactEnrollment`)
 
+**Scope — currently active enrollments only**: Generated from the PowerSchool report that filters to enrollments with no `DateLeft`, **plus** any enrollments closed since the last export (i.e. with a `DateLeft` populated). Do not send a full historical roster — the warehouse uses presence in this export plus the `DateLeft` value to drive `ActiveFlag` and close-out logic.
+
 One row per student-section assignment in the pilot schools.
 
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
-| StudentNumber | BIGINT | Must match a StudentNumber from the Students export | Student_Number |
-| SectionID | VARCHAR(50) | Must match a SectionID from the Sections export | |
-| StartDate | DATE | Enrollment start date | |
-| EndDate | DATE | Enrollment end date, or blank/NULL if still enrolled | |
-| ActiveFlag | BIT | 1 = currently enrolled, 0 = dropped/transferred | |
+| StudentNumber | BIGINT | Must match a StudentNumber from the Students export | [1]Student_Number |
+| SectionID | VARCHAR(50) | Must match a SectionID from the Sections export | SectionID |
+| StartDate | DATE | Enrollment start date | DateEnrolled |
+| EndDate | DATE | Enrollment end date, or blank/NULL if still enrolled | DateLeft |
+| SourceSystemID | VARCHAR(50) | PowerSchool CC table primary key for this enrollment row. Stored for reference/debugging only — NOT used for record matching | ID |
+
+### `ActiveFlag` derivation (not a CSV column)
+
+Same pattern as the Staff export — `ActiveFlag` is derived at ingest, not exported. The merge procedure reconciles each row against prior state:
+
+- Row in import with `EndDate` populated (`DateLeft` from PS) → `ActiveFlag = 0`, `EndDate` written verbatim
+- Row in import with `EndDate` blank → `ActiveFlag = 1`, `EndDate = NULL`
+- Existing warehouse row **absent** from the current import → close it out:
+  - If today is **after** the section's term end (lookup via `DimSection → DimTerm`) → `EndDate = term end date`, `ActiveFlag = 0`
+  - If today is **within** the section's term → `EndDate = ingest date`, `ActiveFlag = 0`
+
+This ensures stale enrollments get a sensible `EndDate` even when PS doesn't supply one (e.g. silent withdrawals, mid-year transfers that weren't formally terminated in PS).
 
 ---
 
