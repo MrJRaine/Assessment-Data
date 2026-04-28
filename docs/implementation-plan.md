@@ -92,27 +92,26 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **RLS approach**: Data-level filtering uses `USERPRINCIPALNAME()` matched against the teacher-of-record email in the PowerSchool section export — no security groups required for this. Groups are only needed at full rollout for managing app access across ~200 teachers.
 - **Fabric Warehouse T-SQL limitations**: No `DEFAULT` constraints, no `PRIMARY KEY`/`FOREIGN KEY` in `CREATE TABLE`, no `NVARCHAR` (use `VARCHAR`), no `DATETIME` (use `DATETIME2(0)`), `DATETIME2` requires explicit precision 0–6, `IDENTITY` columns must be `BIGINT` not `INT`, `IDENTITY` takes no seed/increment parameters, `CREATE INDEX` not supported (columnstore is automatic). Data integrity is enforced through ETL procedures, not database constraints. FK relationships must be defined manually in the Power BI semantic model. Full reference in `/fabric-warehouse-sql` skill.
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
+- **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 
-### Left Off — 2026-04-27
-- **Last completed step**: Step 5 (still). Step 6 (field mapping) is essentially done bar 4 enrollment fields.
-- **Step 6 status**: Field mapping doc ([docs/powerschool-field-mapping.md](powerschool-field-mapping.md)) ~95% complete:
-  - **Students**: 10/10 fields mapped ✓
-  - **Staff**: 9/9 fields mapped ✓ (RoleCode = PS `Group`)
-  - **Sections**: 5/5 fields mapped ✓
-  - **Co-Teachers**: 3/3 fields mapped ✓ (assumes PS tracks them — confirm with PS admin)
-  - **Enrollments**: 1/5 mapped — still need PS field names for `SectionID`, `StartDate`, `EndDate`, `ActiveFlag`
-  - Doc is essentially ready to send to PS admin once Enrollments is finished.
-- **Warehouse schema changes this session** (DimStaff drop/recreate, view drop/recreate):
-  - DimStaff gained 3 per-person access columns (all Type 1): `HomeSchoolID VARCHAR(10) NULL`, `CanChangeSchool VARCHAR(255) NULL`, `IsDistrictLevel BIT NOT NULL`. Now 12-column shape.
-  - `vw_StaffSchoolAccess` rewritten — derives access live from PS-native fields (HomeSchoolID + parsed CanChangeSchool list), role-gated to non-teaching staff via FactStaffAssignment. Parses `0` → `'0000'` aggregate-row marker, strips `999999`, zero-pads everything else.
-- **Design decisions this session**:
-  - PS-native access fields (HomeSchoolID, CanChangeSchool) preferred over deriving access from FactStaffAssignment — single source of truth, avoids PS-vs-warehouse drift.
-  - `0` in CanChangeSchool ≠ "access to all schools" — it's a job-tier marker that surfaces an "All assigned schools" aggregate filter for the user, gated to non-teaching staff.
-  - Sections export feeds **both** DimSection.TeacherStaffKey AND a FactSectionTeachers Primary row — one source row, two write targets. `TeacherEmail` column renamed to `PrimaryTeacherEmail` to self-document.
-  - Co-Teachers export is delta-only (non-primary teachers only) — primary is already in Sections. Skip the export entirely if PS doesn't track co-teaching.
-  - DimSection SCD Type 2 still triggers ONLY on primary teacher change — co-teacher changes are tracked in FactSectionTeachers (its own SCD lifecycle), not via new DimSection versions. Both layers carry effective dates so point-in-time queries work cleanly against either.
-  - `EffectiveStartDate` / `EffectiveEndDate` on DimSection and FactSectionTeachers are warehouse-derived (set at ingest from import date) — NOT pulled from PS.
-  - Section/teacher join key = email (not PS teacher number) — matches DimStaff business key, avoids 2-hop lookup.
-- **Step 8 implementation note (cascade)**: When DimSection Type 2 versions (primary teacher change), the merge must close all existing FactSectionTeachers rows for the OLD SectionKey before opening new rows for the NEW SectionKey. Otherwise IsCurrent=1 teacher rows would orphan against IsCurrent=0 section versions.
-- **Next action**: Either finish the 4 Enrollments fields + send field mapping doc to PS admin, OR start Step 8 (merge procedures) while waiting on PS exports.
+### Left Off — 2026-04-28
+- **Last completed step**: Step 5. Step 6 in progress — both field-mapping and export-procedures docs are complete with sources/filters filled in for all 5 exports; awaiting first test CSV to validate format.
+- **Schema work this session** (significant — schema is now stable for MVP):
+  - `LastUpdated` added to 7 tables that lacked it. `FactEnrollment` also got `SourceSystemID`. Migration: [migrate_add_LastUpdated_step1_schema.sql](../sql/scripts/migrate_add_LastUpdated_step1_schema.sql) + step2 (split because of Fabric parser issue — see fabric-warehouse-sql skill item 11).
+  - DimStudent: 6 demographic fields added (Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap). EnrollStatus value list corrected (0/2/3/-1, was wrongly documented).
+  - DimStaff: Title field added.
+  - DimSection: 4 fields added (SectionNumber, CourseName, EnrollmentCount, MaxEnrollment).
+  - FactSectionTeachers: schema changed to use business keys (SectionID, TeacherEmail) instead of surrogates — decoupled from DimSection / DimStaff versioning.
+- **SCD policy decisions this session**:
+  - **All-Type-2 policy** applied to DimStudent, DimStaff, DimSection. Every business attribute triggers a new version. Rationale: report reproducibility ("Better to flag it than putting toothpaste back in the tube" — same logic for stale rosters in old reports).
+  - **FactStaffAssignment.SourceSystemID** promoted to Type 2 trigger — detects email-reuse collisions where TCRCE's `first.last@tcrce.ca` pattern could let a new hire silently inherit a retired teacher's history.
+  - **FactSectionTeachers decoupled** — no longer cascades from DimSection. Reconciles independently by (SectionID, TeacherEmail, TeacherRole) triple. Side benefit: vw_TeacherStudents matches USERPRINCIPALNAME() against TeacherEmail directly with no DimStaff join.
+  - **Boolean field translation rules** for DimStudent (documented in field-mapping doc): PS sends Yes/No, 1/2, or Y/N depending on the field; ingest normalizes all to BIT (1/0/NULL).
+- **Operational changes**:
+  - New [export-procedures.md](export-procedures.md) doc — operational record of how each test CSV is being pulled. Companion to field-mapping doc. Source/Filters filled in for all 5 exports. Pull History table at the bottom.
+  - New [data/imports/](../data/imports/) drop folder, gitignored, for test CSVs.
+  - Exports renumbered 1-2-3-4-5 (dropped Schools as Export 3 → folded into "Tables NOT Requiring PowerSchool Data").
+  - PS table-number fix: teacher email is `[5]` (Teachers), not `[39]`.
+- **Year-end close-out procedure** added as deferred work (see Notes section above) — needed before September rollout.
+- **Next action**: Drop a test CSV in `data/imports/` for me to validate format, OR start Step 8 (merge procedures). Project memory has full design notes for Step 8.
 - **Blockers**: None.

@@ -95,29 +95,29 @@
 
 ## Export 4 — Co-Teachers → `FactSectionTeachers` (non-Primary)
 
-**Source table / report:** ____________________________________________
+**Source table / report:** Reports --> sqlReports --> Teacher --> "Find Co-Teachers"
 
-**Filters applied:** ____________________________________________
+**Filters applied:** Automatically searches only current school year.
 
 **Output filename:** `section-teachers.csv`
 
 **Skip this export entirely if PS does not track co-teaching.** Do NOT include the primary teacher here — they come from Export 3.
 
-| Warehouse Field | PowerSchool Field |
-|---|---|
-| SectionID | ID |
-| TeacherEmail | [5]Email_Addr |
-| TeacherRole | Role |
+| Warehouse Field | PowerSchool Field | Report Header |
+|---|---|---|
+| SectionID | ID | SectionID |
+| TeacherEmail | [5]Email_Addr | Email |
+| TeacherRole | Role | Role |
 
-**Notes:** ____________________________________________
+**Notes:** Report includes additional fields that could be used for debugging but not necessary to ingest as part of normal course of business.
 
 ---
 
 ## Export 5 — Enrollments → `FactEnrollment`
 
-**Source table / report:** ____________________________________________
+**Source table / report:** "CC (4)"
 
-**Filters applied:** ____________________________________________
+**Filters applied:** TermID >= 3500 ; TermID < 3600 (Limits to sections from the 2025-2026 School year, filter value will change each year.)
 
 **Output filename:** `enrollments.csv`
 
@@ -150,6 +150,7 @@
 - **Number padding:** ingest will zero-pad `SchoolID` to 4 digits, so leading-zero stripping in PS is fine
 - **Email casing:** ingest will lowercase, so original casing doesn't matter
 - **Source table notation:** entries in "Source table / report" are written as `"TableName (N)"` where `N` is the PowerSchool internal table number (e.g. `"Students (1)"`, `"Teachers (5)"`). The same `N` is used in field references like `[5]Email_Addr` to indicate the field is pulled from a related table — table 5 (Teachers) in that example. This makes the export reproducible by the PS admin without ambiguity about which table a field came from.
+- **Saved sqlReports as a source:** when an export is sourced from a saved PS sqlReport rather than a direct table extract, the source-table cell records the PS UI navigation path (e.g. `Reports --> sqlReports --> Teacher --> "Find Co-Teachers"`) instead of the `"TableName (N)"` form. Reports often alias columns for readability, so those exports add a third "Report Header" column to the field-mapping table — that header is what actually appears in the CSV (and therefore what the ingest reads), while the PS Field column remains the canonical reference for what underlying data the column represents.
 
 ---
 
