@@ -78,21 +78,15 @@ Because of this logic, **no `Status` / active-flag column is needed in the CSV**
 
 ---
 
-## Export 3 — Schools — *skipped*
-
-**Schools are not requested from PowerSchool.** `DimSchool` is seeded directly from the Nova Scotia Department of Education 2024-2025 Directory of Public Schools (see [sql/scripts/seed_DimSchool_TCRCE.sql](../sql/scripts/seed_DimSchool_TCRCE.sql)). This is the authoritative provincial source.
-
-**What PowerSchool must still match**: the `SchoolID` values used in `Students.CurrentSchoolID`, `FactStaffAssignment.SchoolID` (sourced from the Staff export), and `Sections.SchoolID` must all be the **4-digit provincial school number** (e.g. `'0079'`, `'0167'`). If PowerSchool strips leading zeros on export, that's fine — the ingest will zero-pad. But the number itself must be the provincial 4-digit code, not a PowerSchool-internal ID.
-
----
-
-## Export 4 — Sections (→ `DimSection` + `FactSectionTeachers`)
+## Export 3 — Sections (→ `DimSection` + `FactSectionTeachers`)
 
 One row per instructional section in the pilot schools. The primary teacher's email feeds **both** targets:
 - `DimSection.TeacherStaffKey` — canonical teacher-of-record on the section dim
 - One `FactSectionTeachers` row per section with `TeacherRole = 'Primary'`
 
-Co-teaching arrangements (if PS tracks them) are handled by Export 5 below — **do not** include co-teachers here.
+Co-teaching arrangements (if PS tracks them) are handled by Export 4 below — **do not** include co-teachers here.
+
+**SCD policy:** every business attribute below is a **Type 2 trigger** — any change creates a new versioned row. Same rationale as `DimStudent` and `DimStaff`: reports cite point-in-time values and must be reproducible. Note that `EnrollmentCount` will fluctuate as students enroll/withdraw, so DimSection accumulates versions over the school year. Only `SectionKey`, `SectionID`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `SourceSystemID`, and `LastUpdated` are exempt.
 
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
@@ -100,7 +94,11 @@ Co-teaching arrangements (if PS tracks them) are handled by Export 5 below — *
 | SchoolID | VARCHAR(10) | 4-digit provincial school number the section is in | SchoolID |
 | TermID | INT | PS 4-digit TermID (e.g. `3501` = 2025-2026 Semester 1). Format: `YY` = year-1990, `TT` = 00 Year Long / 01 S1 / 02 S2. Joins to `DimTerm` to decode school year + term | TermID |
 | CourseCode | VARCHAR(50) | Course identifier (e.g. 'MATH-3-FR') | Course_Number |
-| PrimaryTeacherEmail | VARCHAR(255) | The teacher-of-record's email. On ingest: looked up against `DimStaff.Email` to resolve `StaffKey`, then written to (a) `DimSection.TeacherStaffKey` and (b) one `FactSectionTeachers` row per section with `TeacherRole = 'Primary'`. **SCD Type 2 trigger for DimSection** — a change here closes the current section row and opens a new version | [39]Email_Addr |
+| SectionNumber | VARCHAR(20) | School-set section number (e.g. `'01'`, `'02'`). Used in the Power App section picker so teachers can identify their sections quickly | Section_Number |
+| CourseName | VARCHAR(200) | Human-readable course name (e.g. 'Math 7 French Immersion'). Display label for the Power App section picker | [2]course_name |
+| PrimaryTeacherEmail | VARCHAR(255) | The teacher-of-record's email. Two destinations: (a) `DimSection.TeacherStaffKey` — looked up against `DimStaff.Email` to resolve current `StaffKey` (denormalized snapshot for reporting); (b) `FactSectionTeachers.TeacherEmail` — stored verbatim (lowercased) on a row with `TeacherRole = 'Primary'`. The bridge keys on the email itself, not StaffKey, so DimStaff versioning doesn't churn the bridge | [5]Email_Addr |
+| EnrollmentCount | INT | Current number of students enrolled in the section. Stored on the dimension to avoid re-aggregating `FactEnrollment` for every Power BI visual that needs it | No_of_students |
+| MaxEnrollment | INT | Section capacity. Lower values flag special-program / capped sections | MaxEnrollment |
 
 ### SCD lifecycle (warehouse-derived, NOT pulled from PS)
 
@@ -108,33 +106,33 @@ Co-teaching arrangements (if PS tracks them) are handled by Export 5 below — *
 
 **`DimSection` SCD Type 2:**
 - New `SectionID` → INSERT row with `EffectiveStartDate = import_date`, `IsCurrent = 1`
-- Existing `SectionID` with **same** `PrimaryTeacherEmail` → Type 1 update only (CourseCode, etc.)
-- Existing `SectionID` with **different** `PrimaryTeacherEmail` → close current row (`EffectiveEndDate = import_date - 1`, `IsCurrent = 0`) and INSERT new version (`EffectiveStartDate = import_date`, `IsCurrent = 1`)
+- Existing `SectionID` with **all business fields unchanged** → no-op (touch `LastUpdated`)
+- Existing `SectionID` with **any business field different** → close current row (`EffectiveEndDate = import_date - 1`, `IsCurrent = 0`) and INSERT new version (`EffectiveStartDate = import_date`, `IsCurrent = 1`). **Does NOT cascade to FactSectionTeachers** — the bridge keys on `SectionID`, not `SectionKey`, so it survives DimSection versioning untouched.
 - `SectionID` no longer in import → close current row (`IsCurrent = 0`); do not insert a replacement
 
-**`FactSectionTeachers` Primary rows** seeded from this export:
-- New (`SectionKey`, primary `StaffKey`) → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`, `TeacherRole = 'Primary'`
+**`FactSectionTeachers` Primary rows** seeded from this export (reconciles independently of DimSection):
+- New (`SectionID`, primary `TeacherEmail`, `TeacherRole = 'Primary'`) triple → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`
 - Same triple still appears → no-op (touch `LastUpdated`)
-- Triple drops out (primary teacher changed, or section retired) → close current row (`EffectiveEndDate = import_date`, `IsCurrent = 0`)
+- Triple drops out (primary teacher email changed, or section retired) → close current row (`EffectiveEndDate = import_date`, `IsCurrent = 0`)
 
 ---
 
-## Export 5 — Co-Teachers (→ `FactSectionTeachers`) — *if PS tracks them*
+## Export 4 — Co-Teachers (→ `FactSectionTeachers`) — *if PS tracks them*
 
-**Purpose:** capture additional non-primary teachers (co-teachers, support staff, substitutes) per section. **Do NOT include the primary teacher** — they're already covered by Export 4.
+**Purpose:** capture additional non-primary teachers (co-teachers, support staff, substitutes) per section. **Do NOT include the primary teacher** — they're already covered by Export 3.
 
-If PS doesn't track co-teaching at all, **skip this export entirely**. `FactSectionTeachers` will end up populated with primary-teacher rows from Export 4 alone, and that's the complete picture.
+If PS doesn't track co-teaching at all, **skip this export entirely**. `FactSectionTeachers` will end up populated with primary-teacher rows from Export 3 alone, and that's the complete picture.
 
 | Warehouse Field | Type | Description | PowerSchool Field |
 |---|---|---|---|
 | SectionID | VARCHAR(50) | Must match a `SectionID` from the Sections export | ID |
-| TeacherEmail | VARCHAR(255) | The non-primary teacher's email (matches `Email` in the Staff export). On ingest: looked up against `DimStaff.Email` to resolve `StaffKey` | [39]Email_Addr |
-| TeacherRole | VARCHAR(50) | Expected values: `CoTeacher`, `Support`, `Substitute`. **NOT `Primary`** — that role is reserved for Export 4. PS's equivalent label goes here; we'll map during ingest | Role |
+| TeacherEmail | VARCHAR(255) | The non-primary teacher's email (matches `Email` in the Staff export). Stored verbatim (lowercased) on `FactSectionTeachers.TeacherEmail` | [5]Email_Addr |
+| TeacherRole | VARCHAR(50) | Expected values: `CoTeacher`, `Support`, `Substitute`. **NOT `Primary`** — that role is reserved for Export 3. PS's equivalent label goes here; we'll map during ingest | Role |
 
 ### SCD lifecycle (warehouse-derived, NOT pulled from PS)
 
-Same pattern as the Primary rows from Export 4 — `EffectiveStartDate` and `EffectiveEndDate` are derived at ingest:
-- New (`SectionKey`, `StaffKey`, `TeacherRole`) triple → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`
+Same pattern as the Primary rows from Export 3 — `EffectiveStartDate` and `EffectiveEndDate` are derived at ingest:
+- New (`SectionID`, `TeacherEmail`, `TeacherRole`) triple → INSERT with `EffectiveStartDate = import_date`, `IsCurrent = 1`
 - Same triple still appears in this import → no-op (touch `LastUpdated`)
 - Triple drops out (co-teacher removed, or assignment ended) → close current row (`EffectiveEndDate = import_date`, `IsCurrent = 0`)
 
@@ -142,7 +140,7 @@ The merge procedure reconciles primary and non-primary rows independently within
 
 ---
 
-## Export 6 — Enrollments (→ `FactEnrollment`)
+## Export 5 — Enrollments (→ `FactEnrollment`)
 
 **Scope — currently active enrollments only**: Generated from the PowerSchool report that filters to enrollments with no `DateLeft`, **plus** any enrollments closed since the last export (i.e. with a `DateLeft` populated). Do not send a full historical roster — the warehouse uses presence in this export plus the `DateLeft` value to drive `ActiveFlag` and close-out logic.
 
@@ -211,6 +209,7 @@ If the pilot teachers include any students outside this code list, let us know a
 
 For reference, these warehouse tables get their data from other sources (no PowerSchool export needed):
 
+- `DimSchool` — seeded directly from the Nova Scotia Department of Education 2024-2025 Directory of Public Schools (see [sql/scripts/seed_DimSchool_TCRCE.sql](../sql/scripts/seed_DimSchool_TCRCE.sql)). **PS admin still needs to ensure** the `SchoolID` values used in Students, Staff, and Sections exports are the **4-digit provincial school number** (e.g. `'0079'`, `'0167'`) — leading zeros may be stripped by PS on export (ingest will zero-pad), but the underlying number must be the provincial code, not a PS-internal ID
 - `DimAssessmentWindow` — populated manually by admins when a new assessment pull is scheduled
 - `DimCalendar` — auto-generated date dimension
 - `DimProgram` — static reference data (PowerSchool program code categorization); seeded once from [sql/dimensions/DimProgram.sql](../sql/dimensions/DimProgram.sql)

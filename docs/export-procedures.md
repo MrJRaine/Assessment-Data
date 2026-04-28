@@ -45,7 +45,7 @@
 
 **Source table / report:** "Teachers (5)"
 
-**Filters applied:** ____________________________________________
+**Filters applied:** Status = 1 (Indicates active staff)
 
 **Output filename:** `staff.csv`
 
@@ -69,11 +69,11 @@
 
 ---
 
-## Export 4 — Sections → `DimSection` + `FactSectionTeachers` (Primary)
+## Export 3 — Sections → `DimSection` + `FactSectionTeachers` (Primary)
 
-**Source table / report:** ____________________________________________
+**Source table / report:** "Sections (3)"
 
-**Filters applied:** ____________________________________________
+**Filters applied:** TermID >= 3500 ; TermID < 3600 (Limits to sections from the 2025-2026 School year, filter value will change each year.)
 
 **Output filename:** `sections.csv`
 
@@ -83,13 +83,17 @@
 | SchoolID | SchoolID |
 | TermID | TermID |
 | CourseCode | Course_Number |
-| PrimaryTeacherEmail | [39]Email_Addr |
+| SectionNumber | Section_Number |
+| CourseName | [2]course_name |
+| PrimaryTeacherEmail | [5]Email_Addr |
+| EnrollmentCount | No_of_students |
+| MaxEnrollment | MaxEnrollment |
 
 **Notes:** ____________________________________________
 
 ---
 
-## Export 5 — Co-Teachers → `FactSectionTeachers` (non-Primary)
+## Export 4 — Co-Teachers → `FactSectionTeachers` (non-Primary)
 
 **Source table / report:** ____________________________________________
 
@@ -97,19 +101,19 @@
 
 **Output filename:** `section-teachers.csv`
 
-**Skip this export entirely if PS does not track co-teaching.** Do NOT include the primary teacher here — they come from Export 4.
+**Skip this export entirely if PS does not track co-teaching.** Do NOT include the primary teacher here — they come from Export 3.
 
 | Warehouse Field | PowerSchool Field |
 |---|---|
 | SectionID | ID |
-| TeacherEmail | [39]Email_Addr |
+| TeacherEmail | [5]Email_Addr |
 | TeacherRole | Role |
 
 **Notes:** ____________________________________________
 
 ---
 
-## Export 6 — Enrollments → `FactEnrollment`
+## Export 5 — Enrollments → `FactEnrollment`
 
 **Source table / report:** ____________________________________________
 
@@ -145,7 +149,7 @@
 - **Header row:** required
 - **Number padding:** ingest will zero-pad `SchoolID` to 4 digits, so leading-zero stripping in PS is fine
 - **Email casing:** ingest will lowercase, so original casing doesn't matter
-- **Source table notation:** entries in "Source table / report" are written as `"TableName (N)"` where `N` is the PowerSchool internal table number (e.g. `"Students (1)"`, `"Users (39)"`). The same `N` is used in field references like `[39]Email_Addr` to indicate the field is pulled from a related table — table 39 in that example. This makes the export reproducible by the PS admin without ambiguity about which table a field came from.
+- **Source table notation:** entries in "Source table / report" are written as `"TableName (N)"` where `N` is the PowerSchool internal table number (e.g. `"Students (1)"`, `"Teachers (5)"`). The same `N` is used in field references like `[5]Email_Addr` to indicate the field is pulled from a related table — table 5 (Teachers) in that example. This makes the export reproducible by the PS admin without ambiguity about which table a field came from.
 
 ---
 

@@ -286,7 +286,12 @@ CREATE TABLE DimSection (
     
     -- Attributes
     SchoolID INT,
+    TermID INT,                           -- PS TermID (e.g. 3501); joins to DimTerm
     CourseCode NVARCHAR(50),
+    SectionNumber NVARCHAR(20),           -- School-set, e.g. '01', '02'; Power App display
+    CourseName NVARCHAR(200),             -- Human-readable course name; Power App display
+    EnrollmentCount INT,                  -- Stored to avoid re-aggregating FactEnrollment
+    MaxEnrollment INT,                    -- Capacity; lower for special programs
     TeacherStaffKey INT,                  -- FK to DimStaff surrogate key!
     
     -- SCD Type 2 tracking
@@ -303,8 +308,9 @@ CREATE TABLE DimSection (
 );
 ```
 
-**Attributes that trigger new version**:
-- `TeacherStaffKey` - Teacher reassigned to section
+**SCD policy: every business attribute is Type 2.** Any change to `SchoolID`, `TermID`, `CourseCode`, `SectionNumber`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, or `TeacherStaffKey` creates a new versioned row. Same rationale as `DimStudent` and `DimStaff`. Note: `EnrollmentCount` shifts as students enroll/withdraw, so DimSection accumulates versions throughout the school year — acceptable at pilot volume.
+
+**No cascade to `FactSectionTeachers`.** That bridge keys on `SectionID` (business key) and `TeacherEmail` directly, so it survives DimSection versioning untouched. Teacher reassignments are reconciled directly within the bridge by the (`SectionID`, `TeacherEmail`, `TeacherRole`) triple. `DimSection.TeacherStaffKey` remains a denormalized "primary teacher of record" snapshot for reporting only — not used for access control.
 
 ### DimSchool (SCD Type 1)
 
@@ -709,12 +715,14 @@ Parse rules for `CanChangeSchool` (semicolon-separated list):
 
 Teachers are excluded entirely — their RLS comes from FactSectionTeachers (section-level). The `'0000'` aggregate row only surfaces for non-teaching staff who have `'0'` in their CanChangeSchool list.
 
-**Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`:
+**Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`. The bridge stores `TeacherEmail` directly (business key), so RLS matches `USERPRINCIPALNAME()` without any DimStaff join:
 ```sql
 -- Pattern used in vw_TeacherStudents
-JOIN FactSectionTeachers fst ON fst.SectionKey = e.SectionKey AND fst.IsCurrent = 1
-JOIN DimStaff t ON t.StaffKey = fst.StaffKey AND t.IsCurrent = 1
-WHERE t.Email = USERPRINCIPALNAME()
+JOIN DimSection sec ON sec.SectionID = e.SectionID AND sec.IsCurrent = 1
+JOIN FactSectionTeachers fst
+    ON fst.SectionID = sec.SectionID
+    AND fst.IsCurrent = 1
+WHERE fst.TeacherEmail = USERPRINCIPALNAME()
 ```
 
 ---
