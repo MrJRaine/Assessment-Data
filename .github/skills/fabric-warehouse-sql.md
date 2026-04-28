@@ -115,9 +115,11 @@ Nums AS (
     SELECT d4.d * 1000 + d3.d * 100 + d2.d * 10 + d1.d AS n
     FROM Digits d1 CROSS JOIN Digits d2 CROSS JOIN Digits d3 CROSS JOIN Digits d4
 )
--- Generates 10,000 distinct numbers; filter WHERE n <= desired_count
+-- Generates 10 000 distinct numbers; filter WHERE n <= desired_count
 ```
 
-9. **Row-by-row `INSERT` inside a `WHILE` loop is extremely slow.** Populating 5,844 calendar rows via a WHILE loop took 10+ minutes and did not complete cleanly. Always use set-based `INSERT ... SELECT FROM numbers_cte` for bulk data generation.
+9. **Row-by-row `INSERT` inside a `WHILE` loop is extremely slow.** Populating 5844 calendar rows via a WHILE loop took 10+ minutes and did not complete cleanly. Always use set-based `INSERT ... SELECT FROM numbers_cte` for bulk data generation.
 
 10. **`ALTER TABLE ADD COLUMN` and subsequent `UPDATE`/`SELECT` against that column cannot run in the same batch.** Fabric parses the whole script before executing, so any statement referencing the new column fails with "Invalid column name". Split into two separate query executions: run the ALTER first, then in a new query window run the UPDATE/SELECT. Same applies for DROP COLUMN followed by references to other columns.
+
+11. **`DROP TABLE` + `CREATE TABLE` (new shape) + `INSERT` referencing new columns has the same parser failure** as item 10. Even though the CREATE will give the table its new shape at execution time, the parser checks the INSERT against the *existing* table catalog and rejects "Invalid column name" for any column not in the old shape. Discovered 2026-04-28 while running `migrate_add_LastUpdated.sql` — the combined script failed with `Msg 207 Level 16 'Invalid column name LastUpdated'` on the DimCalendar INSERT, even though the CREATE earlier in the same batch defined that column. Same workaround as item 10: split into two scripts — schema rebuild in batch 1, INSERTs in batch 2 (or higher). The "fresh CREATE TABLE with INSERT in the same script" pattern only works when the table doesn't already exist; rebuilds of existing tables must split.

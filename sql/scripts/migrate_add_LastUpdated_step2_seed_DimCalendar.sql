@@ -1,32 +1,16 @@
 /*******************************************************************************
- * Table: DimCalendar
- * Purpose: Standard date dimension for time-based analysis
- * SCD Type: N/A (static reference data, generated once)
- * Created: 2026-04-22
- * Modified: 2026-04-23 - Switch to digits-based numbers CTE (prior cross-join
- *                       approach didn't produce full row count in Fabric)
- *           2026-04-28 - Added LastUpdated per project standard
+ * Script: migrate_add_LastUpdated_step2_seed_DimCalendar.sql
+ * Purpose: Re-seed DimCalendar after the schema rebuild in step 1. STEP 2 OF 2.
+ *          Populates 2020-01-01 through 2035-12-31 (~5844 rows).
+ *
+ * IMPORTANT: Only run this AFTER migrate_add_LastUpdated_step1_schema.sql
+ *            has completed successfully. The new DimCalendar must exist with
+ *            the LastUpdated column for this INSERT's parser check to pass.
+ *
+ * Created: 2026-04-28
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
-CREATE TABLE DimCalendar (
-    DateKey         INT             NOT NULL,   -- YYYYMMDD format
-    Date            DATE            NOT NULL,
-    SchoolYear      VARCHAR(9)      NOT NULL,   -- e.g. '2025-2026' (Aug–Jul)
-    Month           INT             NOT NULL,
-    MonthName       VARCHAR(20)     NOT NULL,
-    Quarter         INT             NOT NULL,
-    Week            INT             NOT NULL,
-    DayOfWeek       INT             NOT NULL,   -- 1=Sunday, 7=Saturday
-    DayName         VARCHAR(20)     NOT NULL,
-    IsWeekend       BIT             NOT NULL,
-    IsSchoolDay     BIT             NOT NULL,
-    LastUpdated     DATETIME2(0)    NOT NULL    -- Set at seed time
-);
-
--- Populate 2020-01-01 through 2035-12-31 in a single bulk INSERT
--- Uses a 10-digit CTE cross-joined with itself 4 times → 10 000 numbers (0-9999)
--- Then filters to just the ~5844 days we need
 WITH
     Digits AS (
         SELECT 0 AS d UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
@@ -60,7 +44,10 @@ SELECT
     DATEPART(WEEKDAY, d),
     DATENAME(WEEKDAY, d),
     CASE WHEN DATEPART(WEEKDAY, d) IN (1, 7) THEN 1 ELSE 0 END,
-    0,  -- IsSchoolDay = 0 by default; update separately for your district calendar
+    0,
     GETDATE()
 FROM Dates
 ORDER BY d;
+
+-- Verification:
+--   SELECT COUNT(*) FROM DimCalendar;  -- expect 5844
