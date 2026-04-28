@@ -5,12 +5,16 @@ description: Technical architecture and implementation guide for a regional stud
 
 # Regional Student Assessment Data Platform
 
+## Writing Conventions (user preference)
+
+**Never use comma as a thousands separator** in any output — chat, docs, code comments, SQL, commit messages. Write `5844` not `5,844`. For numbers above 9999 in prose, use a space: `10 000`. For numbers ≤ 9999, no separator at all. The user reads commas as decimal points (French primary/secondary education) and finds the standard thousands-separator confusing.
+
 ## Project Context
 
 **Purpose**: Centralized platform for collecting and analyzing student reading and writing assessments across a regional school system.
 
 **Scale**:
-- ~6,000 students (grades Primary to 12)
+- ~6000 students (grades Primary to 12)
 - ~200 teachers across multiple schools
 - 6 reading assessment pulls per year
 - 3 writing assessment pulls per year
@@ -833,7 +837,7 @@ WHERE t.Email = USERPRINCIPALNAME()
 - Azure SQL (not used)
 - Premium connectors (not needed)
 
-**Total**: ~$965/month + $60/month amortized A5 = ~$1,025 CAD/month
+**Total**: ~$965/month + $60/month amortized A5 = ~$1025 CAD/month
 
 ---
 

@@ -4,7 +4,7 @@
 
 Centralized platform for collecting and analyzing student reading/writing assessments across a regional school system in Nova Scotia, Canada.
 
-- ~6,000 students (grades Primary–12), ~200 teachers
+- ~6000 students (grades Primary–12), ~200 teachers
 - **Compliance**: PIIDPA — all data must remain in **Canada East** region
 - **Status**: Pre-MVP development
 - **MVP (June 2025)**: French Immersion pilot, 5–10 teachers, reading assessments only

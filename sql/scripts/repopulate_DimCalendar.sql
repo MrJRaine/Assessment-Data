@@ -1,6 +1,6 @@
 /*******************************************************************************
  * Script: repopulate_DimCalendar.sql
- * Purpose: Clear DimCalendar and repopulate with correct 5,844-row date range
+ * Purpose: Clear DimCalendar and repopulate with correct 5844-row date range
  * Use: Run against Assessment_Warehouse when DimCalendar has bad/partial data
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/

@@ -91,7 +91,7 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Deferred to September**: Writing assessments, Power BI reports, automated ingestion, full SCD Type 2, security groups
 - **RLS approach**: Data-level filtering uses `USERPRINCIPALNAME()` matched against the teacher-of-record email in the PowerSchool section export — no security groups required for this. Groups are only needed at full rollout for managing app access across ~200 teachers.
 - **Fabric Warehouse T-SQL limitations**: No `DEFAULT` constraints, no `PRIMARY KEY`/`FOREIGN KEY` in `CREATE TABLE`, no `NVARCHAR` (use `VARCHAR`), no `DATETIME` (use `DATETIME2(0)`), `DATETIME2` requires explicit precision 0–6, `IDENTITY` columns must be `BIGINT` not `INT`, `IDENTITY` takes no seed/increment parameters, `CREATE INDEX` not supported (columnstore is automatic). Data integrity is enforced through ETL procedures, not database constraints. FK relationships must be defined manually in the Power BI semantic model. Full reference in `/fabric-warehouse-sql` skill.
-- **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5,844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
+- **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 
 ### Left Off — 2026-04-27
 - **Last completed step**: Step 5 (still). Step 6 (field mapping) is essentially done bar 4 enrollment fields.

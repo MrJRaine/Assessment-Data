@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This repository contains the implementation for a regional student assessment data platform built on Microsoft Fabric. The platform collects and analyzes reading and writing assessments for ~6,000 students across multiple schools in Nova Scotia, Canada.
+This repository contains the implementation for a regional student assessment data platform built on Microsoft Fabric. The platform collects and analyzes reading and writing assessments for ~6000 students across multiple schools in Nova Scotia, Canada.
 
 **Key Constraints**:
 - All data must remain in Canada East region (PIIDPA compliance)
@@ -356,7 +356,7 @@ SELECT * FROM DimStudent WHERE StudentID = 12345 AND IsCurrent = 1;
 **Correct**: Teachers access via Power Apps → secured views with RLS
 
 ### 4. Granting Power BI Pro Licenses
-**Wrong**: Buying Power BI Pro for 200 teachers ($2,600/month)
+**Wrong**: Buying Power BI Pro for 200 teachers ($2600/month)
 
 **Correct**: Teachers consume from Premium workspace via embedded visuals (included in A3)
 
