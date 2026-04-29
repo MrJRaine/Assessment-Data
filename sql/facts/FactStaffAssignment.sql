@@ -27,6 +27,16 @@
 -- two rows here (one RoleCode='Administrator', one RoleCode='Teacher'), plus
 -- a single DimStaff row keyed by their email.
 --
+-- RoleCode taxonomy (translated from PS Group via DimRole at ingest):
+--   'Teacher'           — classroom teachers / librarians; section-level RLS only
+--   'SpecialistTeacher' — counsellors, registrars, coordinators, resource teachers,
+--                         APSEA itinerants; school-level + optional section-level
+--   'Administrator'     — Principal/VP, admin assistants; school-level RLS
+--   'RegionalAnalyst'   — TCRCE board-level; multi-school RLS
+--   'ProvincialAnalyst' — DoE / Evaluation Services; all-school + district aggregate
+--   'SupportStaff'      — no access to student data in the app (excluded from
+--                         vw_StaffSchoolAccess); rows still recorded for audit
+--
 -- Source of truth for:
 --   * School-level RLS for admins and regional analysts
 --     (see sql/security/vw_StaffSchoolAccess.sql — a view over this table)
@@ -55,7 +65,7 @@ CREATE TABLE FactStaffAssignment (
     StaffAssignmentID   BIGINT          NOT NULL IDENTITY,  -- Surrogate key
     StaffKey            BIGINT          NOT NULL,           -- References DimStaff.StaffKey
     SchoolID            VARCHAR(10)     NOT NULL,           -- References DimSchool.SchoolID (4-digit provincial)
-    RoleCode            VARCHAR(50)     NOT NULL,           -- 'Teacher', 'Administrator', 'Specialist', 'RegionalAnalyst', etc.
+    RoleCode            VARCHAR(50)     NOT NULL,           -- Warehouse role (translated from PS Group via DimRole): 'Teacher', 'SpecialistTeacher', 'Administrator', 'RegionalAnalyst', 'ProvincialAnalyst', 'SupportStaff'
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,               -- NULL = currently held
     IsCurrent           BIT             NOT NULL,

@@ -123,3 +123,39 @@ Nums AS (
 10. **`ALTER TABLE ADD COLUMN` and subsequent `UPDATE`/`SELECT` against that column cannot run in the same batch.** Fabric parses the whole script before executing, so any statement referencing the new column fails with "Invalid column name". Split into two separate query executions: run the ALTER first, then in a new query window run the UPDATE/SELECT. Same applies for DROP COLUMN followed by references to other columns.
 
 11. **`DROP TABLE` + `CREATE TABLE` (new shape) + `INSERT` referencing new columns has the same parser failure** as item 10. Even though the CREATE will give the table its new shape at execution time, the parser checks the INSERT against the *existing* table catalog and rejects "Invalid column name" for any column not in the old shape. Discovered 2026-04-28 while running `migrate_add_LastUpdated.sql` — the combined script failed with `Msg 207 Level 16 'Invalid column name LastUpdated'` on the DimCalendar INSERT, even though the CREATE earlier in the same batch defined that column. Same workaround as item 10: split into two scripts — schema rebuild in batch 1, INSERTs in batch 2 (or higher). The "fresh CREATE TABLE with INSERT in the same script" pattern only works when the table doesn't already exist; rebuilds of existing tables must split.
+
+## Discovered During Lakehouse Ingest Setup (2026-04-29)
+
+12. **`COPY INTO` does NOT support `ENCODING`** in Fabric Warehouse. Standard T-SQL / Synapse `COPY INTO` accepts `ENCODING = 'UTF8' | 'UTF16'`, but Fabric Warehouse's subset rejects it with `Msg 102, Level 15 'Incorrect syntax near UTF8'`. Default encoding is UTF-8 — just omit the parameter.
+
+    **Supported `COPY INTO` parameters** (per Fabric docs as of 2026-04-29):
+    `FILE_TYPE` (CSV / PARQUET), `FIRSTROW`, `ROWTERMINATOR`, `FIELDTERMINATOR`, `FIELDQUOTE`, `COMPRESSION`, `PARSER_VERSION`, `CREDENTIAL`, `ERRORFILE`, `ERRORFILE_CREDENTIAL`.
+
+    **Standard pattern for this project** (TAB-delimited PS exports, no quote qualifier):
+    ```sql
+    COPY INTO Stg_<Topic>
+    FROM 'abfss://<workspace>@onelake.dfs.fabric.microsoft.com/<lakehouse>.Lakehouse/Files/imports/<topic>/<file>'
+    WITH (
+        FILE_TYPE       = 'CSV',
+        FIELDTERMINATOR = '\t',
+        FIRSTROW        = 2
+    );
+    ```
+
+    **Staging table prerequisite**: `COPY INTO` does not create the target table. Define it first as all-VARCHAR ("load as text, validate/convert in merge"). This avoids COPY INTO failing on a single malformed value and matches the standard staging pattern.
+
+13. **`COPY INTO` default `ROWTERMINATOR` doesn't catch CR-only line endings — silent 0-row load.** PowerSchool direct table extracts emit files with CR-only line endings (0x0D, no LF — old-Mac style), not CRLF. Without an explicit `ROWTERMINATOR = '0x0D'`, COPY INTO finds no row boundaries past the header and silently loads zero rows (no error, just `(0 records affected)`). Discovered 2026-04-29 after multiple guess-and-check cycles on a Students export. Diagnosed by counting line-ending bytes locally: file had 6064 CR, 0 LF, 0 CRLF. Adding `ROWTERMINATOR = '0x0D'` immediately loaded all 6064 rows.
+
+    **Standard COPY INTO config for PS direct table extracts**:
+    ```sql
+    COPY INTO Stg_<Topic>
+    FROM '<onelake_path>'
+    WITH (
+        FILE_TYPE       = 'CSV',
+        FIELDTERMINATOR = '\t',
+        ROWTERMINATOR   = '0x0D',   -- CR only (PS quirk)
+        FIRSTROW        = 2
+    );
+    ```
+
+    Long-term fix: the Step 29 Power Automate flow should normalize line endings (CR → CRLF or LF) on file arrival, alongside the `.text` → `.txt` rename — so downstream tooling that expects standard line endings doesn't have to special-case PS quirks.

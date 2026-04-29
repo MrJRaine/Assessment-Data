@@ -47,13 +47,13 @@ CREATE TABLE DimStudent (
     MiddleName          VARCHAR(100)    NULL,               -- Optional; disambiguates same-name students
     LastName            VARCHAR(100)    NOT NULL,
     DateOfBirth         DATE            NULL,
-    CurrentGrade        VARCHAR(10)     NOT NULL,   -- Triggers new version
+    CurrentGrade        VARCHAR(10)     NOT NULL,   -- Triggers new version. Stored as 'P' (Primary), 'PP' (Pre-Primary), or '1'-'12'. PS emits 0/-1 for Primary/Pre-Primary; ingest translates.
     CurrentSchoolID     VARCHAR(10)     NOT NULL,   -- Triggers new version; 4-digit provincial school number
     ProgramCode         VARCHAR(10)     NOT NULL,   -- Triggers new version, e.g. 'E015', 'S115'
     EnrollStatus        INT             NOT NULL,   -- PS Enroll_Status: 0 = Active, 2 = Inactive, 3 = Graduated, -1 = Pre-Enrolled
     Homeroom            VARCHAR(50)     NULL,       -- PS Home_Room
-    Gender              VARCHAR(10)     NOT NULL,   -- PS Gender (M/F/X or whatever PS emits)
-    SelfIDAfrican       BIT             NULL,       -- PS NS_AssignIdentity_African — student self-ID as African descent
+    Gender              VARCHAR(10)     NOT NULL,   -- PS Gender. Observed values: M, F, X. Joins to DimGender for descriptions.
+    SelfIDAfrican       BIT             NULL,       -- PS NS_AssigndIdentity_African — student self-ID as African descent
     SelfIDIndigenous    BIT             NULL,       -- PS NS_aboriginal — student self-ID as Indigenous descent
     CurrentIPP          BIT             NULL,       -- PS CurrentIPP — has at least one IPP
     CurrentAdap         BIT             NULL,       -- PS CurrentAdap — has adaptations
