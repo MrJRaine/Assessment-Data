@@ -15,3 +15,4 @@ Desktop.ini
 # PowerSchool CSV drop zone — student/staff PII, must not be committed
 data/imports/*
 !data/imports/README.md
+!data/imports/_generate_test_dummies.ps1

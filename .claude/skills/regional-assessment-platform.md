@@ -231,6 +231,7 @@ CREATE TABLE DimStaff (
     CanChangeSchool     VARCHAR(255) NULL,         -- Raw PS semicolon-separated school list
     IsDistrictLevel     BIT,                       -- Derived (1 if '0' present in CanChangeSchool)
     ActiveFlag          BIT,                       -- Derived at ingest via import reconciliation
+    AccessLevel         VARCHAR(50) NULL,          -- Type 1 — derived per-person from FactStaffAssignment highest-priority school-tier role: 'RegionalAnalyst' / 'Administrator' / 'SpecialistTeacher'. NULL for staff with no school-tier access.
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,
     IsCurrent           BIT NOT NULL,
@@ -238,7 +239,7 @@ CREATE TABLE DimStaff (
 );
 ```
 
-**SCD policy: every business attribute is Type 2.** Any change to `FirstName`, `LastName`, `Title`, `HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`, or `ActiveFlag` creates a new versioned row. The only fields exempt are `StaffKey`, `Email`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `LastUpdated`. Same rationale as `DimStudent`: reports cite point-in-time values and must be reproducible regardless of intervening name corrections, school reassignments, or access changes.
+**SCD policy: every business attribute is Type 2 — with one exception.** Any change to `FirstName`, `LastName`, `Title`, `HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`, or `ActiveFlag` creates a new versioned row. `AccessLevel` is **Type 1** (overwrite) — it's a denormalized snapshot of the person's highest-priority school-tier RoleCode in `FactStaffAssignment`, computed at ingest. Historical AccessLevel is recoverable from `FactStaffAssignment`'s own Type 2 history, so DimStaff doesn't need to version it. Lifecycle/audit columns exempt from versioning: `StaffKey`, `Email`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `LastUpdated`. Same rationale for the Type 2 attributes as `DimStudent`: reports cite point-in-time values and must be reproducible regardless of intervening name corrections, school reassignments, or access changes.
 
 `RoleCode` and `SourceSystemID` are NOT on DimStaff — those moved to `FactStaffAssignment` (or are inapplicable because of the collapse). The three per-person access columns (`HomeSchoolID`, `CanChangeSchool`, `IsDistrictLevel`) live here because they describe the person, not a specific assignment — PS sources them from a joined table and emits the same values on every row of a multi-row staff member.
 
@@ -248,7 +249,7 @@ CREATE TABLE FactStaffAssignment (
     StaffAssignmentID   BIGINT NOT NULL IDENTITY,
     StaffKey            BIGINT NOT NULL,           -- FK to DimStaff
     SchoolID            VARCHAR(10) NOT NULL,
-    RoleCode            VARCHAR(50) NOT NULL,      -- 'Teacher', 'Administrator', 'Specialist', 'RegionalAnalyst'
+    RoleCode            VARCHAR(50) NOT NULL,      -- 'Teacher', 'SpecialistTeacher', 'Administrator', 'RegionalAnalyst', 'ProvincialAnalyst', 'SupportStaff' (translated from PS Group via DimRole)
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,                 -- NULL = currently held
     IsCurrent           BIT NOT NULL,
@@ -691,16 +692,21 @@ JOIN DimSchool sch ON s.CurrentSchoolID = sch.SchoolID
 JOIN vw_StaffSchoolAccess access
     ON s.CurrentSchoolID = access.SchoolID
 WHERE s.IsCurrent = 1
-  AND access.AccessLevel IN ('Administrator', 'RegionalAnalyst');
+  AND access.AccessLevel IN ('Administrator', 'RegionalAnalyst', 'SpecialistTeacher');
 ```
 
 ### RLS Derivation (no manual tables)
 
-Access is derived live — there are no RLS junction tables that need to be maintained or rebuilt:
+Access is derived from authoritative ingest fields — there are no manually-maintained RLS tables:
 
 **School-level access** — `sql/security/vw_StaffSchoolAccess.sql`:
 
-Driven by PS-native fields `HomeSchoolID` and `CanChangeSchool` on DimStaff, role-gated to non-teaching staff via `FactStaffAssignment`. Output schema:
+A pure unpacking view over DimStaff (no joins, no aggregation). Driven by three DimStaff fields:
+- `AccessLevel` (Type 1 column on DimStaff) — staff member's highest-priority school-tier RoleCode, computed at ingest from FactStaffAssignment. NULL for staff with no school-tier role. Filter `WHERE AccessLevel IS NOT NULL` is the inclusion gate.
+- `HomeSchoolID` — primary school contribution.
+- `CanChangeSchool` — semicolon-separated list, parsed live in the view.
+
+Output schema:
 ```
 StaffKey | Email | SchoolID | AccessLevel
 ```
@@ -710,10 +716,14 @@ Parse rules for `CanChangeSchool` (semicolon-separated list):
 - `0` (district-level tier marker) → emitted as `'0000'` aggregate-row marker
 - Any other integer → zero-padded to 4 chars (e.g. `79` → `'0079'`)
 
-`AccessLevel` is the staff member's highest-priority current non-teaching role
-(`Administrator > RegionalAnalyst > Specialist`) — same value across all rows for that StaffKey. It's a person-tier indicator, not a per-school role claim.
+`AccessLevel` ordering (priority): `RegionalAnalyst > Administrator > SpecialistTeacher`. It's a person-tier indicator, not a per-school role claim. The merge proc resolves it once per person per ingest.
 
-Teachers are excluded entirely — their RLS comes from FactSectionTeachers (section-level). The `'0000'` aggregate row only surfaces for non-teaching staff who have `'0'` in their CanChangeSchool list.
+**Excluded entirely** (their `AccessLevel` is NULL, so no rows surface in the view):
+- `Teacher` — section-level RLS via FactSectionTeachers, not school-level.
+- `ProvincialAnalyst` — never authenticates to the PowerApp (not in security group).
+- `SupportStaff` — no student-data access in the app.
+
+The `'0000'` aggregate row only surfaces for school-tier staff who have `'0'` in their CanChangeSchool list.
 
 **Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`. The bridge stores `TeacherEmail` directly (business key), so RLS matches `USERPRINCIPALNAME()` without any DimStaff join:
 ```sql

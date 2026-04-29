@@ -13,8 +13,8 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - [x] **3. Upgrade 10 users to M365 A5** in Microsoft 365 admin center *(Manual)*
 - [x] **4. Write and run SQL** to create all dimension and fact tables *(Claude can generate — `sql/dimensions/` and `sql/facts/`)*
 - [x] **5. Write and run SQL** to create RLS security tables and seed with pilot users *(Claude can generate — `sql/security/`)*
-- [ ] **6. Request first PowerSchool CSV exports** — French program students, staff, schools, enrollments *(Manual — PowerSchool admin)*
-- [ ] **7. Upload CSVs to OneLake** landing zone *(Manual — Fabric portal)*
+- [x] **6. Request first PowerSchool CSV exports** — French program students, staff, schools, enrollments *(Manual — PowerSchool admin)*. **Done 2026-04-29**: full PS exports received, format quirks discovered (TAB-delimited / CR-only line endings / UTF-8 / no quote qualifier / `.text` extension / `NS_AssigndIdentity_African` spelling), Staff export revised to include per-row `SchoolID` column, `DimRole` mapping received from PS admin. Cross-export referential integrity confirmed via full export sample.
+- [x] **7. Upload CSVs to OneLake landing zone** — **Done 2026-04-29**: created Lakehouse `Assessment_Landing` in `Regional_Data_Portal`, folder structure `Files/imports/{students|staff|sections|section-teachers|enrollments}/` in place, sample file uploaded, `COPY INTO` validated end-to-end on synthetic data (20 rows from `AssessmentDataStudentsExport.txt`). Standard config locked in: `FILE_TYPE='CSV'`, `FIELDTERMINATOR='\t'`, `ROWTERMINATOR='0x0D'`, `FIRSTROW=2`. Per-call GUID-based path required (name-based path failed with auth error). MVP strategy A; Strategy B (Pipeline + Power Automate) deferred to Step 29 before September rollout.
 - [ ] **8. Run merge procedures** to load pilot data into warehouse *(Claude can generate — `sql/procedures/`)*
 
 ---
@@ -58,9 +58,15 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 ## Phase 5: Full Rollout (July–September 2025)
 *Goal: All schools, programs, and teachers on the platform*
 
-- [ ] **27. Create Entra ID security groups**: `SG-Assessment-Teachers`, `SG-Assessment-SchoolAdmins`, `SG-Assessment-Regional` — populate from staff export *(Manual — Entra admin portal)*
+- [ ] **27. Create Entra ID security groups**: `SG-Assessment-Teachers`, `SG-Assessment-SchoolAdmins`, `SG-Assessment-Regional` — populate from staff export *(Manual — Entra admin portal)*. Membership rules by warehouse `RoleCode` (translated from PS Group via `DimRole`):
+  - `SG-Assessment-Teachers` → `Teacher`
+  - `SG-Assessment-SchoolAdmins` → `Administrator` + `SpecialistTeacher` (both get school-level RLS via `vw_StaffSchoolAccess`; SpecialistTeacher additionally gets section-level via `FactSectionTeachers` if assigned)
+  - `SG-Assessment-Regional` → `RegionalAnalyst`
+  - **Excluded from all groups** (no PowerApp access at all): `ProvincialAnalyst` (DoE / Evaluation Services — confirmed 2026-04-29 they never authenticate to the app), `SupportStaff` (no student-data access by design). Rows still exist in `DimStaff` and `FactStaffAssignment` for audit, but these accounts must not appear in any of the three security groups above.
 - [ ] **28. Full PowerSchool export** — all programs, all schools *(Manual)*
-- [ ] **29. Build Power Automate flow** for automated CSV ingestion *(Claude can generate flow JSON structure — `power-automate/`)*
+- [ ] **29. Build automated CSV ingestion (Strategy B)** — replaces manual Step 7 uploads. Components: (a) Fabric Data Pipeline with Copy activities reading from `Files/imports/{topic}/` into staging tables, (b) Power Automate flow that watches the OneLake folder and triggers the Pipeline on new file arrival, (c) Pipeline calls the existing Step 8 merge procs after staging is loaded. Required before September rollout. *(Claude can generate Pipeline JSON + flow structure — `power-automate/`, `pipelines/`)*
+  - **Extension-rename step required**: PS exports default to `.text` extension, which blocks Fabric Lakehouse UI preview (only `.txt` / `.csv` / `.json` etc. are previewable). The Power Automate flow (or whatever drops files into the Lakehouse) must check the incoming filename and rename `.text` → `.txt` (or `.csv`) before the file lands in the watched folder. Required for operational debuggability — when something goes wrong, an admin needs to be able to open the file in the Lakehouse UI without downloading it first. The COPY INTO logic itself doesn't care (FILE_TYPE='CSV' is explicit), so the rename is purely for human-facing tooling. Captured 2026-04-29 after hitting this during Step 7 manual testing.
+  - **Line-ending normalization step required**: PS direct table extracts use CR-only line endings (`0x0D`, old-Mac-style), not CRLF. Without normalization the staging COPY INTO needs `ROWTERMINATOR = '0x0D'` to load anything (default expects CRLF and silently returns 0 rows). The Power Automate flow should convert CR → CRLF (or LF) on file arrival so the merge procs and any future tooling see standard line endings. Captured 2026-04-29 during Step 7 manual testing.
 - [ ] **30. Implement full SCD Type 2 merge procedures** for all dimensions *(Claude can generate — `sql/procedures/`)*
 - [ ] **31. Add `FactAssessmentWriting`** and configure writing rubric entry in Power Apps *(Claude can generate SQL + formulas)*
 - [ ] **32. Build school admin monitoring dashboard** in Power Apps *(Claude can provide logic and formulas)*
@@ -75,12 +81,12 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 
 | Phase | Total Steps | Completed |
 |-------|-------------|-----------|
-| Phase 1: Foundation | 8 | 5 |
+| Phase 1: Foundation | 8 | 7 |
 | Phase 2: Security & Views | 6 | 0 |
 | Phase 3: Power Apps | 7 | 0 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **5** |
+| **Total** | **36** | **7** |
 
 ---
 
@@ -93,6 +99,31 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Fabric Warehouse T-SQL limitations**: No `DEFAULT` constraints, no `PRIMARY KEY`/`FOREIGN KEY` in `CREATE TABLE`, no `NVARCHAR` (use `VARCHAR`), no `DATETIME` (use `DATETIME2(0)`), `DATETIME2` requires explicit precision 0–6, `IDENTITY` columns must be `BIGINT` not `INT`, `IDENTITY` takes no seed/increment parameters, `CREATE INDEX` not supported (columnstore is automatic). Data integrity is enforced through ETL procedures, not database constraints. FK relationships must be defined manually in the Power BI semantic model. Full reference in `/fabric-warehouse-sql` skill.
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
+- **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-04-29
+- **Last completed step**: Steps 6 + 7 fully closed. End-to-end Step 7 ingest pipeline validated against synthetic test data: 20 rows in `Stg_StudentTest` from `AssessmentDataStudentsExport.txt` in OneLake.
+- **Schema additions this session**:
+  - `DimRole` (50 rows, 6-value RoleCode taxonomy after PS admin clarified roles): `Teacher`, `SpecialistTeacher` (NEW), `Administrator`, `RegionalAnalyst`, `ProvincialAnalyst` (NEW), `SupportStaff` (NEW). ProvincialAnalyst/SupportStaff excluded from `vw_StaffSchoolAccess`.
+  - `DimGender` (3 rows: F/M/X) static reference.
+  - `DimStaff.AccessLevel` column (Type 1 — only Type 1 column on DimStaff). Computed at ingest from highest-priority school-tier RoleCode. Replaces per-query MAX(CASE) in `vw_StaffSchoolAccess`. Migration: [migrate_DimStaff_add_AccessLevel.sql](../sql/scripts/migrate_DimStaff_add_AccessLevel.sql).
+  - `vw_StaffSchoolAccess` simplified to pure DimStaff unpacking — no joins, no aggregation.
+- **Fabric Warehouse quirks discovered (added to fabric-warehouse-sql skill items 12–13)**:
+  - `COPY INTO` does NOT support `ENCODING` parameter (UTF-8 only).
+  - `COPY INTO` default `ROWTERMINATOR` doesn't catch CR-only line endings — silent 0-row load. PS direct extracts use CR-only; specify `ROWTERMINATOR = '0x0D'` always.
+  - GUID-based OneLake path required (name-based `abfss://...` failed auth in this environment).
+  - `RowCount` is reserved — use `RowsLoaded` or `[RowCount]`.
+- **PS export reality (vs. earlier assumptions)**:
+  - Direct extracts: TAB-delimited, `.text` extension (not previewable in Lakehouse — rename to `.txt`/`.csv` on upload), CR-only line endings, UTF-8 no BOM, no quote qualifier (header at minimum; data may show quotes in preview as a render artifact, but FIELDQUOTE not needed).
+  - Field-name correction: `NS_AssigndIdentity_African` (with the extra `d`).
+  - Staff export per-row `SchoolID` column required and confirmed present after PS admin re-export.
+  - Sentinels: HomeSchoolID `'0'` → ingest translates to NULL; per-row SchoolID `'0'` → translates to `'0000'` (district-tier aggregate marker).
+- **Ingest architecture**: Strategy A (Lakehouse + manual upload + `COPY INTO`) for MVP. Strategy B (Fabric Data Pipeline + Power Automate trigger) deferred to Step 29 before launch. Step 29 must include extension-rename (`.text` → `.txt`) and line-ending normalization (CR → CRLF/LF).
+- **Synthetic test data generated** for Step 8 dev: [data/imports/_generate_test_dummies.ps1](../data/imports/_generate_test_dummies.ps1) creates 5 cross-linked files exercising every translation rule (all grades incl. `0`/`-1`, all genders, all 4 EnrollStatus, all boolean encodings, multi-school staff, district sentinel, every active RoleCode bucket, term mix, early-exit + empty-DateLeft enrollments).
+- **Folder structure**: `data/imports/{students|staff|sections|section-teachers|enrollments}/` (mirrored in OneLake `Files/imports/...`).
+- **Compliance lesson saved** ([feedback_no_live_ps_connection.md](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/feedback_no_live_ps_connection.md), [feedback_compliance_flagging.md](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/feedback_compliance_flagging.md)): no live PS connection means freshness arguments are invalid; default to materialization on ingest. Don't ask user to download production OneLake files for me to inspect — use synthetic dummies + metadata-only diagnostics.
+- **Next action**: Step 8 — write `usp_LoadStudentsStaging` + `usp_MergeStudent` for DimStudent, exercising boolean translations + Grade `0`→`'P'` / `-1`→`'PP'` + `MM/DD/YYYY` date parsing + all-Type-2 SCD logic. 20 synthetic rows already loaded in `Stg_StudentTest` ready for validation.
+- **Blockers**: None.
 
 ### Left Off — 2026-04-28
 - **Last completed step**: Step 5. Step 6 in progress — both field-mapping and export-procedures docs are complete with sources/filters filled in for all 5 exports; awaiting first test CSV to validate format.

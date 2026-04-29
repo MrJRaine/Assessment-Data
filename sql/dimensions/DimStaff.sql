@@ -32,15 +32,30 @@
  *                       name corrections, school reassignments, or access changes.
  *            2026-04-28 - Added Title column (VARCHAR(100) NULL). Pulled from PS
  *                       Title field. Also a Type 2 trigger per the policy above.
+ *            2026-04-29 - Added AccessLevel column (VARCHAR(50) NULL). Derived at
+ *                       ingest from FactStaffAssignment.RoleCode (highest-priority
+ *                       school-tier role per person). Type 1 (overwrite, no SCD
+ *                       version) — historical AccessLevel is recoverable from
+ *                       FactStaffAssignment's own Type 2 history; on DimStaff this
+ *                       is just a denormalized snapshot used by vw_StaffSchoolAccess
+ *                       for fast RLS lookups.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
--- SCD policy: ALL business attributes trigger a new version (Type 2).
--- The only fields that DON'T are the lifecycle/audit columns:
+-- SCD policy: ALL business attributes trigger a new version (Type 2)…
+--   …WITH ONE EXCEPTION: AccessLevel is Type 1 (overwrite). It's a derived
+--   denormalized snapshot of the staff member's highest-priority school-tier
+--   RoleCode in FactStaffAssignment. Historical AccessLevel queries are
+--   answered against FactStaffAssignment, not DimStaff.
+--
+-- Lifecycle/audit columns (never trigger a version):
 --   StaffKey, Email, EffectiveStartDate, EffectiveEndDate, IsCurrent, LastUpdated
 --
 -- Type 2 trigger fields (any change creates a new SCD version):
 --   FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel, ActiveFlag
+--
+-- Type 1 fields (overwrite the current row only):
+--   AccessLevel
 --
 -- Business key: Email (normalized to lowercase during ingest)
 -- Surrogate key: StaffKey (warehouse-generated, unique per SCD version)
@@ -95,6 +110,7 @@ CREATE TABLE DimStaff (
     CanChangeSchool     VARCHAR(255)    NULL,               -- Raw PS semicolon-separated school list
     IsDistrictLevel     BIT             NOT NULL,           -- Derived: '0' present in CanChangeSchool
     ActiveFlag          BIT             NOT NULL,           -- Derived at ingest via import reconciliation
+    AccessLevel         VARCHAR(50)     NULL,               -- Type 1 — derived per-person from FactStaffAssignment highest-priority school-tier role: 'RegionalAnalyst' / 'Administrator' / 'SpecialistTeacher'. NULL for staff with no school-tier access (Teacher-only, ProvincialAnalyst, SupportStaff).
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,               -- NULL = current version
     IsCurrent           BIT             NOT NULL,

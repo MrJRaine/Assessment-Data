@@ -1,9 +1,9 @@
 /*******************************************************************************
  * View: vw_StaffSchoolAccess
- * Purpose: School-level RLS authorization for non-teaching staff (admins,
- *          specialists, regional analysts). Derived live at query time from
- *          DimStaff (HomeSchoolID + CanChangeSchool) joined against
- *          FactStaffAssignment for role-tier filtering.
+ * Purpose: School-level RLS authorization for staff with school-tier access.
+ *          Pure unpacking view over DimStaff — no joins, no aggregation.
+ *          AccessLevel and the school list are both per-person attributes
+ *          already stored on DimStaff.
  * Created: 2026-04-24
  * Modified: 2026-04-24 - Initial creation. Replaces the StaffSchoolAccess table,
  *                       which was being rebuilt on every staff ingest.
@@ -12,14 +12,33 @@
  *                       FactStaffAssignment row presence. PS already maintains
  *                       this per-person access list — using it directly avoids
  *                       drift between PS UI navigation rights and warehouse RLS.
+ *            2026-04-29 - Updated for the 6-value RoleCode taxonomy introduced
+ *                       by DimRole. Included roles: Administrator,
+ *                       SpecialistTeacher, RegionalAnalyst. Excluded:
+ *                       Teacher (section-level RLS only), ProvincialAnalyst
+ *                       (no PowerApp access at all — not in security group),
+ *                       SupportStaff (no student-data access).
+ *            2026-04-29 - Simplified by reading AccessLevel directly from
+ *                       DimStaff (Type 1 column, computed at ingest by the
+ *                       staff merge proc) instead of recomputing via MAX(CASE)
+ *                       over FactStaffAssignment on every query. Filter on
+ *                       AccessLevel IS NOT NULL replaces the prior FactStaffAssignment
+ *                       JOIN + GROUP BY. Faster RLS path; no behavior change.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
 -- WHO appears in this view:
---   Only staff with at least one CURRENT non-teaching role
---   (Administrator | Specialist | RegionalAnalyst) in FactStaffAssignment.
---   Teachers are excluded by design — their RLS is section-level via
---   FactSectionTeachers, not school-level.
+--   Only staff with a non-NULL AccessLevel on their current DimStaff row.
+--   AccessLevel is set during the staff merge proc to the highest-priority
+--   current school-tier RoleCode in FactStaffAssignment, with priority
+--   RegionalAnalyst > Administrator > SpecialistTeacher.
+--
+-- Excluded by design (their AccessLevel is NULL):
+--   * Teacher           — section-level RLS via FactSectionTeachers, not school-level.
+--   * ProvincialAnalyst — never authenticates to the PowerApp (not in security group).
+--   * SupportStaff      — no student-data access in the app.
+--   Rows for these roles still exist in FactStaffAssignment for audit; their
+--   DimStaff record exists too, just with AccessLevel = NULL.
 --
 -- WHAT schools are returned per staff member:
 --   Union of:
@@ -32,79 +51,42 @@
 --
 -- The '0000' aggregate row is a UI/filter primitive: when present, the
 -- consuming app can offer an "All assigned schools" combined view to that user.
--- It is gated by role (only non-teaching staff can produce it, by virtue of the
--- view-level role filter) and additionally by IsDistrictLevel = 1 (which mirrors
--- the same '0' presence — defense in depth).
---
--- AccessLevel returned per row is the staff member's HIGHEST-priority current
--- non-teaching role across all of their FactStaffAssignment rows
--- (priority: Administrator > RegionalAnalyst > Specialist). Same value across
--- all rows for a given StaffKey — it is a person-tier indicator, not a per-
--- school role claim. (A user might have access to a school via CanChangeSchool
--- without holding any specific role at that school in FactStaffAssignment.)
+-- It is gated by role (only school-tier staff can produce it, by virtue of
+-- having a non-NULL AccessLevel) and additionally by IsDistrictLevel = 1
+-- (which mirrors the same '0' presence — defense in depth).
 
 CREATE VIEW vw_StaffSchoolAccess AS
 
-WITH NonTeachingStaff AS (
-    -- One row per staff member who holds at least one non-teaching role.
-    -- AccessLevel is the highest-priority role they hold anywhere.
-    SELECT
-        ds.StaffKey,
-        ds.Email,
-        ds.HomeSchoolID,
-        ds.CanChangeSchool,
-        ds.IsDistrictLevel,
-        CASE
-            WHEN MAX(CASE WHEN fsa.RoleCode = 'Administrator'    THEN 1 ELSE 0 END) = 1 THEN 'Administrator'
-            WHEN MAX(CASE WHEN fsa.RoleCode = 'RegionalAnalyst'  THEN 1 ELSE 0 END) = 1 THEN 'RegionalAnalyst'
-            WHEN MAX(CASE WHEN fsa.RoleCode = 'Specialist'       THEN 1 ELSE 0 END) = 1 THEN 'Specialist'
-        END AS AccessLevel
-    FROM DimStaff ds
-    JOIN FactStaffAssignment fsa
-        ON fsa.StaffKey = ds.StaffKey
-    WHERE ds.IsCurrent  = 1
-      AND ds.ActiveFlag = 1
-      AND fsa.IsCurrent = 1
-      AND fsa.RoleCode IN ('Administrator', 'RegionalAnalyst', 'Specialist')
-    GROUP BY ds.StaffKey, ds.Email, ds.HomeSchoolID, ds.CanChangeSchool, ds.IsDistrictLevel
-),
-
-ParsedCanChangeSchool AS (
-    -- Explode CanChangeSchool semicolon list into per-school rows.
-    -- Strip 999999, map 0 -> '0000', zero-pad everything else.
-    SELECT
-        nts.StaffKey,
-        CASE
-            WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
-            ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
-        END AS SchoolID
-    FROM NonTeachingStaff nts
-    CROSS APPLY STRING_SPLIT(nts.CanChangeSchool, ';') AS s
-    WHERE nts.CanChangeSchool IS NOT NULL
-      AND s.value IS NOT NULL
-      AND LTRIM(RTRIM(s.value)) <> ''
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999
-),
-
-AllAccessSchools AS (
-    -- HomeSchoolID contribution (always include if present)
-    SELECT StaffKey, HomeSchoolID AS SchoolID
-    FROM NonTeachingStaff
-    WHERE HomeSchoolID IS NOT NULL
-
-    UNION   -- de-dupes overlap between HomeSchoolID and CanChangeSchool
-
-    -- Parsed CanChangeSchool contribution
-    SELECT StaffKey, SchoolID
-    FROM ParsedCanChangeSchool
-)
-
+-- HomeSchoolID contribution (one row per staff with school-tier access who has a home school)
 SELECT
-    nts.StaffKey,
-    nts.Email,
-    aas.SchoolID,
-    nts.AccessLevel
-FROM AllAccessSchools aas
-JOIN NonTeachingStaff nts
-    ON nts.StaffKey = aas.StaffKey;
+    StaffKey,
+    Email,
+    HomeSchoolID AS SchoolID,
+    AccessLevel
+FROM DimStaff
+WHERE IsCurrent     = 1
+  AND ActiveFlag    = 1
+  AND AccessLevel  IS NOT NULL
+  AND HomeSchoolID IS NOT NULL
+
+UNION   -- de-dupes overlap between HomeSchoolID and CanChangeSchool
+
+-- CanChangeSchool contribution (one row per parsed school entry)
+SELECT
+    ds.StaffKey,
+    ds.Email,
+    CASE
+        WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
+        ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
+    END AS SchoolID,
+    ds.AccessLevel
+FROM DimStaff ds
+CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
+WHERE ds.IsCurrent       = 1
+  AND ds.ActiveFlag      = 1
+  AND ds.AccessLevel    IS NOT NULL
+  AND ds.CanChangeSchool IS NOT NULL
+  AND s.value           IS NOT NULL
+  AND LTRIM(RTRIM(s.value)) <> ''
+  AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
+  AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999;

@@ -20,14 +20,14 @@ One row per student enrolled in the French Immersion program. The business key i
 | FirstName | VARCHAR(100) | | First_Name |
 | MiddleName | VARCHAR(100) | Nullable — include where present. Helps distinguish students with identical first + last names in the same school/grade (common locally) | Middle_Name |
 | LastName | VARCHAR(100) | | Last_Name |
-| DateOfBirth | DATE | Optional but recommended | DOB |
-| CurrentGrade | VARCHAR(10) | Values like 'P', '1', '2', ... '12' | Grade_Level |
+| DateOfBirth | DATE | Optional but recommended. PS emits `MM/DD/YYYY` format (e.g. `10/13/2014`); ingest parses with `CONVERT(DATE, val, 101)` | DOB |
+| CurrentGrade | VARCHAR(10) | Stored values: `'P'` (Primary), `'PP'` (Pre-Primary), `'1'`–`'12'`. PS emits `0` for Primary and `-1` for Pre-Primary as numeric codes; **ingest translates `0`→`'P'` and `-1`→`'PP'`** before storing. Other grade values stored verbatim as their string form | Grade_Level |
 | CurrentSchoolID | VARCHAR(10) | 4-digit provincial school number (e.g. `'0167'`). Leading zeros are normalized during ingest | SchoolID |
 | ProgramCode | VARCHAR(10) | PowerSchool program code (e.g. 'E005', 'J015', 'S120'). 4-character format: letter (grade band) + 3 digits. See "Pilot Program Code Filter" section below | NS_Program |
 | EnrollStatus | INT | PS value stored verbatim: `0` = Active, `2` = Inactive, `3` = Graduated, `-1` = Pre-Enrolled (registered but not yet started at the school) | Enroll_Status |
 | Homeroom | VARCHAR(50) | Student's current homeroom (nullable) | Home_Room |
-| Gender | VARCHAR(10) | Student's gender — only required field of this group | Gender |
-| SelfIDAfrican | BIT | Student self-identifies as being of African descent. PS sends `"Yes"`/`"No"`/NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_AssignIdentity_African |
+| Gender | VARCHAR(10) | Student's gender — only required field of this group. Observed values: `M` (Male), `F` (Female), `X` (Non-binary or another gender identity). Joins to `DimGender` for friendly descriptions | Gender |
+| SelfIDAfrican | BIT | Student self-identifies as being of African descent. PS sends `"Yes"`/`"No"`/NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_AssigndIdentity_African |
 | SelfIDIndigenous | BIT | Student self-identifies as being of Indigenous descent. PS sends `"1"` (Yes) / `"2"` (No) / NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_aboriginal |
 | CurrentIPP | BIT | Student currently has at least one IPP. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentIPP |
 | CurrentAdap | BIT | Student currently has adaptations. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentAdap |
@@ -56,10 +56,10 @@ The ingest splits each raw row into two destinations:
 | FirstName | VARCHAR(100) | `DimStaff.FirstName` | | First_Name |
 | LastName | VARCHAR(100) | `DimStaff.LastName` | | Last_Name |
 | Title | VARCHAR(100) | `DimStaff.Title` | Job title (e.g. "Vice Principal", "Educational Assistant"). Per-person value, same across all rows of a multi-row staff member. Nullable for staff with no title set | Title |
-| HomeSchoolID | VARCHAR(10) | `DimStaff.HomeSchoolID` | Per-person primary/home school (4-digit provincial number). Sourced from a joined PS table; same value on every row of a multi-row staff member. Leave blank for itinerant staff with no single home school | HomeSchoolID |
+| HomeSchoolID | VARCHAR(10) | `DimStaff.HomeSchoolID` | Per-person primary/home school (4-digit provincial number). Sourced from a joined PS table; same value on every row of a multi-row staff member. PS emits `'0'` for district-level / Dept of Education staff with no single home school — **ingest translates `'0'` to NULL**. Leave blank also for itinerant staff with no single home school | HomeSchoolID |
 | CanChangeSchool | VARCHAR(255) | `DimStaff.CanChangeSchool` | Per-person semicolon-separated list of school IDs the user can navigate to in PS (e.g. `0;79;167;1199;999999`). Sourced from a joined PS table; same value on every row of a multi-row staff member. Populated only for staff with multi-school access; leave blank otherwise. Special markers: `0` = district-level tier, `999999` = graduates pseudo-school | CanChangeSchool |
-| SchoolID | VARCHAR(10) | `FactStaffAssignment.SchoolID` | 4-digit provincial school number for **this row's** assignment (leading zeros normalized during ingest). Different from HomeSchoolID — this varies per row when staff appear multiple times | SchoolID |
-| RoleCode | VARCHAR(50) | `FactStaffAssignment.RoleCode` | Expected values: `Teacher`, `Administrator`, `Specialist`, `RegionalAnalyst`. PowerSchool's equivalent label goes here; we'll map during ingest | Group |
+| SchoolID | VARCHAR(10) | `FactStaffAssignment.SchoolID` | 4-digit provincial school number for **this row's** assignment (leading zeros normalized during ingest). Different from HomeSchoolID — this varies per row when staff appear multiple times. PS emits `'0'` for the district-tier aggregate row (Dept of Education staff); ingest translates to `'0000'` | SchoolID |
+| RoleCode | VARCHAR(50) | `FactStaffAssignment.RoleCode` | PS emits the numeric `Group` code (1-50). Ingest joins to `DimRole` to translate `RoleNumber` → warehouse `RoleCode`. Six-value taxonomy: `Teacher` (classroom + librarians; section-level RLS), `SpecialistTeacher` (counsellors, registrars, school-based coordinators e.g. IB/O2/Co-op, resource teachers, APSEA itinerants; school-level + section-level RLS), `Administrator` (Principal/VP, admin assistants; school-level RLS), `RegionalAnalyst` (TCRCE board-level — superintendent, board directors, board services, board coordinators/consultants; multi-school RLS), `ProvincialAnalyst` (DoE / Evaluation Services; **not in PowerApp security group — no app access at all**), `SupportStaff` (no student-data access in app — excluded from RLS). NULL for unused PS slots. See [sql/dimensions/DimRole.sql](../sql/dimensions/DimRole.sql) for the full mapping | Group |
 | ID | VARCHAR(50) | `FactStaffAssignment.SourceSystemID` | PowerSchool staff record ID for this specific email×school×role row. Used for matching by triple `(StaffKey, SchoolID, RoleCode)`, but a **change in this value for an existing triple triggers a new SCD version** — this catches email-reuse collisions where a retiring staffer's `first.last@tcrce.ca` gets handed to a new hire with the same name. Audit-flag any import where this fires | ID |
 
 ### `ActiveFlag` derivation (not a CSV column)
@@ -150,8 +150,8 @@ One row per student-section assignment in the pilot schools.
 |---|---|---|---|
 | StudentNumber | BIGINT | Must match a StudentNumber from the Students export | [1]Student_Number |
 | SectionID | VARCHAR(50) | Must match a SectionID from the Sections export | SectionID |
-| StartDate | DATE | Enrollment start date | DateEnrolled |
-| EndDate | DATE | Enrollment end date, or blank/NULL if still enrolled | DateLeft |
+| StartDate | DATE | Enrollment start date. PS emits `MM/DD/YYYY` format | DateEnrolled |
+| EndDate | DATE | **PS auto-populates `DateLeft` to the section's term-end-date when the student enrolls** (so PS can auto-exit them when the course ends) — it is NOT a "left early" signal by itself. Year-long courses get end-of-June; one-semester courses get end-of-January (S1) or end-of-June (S2). Both can shift to nearest school day. Ingest must compare against `DimTerm`-derived term end: `DateLeft = term end` → still active; `DateLeft < term end` → left early; `DateLeft` blank → still enrolled, `EndDate = NULL` | DateLeft |
 | SourceSystemID | VARCHAR(50) | PowerSchool CC table primary key for this enrollment row. Stored for reference/debugging only — NOT used for record matching | ID |
 
 ### `ActiveFlag` derivation (not a CSV column)
@@ -172,8 +172,8 @@ This ensures stale enrollments get a sensible `EndDate` even when PS doesn't sup
 
 - **ID consistency is critical**: the same student must have the same `StudentNumber` across all exports and across all future exports. Same rule for `Email` (staff), `SchoolID`, and `SectionID`.
 - **No PII beyond what's listed**: do not include SINs, medical info, home addresses, or anything not shown above. Data minimization is part of PIIDPA compliance.
-- **CSV format**: UTF-8 encoding, comma-delimited, double-quote text qualifier, first row is header.
-- **One export = one CSV file**, named `students.csv`, `staff.csv`, `sections.csv`, `section-teachers.csv`, `enrollments.csv`. (Schools not exported — seeded from provincial directory.)
+- **File format**: UTF-8 encoding, first row is header. Delimiter and extension depend on the export source — direct table extracts emit TAB-delimited `.text` files (PS default); sqlReports emit comma-delimited `.csv` files with double-quote text qualifier. The ingest pipeline auto-detects delimiter from the header line, so either form works.
+- **Filenames don't matter** — the ingest pipeline routes by folder placement, not filename. Drop each export into its dedicated subfolder (`students/`, `staff/`, `sections/`, `section-teachers/`, `enrollments/`) under the OneLake landing zone. PS exports default to long auto-generated names like `AssessmentDataStudentsExport.text`; that's fine. Schools not exported — seeded from provincial directory.
 - **Pilot scope**: students export should be filtered to French Immersion program codes only (see "Pilot Program Code Filter" section below). Staff, schools, and sections should be complete (not filtered) — RLS handles the access control.
 
 ---
