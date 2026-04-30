@@ -23,7 +23,10 @@
 # Edge cases covered (deliberately):
 #   - Grades:        0 (Primary), -1 (Pre-Primary), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 #   - Genders:       M, F, X
-#   - EnrollStatus:  0 (Active), 2 (Inactive), 3 (Graduated), -1 (Pre-Enrolled)
+#   - EnrollStatus:  0 (Active) only — production PS Students export is filtered to
+#                    Enroll_Status = 0 upstream, so values 2/3/-1 never appear in
+#                    real exports. (Earlier dummies seeded all four values; stripped
+#                    2026-04-30 to match production reality.)
 #   - SelfIDAfrican: "Yes" and empty (no "No" — matches PS reality)
 #   - SelfIDIndigenous: "1", "2", empty
 #   - CurrentIPP / CurrentAdap: "Y", "N"
@@ -68,13 +71,12 @@ function Write-FileWithCRLF {
 }
 
 # -----------------------------------------------------------------------------
-# 1. STUDENTS  (20 rows)
+# 1. STUDENTS  (18 rows — all Enroll_Status = 0 to match production export filter)
 # -----------------------------------------------------------------------------
 $studentHeader = "Student_Number`tID`tFirst_Name`tMiddle_Name`tLast_Name`tSchoolID`tGrade_Level`tNS_Program`tHome_Room`tGender`tDOB`tNS_AssigndIdentity_African`tNS_aboriginal`tCurrentIPP`tCurrentAdap`tEnroll_Status"
 
 $studentRows = @(
     "9100000001`t90001`tAlpha`tOne`tTest`t0716`t0`tE015`tP-Sample`tM`t09/01/2020`t`t`tN`tN`t0",
-    "9100000002`t90002`tBeta`tTwo`tSample`t0716`t-1`tP005`t`tF`t03/15/2021`t`t`tN`tN`t-1",
     "9100000003`t90003`tGamma`tThree`tDemo`t0167`t1`tE015`t1A`tX`t06/15/2019`tYes`t`tY`tN`t0",
     "9100000004`t90004`tDelta`tFour`tTest`t0167`t5`tE015`t5A`tM`t09/15/2014`t`t1`tN`tY`t0",
     "9100000005`t90005`tEpsilon`tFive`tSample`t0079`t7`tJ015`t7B`tF`t04/22/2012`tYes`t2`tY`tY`t0",
@@ -86,8 +88,7 @@ $studentRows = @(
     "9100000011`t90011`tLambda`t`tSample`t0716`t3`tE015`t3C`tM`t11/03/2017`tYes`t1`tY`tN`t0",
     "9100000012`t90012`tMu`t`tDemo`t0716`t6`tE005`t6A`tF`t07/08/2014`t`t`tN`tN`t0",
     "9100000013`t90013`tNu`tEleven`tTest`t0167`t8`tJ005`t8B`tM`t12/01/2011`t`t`tN`tY`t0",
-    "9100000014`t90014`tXi`tTwelve`tSample`t0079`t4`tE015`t4A`tF`t06/30/2015`tYes`t1`tY`tN`t2",
-    "9100000015`t90015`tOmicron`tThirteen`tDemo`t0079`t12`tS015`t`tM`t01/15/2007`t`t`tN`tN`t3",
+    "9100000014`t90014`tXi`tTwelve`tSample`t0079`t4`tE015`t4A`tF`t06/30/2015`tYes`t1`tY`tN`t0",
     "9100000016`t90016`tPi`tFourteen`tTest`t1178`t9`tJ015`t9A`tF`t09/22/2010`t`t2`tY`tY`t0",
     "9100000017`t90017`tRho`tFifteen`tSample`t0981`t7`tE025`t7C`tM`t10/05/2012`t`t`tN`tN`t0",
     "9100000018`t90018`tSigma`tSixteen`tDemo`t0716`t2`tE015`t2B`tX`t04/12/2018`tYes`t1`tN`tN`t0",
@@ -168,7 +169,7 @@ Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExpo
                    -Lines (@($coTeacherHeader) + $coTeacherRows)
 
 # -----------------------------------------------------------------------------
-# 5. ENROLLMENTS  (37 rows: 35 standard + 2 edge cases)
+# 5. ENROLLMENTS  (36 rows: 34 standard + 2 edge cases)
 # -----------------------------------------------------------------------------
 # Date conventions per term:
 #   Year-Long (3500): DateEnrolled=09/02/2025, DateLeft=06/30/2026 (year end)
@@ -176,7 +177,8 @@ Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExpo
 #   Semester 2 (3502): DateEnrolled=02/02/2026, DateLeft=06/30/2026 (S2/year end)
 #
 # Edge cases:
-#   - Xi (#9100000014) at section 9000005: DateLeft=11/15/2025 (early exit, < term end)
+#   - Xi (#9100000014) at section 9000005: DateLeft=11/15/2025 (early exit, < term end).
+#     Xi is Active overall — students can drop one course without becoming inactive.
 #   - Pi (#9100000016) at section 9000008 (S2): DateLeft empty (testing NULL code path)
 
 $enrollmentHeader = "[1]Student_Number`tSectionID`tDateEnrolled`tDateLeft`tID"
@@ -186,7 +188,6 @@ $enrollmentRows = @(
     "9100000001`t9000001`t09/02/2025`t06/30/2026`t70000001",
     "9100000001`t9000002`t09/02/2025`t06/30/2026`t70000002",
     "9100000001`t9000010`t09/02/2025`t06/30/2026`t70000003",
-    "9100000002`t9000010`t09/02/2025`t06/30/2026`t70000004",  # Beta (Pre-Primary, Pre-Enrolled) — only HRM
     "9100000011`t9000001`t09/02/2025`t06/30/2026`t70000005",
     "9100000011`t9000002`t09/02/2025`t06/30/2026`t70000006",
     "9100000011`t9000010`t09/02/2025`t06/30/2026`t70000007",
@@ -210,8 +211,7 @@ $enrollmentRows = @(
     "9100000005`t9000006`t09/02/2025`t01/30/2026`t70000023",   # S1 ends 01/30/2026
     "9100000006`t9000005`t09/02/2025`t06/30/2026`t70000024",
     "9100000006`t9000006`t09/02/2025`t01/30/2026`t70000025",
-    "9100000014`t9000005`t09/02/2025`t11/15/2025`t70000026",   # Xi — EARLY EXIT (< term end)
-    # Omicron (graduated) — no current enrollments
+    "9100000014`t9000005`t09/02/2025`t11/15/2025`t70000026",   # Xi — EARLY EXIT from this course (< term end); student remains Active
     # School 1178 — Eta, Theta, Pi, Upsilon in {9000007 MTH-10 S1, 9000008 PHY-11 S2}
     "9100000007`t9000007`t09/02/2025`t01/30/2026`t70000027",
     "9100000007`t9000008`t02/02/2026`t06/30/2026`t70000028",
