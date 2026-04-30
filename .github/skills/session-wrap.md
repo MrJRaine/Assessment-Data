@@ -52,9 +52,23 @@ Open `docs/implementation-plan.md` and:
 
 ---
 
-## Step 4 — Confirm
+## Step 4 — Commit, Push, and Open PR
+
+After Steps 1–3 are complete (memory + skills + implementation plan all updated), commit the session's work, push the session branch to origin, and open a PR against `main`. Do this without asking — the user has standing approval for end-of-session push and PR via the wrap procedure.
+
+1. **Commit**: stage the session's changes (new SQL files, doc updates, skill updates, plan updates) and create a single wrap commit. Title format: `Session wrap (YYYY-MM-DD): <short summary of what shipped>`. Body should summarize what landed and why.
+2. **Push**: `git push -u origin <session-branch>` to publish the branch.
+3. **PR**: `gh pr create --base main --head <session-branch>` with a body summarizing the session's deliverables and a brief test-plan checklist. Include the `🤖 Generated with [Claude Code]` footer.
+4. Return the PR URL to the user.
+
+**Skip the push + PR only if** the user has already explicitly said not to (e.g. "wrap but don't push") or the session branch is unpushable (no remote, dirty merge state). Otherwise it's part of the wrap.
+
+---
+
+## Step 5 — Confirm
 
 Tell the user:
 - What was saved to memory
 - Which skills were updated
 - The exact "Left Off" state so they can confirm it's accurate before closing
+- The PR URL from Step 4
