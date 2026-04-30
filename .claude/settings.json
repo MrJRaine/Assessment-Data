@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"You are starting a session on the Regional Student Assessment Data Platform project. Before any other work, read .claude/skills/session-start.md and follow the procedure in full (review MEMORY.md and all linked memory files, read .claude/skills/regional-assessment-platform.md, read docs/implementation-plan.md, load any relevant skills based on next steps, then give the user a synopsis). The project-local skills in .claude/skills/ are not auto-discovered by the harness, so this hook substitutes for their absence.\"}}'"
+          }
+        ]
+      }
+    ]
+  }
+}

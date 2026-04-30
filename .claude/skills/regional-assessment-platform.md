@@ -516,7 +516,55 @@ CREATE TABLE FactSubmissionAudit (
 
 ## SCD Type 2 Implementation
 
-### Merge Procedure Template
+### Production Merge Procedure Conventions (established 2026-04-30)
+
+The deployed merge procs are set-based and topic-scoped, NOT per-row parameter-driven. Canonical examples in `sql/procedures/`:
+- `usp_MergeStudent` — single-table SCD merge (DimStudent only)
+- `usp_MergeStaff` — two-table SCD merge (DimStaff + FactStaffAssignment in one proc, since FactStaffAssignment depends on the just-merged StaffKey)
+
+**File-set per ingest topic (4 or 5 files):**
+- `sql/staging/Stg_<Topic>.sql` — all-VARCHAR landing table; `COPY INTO` target
+- `sql/staging/Wrk_<Topic>.sql` — typed working set with translations applied
+- (For two-table topics, an additional `Wrk_<Topic2>.sql` for the second grain)
+- `sql/procedures/usp_Load<Topic>Staging.sql` — TRUNCATE + COPY INTO; replaceable by Strategy B Pipeline (Step 29)
+- `sql/procedures/usp_Merge<Topic>.sql` — Stg → Wrk → Dim/Fact SCD reconciliation
+
+**Merge proc structure (every topic follows this):**
+1. **Build Wrk from Stg** — apply ALL translations here (sentinel mappings, type casts, boolean encodings, NULL normalization, lowercasing). The reconciliation steps assume Wrk is already clean and typed.
+2. **Phase: close changed-current rows** — UPDATE…JOIN where business fields differ. Use `WHERE EXISTS (SELECT w.fields EXCEPT SELECT d.fields)` for NULL-safe comparison across all Type 2 trigger fields.
+3. **Phase: close missing-current rows** (if anti-join applies for this dimension)
+4. **Phase: insert deactivation rows** (only if `close + replace` semantic — see anti-join semantics below)
+5. **Phase: insert active versions** — combined NEW + just-closed-CHANGED + RETURNING in one INSERT…SELECT WHERE NOT EXISTS
+6. **Phase: touch unchanged rows** — UPDATE LastUpdated WHERE EffectiveStartDate < @EffectiveDate (strict less-than means same-day re-runs read 0 touched, which is fine)
+7. **Phase: refresh Type 1 columns** (only if the dimension has any — DimStaff.AccessLevel is currently the only one)
+8. **Audit row insert** to FactSubmissionAudit with all counters.
+
+**Anti-join semantics — picking close-only vs close-and-replace:**
+- **Close-only (no replacement)**: when the absent state is multi-valued and we can't infer which value to use. Examples: DimStudent (could be Inactive/Graduated/Pre-Enrolled), FactStaffAssignment (a triple just stops existing). The row becomes `IsCurrent=0` with no new current row; downstream IsCurrent=1 filters naturally exclude it.
+- **Close + insert replacement**: when the absent state is binary and we know exactly what to materialize. Example: DimStaff (`ActiveFlag=0` is the only possible inactive state). The replacement preserves last-known business fields with the inactive flag flipped.
+
+**Required translations (applied in Wrk INSERT):**
+- `Email` → `LOWER()` everywhere (matches Entra ID UPN)
+- `SchoolID` → `RIGHT('0000' + value, 4)` (zero-pad to 4 chars)
+- Sentinel `'0'` on `HomeSchoolID` → NULL; sentinel `'0'` on per-row `SchoolID` → `'0000'`
+- `'999999'` (graduates pseudo-school) stripped from CanChangeSchool parsing
+- Date columns: `MM/DD/YYYY` via `CONVERT(DATE, val, 101)`; empty → NULL
+- Numeric casts via `CAST(val AS BIGINT)` / `CAST(val AS INT)`
+- Boolean encodings (DimStudent): `'Yes'`/`''` → 1/NULL; `'1'`/`'2'`/`''` → 1/0/NULL; `'Y'`/`'N'`/`''` → 1/0/NULL
+- Grade_Level: `'0'` → `'P'`, `'-1'` → `'PP'`, others verbatim
+- DimRole resolution: `JOIN DimRole ON CAST(s.[Group] AS INT) = r.RoleNumber AND r.ActiveFlag = 1 AND r.RoleCode IS NOT NULL` — rows that don't match are excluded from FactStaffAssignment Wrk and counted as a warning
+
+**Identifier quoting:** PS exports use `Group` as a column name — reserved word. Use `[Group]` (bracket-quoted) in T-SQL, not `"Group"` (relies on QUOTED_IDENTIFIER ON).
+
+**`@EffectiveDate` parameter:** every merge proc takes `@EffectiveDate DATE = NULL`, defaults to today inside the proc body. Override only for backfill or replay.
+
+**Audit message convention:** `usp_Merge<Topic>: <staged> staged | DimX: <inserted> inserts | <versioned> versioned (closed) | <deactivated> deactivated | <touched> touched`. For multi-table merges, separate per-table sections with ` || `. Append `[WARN: ...]` segments for any anomalies. Set `Status = 'AcceptedWithWarnings'` if any warning fires; otherwise `'Accepted'`.
+
+**Migration ordering gotcha:** CREATE PROCEDURE doesn't validate column existence at compile time (deferred name resolution). A merge proc that references a column added by a separate `ALTER TABLE … ADD COLUMN` migration will create successfully on a pre-migration warehouse but fail at EXEC with `Invalid column name`. Always run column-add migrations BEFORE deploying merge procs that reference the new columns.
+
+### Legacy Per-Row Merge Procedure Template (deprecated)
+
+The template below is from an earlier per-row design and is NOT what the deployed procs use. Kept here for historical reference only — see `sql/procedures/usp_MergeStudent.sql` for the actual production pattern.
 
 **For DimStudent** (adapt pattern for DimStaff and DimSection):
 
