@@ -58,6 +58,17 @@ All storage, compute, and processing must run in **Canada East**. No third-party
 - SCD Type 2 index: `IX_[BusinessKey]_IsCurrent`
 - Required file header: Table name, purpose, SCD type, dates, region note
 
+## Project Skills (read on demand — not all auto-discovered)
+
+The `.claude/skills/` directory contains four project-local skills. The harness does not always surface them in the auto-loaded skill list, so treat the table below as authoritative — read the file directly when the trigger applies.
+
+| Skill | When to read |
+|---|---|
+| `.claude/skills/session-start.md` | At the start of every session (also enforced by a `SessionStart` hook in `.claude/settings.local.json`) |
+| `.claude/skills/session-wrap.md` | When the user signals end-of-session ("wrap up", "session wrap", "let's stop here", or similar) |
+| `.claude/skills/regional-assessment-platform.md` | Any work touching the data model, SCD logic, RLS, Power Apps, or architecture decisions for this platform |
+| `.claude/skills/fabric-warehouse-sql.md` | Any time you write, review, or debug T-SQL that will run in `Assessment_Warehouse` (Fabric Warehouse has significant T-SQL limitations vs. standard SQL Server) |
+
 ## Full Technical Reference
 
 Use `/regional-assessment-platform` skill for complete specs: full table schemas, SCD merge procedure templates, RLS view SQL, Power Apps data flow, MVP critical path, and cost breakdown.
