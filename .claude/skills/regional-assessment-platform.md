@@ -773,14 +773,14 @@ Parse rules for `CanChangeSchool` (semicolon-separated list):
 
 The `'0000'` aggregate row only surfaces for school-tier staff who have `'0'` in their CanChangeSchool list.
 
-**Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`. The bridge stores `TeacherEmail` directly (business key), so RLS matches `USERPRINCIPALNAME()` without any DimStaff join:
+**Section-level access** — derived from `FactSectionTeachers` directly in `vw_TeacherStudents`. The bridge stores `TeacherEmail` directly (business key), so RLS matches the calling user's UPN without any DimStaff join. Use **`CURRENT_USER`** in Fabric Warehouse SQL views (`USERPRINCIPALNAME()` is not supported in Fabric Warehouse T-SQL — it remains the correct function in DAX context for Power BI semantic model RLS roles):
 ```sql
 -- Pattern used in vw_TeacherStudents
 JOIN DimSection sec ON sec.SectionID = e.SectionID AND sec.IsCurrent = 1
 JOIN FactSectionTeachers fst
     ON fst.SectionID = sec.SectionID
     AND fst.IsCurrent = 1
-WHERE fst.TeacherEmail = USERPRINCIPALNAME()
+WHERE LOWER(fst.TeacherEmail) = LOWER(CURRENT_USER)
 ```
 
 ---

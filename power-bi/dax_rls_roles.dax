@@ -1,0 +1,262 @@
+// ============================================================================
+// DAX RLS Roles — Assessment_Analytics semantic model
+// ============================================================================
+// Purpose: Row-level security definitions for the three access tiers in the
+//          Power BI semantic model. Each role's table-filter DAX expression
+//          is applied per-row when a user assigned to that role queries the
+//          model. Role membership is configured in the Fabric/Power BI
+//          workspace (manual step — see docs/semantic-model-setup.md).
+//
+// Created: 2026-05-01
+// Region:  Canada East (PIIDPA compliant)
+//
+// Identity function:
+//   USERPRINCIPALNAME() in DAX context — supported in Power BI semantic
+//   models, returns the report viewer's Entra UPN. Different code path
+//   from SQL CURRENT_USER (which is used in the warehouse views), but
+//   resolves to the same identity for any given Entra-authenticated user.
+//
+// Layering:
+//   This is a DEFENCE-IN-DEPTH layer. The primary security boundary for
+//   data access is at the SQL view layer (vw_TeacherStudents,
+//   vw_SchoolStudents, vw_RegionalData) which Power Apps consumes
+//   directly. The semantic model is intended for the 10 A5 regional
+//   analyst users at launch, but Teachers and SchoolAdmins roles are
+//   defined here so that any future expansion of Power BI access (or
+//   accidental workspace-permission drift) is gated correctly.
+//
+// Cross-filter cascade:
+//   Each role applies filters on TWO target tables: DimStudent (student
+//   visibility) and DimStaff (staff visibility). Other tables filter via
+//   relationships:
+//     - FactEnrollment / FactAssessmentReading auto-filter from DimStudent
+//       via StudentKey (single-direction dim→fact).
+//     - FactStaffAssignment auto-filters from DimStaff via StaffKey
+//       (single-direction dim→fact).
+//   DimSection / FactSectionTeachers are NOT additionally filtered —
+//   those tables show their full content for any authorized user, which
+//   is correct for the analyst use case.
+//
+// Staff visibility rules (mirror student visibility, per 2026-05-01 update):
+//   - Teacher                   → only self
+//   - SpecialistTeacher         → staff at user's accessible schools
+//   - Administrator             → staff at user's accessible schools
+//   - RegionalAnalyst           → staff at user's accessible schools
+//                                 (typically all 5 via CanChangeSchool)
+//   The SchoolAdmins role mixes Administrator + SpecialistTeacher (per
+//   Step 27 security group plan). After the 2026-05-01 reclassification
+//   of RoleNumbers 22 and 32 from SpecialistTeacher to Teacher, the
+//   remaining SpecialistTeacher list is admin-tier (counsellors,
+//   registrars, resource teachers), so both AccessLevels in this role
+//   share the same staff-visibility rule — no branching needed.
+//
+// Role-overlap semantics:
+//   Power BI RLS combines filters from multiple roles using OR logic.
+//   A user in both Teachers AND RegionalAnalysts will see the union of
+//   what each role allows (= everything, since RegionalAnalysts is
+//   unrestricted). This is the intended behaviour — broader access wins.
+//
+// Date gate (Teachers only):
+//   Mirrors vw_TeacherStudents — pre-enrolled students appear on the
+//   teacher's roster only on or after FactEnrollment.StartDate.
+//   Uses TODAY() which evaluates in the report viewer's local time zone;
+//   the SQL view uses GETDATE() (UTC). For the regional Atlantic time
+//   zone this can produce an off-by-one-day discrepancy at the day
+//   boundary. Acceptable for MVP — flag for review if it surfaces.
+//
+// Casing:
+//   USERPRINCIPALNAME() casing is environment-dependent (typically
+//   lowercase in Entra ID, but not guaranteed). Email columns in
+//   FactSectionTeachers and DimStaff are lowercased at ingest. Wrap
+//   both sides in LOWER() defensively.
+// ============================================================================
+
+
+// ----------------------------------------------------------------------------
+// ROLE: Teachers
+// ----------------------------------------------------------------------------
+// Membership: SG-Assessment-Teachers (Step 27); individual user assignment
+//             during MVP pilot before security groups are created.
+//
+// Visibility: students enrolled (active enrollment, started today or earlier)
+//             in any section the user teaches as Primary, CoTeacher,
+//             Support, or Substitute. Includes pre-enrolled (-1) students
+//             whose StartDate has been reached, mirroring the teacher view.
+//
+// Apply this expression as the row filter for table DimStudent in the
+// Teachers role.
+// ----------------------------------------------------------------------------
+
+// Table filter on: DimStudent
+VAR UserEmail = LOWER ( USERPRINCIPALNAME () )
+VAR Today = TODAY ()
+VAR UserSectionIDs =
+    CALCULATETABLE (
+        VALUES ( FactSectionTeachers[SectionID] ),
+        LOWER ( FactSectionTeachers[TeacherEmail] ) = UserEmail,
+        FactSectionTeachers[IsCurrent] = 1
+    )
+VAR UserStudentKeys =
+    CALCULATETABLE (
+        VALUES ( FactEnrollment[StudentKey] ),
+        FILTER (
+            DimSection,
+            DimSection[IsCurrent] = 1
+                && DimSection[SectionID] IN UserSectionIDs
+        ),
+        FactEnrollment[ActiveFlag] = 1,
+        FactEnrollment[StartDate] <= Today
+    )
+RETURN
+    DimStudent[IsCurrent] = 1
+        && DimStudent[EnrollStatus] IN { 0, -1 }
+        && DimStudent[StudentKey] IN UserStudentKeys
+
+// Table filter on: DimStaff
+// Teachers see only themselves.
+LOWER ( DimStaff[Email] ) = LOWER ( USERPRINCIPALNAME () )
+    && DimStaff[IsCurrent] = 1
+    && DimStaff[ActiveFlag] = 1
+
+
+// ----------------------------------------------------------------------------
+// ROLE: SchoolAdmins
+// ----------------------------------------------------------------------------
+// Membership: SG-Assessment-SchoolAdmins (Step 27). Includes both
+//             Administrator (Principal/VP) and SpecialistTeacher
+//             (counsellors, registrars, coordinators) RoleCodes.
+//
+// Visibility: all current students at any school the user has school-tier
+//             access to (via DimStaff.HomeSchoolID + CanChangeSchool,
+//             unpacked in vw_StaffSchoolAccess). NO date gate — admins
+//             see all pre-enrolled students regardless of StartDate, for
+//             roster planning purposes (mirrors vw_SchoolStudents policy).
+//
+// Apply this expression as the row filter for table DimStudent in the
+// SchoolAdmins role.
+// ----------------------------------------------------------------------------
+
+// Table filter on: DimStudent
+VAR UserEmail = LOWER ( USERPRINCIPALNAME () )
+VAR UserSchoolIDs =
+    CALCULATETABLE (
+        VALUES ( vw_StaffSchoolAccess[SchoolID] ),
+        LOWER ( vw_StaffSchoolAccess[Email] ) = UserEmail,
+        vw_StaffSchoolAccess[AccessLevel]
+            IN { "Administrator", "SpecialistTeacher", "RegionalAnalyst" }
+    )
+RETURN
+    DimStudent[IsCurrent] = 1
+        && DimStudent[EnrollStatus] IN { 0, -1 }
+        && DimStudent[CurrentSchoolID] IN UserSchoolIDs
+
+// Table filter on: DimStaff
+// Both Administrator and SpecialistTeacher viewers see staff at their
+// accessible schools. Visibility is gated on FactStaffAssignment overlap
+// with the user's accessible schools (from vw_StaffSchoolAccess) — this
+// correctly handles itinerant / multi-school staff that DimStaff.HomeSchoolID
+// alone would miss. Self is always visible.
+VAR UserEmail = LOWER ( USERPRINCIPALNAME () )
+VAR UserSchoolIDs =
+    CALCULATETABLE (
+        VALUES ( vw_StaffSchoolAccess[SchoolID] ),
+        LOWER ( vw_StaffSchoolAccess[Email] ) = UserEmail
+    )
+VAR CurrentStaffKey = DimStaff[StaffKey]
+VAR StaffIsAtUserSchool =
+    COUNTROWS (
+        FILTER (
+            ALL ( FactStaffAssignment ),
+            FactStaffAssignment[StaffKey] = CurrentStaffKey
+                && FactStaffAssignment[IsCurrent] = 1
+                && FactStaffAssignment[SchoolID] IN UserSchoolIDs
+        )
+    ) > 0
+RETURN
+    DimStaff[IsCurrent] = 1
+        && DimStaff[ActiveFlag] = 1
+        && (
+            LOWER ( DimStaff[Email] ) = UserEmail
+            || StaffIsAtUserSchool
+        )
+
+
+// ----------------------------------------------------------------------------
+// ROLE: RegionalAnalysts
+// ----------------------------------------------------------------------------
+// Membership: SG-Assessment-Regional (Step 27). The 10 A5 users at launch.
+//
+// Visibility: all current students region-wide. No school filter, no date
+//             gate. Role membership IS the access gate — anyone in this
+//             role sees the full student population.
+//
+// Apply this expression as the row filter for table DimStudent in the
+// RegionalAnalysts role. Defensive filter on IsCurrent and EnrollStatus
+// retained for consistency with the other roles (excludes any rogue
+// historical or non-(0,-1) rows that might land via future ingest changes).
+// ----------------------------------------------------------------------------
+
+// Table filter on: DimStudent
+DimStudent[IsCurrent] = 1
+    && DimStudent[EnrollStatus] IN { 0, -1 }
+
+// Table filter on: DimStaff
+// RegionalAnalysts see all staff at any of their accessible schools.
+// In practice their CanChangeSchool covers all 5 schools, so this is
+// effectively region-wide visibility — but the filter is still gated on
+// FactStaffAssignment overlap so it correctly handles a future
+// RegionalAnalyst with restricted CanChangeSchool.
+VAR UserEmail = LOWER ( USERPRINCIPALNAME () )
+VAR UserSchoolIDs =
+    CALCULATETABLE (
+        VALUES ( vw_StaffSchoolAccess[SchoolID] ),
+        LOWER ( vw_StaffSchoolAccess[Email] ) = UserEmail
+    )
+VAR CurrentStaffKey = DimStaff[StaffKey]
+VAR StaffIsAtUserSchool =
+    COUNTROWS (
+        FILTER (
+            ALL ( FactStaffAssignment ),
+            FactStaffAssignment[StaffKey] = CurrentStaffKey
+                && FactStaffAssignment[IsCurrent] = 1
+                && FactStaffAssignment[SchoolID] IN UserSchoolIDs
+        )
+    ) > 0
+RETURN
+    DimStaff[IsCurrent] = 1
+        && DimStaff[ActiveFlag] = 1
+        && (
+            LOWER ( DimStaff[Email] ) = UserEmail
+            || StaffIsAtUserSchool
+        )
+
+
+// ============================================================================
+// Notes for future expansion
+// ============================================================================
+//
+// (1) FactAssessmentReading / FactAssessmentWriting RLS
+//     These fact tables auto-filter via the StudentKey relationship to
+//     DimStudent (single-direction, dim-filters-fact). No additional RLS
+//     needed. Verify by reviewing visuals in "View as role" mode after
+//     assessment data lands.
+//
+// (2) DimSection / FactSectionTeachers RLS
+//     Currently NOT filtered per role — analysts see all sections and
+//     teacher assignments. If this becomes too revealing for SchoolAdmins
+//     (e.g. seeing teacher names from other schools they don't oversee),
+//     add table filters mirroring the DimStudent pattern.
+//
+// (3) Co-teaching nuance for Teachers role
+//     A teacher with a CoTeacher or Support role on a section sees the
+//     same students as the Primary teacher of that section — they all
+//     match the same SectionID in FactSectionTeachers. Intentional;
+//     matches vw_TeacherStudents behaviour.
+//
+// (4) Time-zone discrepancy with TODAY() vs GETDATE()
+//     DAX TODAY() = report viewer's local date.
+//     SQL GETDATE() = UTC date.
+//     For Atlantic Time (UTC-3 ADT / UTC-4 AST), a pre-enrolled student
+//     with StartDate = today UTC may appear in the SQL view but not yet
+//     in the DAX RLS-filtered Power BI report (or vice versa) at the
+//     day boundary. Documented; revisit if it causes reportable issues.

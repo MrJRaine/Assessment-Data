@@ -15,17 +15,17 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - [x] **5. Write and run SQL** to create RLS security tables and seed with pilot users *(Claude can generate — `sql/security/`)*
 - [x] **6. Request first PowerSchool CSV exports** — French program students, staff, schools, enrollments *(Manual — PowerSchool admin)*. **Done 2026-04-29**: full PS exports received, format quirks discovered (TAB-delimited / CR-only line endings / UTF-8 / no quote qualifier / `.text` extension / `NS_AssigndIdentity_African` spelling), Staff export revised to include per-row `SchoolID` column, `DimRole` mapping received from PS admin. Cross-export referential integrity confirmed via full export sample.
 - [x] **7. Upload CSVs to OneLake landing zone** — **Done 2026-04-29**: created Lakehouse `Assessment_Landing` in `Regional_Data_Portal`, folder structure `Files/imports/{students|staff|sections|section-teachers|enrollments}/` in place, sample file uploaded, `COPY INTO` validated end-to-end on synthetic data (20 rows from `AssessmentDataStudentsExport.txt`). Standard config locked in: `FILE_TYPE='CSV'`, `FIELDTERMINATOR='\t'`, `ROWTERMINATOR='0x0D'`, `FIRSTROW=2`. Per-call GUID-based path required (name-based path failed with auth error). MVP strategy A; Strategy B (Pipeline + Power Automate) deferred to Step 29 before September rollout.
-- [ ] **8. Run merge procedures** to load pilot data into warehouse *(Claude can generate — `sql/procedures/`)*. **In progress 2026-04-30:** `usp_MergeStudent` (DimStudent) and `usp_MergeStaff` (DimStaff + FactStaffAssignment) deployed and validated end-to-end against synthetic data. Decoupled load + merge pattern established. Still TODO under Step 8: `usp_MergeSection` (DimSection), `usp_MergeEnrollment` (FactEnrollment), `usp_MergeSectionTeachers` (FactSectionTeachers), and the deferred year-end close-out procedure.
+- [x] **8. Run merge procedures** to load pilot data into warehouse *(Claude can generate — `sql/procedures/`)*. **Done 2026-05-01:** all 5 merge procs deployed and validated end-to-end (`usp_MergeStudent`, `usp_MergeStaff`, `usp_MergeSection`, `usp_MergeEnrollment`, `usp_MergeSectionTeachers`). Plus orchestrator `usp_RunFullIngestCycle` (production entry point + dev rebuild command) and year-end close-out `usp_YearEndCloseOut` (scheduled in `Pipeline_YearEndCloseOut`, fires every 12 months on July 1 Atlantic time).
 
 ---
 
 ## Phase 2: Security & Views (Weeks 3–4)
 *Goal: RLS enforced, data accessible only to correct users*
 
-- [ ] **9. Write secured SQL views**: `vw_TeacherStudents`, `vw_SchoolStudents`, `vw_RegionalData` *(Claude can generate — `sql/views/`)*
-- [ ] **10. Test views** by querying as pilot teacher Entra accounts *(Manual — requires real Entra identities)*
-- [ ] **11. Create Fabric semantic model** pointing to warehouse views *(Manual — Power BI portal)*
-- [ ] **12. Configure DAX RLS roles** in semantic model (`[TeacherEmail] = USERPRINCIPALNAME()`) *(Claude can write DAX)*
+- [x] **9. Write secured SQL views**: `vw_TeacherStudents`, `vw_SchoolStudents`, `vw_RegionalData` *(Claude can generate — `sql/security/`)*. **Done 2026-05-01.** All three views deployed; pre-enrolled student support added (PS export filter broadened to `Enroll_Status IN (0, -1)`, teacher view date-gates pre-enrolled visibility, admin view shows all pre-enrolled).
+- [x] **10. Test views** by querying as pilot teacher Entra accounts *(Manual — requires real Entra identities)*. **Done 2026-05-01 via 5-test impersonation matrix** (Teacher with future pre-enrolled, Teacher with past pre-enrolled, SpecialistTeacher cross-school co-teacher, Administrator, RegionalAnalyst). Real Entra account validation pending Step 16 / Phase 4 pilot UAT but the RLS contract is fully proven.
+- [ ] **11. Create Fabric semantic model** pointing to warehouse views *(Manual — Power BI portal)*. **Deliverable ready in [`docs/semantic-model-setup.md`](semantic-model-setup.md)** — full click-through for `Assessment_Analytics` model in DirectLake mode with the table list, relationships, and role-assignment migration path.
+- [ ] **12. Configure DAX RLS roles** in semantic model *(Claude can write DAX)*. **Deliverable ready in [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax)** — three roles (Teachers, SchoolAdmins, RegionalAnalysts) with two table filters each (DimStudent + DimStaff). Symmetric staff RLS rules added 2026-05-01: teachers see only self; school admins see staff at their schools.
 - [ ] **13. Validate RLS** with test accounts — confirm teacher sees only their students *(Manual — requires login testing)*
 - [ ] **14. Write data quality validation queries** — orphan checks, duplicate IsCurrent, date logic *(Claude can generate — `sql/scripts/`)*
 
@@ -81,12 +81,12 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 
 | Phase | Total Steps | Completed |
 |-------|-------------|-----------|
-| Phase 1: Foundation | 8 | 7 |
-| Phase 2: Security & Views | 6 | 0 |
+| Phase 1: Foundation | 8 | 8 |
+| Phase 2: Security & Views | 6 | 2 |
 | Phase 3: Power Apps | 7 | 0 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **7** |
+| **Total** | **36** | **10** |
 
 ---
 
@@ -100,6 +100,23 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-05-01
+- **Last completed steps**: Steps 8, 9, and 10 fully closed (with Step 10's "real Entra accounts" portion deferred to Step 16 / Phase 4 — RLS contract is proven via impersonation, the open piece is just pilot account UAT).
+- **What landed today** (substantial session):
+  - **Step 8 closed**: 3 more merge procs deployed and validated end-to-end (`usp_MergeSection`, `usp_MergeEnrollment`, `usp_MergeSectionTeachers`). Plus `usp_RunFullIngestCycle` orchestrator and `usp_YearEndCloseOut` (scheduled in `Pipeline_YearEndCloseOut` — fires every 12 months on July 1 Atlantic, dynamic-expression year derivation).
+  - **Step 9 closed**: `vw_TeacherStudents`, `vw_SchoolStudents`, `vw_RegionalData` deployed. Pre-enrolled student support added — PS Students export filter broadened from `Enroll_Status = 0` to `Enroll_Status IN (0, -1)`; teacher view date-gates pre-enrolled visibility (`StartDate <= today`), admin view shows all pre-enrolled regardless of date.
+  - **Step 10 closed**: 5-test impersonation matrix executed against the views (swap email in DimStaff/FactSectionTeachers, run views, revert). Every result matched expected counts and student names — pre-enrolled date gate works in both directions, cross-school co-teaching works, multi-school CanChangeSchool unpacking works.
+  - **Steps 11-12 deliverables ready**: [`docs/semantic-model-setup.md`](semantic-model-setup.md) (full click-through for `Assessment_Analytics` model in DirectLake mode) and [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax) (three RLS roles with symmetric DimStudent + DimStaff filters). Manual Fabric portal setup pending Monday.
+  - **DimRole reclassification (code-only, migration pending)**: groups 22 (IB/O2/Co-op Coordinators) and 32 (APSEA Itinerant Teachers) moved from `SpecialistTeacher` to `Teacher`. Rationale: both are teaching roles; APSEA contractors don't even have TCRCE Entra accounts. Side benefit: removed the only AccessLevel-branching case in the SchoolAdmins DAX RLS. Migration script `migrate_DimRole_22_32_to_Teacher.sql` written but NOT yet applied to the warehouse.
+  - **`fabric-warehouse-sql` skill update**: item #14 added — `USERPRINCIPALNAME()` is not supported in Fabric Warehouse T-SQL; use `CURRENT_USER` for SQL view RLS. (DAX RLS roles still use `USERPRINCIPALNAME()` — different code path, works fine in DAX context.)
+  - **Memory adds**: feedback rule for "always truncate all 6 tables before `usp_RunFullIngestCycle`" so future Claude sessions don't selectively truncate and hit stale-key issues.
+- **Monday TODO (in order)**:
+  1. Apply `sql/scripts/migrate_DimRole_22_32_to_Teacher.sql` then run the canonical 6-table truncate + `EXEC usp_RunFullIngestCycle` to cascade the RoleCode change through `FactStaffAssignment` and `DimStaff.AccessLevel`.
+  2. Build the `Assessment_Analytics` semantic model in the Fabric portal per [`docs/semantic-model-setup.md`](semantic-model-setup.md).
+  3. Configure the three DAX RLS roles per [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax).
+  4. Validate via "View as → Other user" using the same 5 impersonation users from Step 10's SQL tests.
+- **Blockers**: None.
 
 ### Left Off — 2026-04-30
 - **Last completed step**: Substantial Step 8 progress — first two merge procs deployed, validated end-to-end against synthetic data.

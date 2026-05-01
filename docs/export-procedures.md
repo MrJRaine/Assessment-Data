@@ -12,7 +12,7 @@
 
 **Source table / report:** "Students (1)"
 
-**Filters applied:** Enroll_Status = 0 (Indicates an actively enrolled student)
+**Filters applied:** `Enroll_Status IN (0, -1)` — `0` = actively enrolled student, `-1` = pre-enrolled (registered, not yet started). Inactive (`2`) and Graduated (`3`) excluded.
 
 **File format:** TAB-delimited, `.text` extension (PS direct table extract default). Drop in `data/imports/students/`.
 
@@ -43,6 +43,7 @@
 - **Gender values** — observed: `M`, `F`, `X`. `X` represents "Non-binary or another gender identity" — see `DimGender` reference table.
 - **Boolean encodings** — confirmed against test pull 2026-04-29: `SelfIDAfrican` = `Yes`/empty; `SelfIDIndigenous` = `1`/`2`/empty; `CurrentIPP`/`CurrentAdap` = `Y`/`N`.
 - **PS field name spelling** — `NS_AssigndIdentity_African` (note the `d` between `Assign` and `Identity`) is the actual PS column name. Verified 2026-04-29 against test export.
+- **Pre-enrolled students (`Enroll_Status = -1`)** — included so teachers and admins can see students whose start date falls between PS exports (no live PS connection means we can't wait for the next pull). The teacher view (`vw_TeacherStudents`) date-gates visibility: a pre-enrolled student appears on the teacher's roster only on or after `FactEnrollment.StartDate`. The school admin view shows all pre-enrolled regardless of start date for roster planning. PS still flips `Enroll_Status` from `-1` to `0` once the student actually starts; the warehouse handles either state correctly.
 
 ---
 
@@ -138,7 +139,7 @@
 
 **File format:** TAB-delimited, `.text` extension (PS direct table extract default). Drop in `data/imports/enrollments/`.
 
-**Scope:** include currently-active enrollments AND any enrollments closed since last pull (i.e. with `DateLeft` populated). Do NOT send a full historical roster.
+**Scope:** include currently-active enrollments AND any enrollments closed since last pull (i.e. with `DateLeft` populated). Pre-enrolled students' future enrollments (those whose `DateEnrolled` is in the future) are also in scope — they're naturally included by the term-based filter as long as the section exists in PS. Do NOT send a full historical roster.
 
 | Warehouse Field | PowerSchool Field |
 |---|---|
@@ -194,5 +195,6 @@
 | 2026-04-29 | All 5 | Anonymized test pull (10/2/4/3/6 rows + headers) for format validation. Confirmed: TAB-delimited for direct extracts, comma+quote for sqlReports. Field-name fix: `NS_AssigndIdentity_African` (with `d`). Found: Staff export missing `SchoolID` column. Decisions made: Grade_Level translation `0`→`'P'`, `-1`→`'PP'`; `DateLeft` auto-fill semantics; folder-based ingest routing. |
 | 2026-04-29 | Staff (revised) | Re-pull with `SchoolID` column added (5 rows). Multi-row grain confirmed via 3-row Dept of Education test row. New observations: `HomeSchoolID = '0'` and `SchoolID = '0'` sentinels for district-tier staff (translate to NULL and `'0000'` respectively at ingest); `Group = 9` for Dept of Education added to running code list; same-email-different-First_Name edge case noted. |
 | 2026-04-29 | (reference) | DimRole table received from PS admin — 50-row mapping of PS RoleNumber → RoleName. Mapped to warehouse RoleCode and seeded into `DimRole`. 40 active roles, 10 unused/placeholder slots. Two judgment-call mappings flagged for confirmation: 29 (Report Creator) and 30 (Evaluation Services - 30). |
+| 2026-05-01 | (filter change) | Students export filter broadened from `Enroll_Status = 0` to `Enroll_Status IN (0, -1)` to include pre-enrolled students. Rationale: no live PS connection means teachers couldn't see a student whose start date fell between exports. `vw_TeacherStudents` date-gates pre-enrolled visibility (`StartDate <= today`); admin view shows all pre-enrolled. Anti-join semantics in `usp_MergeStudent` unchanged (absent state still multi-valued: Inactive/Graduated). |
 | | | |
 | | | |

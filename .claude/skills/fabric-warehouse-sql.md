@@ -159,3 +159,17 @@ Nums AS (
     ```
 
     Long-term fix: the Step 29 Power Automate flow should normalize line endings (CR → CRLF or LF) on file arrival, alongside the `.text` → `.txt` rename — so downstream tooling that expects standard line endings doesn't have to special-case PS quirks.
+
+## Discovered During RLS View Authoring (2026-05-01)
+
+14. **`USERPRINCIPALNAME()` is NOT a recognized function** in Fabric Warehouse T-SQL. Standard SQL Server / Synapse Dedicated supports it; Fabric Warehouse rejects it with `Msg 195, Level 15 'USERPRINCIPALNAME' is not a recognized built-in function name`. **Use `CURRENT_USER` instead** — when the connection authenticates with Entra ID (the default in Fabric), `CURRENT_USER` returns the user's UPN (e.g. `jeffrey.raine@tcrce.ca`). All four of these return the same UPN value in Fabric Warehouse with Entra auth: `CURRENT_USER`, `USER_NAME()`, `SUSER_NAME()`, `SUSER_SNAME()`. Going with `CURRENT_USER` for semantic clarity (standard SQL-92 keyword, no parens needed).
+
+    **Important caveat — DAX RLS roles still use `USERPRINCIPALNAME()`**. The DAX function exists in Power BI semantic models and works as expected there. The Fabric-specific limitation only applies to T-SQL contexts (views, stored procs, ad-hoc queries against the warehouse SQL endpoint). Don't conflate the two when writing RLS — SQL views use `CURRENT_USER`, DAX RLS roles use `USERPRINCIPALNAME()`.
+
+    **Standard pattern for SQL view RLS in this project**:
+    ```sql
+    -- Wrap both sides in LOWER() defensively. DimStaff.Email and
+    -- FactSectionTeachers.TeacherEmail are lowercased at ingest, but
+    -- CURRENT_USER's casing is environment-dependent.
+    WHERE LOWER(fst.TeacherEmail) = LOWER(CURRENT_USER)
+    ```
