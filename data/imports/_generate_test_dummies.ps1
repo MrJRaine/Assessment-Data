@@ -23,10 +23,14 @@
 # Edge cases covered (deliberately):
 #   - Grades:        0 (Primary), -1 (Pre-Primary), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
 #   - Genders:       M, F, X
-#   - EnrollStatus:  0 (Active) only — production PS Students export is filtered to
-#                    Enroll_Status = 0 upstream, so values 2/3/-1 never appear in
-#                    real exports. (Earlier dummies seeded all four values; stripped
-#                    2026-04-30 to match production reality.)
+#   - EnrollStatus:  0 (Active) and -1 (Pre-Enrolled) — production PS Students
+#                    export is filtered to Enroll_Status IN (0, -1) upstream, so
+#                    values 2 (Inactive) and 3 (Graduated) never appear in real
+#                    exports. Pre-enrolled cases include both a future StartDate
+#                    (Beta — not yet visible to teacher) and a past StartDate
+#                    (Omicron — visible to teacher via vw_TeacherStudents date
+#                    gate, before PS has flipped the status). Filter broadened
+#                    2026-05-01 from Enroll_Status = 0 only.
 #   - SelfIDAfrican: "Yes" and empty (no "No" — matches PS reality)
 #   - SelfIDIndigenous: "1", "2", empty
 #   - CurrentIPP / CurrentAdap: "Y", "N"
@@ -37,8 +41,10 @@
 #   - Itinerant staff: HomeSchoolID empty
 #   - District-tier sentinel: HomeSchoolID = '0', SchoolID = '0' (DoE staff)
 #   - Every active RoleCode bucket:
-#       Teacher (47, 48), SpecialistTeacher (12, 32), Administrator (33),
-#       RegionalAnalyst (10), ProvincialAnalyst (9, 30), SupportStaff (49)
+#       Teacher (47, 48, 32), SpecialistTeacher (12), Administrator (33),
+#       RegionalAnalyst (10), ProvincialAnalyst (9), SupportStaff (49)
+#     (Group 32 = APSEA Itinerant reclassified from SpecialistTeacher to
+#      Teacher on 2026-05-01.)
 #   - Term mix: Year-Long (3500), S1 (3501), S2 (3502)
 #   - Enrollment DateLeft: term-end auto-fill (most), early-exit (Xi),
 #     and one truly-empty DateLeft (Pi at S2 — testing the NULL code path)
@@ -71,7 +77,8 @@ function Write-FileWithCRLF {
 }
 
 # -----------------------------------------------------------------------------
-# 1. STUDENTS  (18 rows — all Enroll_Status = 0 to match production export filter)
+# 1. STUDENTS  (20 rows — 18 Active + 2 Pre-Enrolled, matching production
+#               filter Enroll_Status IN (0, -1))
 # -----------------------------------------------------------------------------
 $studentHeader = "Student_Number`tID`tFirst_Name`tMiddle_Name`tLast_Name`tSchoolID`tGrade_Level`tNS_Program`tHome_Room`tGender`tDOB`tNS_AssigndIdentity_African`tNS_aboriginal`tCurrentIPP`tCurrentAdap`tEnroll_Status"
 
@@ -93,7 +100,11 @@ $studentRows = @(
     "9100000017`t90017`tRho`tFifteen`tSample`t0981`t7`tE025`t7C`tM`t10/05/2012`t`t`tN`tN`t0",
     "9100000018`t90018`tSigma`tSixteen`tDemo`t0716`t2`tE015`t2B`tX`t04/12/2018`tYes`t1`tN`tN`t0",
     "9100000019`t90019`tTau`t`tTest`t0167`t4`tJ015`t4D`tF`t11/19/2015`t`t`tY`tN`t0",
-    "9100000020`t90020`tUpsilon`tSeventeen`tSample`t1178`t11`tS005`t11A`tM`t06/14/2008`t`t1`tN`tY`t0"
+    "9100000020`t90020`tUpsilon`tSeventeen`tSample`t1178`t11`tS005`t11A`tM`t06/14/2008`t`t1`tN`tY`t0",
+    # Pre-Enrolled (-1) — Beta has FUTURE StartDate, not yet visible on teacher roster
+    "9100000002`t90002`tBeta`t`tDemo`t0716`t0`tE015`tP-Sample`tF`t08/22/2020`t`t`tN`tN`t-1",
+    # Pre-Enrolled (-1) — Omicron has PAST StartDate, VISIBLE on teacher roster via date gate
+    "9100000015`t90015`tOmicron`tFifteen`tTest`t0167`t1`tE015`t1A`tM`t05/30/2019`tYes`t2`tN`tN`t-1"
 )
 
 Write-FileWithCR -Path "$basePath\students\AssessmentDataStudentsExport.text" `
@@ -169,7 +180,7 @@ Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExpo
                    -Lines (@($coTeacherHeader) + $coTeacherRows)
 
 # -----------------------------------------------------------------------------
-# 5. ENROLLMENTS  (36 rows: 34 standard + 2 edge cases)
+# 5. ENROLLMENTS  (40 rows: 34 standard + 2 edge cases + 4 pre-enrolled)
 # -----------------------------------------------------------------------------
 # Date conventions per term:
 #   Year-Long (3500): DateEnrolled=09/02/2025, DateLeft=06/30/2026 (year end)
@@ -180,6 +191,10 @@ Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExpo
 #   - Xi (#9100000014) at section 9000005: DateLeft=11/15/2025 (early exit, < term end).
 #     Xi is Active overall — students can drop one course without becoming inactive.
 #   - Pi (#9100000016) at section 9000008 (S2): DateLeft empty (testing NULL code path)
+#   - Beta (#9100000002, EnrollStatus=-1) at sections 9000001/9000002 (year-long):
+#     DateEnrolled=05/15/2026 (FUTURE — should NOT appear on teacher roster yet)
+#   - Omicron (#9100000015, EnrollStatus=-1) at sections 9000003/9000004 (year-long):
+#     DateEnrolled=04/15/2026 (PAST — SHOULD appear on teacher roster via date gate)
 
 $enrollmentHeader = "[1]Student_Number`tSectionID`tDateEnrolled`tDateLeft`tID"
 
@@ -224,7 +239,13 @@ $enrollmentRows = @(
     # School 0981 — Iota, Kappa, Rho in {9000009 LIT-12 Year-Long}
     "9100000009`t9000009`t09/02/2025`t06/30/2026`t70000035",
     "9100000010`t9000009`t09/02/2025`t06/30/2026`t70000036",
-    "9100000017`t9000009`t09/02/2025`t06/30/2026`t70000037"
+    "9100000017`t9000009`t09/02/2025`t06/30/2026`t70000037",
+    # Pre-Enrolled — Beta (future StartDate) at school 0716, sections 9000001/9000002
+    "9100000002`t9000001`t05/15/2026`t06/30/2026`t70000038",   # Beta — FUTURE start (not yet visible)
+    "9100000002`t9000002`t05/15/2026`t06/30/2026`t70000039",
+    # Pre-Enrolled — Omicron (past StartDate) at school 0167, sections 9000003/9000004
+    "9100000015`t9000003`t04/15/2026`t06/30/2026`t70000040",   # Omicron — PAST start (visible via date gate)
+    "9100000015`t9000004`t04/15/2026`t06/30/2026`t70000041"
 )
 
 Write-FileWithCR -Path "$basePath\enrollments\AssessmentDataEnrollmentsExport.text" `

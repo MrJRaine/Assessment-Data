@@ -42,7 +42,8 @@
  *   - DimStaff: close + insert ActiveFlag=0 replacement (binary state — we
  *     KNOW the new state is inactive, so we materialize it).
  *   - DimStudent: close-only, no replacement (multi-valued state — can't
- *     guess Inactive vs Graduated vs Pre-Enrolled withdrew).
+ *     guess Inactive=2 vs Graduated=3; Pre-Enrolled=-1 is now included in
+ *     the import filter so it's not part of the absent-state set).
  *   - FactStaffAssignment: close-only, no replacement (a missing triple
  *     just means the person no longer holds that assignment).
  *

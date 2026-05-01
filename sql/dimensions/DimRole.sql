@@ -9,16 +9,30 @@
  * Modified: 2026-04-29 - Expanded RoleCode taxonomy from 4 values to 6:
  *                       added SpecialistTeacher, ProvincialAnalyst, SupportStaff
  *                       per PS admin clarification on role responsibilities.
+ *           2026-05-01 - Reclassified RoleNumbers 22 (IB/O2/Co-op Coordinators)
+ *                       and 32 (APSEA Itinerant Teachers) from SpecialistTeacher
+ *                       to Teacher. Rationale: both roles ARE teachers (vs the
+ *                       remaining SpecialistTeacher list which is admin-tier:
+ *                       counsellors, registrars, resource teachers). APSEA
+ *                       itinerants are external contractors without TCRCE Entra
+ *                       accounts and never authenticate to the platform, so
+ *                       AccessLevel is moot for them. Side benefit: removes the
+ *                       only AccessLevel-branching case in the SchoolAdmins
+ *                       DAX RLS — Administrator and remaining SpecialistTeacher
+ *                       now have identical staff-visibility rules.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
 -- Warehouse RoleCode taxonomy and RLS implications:
---   'Teacher'           — classroom teachers + librarians. RLS via section-level
+--   'Teacher'           — anyone whose role IS to teach: classroom teachers,
+--                         librarians, IB/O2/Co-op coordinators (who teach those
+--                         courses), APSEA itinerants. RLS via section-level
 --                         FactSectionTeachers (NOT vw_StaffSchoolAccess).
---   'SpecialistTeacher' — school-based teaching specialists: counsellors,
---                         registrars, coordinators, resource teachers, APSEA
---                         itinerants. Get school-level RLS via
---                         vw_StaffSchoolAccess AND section-level if assigned.
+--   'SpecialistTeacher' — school-based non-teaching specialists: counsellors,
+--                         registrars, resource teachers. Despite the name (kept
+--                         for historical continuity), this RoleCode no longer
+--                         includes anyone who actually teaches. Get school-level
+--                         RLS via vw_StaffSchoolAccess.
 --   'Administrator'     — Principals, VPs, admin assistants. School-level RLS
 --                         via vw_StaffSchoolAccess.
 --   'RegionalAnalyst'   — TCRCE board-level: superintendent, board directors,
@@ -38,11 +52,16 @@
 --                         in production exports). ActiveFlag = 0.
 --
 -- Notes:
---   - RoleNumber 22 (IB, O2, and Co-op Coordinators) → SpecialistTeacher
---     (school-based coordinators).
+--   - RoleNumber 22 (IB, O2, and Co-op Coordinators) → Teacher
+--     (they teach the courses they coordinate; reclassified 2026-05-01).
+--   - RoleNumber 32 (APSEA Itinerant Teachers)      → Teacher
+--     (external contractors who teach across multiple schools; reclassified
+--     2026-05-01. Note: APSEA staff don't have TCRCE Entra accounts and
+--     never authenticate to the platform, so AccessLevel is functionally
+--     irrelevant for them — but Teacher is the correct classification.)
 --   - RoleNumber 40 (Coordinators or Consultants)    → RegionalAnalyst
 --     (board-level coordinators/consultants — distinct from the school-based
---     coordinators in 22).
+--     coordinators in 22 who are now Teachers).
 --   - RoleNumber 50 is a legacy code with a few non-teaching accounts still
 --     active per PS admin; mapped to SupportStaff with ActiveFlag=1.
 
@@ -77,7 +96,7 @@ VALUES
     (19, 'Registrar (without Counsellor Admin notes)',            'SpecialistTeacher', 1, GETDATE()),
     (20, 'Admin Assistant - Level 2 (Reports and Alert)',         'Administrator',     1, GETDATE()),
     (21, 'Counselor - Level 1 (Walk-In Scheduling)',              'SpecialistTeacher', 1, GETDATE()),
-    (22, 'IB, O2, and Co-op Coordinators',                        'SpecialistTeacher', 1, GETDATE()),
+    (22, 'IB, O2, and Co-op Coordinators',                        'Teacher',           1, GETDATE()),
     (23, 'Counselor - Level 2 (Non-Scheduling)',                  'SpecialistTeacher', 1, GETDATE()),
     (24, 'Parent Navigator',                                      'SupportStaff',      1, GETDATE()),
     (25, 'SchoolsPlus Community Outreach',                        'SupportStaff',      1, GETDATE()),
@@ -87,7 +106,7 @@ VALUES
     (29, 'Report Creator',                                        'RegionalAnalyst',   1, GETDATE()),
     (30, 'Evaluation Services - 30',                              'ProvincialAnalyst', 1, GETDATE()),
     (31, 'Mental Health Clinician / CYCPS',                       'SupportStaff',      1, GETDATE()),
-    (32, 'APSEA Itinerant Teachers',                              'SpecialistTeacher', 1, GETDATE()),
+    (32, 'APSEA Itinerant Teachers',                              'Teacher',           1, GETDATE()),
     (33, 'Principal/VP Only (scheduling)',                        'Administrator',     1, GETDATE()),
     (34, 'Principal/VP Only (PS admin and scheduling)',           'Administrator',     1, GETDATE()),
     (35, 'Principal/VP Only (no scheduling)',                     'Administrator',     1, GETDATE()),

@@ -19,10 +19,10 @@
  *      "still here, unchanged" from "no longer in import".
  *   5. Close out current DimStudent rows whose StudentNumber is absent from
  *      this import. The PS Students export is filtered upstream to
- *      Enroll_Status = 0 (Active only) — so absence from the export means
- *      the student is no longer active. No replacement row is inserted: we
- *      don't know which inactive state (Inactive=2 / Graduated=3 /
- *      Pre-Enrolled withdrew=-1) they're in, and IsCurrent=1 filters
+ *      Enroll_Status IN (0, -1) (Active + Pre-Enrolled) — so absence from
+ *      the export means the student is no longer in either of those states.
+ *      No replacement row is inserted: we don't know which absent state
+ *      (Inactive=2 or Graduated=3) they're in, and IsCurrent=1 filters
  *      everywhere already exclude them. Returning students get a fresh
  *      current row from Step 3 on the next ingest.
  *   6. Append one summary row to FactSubmissionAudit.
@@ -187,11 +187,11 @@ BEGIN
 
     -- ------------------------------------------------------------------------
     -- Step 5: Close out current DimStudent rows whose StudentNumber is absent
-    -- from this import. The PS export is pre-filtered to Enroll_Status = 0
-    -- (Active), so absence == no longer active. No replacement row is inserted
-    -- because we don't know which inactive state (Inactive / Graduated /
-    -- Pre-Enrolled withdrew) the student moved to. Returning students get a
-    -- fresh row via Step 3 on the next ingest.
+    -- from this import. The PS export is pre-filtered to Enroll_Status IN
+    -- (0, -1) (Active + Pre-Enrolled), so absence == no longer in either of
+    -- those states. No replacement row is inserted because we don't know
+    -- which absent state (Inactive=2 or Graduated=3) the student moved to.
+    -- Returning students get a fresh row via Step 3 on the next ingest.
     --
     -- Anti-join uses LEFT JOIN with NULL guard rather than NOT EXISTS so the
     -- @@ROWCOUNT after this UPDATE is reliable across all T-SQL flavours.
