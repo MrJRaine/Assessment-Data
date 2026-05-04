@@ -27,25 +27,25 @@
 --   'Teacher'           — anyone whose role IS to teach: classroom teachers,
 --                         librarians, IB/O2/Co-op coordinators (who teach those
 --                         courses), APSEA itinerants. RLS via section-level
---                         FactSectionTeachers (NOT vw_StaffSchoolAccess).
+--                         FactSectionTeachers (NOT StaffSchoolAccess).
 --   'SpecialistTeacher' — school-based non-teaching specialists: counsellors,
 --                         registrars, resource teachers. Despite the name (kept
 --                         for historical continuity), this RoleCode no longer
 --                         includes anyone who actually teaches. Get school-level
---                         RLS via vw_StaffSchoolAccess.
+--                         RLS via StaffSchoolAccess.
 --   'Administrator'     — Principals, VPs, admin assistants. School-level RLS
---                         via vw_StaffSchoolAccess.
+--                         via StaffSchoolAccess.
 --   'RegionalAnalyst'   — TCRCE board-level: superintendent, board directors,
 --                         board admin, board services. Multi-school RLS via
---                         vw_StaffSchoolAccess (board scope).
+--                         StaffSchoolAccess (board scope).
 --   'ProvincialAnalyst' — Provincial-level: Dept of Education, evaluation
 --                         services. NOT included in the PowerApp security
 --                         group at all — these accounts never authenticate to
---                         the app, so they're excluded from vw_StaffSchoolAccess
+--                         the app, so they're excluded from StaffSchoolAccess
 --                         entirely. Rows are still recorded in DimStaff /
 --                         FactStaffAssignment for audit/reporting.
 --   'SupportStaff'      — No access to student data in the app. Excluded
---                         entirely from vw_StaffSchoolAccess. Mix of school-
+--                         entirely from StaffSchoolAccess. Mix of school-
 --                         and regional-based positions; the distinction is
 --                         irrelevant for RLS since access is denied uniformly.
 --   NULL                — Unused or placeholder slot in PS (should not appear

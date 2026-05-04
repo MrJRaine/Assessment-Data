@@ -35,11 +35,12 @@
 --   'RegionalAnalyst'   — TCRCE board-level; multi-school RLS
 --   'ProvincialAnalyst' — DoE / Evaluation Services; all-school + district aggregate
 --   'SupportStaff'      — no access to student data in the app (excluded from
---                         vw_StaffSchoolAccess); rows still recorded for audit
+--                         StaffSchoolAccess); rows still recorded for audit
 --
 -- Source of truth for:
 --   * School-level RLS for admins and regional analysts
---     (see sql/security/vw_StaffSchoolAccess.sql — a view over this table)
+--     (see sql/security/StaffSchoolAccess.sql — materialized table rebuilt by
+--      usp_MergeStaff Step 6 from this table + DimStaff)
 --   * Historical "who held what role at which school" reporting
 --
 -- NOT used for section-level RLS — that still comes from FactSectionTeachers

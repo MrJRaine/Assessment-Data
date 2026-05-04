@@ -29,14 +29,14 @@ CREATE TABLE Wrk_Student (
     MiddleName          VARCHAR(100)    NULL,
     LastName            VARCHAR(100)    NOT NULL,
     DateOfBirth         DATE            NULL,
-    CurrentGrade        VARCHAR(10)     NOT NULL,
-    CurrentSchoolID     VARCHAR(10)     NOT NULL,
+    Grade               VARCHAR(10)     NOT NULL,
+    SchoolID            VARCHAR(10)     NOT NULL,
     ProgramCode         VARCHAR(10)     NOT NULL,
     EnrollStatus        INT             NOT NULL,
     Homeroom            VARCHAR(50)     NULL,
     Gender              VARCHAR(10)     NOT NULL,
     SelfIDAfrican       BIT             NULL,
     SelfIDIndigenous    BIT             NULL,
-    CurrentIPP          BIT             NULL,
-    CurrentAdap         BIT             NULL
+    IPP                 BIT             NULL,
+    Adap                BIT             NULL
 );

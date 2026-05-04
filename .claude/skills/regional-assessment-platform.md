@@ -128,8 +128,8 @@ description: Technical architecture and implementation guide for a regional stud
 - `DimProgram` - PowerSchool program code reference (GradeBand, ProgramFamily, IsImmersion, SpecialtyType)
 - `DimReadingScale` - Reading level reference values
 
-**Security Views**:
-- `vw_StaffSchoolAccess` - School-level authorization for admins and regional analysts, derived live from `FactStaffAssignment` at query time (no rebuild step, no drift risk)
+**Security Tables / Views**:
+- `StaffSchoolAccess` (table) - School-level authorization for admins and regional analysts. Materialized RLS oracle: rebuilt on every `usp_MergeStaff` run from current DimStaff (HomeSchoolID + parsed CanChangeSchool, gated on AccessLevel IS NOT NULL). Started life as a view (`vw_StaffSchoolAccess`); materialized 2026-05-04 so the Power BI semantic model could use Direct Lake on OneLake mode (full DAX RLS surface, no DirectQuery fallback). Same staleness as the prior view — refreshes on staff merge.
 - Teacher-level section access is derived from `FactSectionTeachers` at query time — no separate RLS table
 
 ### Critical Design Principle: Use Surrogate Keys
@@ -176,16 +176,16 @@ CREATE TABLE DimStudent (
     MiddleName          VARCHAR(100),              -- Nullable; disambiguates same-name students in the same school/grade
     LastName            VARCHAR(100),
     DateOfBirth         DATE,
-    CurrentGrade        VARCHAR(10),               -- Triggers new version
-    CurrentSchoolID     INT,                       -- Triggers new version
+    Grade        VARCHAR(10),               -- Triggers new version
+    SchoolID     INT,                       -- Triggers new version
     ProgramCode         VARCHAR(10),               -- Triggers new version, e.g. 'E015', 'S115'
     EnrollStatus        INT,                       -- PS Enroll_Status: 0 = Active, 2 = Inactive, 3 = Graduated, -1 = Pre-Enrolled
     Homeroom            VARCHAR(50),               -- PS Home_Room
     Gender              VARCHAR(10) NOT NULL,      -- PS Gender
     SelfIDAfrican       BIT,                       -- PS NS_AssignIdentity_African — student self-ID as African descent
     SelfIDIndigenous    BIT,                       -- PS NS_aboriginal — student self-ID as Indigenous descent
-    CurrentIPP          BIT,                       -- PS CurrentIPP — has at least one IPP
-    CurrentAdap         BIT,                       -- PS CurrentAdap — has adaptations
+    IPP                 BIT,                       -- PS CurrentIPP — has at least one IPP
+    Adap                BIT,                       -- PS CurrentAdap — has adaptations
     EffectiveStartDate  DATE NOT NULL,
     EffectiveEndDate    DATE NULL,                 -- NULL = current version
     IsCurrent           BIT NOT NULL,              -- 1 = current, 0 = historical
@@ -199,8 +199,8 @@ CREATE TABLE DimStudent (
 **Rationale:** reports often cite point-in-time values (e.g. "X students with IPPs in Q3 2025"). Without Type 2 on these attributes, a later re-run would produce different numbers when names, homerooms, IPP statuses, etc. change — sending stakeholders chasing phantom discrepancies. Treating every business field as Type 2 makes any historical query reproducible.
 
 **Type 2 trigger fields:**
-- `CurrentGrade` - Student promoted
-- `CurrentSchoolID` - Student transferred schools
+- `Grade` - Student promoted
+- `SchoolID` - Student transferred schools
 - `ProgramCode` - Program change (see DimProgram for valid codes)
 - `EnrollStatus` - Active/Inactive/Graduated/Pre-Enrolled state changes
 - `FirstName`, `MiddleName`, `LastName` - Name changes or corrections
@@ -208,7 +208,7 @@ CREATE TABLE DimStudent (
 - `Homeroom` - Homeroom reassignment
 - `Gender` - Gender update
 - `SelfIDAfrican`, `SelfIDIndigenous` - Self-ID flag updates
-- `CurrentIPP`, `CurrentAdap` - IPP/adaptations status changes
+- `IPP`, `Adap` - IPP/adaptations status changes
 
 **Note on business key:** `StudentNumber` is the provincial 10-digit student ID (PowerSchool's "Student Number" field). It's more stable than PowerSchool's internal DCID — it follows the student across schools, regions, and re-enrollments. `SourceSystemID` stores the PowerSchool DCID for reference only, not for matching.
 
@@ -575,8 +575,8 @@ CREATE PROCEDURE usp_MergeStudent
     @FirstName NVARCHAR(100),
     @LastName NVARCHAR(100),
     @DateOfBirth DATE,
-    @CurrentGrade NVARCHAR(10),
-    @CurrentSchoolID INT,
+    @Grade NVARCHAR(10),
+    @SchoolID INT,
     @ProgramCode NVARCHAR(10),
     @ActiveFlag BIT,
     @SourceSystemID NVARCHAR(50),
@@ -599,12 +599,12 @@ BEGIN
     BEGIN
         INSERT INTO DimStudent (
             StudentID, StudentNumber, FirstName, LastName, DateOfBirth,
-            CurrentGrade, CurrentSchoolID, ProgramCode, ActiveFlag,
+            Grade, SchoolID, ProgramCode, ActiveFlag,
             EffectiveStartDate, EffectiveEndDate, IsCurrent, SourceSystemID
         )
         VALUES (
             @StudentID, @StudentNumber, @FirstName, @LastName, @DateOfBirth,
-            @CurrentGrade, @CurrentSchoolID, @ProgramCode, @ActiveFlag,
+            @Grade, @SchoolID, @ProgramCode, @ActiveFlag,
             @EffectiveDate, NULL, 1, @SourceSystemID
         );
     END
@@ -612,8 +612,8 @@ BEGIN
     BEGIN
         -- Check if Type 2 attributes changed
         SELECT @Changed = CASE 
-            WHEN CurrentGrade != @CurrentGrade 
-              OR CurrentSchoolID != @CurrentSchoolID 
+            WHEN Grade != @Grade 
+              OR SchoolID != @SchoolID 
               OR ProgramCode != @ProgramCode 
             THEN 1 
             ELSE 0 
@@ -632,12 +632,12 @@ BEGIN
             -- Insert new version
             INSERT INTO DimStudent (
                 StudentID, StudentNumber, FirstName, LastName, DateOfBirth,
-                CurrentGrade, CurrentSchoolID, ProgramCode, ActiveFlag,
+                Grade, SchoolID, ProgramCode, ActiveFlag,
                 EffectiveStartDate, EffectiveEndDate, IsCurrent, SourceSystemID
             )
             VALUES (
                 @StudentID, @StudentNumber, @FirstName, @LastName, @DateOfBirth,
-                @CurrentGrade, @CurrentSchoolID, @ProgramCode, @ActiveFlag,
+                @Grade, @SchoolID, @ProgramCode, @ActiveFlag,
                 @EffectiveDate, NULL, 1, @SourceSystemID
             );
         END
@@ -699,8 +699,8 @@ SELECT
     s.StudentID,
     s.FirstName,
     s.LastName,
-    s.CurrentGrade,
-    s.CurrentSchoolID,
+    s.Grade,
+    s.SchoolID,
     s.ProgramCode,
     t.Email AS TeacherEmail,
     sec.SectionKey,
@@ -731,14 +731,14 @@ SELECT
     s.StudentID,
     s.FirstName,
     s.LastName,
-    s.CurrentGrade,
-    s.CurrentSchoolID,
+    s.Grade,
+    s.SchoolID,
     sch.SchoolName,
     adm.Email AS AdminEmail
 FROM DimStudent s
-JOIN DimSchool sch ON s.CurrentSchoolID = sch.SchoolID
-JOIN vw_StaffSchoolAccess access
-    ON s.CurrentSchoolID = access.SchoolID
+JOIN DimSchool sch ON s.SchoolID = sch.SchoolID
+JOIN StaffSchoolAccess access
+    ON s.SchoolID = access.SchoolID
 WHERE s.IsCurrent = 1
   AND access.AccessLevel IN ('Administrator', 'RegionalAnalyst', 'SpecialistTeacher');
 ```
@@ -747,12 +747,14 @@ WHERE s.IsCurrent = 1
 
 Access is derived from authoritative ingest fields — there are no manually-maintained RLS tables:
 
-**School-level access** — `sql/security/vw_StaffSchoolAccess.sql`:
+**School-level access** — `sql/security/StaffSchoolAccess.sql` (table) + `usp_MergeStaff` Step 6 (rebuild logic):
 
-A pure unpacking view over DimStaff (no joins, no aggregation). Driven by three DimStaff fields:
+A materialized RLS-oracle table, rebuilt on every staff merge from DimStaff. Started life as a view (`vw_StaffSchoolAccess`) doing the unpacking on every query; materialized 2026-05-04 so the Power BI semantic model could use Direct Lake on OneLake mode (full DAX RLS surface — `[Column] IN tablevar` works; the SQL-fallback path of "Direct Lake on SQL" blocks `CONTAINSROW` via the DirectQuery DAX subset).
+
+Driven by three DimStaff fields:
 - `AccessLevel` (Type 1 column on DimStaff) — staff member's highest-priority school-tier RoleCode, computed at ingest from FactStaffAssignment. NULL for staff with no school-tier role. Filter `WHERE AccessLevel IS NOT NULL` is the inclusion gate.
 - `HomeSchoolID` — primary school contribution.
-- `CanChangeSchool` — semicolon-separated list, parsed live in the view.
+- `CanChangeSchool` — semicolon-separated list, parsed in the merge proc.
 
 Output schema:
 ```

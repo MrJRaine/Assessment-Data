@@ -21,16 +21,16 @@ One row per student enrolled in the French Immersion program. The business key i
 | MiddleName | VARCHAR(100) | Nullable — include where present. Helps distinguish students with identical first + last names in the same school/grade (common locally) | Middle_Name |
 | LastName | VARCHAR(100) | | Last_Name |
 | DateOfBirth | DATE | Optional but recommended. PS emits `MM/DD/YYYY` format (e.g. `10/13/2014`); ingest parses with `CONVERT(DATE, val, 101)` | DOB |
-| CurrentGrade | VARCHAR(10) | Stored values: `'P'` (Primary), `'PP'` (Pre-Primary), `'1'`–`'12'`. PS emits `0` for Primary and `-1` for Pre-Primary as numeric codes; **ingest translates `0`→`'P'` and `-1`→`'PP'`** before storing. Other grade values stored verbatim as their string form | Grade_Level |
-| CurrentSchoolID | VARCHAR(10) | 4-digit provincial school number (e.g. `'0167'`). Leading zeros are normalized during ingest | SchoolID |
+| Grade | VARCHAR(10) | Stored values: `'P'` (Primary), `'PP'` (Pre-Primary), `'1'`–`'12'`. PS emits `0` for Primary and `-1` for Pre-Primary as numeric codes; **ingest translates `0`→`'P'` and `-1`→`'PP'`** before storing. Other grade values stored verbatim as their string form | Grade_Level |
+| SchoolID | VARCHAR(10) | 4-digit provincial school number (e.g. `'0167'`). Leading zeros are normalized during ingest | SchoolID |
 | ProgramCode | VARCHAR(10) | PowerSchool program code (e.g. 'E005', 'J015', 'S120'). 4-character format: letter (grade band) + 3 digits. See "Pilot Program Code Filter" section below | NS_Program |
 | EnrollStatus | INT | PS value stored verbatim. Full PS value list: `0` = Active, `2` = Inactive, `3` = Graduated, `-1` = Pre-Enrolled (registered but not yet started at the school). **Production export filters to `IN (0, -1)`**, so only Active and Pre-Enrolled rows appear in the warehouse — `2` and `3` are excluded upstream. The teacher view date-gates `-1` rows on `FactEnrollment.StartDate <= today`; the admin view shows all `-1` rows for roster planning. | Enroll_Status |
 | Homeroom | VARCHAR(50) | Student's current homeroom (nullable) | Home_Room |
 | Gender | VARCHAR(10) | Student's gender — only required field of this group. Observed values: `M` (Male), `F` (Female), `X` (Non-binary or another gender identity). Joins to `DimGender` for friendly descriptions | Gender |
 | SelfIDAfrican | BIT | Student self-identifies as being of African descent. PS sends `"Yes"`/`"No"`/NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_AssigndIdentity_African |
 | SelfIDIndigenous | BIT | Student self-identifies as being of Indigenous descent. PS sends `"1"` (Yes) / `"2"` (No) / NULL — ingest translates to `1`/`0`/NULL. NULL means not declared either way (not the same as "No") | NS_aboriginal |
-| CurrentIPP | BIT | Student currently has at least one IPP. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentIPP |
-| CurrentAdap | BIT | Student currently has adaptations. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentAdap |
+| IPP | BIT | Student currently has at least one IPP. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentIPP |
+| Adap | BIT | Student currently has adaptations. PS sends `"Y"`/`"N"`/NULL — ingest translates to `1`/`0`/NULL | CurrentAdap |
 | SourceSystemID | VARCHAR(50) | PowerSchool DCID (internal database ID). Stored for reference/debugging only — NOT used for record matching | ID |
 
 ---

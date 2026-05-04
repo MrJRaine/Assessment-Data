@@ -23,25 +23,25 @@
 | MiddleName | Middle_Name |
 | LastName | Last_Name |
 | DateOfBirth | DOB |
-| CurrentGrade | Grade_Level |
-| CurrentSchoolID | SchoolID |
+| Grade | Grade_Level |
+| SchoolID | SchoolID |
 | ProgramCode | NS_Program |
 | EnrollStatus | Enroll_Status |
 | Homeroom | Home_Room |
 | Gender | Gender |
 | SelfIDAfrican | NS_AssigndIdentity_African |
 | SelfIDIndigenous | NS_aboriginal |
-| CurrentIPP | CurrentIPP |
-| CurrentAdap | CurrentAdap |
+| IPP | CurrentIPP |
+| Adap | CurrentAdap |
 | SourceSystemID | ID |
 
 **Required filter (pilot scope):** `NS_Program` IN (`E015`, `J015`, `J020`, `S015`, `S020`, `S115`, `S120`, `S215`, `S220`) — French Immersion only.
 
 **Notes:**
-- **Grade_Level translation at ingest** — PS emits `0` for Primary and `-1` for Pre-Primary; ingest converts to `'P'` and `'PP'` respectively before writing to `DimStudent.CurrentGrade`. Other grades (`1`–`12`) stored verbatim as their string form.
+- **Grade_Level translation at ingest** — PS emits `0` for Primary and `-1` for Pre-Primary; ingest converts to `'P'` and `'PP'` respectively before writing to `DimStudent.Grade`. Other grades (`1`–`12`) stored verbatim as their string form.
 - **DOB format** — PS emits `MM/DD/YYYY` (e.g. `10/13/2014`). Ingest uses `CONVERT(DATE, val, 101)`.
 - **Gender values** — observed: `M`, `F`, `X`. `X` represents "Non-binary or another gender identity" — see `DimGender` reference table.
-- **Boolean encodings** — confirmed against test pull 2026-04-29: `SelfIDAfrican` = `Yes`/empty; `SelfIDIndigenous` = `1`/`2`/empty; `CurrentIPP`/`CurrentAdap` = `Y`/`N`.
+- **Boolean encodings** — confirmed against test pull 2026-04-29: `SelfIDAfrican` = `Yes`/empty; `SelfIDIndigenous` = `1`/`2`/empty; `CurrentIPP`/`CurrentAdap` source columns = `Y`/`N` (warehouse stores as `IPP`/`Adap`).
 - **PS field name spelling** — `NS_AssigndIdentity_African` (note the `d` between `Assign` and `Identity`) is the actual PS column name. Verified 2026-04-29 against test export.
 - **Pre-enrolled students (`Enroll_Status = -1`)** — included so teachers and admins can see students whose start date falls between PS exports (no live PS connection means we can't wait for the next pull). The teacher view (`vw_TeacherStudents`) date-gates visibility: a pre-enrolled student appears on the teacher's roster only on or after `FactEnrollment.StartDate`. The school admin view shows all pre-enrolled regardless of start date for roster planning. PS still flips `Enroll_Status` from `-1` to `0` once the student actually starts; the warehouse handles either state correctly.
 

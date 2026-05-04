@@ -16,7 +16,12 @@
  *   2. UPDATE existing FactEnrollment rows whose business attributes differ
  *      from incoming Wrk (matched by SourceSystemID = PS CC.ID). Type 1
  *      fields tracked: StudentKey, SectionKey, StartDate, EndDate,
- *      ActiveFlag. EXCEPT-based NULL-safe comparison.
+ *      ActiveFlag. EXCEPT-based NULL-safe comparison. StudentKey and
+ *      SectionKey are CASE-gated: re-resolved when the row is (or is
+ *      becoming) active; FROZEN at existing values when both old and new
+ *      ActiveFlag = 0 (closed enrollment in PS rolling window).
+ *      Refinement 2026-05-04 — see the in-line comment in Step 2 for
+ *      rationale and case table.
  *   3. INSERT new FactEnrollment rows (no SourceSystemID match in current
  *      table).
  *   4. Touch LastUpdated on unchanged matched rows (matched by
@@ -147,10 +152,40 @@ BEGIN
     -- ------------------------------------------------------------------------
     -- Step 2: UPDATE existing FactEnrollment rows whose business attributes
     -- differ from Wrk. EXCEPT is NULL-safe across the 5 Type 1 fields.
+    --
+    -- SURROGATE-KEY FREEZE on already-inactive rows (refinement 2026-05-04):
+    --   StudentKey and SectionKey are re-resolved to the current dim version
+    --   IF either the existing row OR the new (Wrk) row is active. They are
+    --   FROZEN (preserved at their existing values) only when both old and
+    --   new ActiveFlag = 0 — i.e., a closed enrollment that's still being
+    --   sent in the PS rolling window.
+    --
+    -- Why: an enrollment is a relationship that captures a specific period
+    -- of the student's life. While active, "current pointer" semantics are
+    -- right (rosters reflect the student as they are now). Once closed, the
+    -- record should freeze on the version of the student / section that
+    -- existed during the enrollment's active period — historical reports
+    -- naturally show "Alpha was Grade 5 when she enrolled in Section ABC"
+    -- without needing date-range joins on DimStudent.
+    --
+    -- Cases handled by `f.ActiveFlag = 1 OR w.ActiveFlag = 1`:
+    --   f=1, w=1  → re-resolve   (active staying active)
+    --   f=1, w=0  → re-resolve   (active→inactive: capture keys at closure)
+    --   f=0, w=1  → re-resolve   (reactivation)
+    --   f=0, w=0  → freeze       (already-closed, staying closed)
+    --
+    -- Side note: when a closed enrollment's resolved key in Wrk differs
+    -- from f's frozen key, EXCEPT still detects the difference and the
+    -- UPDATE fires — but the CASE preserves f's keys, so only LastUpdated
+    -- gets bumped on what's effectively a no-op write. Acceptable cost.
     -- ------------------------------------------------------------------------
     UPDATE f
-    SET StudentKey  = w.StudentKey,
-        SectionKey  = w.SectionKey,
+    SET StudentKey  = CASE WHEN f.ActiveFlag = 1 OR w.ActiveFlag = 1
+                           THEN w.StudentKey
+                           ELSE f.StudentKey END,
+        SectionKey  = CASE WHEN f.ActiveFlag = 1 OR w.ActiveFlag = 1
+                           THEN w.SectionKey
+                           ELSE f.SectionKey END,
         StartDate   = w.StartDate,
         EndDate     = w.EndDate,
         ActiveFlag  = w.ActiveFlag,
