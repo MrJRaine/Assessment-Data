@@ -36,7 +36,12 @@
  *          via the current StaffKey).
  *      5c. Insert new triples (NEW + CHANGED-after-close).
  *      5d. Touch LastUpdated on unchanged triples.
- *   6. One summary row to FactSubmissionAudit covering both tables.
+ *   6. Rebuild StaffSchoolAccess — TRUNCATE + INSERT from current DimStaff
+ *      (HomeSchoolID + parsed CanChangeSchool, gated on AccessLevel IS
+ *      NOT NULL). Replaces the prior vw_StaffSchoolAccess view; same
+ *      derivation logic, materialized so the Power BI semantic model can
+ *      use Direct Lake on OneLake mode (full DAX RLS surface).
+ *   7. One summary row to FactSubmissionAudit covering all tables.
  *
  * Anti-join semantics differ from DimStudent:
  *   - DimStaff: close + insert ActiveFlag=0 replacement (binary state — we
@@ -87,6 +92,8 @@ BEGIN
     DECLARE @AssignmentsClosedMissing INT = 0;
     DECLARE @AssignmentsInserted      INT = 0;
     DECLARE @AssignmentsTouched       INT = 0;
+    -- StaffSchoolAccess counter
+    DECLARE @SsaRowCount              INT = 0;
 
     SELECT @StgRowCount = COUNT(*) FROM Stg_Staff;
 
@@ -416,7 +423,56 @@ BEGIN
     SET @AssignmentsTouched = @@ROWCOUNT;
 
     -- ========================================================================
-    -- Step 6: Audit. One summary row covering both tables.
+    -- Step 6: Rebuild StaffSchoolAccess materialized RLS-oracle table.
+    -- TRUNCATE + INSERT pattern. Fully derived from current DimStaff state
+    -- (HomeSchoolID + CanChangeSchool + AccessLevel). Logic mirrors the
+    -- prior vw_StaffSchoolAccess view; materialized so the Power BI
+    -- semantic model can include this access set under Direct Lake on
+    -- OneLake mode (which doesn't support views).
+    -- ========================================================================
+    TRUNCATE TABLE StaffSchoolAccess;
+
+    INSERT INTO StaffSchoolAccess (StaffKey, Email, SchoolID, AccessLevel, LastRebuilt)
+    -- HomeSchoolID contribution (one row per active school-tier staff with a home school)
+    SELECT
+        StaffKey,
+        Email,
+        HomeSchoolID,
+        AccessLevel,
+        GETDATE()
+    FROM DimStaff
+    WHERE IsCurrent     = 1
+      AND ActiveFlag    = 1
+      AND AccessLevel  IS NOT NULL
+      AND HomeSchoolID IS NOT NULL
+
+    UNION   -- de-dupes overlap with CanChangeSchool
+
+    -- CanChangeSchool contribution (one row per parsed entry)
+    SELECT
+        ds.StaffKey,
+        ds.Email,
+        CASE
+            WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
+            ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
+        END,
+        ds.AccessLevel,
+        GETDATE()
+    FROM DimStaff ds
+    CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
+    WHERE ds.IsCurrent       = 1
+      AND ds.ActiveFlag      = 1
+      AND ds.AccessLevel    IS NOT NULL
+      AND ds.CanChangeSchool IS NOT NULL
+      AND s.value           IS NOT NULL
+      AND LTRIM(RTRIM(s.value)) <> ''
+      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
+      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999;
+
+    SET @SsaRowCount = @@ROWCOUNT;
+
+    -- ========================================================================
+    -- Step 7: Audit. One summary row covering all tables.
     -- ========================================================================
     INSERT INTO FactSubmissionAudit (
         RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message,
@@ -447,7 +503,9 @@ BEGIN
                 CAST(@AssignmentsInserted      AS VARCHAR(20)), ' inserted | ',
                 CAST(@AssignmentsClosedChanged AS VARCHAR(20)), ' collision-versioned | ',
                 CAST(@AssignmentsClosedMissing AS VARCHAR(20)), ' closed (missing) | ',
-                CAST(@AssignmentsTouched       AS VARCHAR(20)), ' touched',
+                CAST(@AssignmentsTouched       AS VARCHAR(20)), ' touched || ',
+            'StaffSchoolAccess: ',
+                CAST(@SsaRowCount AS VARCHAR(20)), ' rows rebuilt',
             CASE WHEN @UnknownGroupRows > 0
                  THEN CONCAT(' | [WARN: ', CAST(@UnknownGroupRows AS VARCHAR(20)), ' rows had unknown PS Group, no FactStaffAssignment row created]')
                  ELSE '' END,

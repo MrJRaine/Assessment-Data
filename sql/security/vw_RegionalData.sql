@@ -45,8 +45,8 @@ SELECT
     s.MiddleName,
     s.LastName,
     s.DateOfBirth,
-    s.CurrentGrade,
-    s.CurrentSchoolID,
+    s.Grade,
+    s.SchoolID,
     sch.SchoolName,
     s.ProgramCode,
     s.EnrollStatus,
@@ -54,11 +54,11 @@ SELECT
     s.Gender,
     s.SelfIDAfrican,
     s.SelfIDIndigenous,
-    s.CurrentIPP,
-    s.CurrentAdap
+    s.IPP,
+    s.Adap
 FROM DimStudent s
 INNER JOIN DimSchool sch
-        ON sch.SchoolID = s.CurrentSchoolID
+        ON sch.SchoolID = s.SchoolID
 WHERE s.IsCurrent = 1
   AND s.EnrollStatus IN (0, -1)
   AND EXISTS (

@@ -73,8 +73,8 @@ BEGIN
 
     INSERT INTO Wrk_Student (
         StudentNumber, SourceSystemID, FirstName, MiddleName, LastName,
-        DateOfBirth, CurrentGrade, CurrentSchoolID, ProgramCode, EnrollStatus,
-        Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap
+        DateOfBirth, Grade, SchoolID, ProgramCode, EnrollStatus,
+        Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap
     )
     SELECT
         CAST(s.Student_Number AS BIGINT)                            AS StudentNumber,
@@ -87,8 +87,8 @@ BEGIN
         CASE s.Grade_Level
              WHEN '0'  THEN 'P'
              WHEN '-1' THEN 'PP'
-             ELSE s.Grade_Level END                                 AS CurrentGrade,
-        RIGHT('0000' + s.SchoolID, 4)                               AS CurrentSchoolID,
+             ELSE s.Grade_Level END                                 AS Grade,
+        RIGHT('0000' + s.SchoolID, 4)                               AS SchoolID,
         s.NS_Program                                                AS ProgramCode,
         CAST(s.Enroll_Status AS INT)                                AS EnrollStatus,
         NULLIF(s.Home_Room, '')                                     AS Homeroom,
@@ -106,12 +106,12 @@ BEGIN
              WHEN 'Y' THEN CAST(1 AS BIT)
              WHEN 'N' THEN CAST(0 AS BIT)
              WHEN ''  THEN NULL
-             ELSE NULL END                                          AS CurrentIPP,
+             ELSE NULL END                                          AS IPP,
         CASE s.CurrentAdap
              WHEN 'Y' THEN CAST(1 AS BIT)
              WHEN 'N' THEN CAST(0 AS BIT)
              WHEN ''  THEN NULL
-             ELSE NULL END                                          AS CurrentAdap
+             ELSE NULL END                                          AS Adap
     FROM Stg_Student s;
 
     SELECT @StgRowCount = COUNT(*) FROM Wrk_Student;
@@ -130,14 +130,14 @@ BEGIN
     WHERE d.IsCurrent = 1
       AND EXISTS (
           SELECT w.FirstName, w.MiddleName, w.LastName, w.DateOfBirth,
-                 w.CurrentGrade, w.CurrentSchoolID, w.ProgramCode, w.EnrollStatus,
+                 w.Grade, w.SchoolID, w.ProgramCode, w.EnrollStatus,
                  w.Homeroom, w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous,
-                 w.CurrentIPP, w.CurrentAdap
+                 w.IPP, w.Adap
           EXCEPT
           SELECT d.FirstName, d.MiddleName, d.LastName, d.DateOfBirth,
-                 d.CurrentGrade, d.CurrentSchoolID, d.ProgramCode, d.EnrollStatus,
+                 d.Grade, d.SchoolID, d.ProgramCode, d.EnrollStatus,
                  d.Homeroom, d.Gender, d.SelfIDAfrican, d.SelfIDIndigenous,
-                 d.CurrentIPP, d.CurrentAdap
+                 d.IPP, d.Adap
       );
 
     SET @ClosedRows = @@ROWCOUNT;
@@ -151,14 +151,14 @@ BEGIN
     -- ------------------------------------------------------------------------
     INSERT INTO DimStudent (
         StudentNumber, FirstName, MiddleName, LastName, DateOfBirth,
-        CurrentGrade, CurrentSchoolID, ProgramCode, EnrollStatus, Homeroom,
-        Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap,
+        Grade, SchoolID, ProgramCode, EnrollStatus, Homeroom,
+        Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap,
         EffectiveStartDate, EffectiveEndDate, IsCurrent, SourceSystemID, LastUpdated
     )
     SELECT
         w.StudentNumber, w.FirstName, w.MiddleName, w.LastName, w.DateOfBirth,
-        w.CurrentGrade, w.CurrentSchoolID, w.ProgramCode, w.EnrollStatus, w.Homeroom,
-        w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous, w.CurrentIPP, w.CurrentAdap,
+        w.Grade, w.SchoolID, w.ProgramCode, w.EnrollStatus, w.Homeroom,
+        w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous, w.IPP, w.Adap,
         @EffectiveDate, NULL, 1, w.SourceSystemID, GETDATE()
     FROM Wrk_Student w
     WHERE NOT EXISTS (

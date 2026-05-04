@@ -9,11 +9,12 @@
  *
  * RLS model:
  *   The calling user is identified via CURRENT_USER. Access is
- *   gated through vw_StaffSchoolAccess, which unpacks DimStaff's
- *   HomeSchoolID + CanChangeSchool + AccessLevel into a (StaffKey, Email,
- *   SchoolID, AccessLevel) row set. The view filters to rows where the
- *   user has access to the student's CurrentSchoolID with one of the
- *   school-tier AccessLevels:
+ *   gated through StaffSchoolAccess (materialized RLS-oracle table —
+ *   rebuilt on every staff merge), which unpacks DimStaff's HomeSchoolID +
+ *   CanChangeSchool + AccessLevel into a (StaffKey, Email, SchoolID,
+ *   AccessLevel) row set. The view filters to rows where the user has
+ *   access to the student's SchoolID with one of the school-tier
+ *   AccessLevels:
  *     - 'Administrator'      — Principal, VP, admin assistants
  *     - 'SpecialistTeacher'  — counsellors, registrars, coordinators,
  *                              resource teachers (school-based)
@@ -37,7 +38,7 @@
  * Grain: one row per StudentKey (no enrollment fanout). Students with
  * multiple section enrollments appear only once. Students attending
  * multiple schools (rare; would require multiple DimStudent versions
- * with different CurrentSchoolID) appear once per school they're
+ * with different SchoolID) appear once per school they're
  * currently associated with — but our DimStudent model only stores ONE
  * current school per student, so this is effectively one row per student.
  *
@@ -52,8 +53,8 @@ SELECT
     s.FirstName,
     s.MiddleName,
     s.LastName,
-    s.CurrentGrade,
-    s.CurrentSchoolID,
+    s.Grade,
+    s.SchoolID,
     sch.SchoolName,
     s.ProgramCode,
     s.EnrollStatus,
@@ -61,15 +62,15 @@ SELECT
     s.Gender,
     s.SelfIDAfrican,
     s.SelfIDIndigenous,
-    s.CurrentIPP,
-    s.CurrentAdap,
-    vssa.AccessLevel    AS UserAccessLevel
+    s.IPP,
+    s.Adap,
+    ssa.AccessLevel    AS UserAccessLevel
 FROM DimStudent s
 INNER JOIN DimSchool sch
-        ON sch.SchoolID = s.CurrentSchoolID
-INNER JOIN vw_StaffSchoolAccess vssa
-        ON vssa.SchoolID = s.CurrentSchoolID
+        ON sch.SchoolID = s.SchoolID
+INNER JOIN StaffSchoolAccess ssa
+        ON ssa.SchoolID = s.SchoolID
 WHERE s.IsCurrent = 1
   AND s.EnrollStatus IN (0, -1)
-  AND vssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
-  AND LOWER(vssa.Email) = LOWER(CURRENT_USER);
+  AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+  AND LOWER(ssa.Email) = LOWER(CURRENT_USER);

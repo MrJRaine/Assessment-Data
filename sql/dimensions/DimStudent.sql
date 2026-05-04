@@ -24,6 +24,13 @@
  *                       a later re-query produces different numbers when names,
  *                       homeroom, IPP status, etc. change — sending stakeholders
  *                       on rabbit hunts to explain phantom discrepancies.
+ *            2026-05-04 - Stripped misleading "Current" prefix from Grade, SchoolID,
+ *                       IPP, Adap to align with DimStaff / DimSection convention.
+ *                       The prefix was inaccurate on a Type 2 dim — every row is a
+ *                       point-in-time snapshot; the row's effective dates define
+ *                       currency, not the column name. PS source column names
+ *                       (Stg_Student.CurrentIPP / CurrentAdap) are unchanged —
+ *                       only the warehouse-side names dropped the prefix.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
@@ -33,9 +40,9 @@
 --   SourceSystemID, LastUpdated
 --
 -- Type 2 trigger fields (any change creates a new SCD version):
---   FirstName, MiddleName, LastName, DateOfBirth, CurrentGrade, CurrentSchoolID,
+--   FirstName, MiddleName, LastName, DateOfBirth, Grade, SchoolID,
 --   ProgramCode, EnrollStatus, Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous,
---   CurrentIPP, CurrentAdap
+--   IPP, Adap
 --
 -- Business key: StudentNumber (provincial 10-digit number, term used in PowerSchool)
 -- Surrogate key: StudentKey (warehouse-generated, unique per SCD version)
@@ -47,16 +54,16 @@ CREATE TABLE DimStudent (
     MiddleName          VARCHAR(100)    NULL,               -- Optional; disambiguates same-name students
     LastName            VARCHAR(100)    NOT NULL,
     DateOfBirth         DATE            NULL,
-    CurrentGrade        VARCHAR(10)     NOT NULL,   -- Triggers new version. Stored as 'P' (Primary), 'PP' (Pre-Primary), or '1'-'12'. PS emits 0/-1 for Primary/Pre-Primary; ingest translates.
-    CurrentSchoolID     VARCHAR(10)     NOT NULL,   -- Triggers new version; 4-digit provincial school number
+    Grade               VARCHAR(10)     NOT NULL,   -- Triggers new version. Stored as 'P' (Primary), 'PP' (Pre-Primary), or '1'-'12'. PS emits 0/-1 for Primary/Pre-Primary; ingest translates.
+    SchoolID            VARCHAR(10)     NOT NULL,   -- Triggers new version; 4-digit provincial school number
     ProgramCode         VARCHAR(10)     NOT NULL,   -- Triggers new version, e.g. 'E015', 'S115'
     EnrollStatus        INT             NOT NULL,   -- PS Enroll_Status: 0 = Active, 2 = Inactive, 3 = Graduated, -1 = Pre-Enrolled
     Homeroom            VARCHAR(50)     NULL,       -- PS Home_Room
     Gender              VARCHAR(10)     NOT NULL,   -- PS Gender. Observed values: M, F, X. Joins to DimGender for descriptions.
     SelfIDAfrican       BIT             NULL,       -- PS NS_AssigndIdentity_African — student self-ID as African descent
     SelfIDIndigenous    BIT             NULL,       -- PS NS_aboriginal — student self-ID as Indigenous descent
-    CurrentIPP          BIT             NULL,       -- PS CurrentIPP — has at least one IPP
-    CurrentAdap         BIT             NULL,       -- PS CurrentAdap — has adaptations
+    IPP                 BIT             NULL,       -- PS CurrentIPP — has at least one IPP
+    Adap                BIT             NULL,       -- PS CurrentAdap — has adaptations
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,        -- NULL = current version
     IsCurrent           BIT             NOT NULL,

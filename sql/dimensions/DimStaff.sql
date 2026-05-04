@@ -22,7 +22,7 @@
  *            2026-04-27 - Added per-person access attributes (all Type 1):
  *                       HomeSchoolID, CanChangeSchool, IsDistrictLevel.
  *                       Sourced from PS staff record (joined into the staff
- *                       export). Drives vw_StaffSchoolAccess for non-teaching
+ *                       export). Drives StaffSchoolAccess for non-teaching
  *                       staff school-level RLS.
  *            2026-04-28 - SCD policy change: ALL business attributes are now Type 2
  *                       triggers (FirstName, LastName, HomeSchoolID, CanChangeSchool,
@@ -37,7 +37,7 @@
  *                       school-tier role per person). Type 1 (overwrite, no SCD
  *                       version) — historical AccessLevel is recoverable from
  *                       FactStaffAssignment's own Type 2 history; on DimStaff this
- *                       is just a denormalized snapshot used by vw_StaffSchoolAccess
+ *                       is just a denormalized snapshot used by StaffSchoolAccess
  *                       for fast RLS lookups.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
@@ -75,11 +75,11 @@
 --                        only when the user has multi-school access. Includes
 --                        special markers: '0' (district-level tier), '999999'
 --                        (graduates pseudo-school — should not appear for staff).
---                        Parsed live by vw_StaffSchoolAccess.
+--                        Parsed live by StaffSchoolAccess.
 --   * IsDistrictLevel  — derived flag set at ingest: 1 if '0' appears in the
 --                        CanChangeSchool list, else 0. Drives whether the
 --                        '0000' aggregate row surfaces for the user in
---                        vw_StaffSchoolAccess.
+--                        StaffSchoolAccess.
 --
 -- ActiveFlag lifecycle (import-driven, not pulled from PowerSchool):
 --   Staff are exported from a PowerSchool report that filters to currently active

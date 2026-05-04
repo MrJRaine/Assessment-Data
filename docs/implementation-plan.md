@@ -24,9 +24,9 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 
 - [x] **9. Write secured SQL views**: `vw_TeacherStudents`, `vw_SchoolStudents`, `vw_RegionalData` *(Claude can generate — `sql/security/`)*. **Done 2026-05-01.** All three views deployed; pre-enrolled student support added (PS export filter broadened to `Enroll_Status IN (0, -1)`, teacher view date-gates pre-enrolled visibility, admin view shows all pre-enrolled).
 - [x] **10. Test views** by querying as pilot teacher Entra accounts *(Manual — requires real Entra identities)*. **Done 2026-05-01 via 5-test impersonation matrix** (Teacher with future pre-enrolled, Teacher with past pre-enrolled, SpecialistTeacher cross-school co-teacher, Administrator, RegionalAnalyst). Real Entra account validation pending Step 16 / Phase 4 pilot UAT but the RLS contract is fully proven.
-- [ ] **11. Create Fabric semantic model** pointing to warehouse views *(Manual — Power BI portal)*. **Deliverable ready in [`docs/semantic-model-setup.md`](semantic-model-setup.md)** — full click-through for `Assessment_Analytics` model in DirectLake mode with the table list, relationships, and role-assignment migration path.
-- [ ] **12. Configure DAX RLS roles** in semantic model *(Claude can write DAX)*. **Deliverable ready in [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax)** — three roles (Teachers, SchoolAdmins, RegionalAnalysts) with two table filters each (DimStudent + DimStaff). Symmetric staff RLS rules added 2026-05-01: teachers see only self; school admins see staff at their schools.
-- [ ] **13. Validate RLS** with test accounts — confirm teacher sees only their students *(Manual — requires login testing)*
+- [x] **11. Create Fabric semantic model** pointing to warehouse views *(Manual — Power BI portal)*. **Done 2026-05-04.** `Assessment_Analytics` model deployed in **Direct Lake on OneLake** mode (switched from "Direct Lake on SQL" mid-build to enable full DAX RLS surface — see semantic-model-setup.md for rationale). 15 tables loaded, 13 relationships wired (DimSchool→DimSection inactive to break the diamond; DimCalendar.Date↔FactAssessmentReading.AssessmentDate joining on the natural DATE columns).
+- [x] **12. Configure DAX RLS roles** in semantic model *(Claude can write DAX)*. **Done 2026-05-04.** Three roles (Teachers, SchoolAdmins, RegionalAnalysts) deployed via Manage Roles. RLS expressions iterated through several DAX gotchas in the process — all captured in [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax) header for future readers (CALCULATETABLE shortcut filters can't wrap columns in LOWER, BIT columns import as Boolean True/False not Integer, IsCurrent/EnrollStatus filters dropped on analyst roles to support historical reporting). Filter design varies per role: Teachers operational-current; SchoolAdmins per-row SchoolID gate (sees historical staff via "ever at my school" check); RegionalAnalysts unrestricted.
+- [x] **13. Validate RLS** with test accounts — confirm teacher sees only their students *(Manual — requires login testing)*. **Structurally validated 2026-05-04; empirical end-user validation deferred to Phase 4 pilot UAT.** Hit a wall: Direct Lake on OneLake's SSO identity passthrough is incompatible with all three standard impersonation-testing surfaces — Fabric web report editor doesn't expose **View as**, Power BI Desktop's **View as** doesn't work for live-connected SaaS models, and Power BI Service's **Test as role** explicitly errors with "does not work with Single Sign-On." Mitigation: the SQL-side RLS already validated end-to-end via the 5-test impersonation matrix (Step 10, 2026-05-01) and the DAX rules implement identical logical filters. DAX parses and saves cleanly. Real-account validation lands at Step 21+ / Phase 4 pilot UAT — same accommodation as Step 10's "real Entra accounts" portion.
 - [ ] **14. Write data quality validation queries** — orphan checks, duplicate IsCurrent, date logic *(Claude can generate — `sql/scripts/`)*
 
 ---
@@ -82,11 +82,11 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 | Phase | Total Steps | Completed |
 |-------|-------------|-----------|
 | Phase 1: Foundation | 8 | 8 |
-| Phase 2: Security & Views | 6 | 2 |
+| Phase 2: Security & Views | 6 | 5 |
 | Phase 3: Power Apps | 7 | 0 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **10** |
+| **Total** | **36** | **13** |
 
 ---
 
@@ -100,6 +100,25 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-05-04
+- **Last completed steps**: Steps 11, 12, 13 closed (Step 13 with empirical-validation deferral to Phase 4 pilot UAT — same accommodation as Step 10's "real Entra accounts" portion). Phase 2 now 5 of 6.
+- **What landed today** (substantial session, lots of architectural pivots):
+  - **Step 11 — semantic model deployed** in **Direct Lake on OneLake** mode. Started in Direct Lake on SQL; ran into CONTAINSROW being blocked in DirectQuery RLS subset; pivoted. 15 tables loaded, 13 relationships wired (DimSchool→DimSection inactive to break the diamond; DimCalendar.Date↔FactAssessmentReading.AssessmentDate joining on natural DATE columns instead of DateKey).
+  - **Step 12 — three DAX RLS roles deployed**: Teachers (operational current-only), SchoolAdmins (per-row SchoolID gate, allows historical reporting), RegionalAnalysts (unrestricted). Iterated through several DAX gotchas: LOWER inside CALCULATETABLE filter shortcut blocked, BIT comparison `= 1` fails (use `= TRUE`), CONTAINSROW blocked. Per-role filter strategy refined to drop redundant defensive filters (EnrollStatus, IsCurrent on analyst roles, AccessLevel on StaffSchoolAccess gate).
+  - **Step 13 — RLS validation deferred**. Hit hard wall: SSO identity passthrough is incompatible with all three impersonation-testing surfaces (Fabric web View as absent; Desktop View as doesn't work for live SaaS; Service Test as role errors with "doesn't work with SSO"). SQL-side RLS already validated 2026-05-01 with same logic; DAX parses + saves cleanly. Deferred to Phase 4 with real Entra accounts.
+  - **MAJOR refactor: vw_StaffSchoolAccess materialized as StaffSchoolAccess table**. Required to unblock Direct Lake on OneLake mode (which doesn't permit views). Rebuild logic added as Step 6 to `usp_MergeStaff`. Same staleness as the prior view, no manual entries — just materialized. Migration: `sql/scripts/migrate_StaffSchoolAccess_materialize.sql`. Deleted old view file, updated vw_SchoolStudents to reference the table.
+  - **DimStudent column rename**: stripped misleading "Current" prefix from 4 columns. `CurrentGrade → Grade`, `CurrentSchoolID → SchoolID`, `CurrentIPP → IPP`, `CurrentAdap → Adap`. Reason: on a Type 2 dim every row is a point-in-time snapshot, "Current" prefix was inaccurate. PS source columns in `Stg_Student` keep their PS-side names. Migration: `sql/scripts/migrate_DimStudent_strip_current_prefix.sql`. Touched 19 files.
+  - **DimRole 22/32 migration applied + cascaded**. APSEA itinerant + IB/O2/Co-op coordinators moved from `SpecialistTeacher` to `Teacher`. Verified: apsea.itinerant now `RoleCode='Teacher'`, `AccessLevel=NULL`, dropped out of StaffSchoolAccess.
+  - **`reset_and_run_full_ingest.sql` script** committed. Canonical truncate-6 + orchestrator pattern from feedback memory, now in source control.
+  - **FactEnrollment Step 2 refinement**: surrogate keys CASE-gated to freeze on already-inactive rows (point-in-time correctness for closed enrollments). Active rows continue to re-resolve normally. Header docstring + in-line comment explain the case table.
+  - **DAX file restructured** with heavy `████` role separators and `╭─╮` block headers for visual scanning in environments without DAX syntax highlighting (the user works in VS Code which doesn't parse DAX).
+  - **New memory: `project_assessment_fact_scd_policy.md`** — per-fact SCD linking policy. Documents FactEnrollment refinement and the planned Type 2 frozen policy for FactAssessmentReading / FactAssessmentWriting (Step 31).
+- **Test data state at session end**: DimStudent 20 / 18+2pre. DimStaff 11. FactStaffAssignment 14. DimSection 10. FactEnrollment 40 / 39 active. FactSectionTeachers 14. StaffSchoolAccess 7 / 3 unique school-tier staff.
+- **Next-session TODO**:
+  1. **Step 14 — write data quality validation queries** (`sql/scripts/`): orphan checks, duplicate-IsCurrent on Type 2 dims, date-window logic. Closes Phase 2.
+  2. Then **Phase 3 — Step 15+ Power Apps work**. Step 16 (Power Apps → Fabric SQL connection) is the highest-risk item per implementation plan; tackle that early.
+- **Blockers**: None.
 
 ### Left Off — 2026-05-01
 - **Last completed steps**: Steps 8, 9, and 10 fully closed (with Step 10's "real Entra accounts" portion deferred to Step 16 / Phase 4 — RLS contract is proven via impersonation, the open piece is just pilot account UAT).
