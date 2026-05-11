@@ -34,9 +34,9 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 ## Phase 3: Power Apps Entry Form (Weeks 5–6)
 *Goal: Teachers can submit reading assessments from Teams*
 
-- [ ] **15. Create canvas app** in Power Apps maker portal *(Manual — maker portal)*
-- [ ] **16. Connect app to Fabric SQL endpoint** — test connection early, may need custom connector *(Manual — connector setup in portal)*
-- [ ] **17. Design screen layout** — `scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation` *(Claude can provide full screen logic and formulas)*
+- [x] **15. Create canvas app** in Power Apps maker portal *(Manual — maker portal)*. **Done 2026-05-11.** Single-screen test app created in TCRCE default environment with a smoke-test button.
+- [x] **16. Connect app to Fabric SQL endpoint** — test connection early, may need custom connector *(Manual — connector setup in portal)*. **Done 2026-05-11.** SQL Server connector + Microsoft Entra ID Integrated auth confirmed working for reads against `Assessment_Warehouse`. **MAJOR ARCHITECTURAL FINDING**: Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables (`Defaults(<FabricTable>)` returns `{}`). Established workaround pattern (memorialized in `project_powerapps_write_pattern.md` memory + fabric-warehouse-sql skill items 15-16): wrapper stored procs called from Power Apps formulas via the same SQL connector. First proc `usp_InsertSubmissionAudit` deployed; end-to-end smoke test confirmed (Power Apps button → row in `FactSubmissionAudit` with calling user's UPN). Reference: [Shabnam Watson blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/).
+- [x] **17. Design screen layout** — `scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation` *(Claude can provide full screen logic and formulas)*. **Done 2026-05-11.** Original 3-screen single-student-at-a-time design rejected after stakeholder feedback in favor of group-then-roster batch entry. New 4-screen design lives at [`docs/powerapps-screen-design.md`](powerapps-screen-design.md): `scrLanding` → `scrWindowSelect` → `scrGroupSelect` → `scrRosterGrid` (with `scrStudentData` placeholder for Phase 5+). Supports multiple concurrent windows (e.g. P-6 Reading + 7-12 Writing simultaneously), role-based filtering, edit-during-window for teachers + edit-anytime for admins/analysts, school year dropdown for admins. Includes prerequisite SQL build list for Step 18.
 - [ ] **18. Write Power Apps formulas** — student filter, active window filter, submit action *(Claude can write all formulas)*
 - [ ] **19. Write audit logging logic** to `FactSubmissionAudit` on each submission *(Claude can write formula/flow)*
 - [ ] **20. Embed app in Microsoft Teams** via Teams app catalog *(Manual — Teams admin portal)*
@@ -83,10 +83,10 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 |-------|-------------|-----------|
 | Phase 1: Foundation | 8 | 8 |
 | Phase 2: Security & Views | 6 | 6 |
-| Phase 3: Power Apps | 7 | 0 |
+| Phase 3: Power Apps | 7 | 3 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **14** |
+| **Total** | **36** | **17** |
 
 ---
 
@@ -101,17 +101,53 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
-### Left Off — 2026-05-11
-- **Last completed step**: Step 14 closed. **Phase 2 fully done (6 of 6).** 14 of 36 steps complete overall.
-- **What landed today** (short session):
-  - Ran [`sql/scripts/data_quality_checks.sql`](../sql/scripts/data_quality_checks.sql) against `Assessment_Warehouse` for the first time — empty result set, all 49 checks pass clean against current MVP test state. Code was committed last session (`26e388a`) but had never actually been executed; today closes that gap.
-  - Caught a small T-SQL quirk during the baseline-count query: `Current` is a reserved word in Fabric Warehouse and can't be used as a bare column alias. Captured in [.claude/skills/fabric-warehouse-sql.md](../.claude/skills/fabric-warehouse-sql.md) (and the `.github/skills/` mirror) under a new "Reserved Words" section that consolidates `Group`, `RowCount`, and `Current` into one bracket-quote-required table.
-- **Test data state at session end (unchanged from 2026-05-04)**: DimStudent 20, DimStaff 11, FactStaffAssignment 14, DimSection 10, FactEnrollment 40 / 39 active, FactSectionTeachers 14, StaffSchoolAccess 7.
-- **Next-session TODO** — Phase 3 begins:
-  1. **Step 15** — create the canvas app in the Power Apps maker portal (manual, your hands).
-  2. **Step 16 (highest-risk item in the whole plan)** — connect the app to Fabric SQL endpoint. Test this immediately to surface any custom-connector requirement before sinking time into screen design. The implementation-plan Notes section explicitly flags this as #1 risk.
-  3. **Step 17** — design 3 screens (`scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation`).
-- **Blockers**: None.
+### Left Off — 2026-05-11 (long session, multiple architectural findings)
+- **Last completed steps**: 14 (data quality), 15 (canvas app shell), 16 (Power Apps → Fabric SQL connection), 17 (screen design spec). **17 of 36 steps complete overall.** Phase 3 at 3/7.
+- **What landed today**:
+  - **Step 14 verified**: `sql/scripts/data_quality_checks.sql` ran against `Assessment_Warehouse`, all 49 checks returned empty result. Code was committed in prior session but never executed.
+  - **Reserved-words discovery**: `Current` is reserved in Fabric Warehouse T-SQL — can't be used as a bare column alias. Captured alongside `Group` and `RowCount` in fabric-warehouse-sql skill's new "Reserved Words" section.
+  - **PR opened + merged for all Phase 1+2 work** — branch `step-14-data-quality-checks` (which actually held Steps 8-14 + all Phase 2 deliverables) merged to main. Created fresh `phase-3-power-apps` branch for ongoing Phase 3 work.
+  - **Step 15 closed**: canvas app shell created in TCRCE Power Platform default environment with single test button.
+  - **Step 16 closed — MAJOR ARCHITECTURAL FINDING**: Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables. `Defaults(<FabricTable>)` returns `{}` because the SQL connector can't introspect the PK-less / no-DEFAULT schema. Validated independently by [Shabnam Watson blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/). Workaround pattern established: wrapper stored procs called from Power Apps formulas via the same SQL connector. First proc `usp_InsertSubmissionAudit` deployed; smoke test passed end-to-end (Power Apps button → row in `FactSubmissionAudit` with `SubmittedBy = jeffrey.raine@tcrce.ca`).
+  - **PIIDPA correction in CLAUDE.md**: Earlier wording said "data must remain in Canada East" — that's stricter than PIIDPA actually requires. PIIDPA requires Canadian residency (any region); Canada East is the project's deliberate Fabric implementation choice, not the regulatory floor. Both spots in CLAUDE.md softened to reflect this. Memory: `feedback_piidpa_canada_not_canada_east.md`.
+  - **Time zone convention established and applied**: Fabric Warehouse server clocks are UTC unconditionally. Project convention is "store UTC, display/compare in Atlantic with DST" via `AT TIME ZONE 'Atlantic Standard Time'` (Windows TZ ID handles DST automatically — returns ADT in DST window, AST otherwise). Audit found 7 spots needing Atlantic conversion (vw_TeacherStudents pre-enrolled date gate + all 5 merge proc `@EffectiveDate` fallbacks + usp_YearEndCloseOut year-of-closing computation + EffectiveDate fallback). All 7 source files updated; `sql/scripts/deploy_timezone_audit.sql` created and executed clean against the warehouse. Data quality re-check after deploy: PASS. Memory: `project_timezone_convention.md`. Skill update in fabric-warehouse-sql.
+  - **Step 17 design spec drafted**: [`docs/powerapps-screen-design.md`](powerapps-screen-design.md). Substantial design pivots during the session: (1) original 3-screen single-student-at-a-time design rejected for group-then-roster grid; (2) ProgramFamily on `DimAssessmentWindow` retained after initial proposal to drop (windows CAN scope by program); (3) `scrLanding` added to separate Student Data viewing from Data Entry. Final design: 4 screens (`scrLanding` → `scrWindowSelect` → `scrGroupSelect` → `scrRosterGrid`), supporting multiple concurrent windows, role-based filtering, edit-during-window for teachers + edit-anytime for admins, school year dropdown for admins/analysts.
+  - **3 new memory files**: PIIDPA correction, Power Apps write pattern, time zone convention.
+  - **fabric-warehouse-sql skill updated 3 times**: Reserved Words section (Group/RowCount/Current), items 15-16 (Power Apps write limitations + workaround pattern), Time Zone Convention section.
+  - **gh CLI installed** locally via winget (was previously absent — captured in session-wrap skill fallback). Not yet authenticated (no `gh auth login` run); next session can either set up auth or continue using the GitHub Pull Requests VS Code extension.
+- **Test data state at session end**: Same as 2026-05-04 EOD (DimStudent 20, DimStaff 11, FactStaffAssignment 14, DimSection 10, FactEnrollment 40, FactSectionTeachers 14, StaffSchoolAccess 7) PLUS:
+  - 1 row in FactSubmissionAudit from the Power Apps smoke test (`Source = 'PowerApps'`, `SubmittedBy = jeffrey.raine@tcrce.ca`)
+  - Multiple rows in FactDataQualityAudit (PASS sentinels from each EXEC of `usp_RunDataQualityChecks` — at least 3 today: deploy verification + post-Step14-deploy + post-timezone-audit)
+- **Pending issues — Step 18 prerequisite SQL build list (in order):**
+  1. New `DimGrade` table + 15-row seed (PP=−1, P=0, 1-12, RG=13)
+  2. `usp_MergeStudent` Wrk_Student translation update: PS `grade_level=13` → `'RG'` alongside existing `0`→`'P'` and `-1`→`'PP'`
+  3. `DimAssessmentWindow` schema migration: drop `AppliesTo`, drop `IsCurrentWindow`, rename `ProgramCode` → `ProgramFamily`. Migration script + redeploy.
+  4. New view `vw_UserAssessmentWindows` (full SQL drafted in design doc)
+  5. Revised view `vw_TeacherGroups` (window-parameterized; full SQL drafted)
+  6. Revised view `vw_TeacherRoster` (window-parameterized; full SQL drafted)
+  7. New proc `usp_UpsertReadingAssessment` (with server-side role + window-state enforcement; no OUTPUT clause; computes ReadingDelta)
+  8. Seed `DimAssessmentWindow` with MVP pilot windows (likely 2: English Reading all-grades + French Reading FI-only)
+  9. Verify `DimReadingScale` is populated for relevant program/grade combos (probably needs sourcing from assessment team — open question)
+- **Pending issues — Power Apps app build (Step 18 + parallel)**:
+  - Build all 4 screens (currently only the 1-button test screen exists)
+  - Wire all data sources for the new SQL objects above
+  - Implement state vars (`gblIsAdminOrAnalyst`, `gblSelectedWindow`, `gblSelectedGroup`, `gblCanEdit`, `colDirty`)
+  - Implement save behavior (ForAll + proc call + Notify toast)
+  - Implement back-arrow unsaved-changes confirm dialog
+  - Validate Power Apps keyboard navigation approximation works for typical roster sizes (25-30 students)
+- **Pending issues — verifications / longer-term**:
+  - Real Entra-account RLS validation (Phase 4 pilot UAT, deferred per Step 13 closure)
+  - Concurrent-edit race feedback to losing party (deferred — acceptable for MVP per spec)
+  - Synthetic Returning Graduate student data for testing the new ingest translation
+  - Full-cycle test with multiple concurrent windows in `DimAssessmentWindow` once seeded
+- **Open architectural questions for next session**:
+  - `vw_UserAssessmentWindows` UNION-across-3-RLS-views vs explicit role-branching (current design uses UNION; works but worth user confirmation when implementing)
+  - `DimReadingScale` content sourcing — is there an assessment team contact?
+  - gh CLI authentication setup (optional — only if user wants me to drive PRs end-to-end without leaving the terminal)
+- **Pending issues — housekeeping**:
+  - `origin/step-14-data-quality-checks` still on GitHub (no auto-delete-on-merge); local copy gone. Safe to delete from GitHub Branches page.
+  - `origin/session-2026-04-29` and `origin/session-2026-04-30` stale branches still on GitHub (also safe to delete).
+- **Blockers**: None. Step 18 SQL prereqs can begin immediately; Power Apps screen build can run in parallel.
 
 ### Left Off — 2026-05-04
 - **Last completed steps**: Steps 11, 12, 13 closed (Step 13 with empirical-validation deferral to Phase 4 pilot UAT — same accommodation as Step 10's "real Entra accounts" portion). Phase 2 now 5 of 6.

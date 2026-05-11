@@ -82,14 +82,20 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Defaults
+    -- Defaults — both derived from "today in Atlantic" so the school-year
+    -- boundary aligns with the Pipeline trigger's July 1 Atlantic schedule
+    -- regardless of when the proc fires (UTC server clock would otherwise
+    -- shift the calendar day late-evening Atlantic).
+    DECLARE @AtlanticToday DATE =
+        CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
+
     IF @ClosingSchoolYearEnd IS NULL
         SET @ClosingSchoolYearEnd =
-            CASE WHEN MONTH(GETDATE()) >= 7 THEN YEAR(GETDATE())
-                 ELSE YEAR(GETDATE()) - 1 END;
+            CASE WHEN MONTH(@AtlanticToday) >= 7 THEN YEAR(@AtlanticToday)
+                 ELSE YEAR(@AtlanticToday) - 1 END;
 
     IF @EffectiveDate IS NULL
-        SET @EffectiveDate = CAST(GETDATE() AS DATE);
+        SET @EffectiveDate = @AtlanticToday;
 
     DECLARE @RunStart           DATETIME2(0) = GETDATE();
     DECLARE @EnrollmentsClosed  INT = 0;

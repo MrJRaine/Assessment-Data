@@ -174,6 +174,64 @@ Nums AS (
     WHERE LOWER(fst.TeacherEmail) = LOWER(CURRENT_USER)
     ```
 
+## Discovered During Power Apps Write Path Testing (2026-05-11)
+
+15. **`OUTPUT` clause is NOT supported in Fabric Warehouse.** Standard T-SQL allows `INSERT…OUTPUT INSERTED.*`, `UPDATE…OUTPUT DELETED.col, INSERTED.col`, etc. for capturing affected-row data inline. Fabric Warehouse rejects all of these. **Workaround:** if you need the inserted/updated rows, capture them via a separate `SELECT` against the table after the write, ideally filtered by a known business key. This affects any new merge procs, write procs, and audit-trail patterns.
+
+    Per the [Power Apps write workaround blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/) — *"Fabric Warehouse supports sp_executesql, it does not yet support the OUTPUT clause."*
+
+16. **Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables.** The standard SQL Server connector exposes the warehouse for reads but cannot perform Patch/SubmitForm writes — `Defaults(<FabricTable>)` returns an empty record (`{}`), causing the connector to reject any Patch call with "The function 'Patch' has some invalid arguments" or similar generic errors. Confirmed against `Assessment_Warehouse.FactSubmissionAudit` 2026-05-11.
+
+    **Workaround pattern for Power Apps writes**: create a wrapper stored procedure in the warehouse, expose it as a data source from the same SQL connection, and call it directly from Power Apps formulas:
+
+    ```
+    -- Warehouse-side proc (NO OUTPUT clause):
+    CREATE PROCEDURE usp_InsertSubmissionAudit
+        @RecordType  VARCHAR(50),
+        ...
+    AS
+    BEGIN
+        SET NOCOUNT ON;
+        INSERT INTO FactSubmissionAudit (...) VALUES (...);
+    END;
+    ```
+
+    ```
+    // Power Apps OnSelect formula (approximate; Power Apps formats per locale):
+    'Assessment_Warehouse'.dbo.usp_InsertSubmissionAudit({
+        RecordType: "Test",
+        ...
+    })
+    ```
+
+    Same SQL connector that's already validated for reads — no Power Automate intermediary needed. Stored procs also align with the project's existing `usp_*` convention. This is the established Power Apps write pattern for the project; do not propose Patch/SubmitForm against warehouse tables in any future design.
+
+    **Caveat — Fabric Warehouse is not OLTP-optimized**: per the same blog, frequent small writes generate parquet-file churn that eventually requires optimization. At MVP / pilot volume (a handful of writes per teacher per assessment window), this is fine. At full rollout (200 teachers × multiple assessments × multiple windows), monitor and consider write batching if performance degrades.
+
+## Time Zone Convention (project-specific, 2026-05-11)
+
+**Fabric Warehouse runs all server clocks in UTC.** `GETDATE()`, `SYSDATETIME()`, `CURRENT_TIMESTAMP` all return UTC regardless of workspace region. This is a Microsoft Fabric design choice (consistent with Azure SQL); it cannot be configured to a local timezone.
+
+**Project convention: store UTC, display/compare in Atlantic time** (Atlantic Standard Time with automatic DST → Atlantic Daylight Time). The Atlantic Provinces school system is the only audience.
+
+**For "today in Atlantic" in views and procs**, use:
+```sql
+CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)
+```
+
+Notes on `AT TIME ZONE`:
+- Windows timezone ID `'Atlantic Standard Time'` includes DST handling automatically despite the legacy "Standard" naming — `AT TIME ZONE` returns ADT (UTC-3) during DST and AST (UTC-4) outside DST without any explicit logic.
+- First `AT TIME ZONE 'UTC'` is required to mark a bare `DATETIME2` value as UTC (returns a `datetimeoffset`). Skipping it makes the conversion ambiguous.
+- Cast back to `DATE` (or `DATETIME2`) afterward if you only need the date or want to strip the offset.
+
+**Apply consistently:**
+- Date-gated view filters (e.g. `vw_TeacherStudents`'s pre-enrolled date gate)
+- Merge proc `@EffectiveDate` defaults
+- Year-end close-out date computations
+- Any T-SQL that compares `GETDATE()` to a `DATE`-typed column to answer "is this today?"
+
+**Audit-only timestamps** (`SubmissionTimestamp`, `LastUpdated`, `RunTimestamp` on audit tables) — leave as UTC. Storage convention is UTC; only display-layer conversion is needed in Power Apps / Power BI for those.
+
 ## Reserved Words — bracket-quote when used as identifiers
 
 These T-SQL reserved words have bitten this project as column names or aliases. Always wrap in `[brackets]` when used as identifiers (column names, aliases, etc.):

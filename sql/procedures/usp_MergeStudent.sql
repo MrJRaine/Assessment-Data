@@ -56,7 +56,7 @@ BEGIN
     SET NOCOUNT ON;
 
     IF @EffectiveDate IS NULL
-        SET @EffectiveDate = CAST(GETDATE() AS DATE);
+        SET @EffectiveDate = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
 
     DECLARE @RunStart        DATETIME2(0) = GETDATE();
     DECLARE @StgRowCount     INT = 0;

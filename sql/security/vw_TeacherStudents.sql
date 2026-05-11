@@ -88,7 +88,7 @@ FROM DimStudent s
 INNER JOIN FactEnrollment e
         ON e.StudentKey = s.StudentKey
        AND e.ActiveFlag = 1
-       AND e.StartDate <= CAST(GETDATE() AS DATE)
+       AND e.StartDate <= CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)
 INNER JOIN DimSection sec
         ON sec.SectionKey = e.SectionKey
        AND sec.IsCurrent  = 1
