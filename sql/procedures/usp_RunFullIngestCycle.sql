@@ -49,6 +49,14 @@
  *   from those rows. The cycle-summary audit row at the end is only written
  *   on a fully successful run.
  *
+ * Data quality gate (Phase 3):
+ *   After all merges complete, EXEC usp_RunDataQualityChecks. If it returns
+ *   non-zero, THROW to halt the cycle BEFORE the cycle-summary audit row is
+ *   written. This means a successful 'IngestCycle' row in FactSubmissionAudit
+ *   is a guarantee that data quality was clean at end of cycle. Violations
+ *   are persisted to FactDataQualityAudit regardless — investigate via
+ *   `SELECT * FROM FactDataQualityAudit WHERE RunTimestamp = (SELECT MAX(RunTimestamp) FROM FactDataQualityAudit)`.
+ *
  * Idempotence:
  *   Safe to re-run on the same lakehouse files — every merge proc is
  *   designed to be idempotent (same input -> same warehouse state).
@@ -93,8 +101,43 @@ BEGIN
     EXEC usp_MergeSectionTeachers @EffectiveDate = @EffectiveDate;
 
     -- ------------------------------------------------------------------------
-    -- Phase 3: Cycle-level audit. Written only on full success — useful
-    -- as a "cycle boundary" marker when scanning the audit log.
+    -- Phase 3: Data quality gate. Halts the cycle if any check fails so the
+    -- cycle-summary audit row below is only written on a fully clean run.
+    -- ------------------------------------------------------------------------
+    DECLARE @DqViolations INT;
+    EXEC @DqViolations = usp_RunDataQualityChecks;
+
+    IF @DqViolations <> 0
+    BEGIN
+        -- Persist a failure marker to FactSubmissionAudit so the cycle's
+        -- failure is visible alongside the per-table merge audit rows.
+        -- Per-violation detail lives in FactDataQualityAudit, not duplicated here.
+        INSERT INTO FactSubmissionAudit (
+            RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message,
+            RecordCount, LastUpdated
+        )
+        VALUES (
+            'IngestCycle',
+            'system',
+            'system',
+            @CycleStart,
+            'Rejected',
+            CONCAT(
+                'usp_RunFullIngestCycle: data quality gate FAILED | ',
+                CAST(@DqViolations AS VARCHAR(10)), ' violations | ',
+                'see FactDataQualityAudit for details (latest RunTimestamp)'
+            ),
+            @DqViolations,
+            GETDATE()
+        );
+
+        THROW 51000, 'usp_RunFullIngestCycle halted: data quality checks failed. See FactDataQualityAudit for details.', 1;
+    END;
+
+    -- ------------------------------------------------------------------------
+    -- Phase 4: Cycle-level success audit. Written only on a fully clean run
+    -- (data quality gate passed) — useful as a "cycle boundary" marker when
+    -- scanning the audit log.
     -- ------------------------------------------------------------------------
     INSERT INTO FactSubmissionAudit (
         RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message,
@@ -112,7 +155,8 @@ BEGIN
             CASE WHEN @SkipCoTeachers = 1
                  THEN ' | co-teachers SKIPPED'
                  ELSE '' END,
-            ' | 5 merge procs executed (see preceding audit rows for per-table counts)'
+            ' | 5 merge procs executed (see preceding audit rows for per-table counts)',
+            ' | data quality gate PASSED'
         ),
         0,
         GETDATE()

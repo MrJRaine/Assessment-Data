@@ -27,7 +27,7 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - [x] **11. Create Fabric semantic model** pointing to warehouse views *(Manual — Power BI portal)*. **Done 2026-05-04.** `Assessment_Analytics` model deployed in **Direct Lake on OneLake** mode (switched from "Direct Lake on SQL" mid-build to enable full DAX RLS surface — see semantic-model-setup.md for rationale). 15 tables loaded, 13 relationships wired (DimSchool→DimSection inactive to break the diamond; DimCalendar.Date↔FactAssessmentReading.AssessmentDate joining on the natural DATE columns).
 - [x] **12. Configure DAX RLS roles** in semantic model *(Claude can write DAX)*. **Done 2026-05-04.** Three roles (Teachers, SchoolAdmins, RegionalAnalysts) deployed via Manage Roles. RLS expressions iterated through several DAX gotchas in the process — all captured in [`power-bi/dax_rls_roles.dax`](../power-bi/dax_rls_roles.dax) header for future readers (CALCULATETABLE shortcut filters can't wrap columns in LOWER, BIT columns import as Boolean True/False not Integer, IsCurrent/EnrollStatus filters dropped on analyst roles to support historical reporting). Filter design varies per role: Teachers operational-current; SchoolAdmins per-row SchoolID gate (sees historical staff via "ever at my school" check); RegionalAnalysts unrestricted.
 - [x] **13. Validate RLS** with test accounts — confirm teacher sees only their students *(Manual — requires login testing)*. **Structurally validated 2026-05-04; empirical end-user validation deferred to Phase 4 pilot UAT.** Hit a wall: Direct Lake on OneLake's SSO identity passthrough is incompatible with all three standard impersonation-testing surfaces — Fabric web report editor doesn't expose **View as**, Power BI Desktop's **View as** doesn't work for live-connected SaaS models, and Power BI Service's **Test as role** explicitly errors with "does not work with Single Sign-On." Mitigation: the SQL-side RLS already validated end-to-end via the 5-test impersonation matrix (Step 10, 2026-05-01) and the DAX rules implement identical logical filters. DAX parses and saves cleanly. Real-account validation lands at Step 21+ / Phase 4 pilot UAT — same accommodation as Step 10's "real Entra accounts" portion.
-- [ ] **14. Write data quality validation queries** — orphan checks, duplicate IsCurrent, date logic *(Claude can generate — `sql/scripts/`)*
+- [x] **14. Write data quality validation queries** — orphan checks, duplicate IsCurrent, date logic *(Claude can generate — `sql/scripts/`)*. **Done 2026-05-11.** [`sql/scripts/data_quality_checks.sql`](../sql/scripts/data_quality_checks.sql) — 49 checks across 5 categories (Orphan / IsCurrent / Date / Reference / Consistency) unioned into a single result set; empty result = all pass. First run against current MVP test state (DimStudent 20, DimStaff 11, DimSection 10, FactStaffAssignment 14, FactSectionTeachers 14, FactEnrollment 40, StaffSchoolAccess 7) returned zero violations. **Phase 2 closed.**
 
 ---
 
@@ -82,11 +82,11 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 | Phase | Total Steps | Completed |
 |-------|-------------|-----------|
 | Phase 1: Foundation | 8 | 8 |
-| Phase 2: Security & Views | 6 | 5 |
+| Phase 2: Security & Views | 6 | 6 |
 | Phase 3: Power Apps | 7 | 0 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **13** |
+| **Total** | **36** | **14** |
 
 ---
 
@@ -100,6 +100,18 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-05-11
+- **Last completed step**: Step 14 closed. **Phase 2 fully done (6 of 6).** 14 of 36 steps complete overall.
+- **What landed today** (short session):
+  - Ran [`sql/scripts/data_quality_checks.sql`](../sql/scripts/data_quality_checks.sql) against `Assessment_Warehouse` for the first time — empty result set, all 49 checks pass clean against current MVP test state. Code was committed last session (`26e388a`) but had never actually been executed; today closes that gap.
+  - Caught a small T-SQL quirk during the baseline-count query: `Current` is a reserved word in Fabric Warehouse and can't be used as a bare column alias. Captured in [.claude/skills/fabric-warehouse-sql.md](../.claude/skills/fabric-warehouse-sql.md) (and the `.github/skills/` mirror) under a new "Reserved Words" section that consolidates `Group`, `RowCount`, and `Current` into one bracket-quote-required table.
+- **Test data state at session end (unchanged from 2026-05-04)**: DimStudent 20, DimStaff 11, FactStaffAssignment 14, DimSection 10, FactEnrollment 40 / 39 active, FactSectionTeachers 14, StaffSchoolAccess 7.
+- **Next-session TODO** — Phase 3 begins:
+  1. **Step 15** — create the canvas app in the Power Apps maker portal (manual, your hands).
+  2. **Step 16 (highest-risk item in the whole plan)** — connect the app to Fabric SQL endpoint. Test this immediately to surface any custom-connector requirement before sinking time into screen design. The implementation-plan Notes section explicitly flags this as #1 risk.
+  3. **Step 17** — design 3 screens (`scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation`).
+- **Blockers**: None.
 
 ### Left Off — 2026-05-04
 - **Last completed steps**: Steps 11, 12, 13 closed (Step 13 with empirical-validation deferral to Phase 4 pilot UAT — same accommodation as Step 10's "real Entra accounts" portion). Phase 2 now 5 of 6.

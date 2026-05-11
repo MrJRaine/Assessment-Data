@@ -173,3 +173,15 @@ Nums AS (
     -- CURRENT_USER's casing is environment-dependent.
     WHERE LOWER(fst.TeacherEmail) = LOWER(CURRENT_USER)
     ```
+
+## Reserved Words — bracket-quote when used as identifiers
+
+These T-SQL reserved words have bitten this project as column names or aliases. Always wrap in `[brackets]` when used as identifiers (column names, aliases, etc.):
+
+| Reserved word | Where it bit us | How |
+|---|---|---|
+| `Group` | PS staff export column name | `s.[Group]` in T-SQL — discovered during DimStaff merge proc work |
+| `RowCount` | `COPY INTO` result column | `COPY INTO ... WITH (...) AS [RowCount]` or use `RowsLoaded` — discovered 2026-04-29 |
+| `Current` | column alias in baseline-count query | `SUM(...) AS [Current]` — discovered 2026-05-11 while validating Step 14 ran clean |
+
+Don't rely on `"Double quotes"` for identifier quoting in this project — it depends on `QUOTED_IDENTIFIER ON` session state. Brackets are unconditional.
