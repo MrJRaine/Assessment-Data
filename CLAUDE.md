@@ -5,7 +5,7 @@
 Centralized platform for collecting and analyzing student reading/writing assessments across a regional school system in Nova Scotia, Canada.
 
 - ~6000 students (grades Primary–12), ~200 teachers
-- **Compliance**: PIIDPA — all data must remain in **Canada East** region
+- **Compliance**: PIIDPA — all data must remain in a **Canadian region**. Fabric workspace deliberately deployed to **Canada East**; other components (Power Automate, etc.) only need to be in *some* Canadian region (Canada East or Canada Central are both valid).
 - **Status**: Pre-MVP development
 - **MVP (June 2025)**: French Immersion pilot, 5–10 teachers, reading assessments only
 - **Full rollout (September 2025)**: All programs (EN + FR), all schools, ~200 teachers
@@ -41,7 +41,7 @@ RLS is **not** enforced at Fabric storage. Enforce it via:
 - Power Apps reads from secured views only — **never** grant teachers direct workspace access
 
 ### 4. Data Residency
-All storage, compute, and processing must run in **Canada East**. No third-party connectors that route data outside Canada.
+PIIDPA requires all storage, compute, and processing to run in a **Canadian region** — either Canada East or Canada Central qualifies. The Fabric workspace is deliberately deployed to **Canada East** as the project's chosen primary region; new components (Power Automate environments, etc.) should default to Canada East for consistency but Canada Central is also PIIDPA-compliant if Canada East isn't an option. No third-party connectors that route data outside Canada.
 
 ## Star Schema
 
