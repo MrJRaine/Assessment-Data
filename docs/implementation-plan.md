@@ -37,7 +37,7 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - [x] **15. Create canvas app** in Power Apps maker portal *(Manual — maker portal)*. **Done 2026-05-11.** Single-screen test app created in TCRCE default environment with a smoke-test button.
 - [x] **16. Connect app to Fabric SQL endpoint** — test connection early, may need custom connector *(Manual — connector setup in portal)*. **Done 2026-05-11.** SQL Server connector + Microsoft Entra ID Integrated auth confirmed working for reads against `Assessment_Warehouse`. **MAJOR ARCHITECTURAL FINDING**: Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables (`Defaults(<FabricTable>)` returns `{}`). Established workaround pattern (memorialized in `project_powerapps_write_pattern.md` memory + fabric-warehouse-sql skill items 15-16): wrapper stored procs called from Power Apps formulas via the same SQL connector. First proc `usp_InsertSubmissionAudit` deployed; end-to-end smoke test confirmed (Power Apps button → row in `FactSubmissionAudit` with calling user's UPN). Reference: [Shabnam Watson blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/).
 - [x] **17. Design screen layout** — `scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation` *(Claude can provide full screen logic and formulas)*. **Done 2026-05-11.** Original 3-screen single-student-at-a-time design rejected after stakeholder feedback in favor of group-then-roster batch entry. New 4-screen design lives at [`docs/powerapps-screen-design.md`](powerapps-screen-design.md): `scrLanding` → `scrWindowSelect` → `scrGroupSelect` → `scrRosterGrid` (with `scrStudentData` placeholder for Phase 5+). Supports multiple concurrent windows (e.g. P-6 Reading + 7-12 Writing simultaneously), role-based filtering, edit-during-window for teachers + edit-anytime for admins/analysts, school year dropdown for admins. Includes prerequisite SQL build list for Step 18.
-- [ ] **18. Write Power Apps formulas** — student filter, active window filter, submit action *(Claude can write all formulas)*
+- [ ] **18. Build screens (Copilot scaffold) + write precision formulas (manual paste)** — Hybrid C+B build approach decided 2026-05-11 (see [`project_powerapps_build_approach`](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/project_powerapps_build_approach.md) memory). Lead with Power Apps Copilot meta-prompts for scaffolding (galleries, navigation skeletons, repeating UI patterns from the [screen design spec](powerapps-screen-design.md)); use formula-bar paste for precision pieces (OnSelect formulas, the `colDirty` dirty-tracking pattern, back-arrow confirm dialog, `usp_*` stored-proc invocations). *(Claude drafts both the Copilot prompts and the precision formulas; user pastes Copilot prompts into Studio's Copilot pane and pastes precision formulas into individual control properties)*
 - [ ] **19. Write audit logging logic** to `FactSubmissionAudit` on each submission *(Claude can write formula/flow)*
 - [ ] **20. Embed app in Microsoft Teams** via Teams app catalog *(Manual — Teams admin portal)*
 - [ ] **21. Share Power Apps** directly with 5–10 pilot teachers *(Manual — Power Apps share dialog)*
@@ -100,6 +100,36 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-05-12 (Step 18 SQL prereqs partial — reading scale + DimGrade done)
+- **Last completed**: DimGrade, DimReadingScale refactor, DimReadingBenchmark new, EN + FR seeds (59 levels + 160 benchmark rows). All deployed and verified. Architectural decisions for Step 18 nailed down.
+- **What landed today**:
+  - **Architectural decision: `vw_UserAssessmentWindows` role-branched + historical-roster reconciliation** (Option 3 from yesterday's question). For closed windows, teachers see the roster they HAD at the time — not their current roster. Admin-side intentionally NOT historically reconciled (StaffSchoolAccess is current-only). New memory: `project_historical_roster_reconciliation.md`. Design doc updated with role-branched SQL.
+  - **`DimReadingScale` refactored** from single-table to two-table model. `DimReadingScale` becomes the valid-levels list (dropdown source); new `DimReadingBenchmark` holds the Grade × Month × Min/Max expectation matrix.
+  - **F&P references removed everywhere** per user request (political reasons). ScaleSystem naming: `'EN_Reading'` / `'FR_Reading'` — vendor-neutral, language-prefixed.
+  - **English scale seeded**: 27 levels (DT + A-Z), 80 benchmark rows (Grades P-7, Sept-Jun, ProgramFamily = English). Grade 7 = Grade-6-June Z-Z carry-over for students who didn't reach grade level.
+  - **French scale seeded**: 32 levels (TD + 1-30 + 30+), 80 benchmark rows (Grades P-7, ProgramFamily = French Immersion only — FSL not in scope). Same Grade 7 carry-over (30 to 30+).
+  - **30+ chosen as a submittable level** (LevelOrder = 31) — symmetric with the no-upper-bound semantic. Teachers can pick 30+ from the dropdown; benchmark Max = 30+ means "no positive delta possible."
+  - **ReadingDelta formula refined** with explicit pre-CASE NULL validation (THROW 51001) and AND-explicit in-range condition. No silent wrong answers on lookup failures.
+  - **Submission validation strategy memorialized** — three layers: Power Apps client → proc input validation → compute safety nets. Error code allocation 51001-51009 (safety nets) / 51010-51029 (user-fixable) / 51030-51049 (permission). New memory: `project_submission_validation_strategy.md`. Strongest version of Layer 1: constrain `Items` via data filters so invalid choices are impossible to make.
+  - **`DimGrade` deployed**: 15-row lookup (PP=-1, P=0, 1-12, RG=13, with GradeName + GradeBand). Solves grade-range BETWEEN comparisons in window-applicability views.
+  - **`cmbNewLevel` dropdown configuration locked**: `Items` filters DimReadingScale by `gblSelectedWindow.ScaleSystem`, sorted by `LevelOrder`. `DisplayFields = ["LevelCode"]` so teachers see "DT", "A", "1", "30+" etc. without internal columns leaking.
+  - **`DimAssessmentWindow.ScaleSystem` column** added to the planned migration spec. Each window declares which scale applies; ScaleSystem in DimReadingScale must match for the dropdown filter to work.
+- **Test data state at session end**: DimGrade 15, DimReadingScale 59 (27 EN + 32 FR), DimReadingBenchmark 160 (80 EN + 80 FR). No other table changes today.
+- **Pending Step 18 work** (in suggested order):
+  1. `usp_MergeStudent` Wrk_Student translation update for PS `grade_level=13` → `'RG'`
+  2. `DimAssessmentWindow` migration (drop `AppliesTo` + `IsCurrentWindow`, rename `ProgramCode` → `ProgramFamily`, add `ScaleSystem`)
+  3. `vw_UserAssessmentWindows` (SQL drafted in design doc — ready to deploy as-is)
+  4. `vw_TeacherGroups` revised (same historical-reconciliation pattern; SQL not yet drafted)
+  5. `vw_TeacherRoster` revised (same pattern; SQL not yet drafted)
+  6. `usp_UpsertReadingAssessment` (3-layer validation + ReadingDelta formula)
+  7. Seed pilot windows in `DimAssessmentWindow` (at least one English + one French Immersion)
+  8. Power Apps screen build (4 screens via C+B hybrid + grounded Copilot prompts)
+- **Open architectural questions**:
+  - Grade 8+ carry-over pattern — does retention extend past Grade 7 for EN or FR?
+  - FSL reading assessment — is FSL ever assessed for reading? Currently not in MVP scope.
+  - `usp_InsertSubmissionAudit` retrofit to 3-layer validation pattern — deferred unless audit table becomes consequential downstream.
+- **Blockers**: None. All design decisions for Step 18 are made; remaining work is straightforward implementation.
 
 ### Left Off — 2026-05-11 (long session, multiple architectural findings)
 - **Last completed steps**: 14 (data quality), 15 (canvas app shell), 16 (Power Apps → Fabric SQL connection), 17 (screen design spec). **17 of 36 steps complete overall.** Phase 3 at 3/7.

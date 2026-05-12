@@ -192,77 +192,149 @@ Status icons: 🔓 open · 🔒 closed · ⏰ closes today
 
 ### Data source
 
-**New view to build** (Step 18 prereq): `vw_UserAssessmentWindows`
+**New view to build** (Step 18 prereq): `vw_UserAssessmentWindows` — implements role-branched **historical roster reconciliation** per `project_historical_roster_reconciliation.md` memory (decided 2026-05-12). For closed windows, teachers see the roster they HAD at the time of the window (not current); admins see students who were in their schools at the window's effective date.
 
-Returns one row per (window the calling user has applicable students in), with the user's progress count and the window's status. Filters by user's role automatically via `CURRENT_USER`.
+**Window effective date**: `CASE WHEN today_atlantic > window.EndDate THEN window.EndDate ELSE today_atlantic END` — resolves point-in-time roster for closed windows; resolves current state for open/future windows.
 
 ```sql
 CREATE VIEW vw_UserAssessmentWindows AS
 WITH AtlanticToday AS (
     SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
 ),
--- Students this user can act on:
---   Teachers: their roster (vw_TeacherStudents)
---   Admins:  students in their schools (vw_SchoolStudents)
---   Analysts: all students (vw_RegionalData)
--- For MVP, use a UNION across the three views; the views already enforce
--- role-based filtering via CURRENT_USER, so the UNION is naturally a no-op
--- for users who don't qualify for a given path.
-UserStudents AS (
-    SELECT DISTINCT StudentKey FROM vw_TeacherStudents
-    UNION
-    SELECT DISTINCT StudentKey FROM vw_SchoolStudents
-    UNION
-    SELECT DISTINCT StudentKey FROM vw_RegionalData
+-- Resolve caller's role + identity once
+Caller AS (
+    SELECT TOP 1
+        d.StaffKey,
+        LOWER(d.Email) AS Email,
+        d.AccessLevel
+    FROM DimStaff d
+    WHERE LOWER(d.Email) = LOWER(CURRENT_USER)
+      AND d.IsCurrent = 1
 ),
-ApplicableMatrix AS (
-    -- (window × student) pairs where the student matches the window's scope
+-- For each active window, compute its effective date for historical-roster resolution
+WindowEffectiveDates AS (
     SELECT
         w.AssessmentWindowID,
-        s.StudentKey
+        w.WindowName,
+        w.AssessmentType,
+        w.SchoolYear,
+        w.StartDate,
+        w.EndDate,
+        w.MinGrade,
+        w.MaxGrade,
+        w.ProgramFamily,
+        CASE WHEN at.Today > w.EndDate THEN w.EndDate
+             ELSE at.Today END AS EffectiveDate,
+        CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
+             WHEN at.Today > w.EndDate   THEN 'Closed'
+             WHEN at.Today = w.EndDate   THEN 'ClosesToday'
+             ELSE 'Open' END AS WindowStatus
     FROM DimAssessmentWindow w
-    INNER JOIN DimGrade   wmin ON wmin.GradeCode = w.MinGrade
-    INNER JOIN DimGrade   wmax ON wmax.GradeCode = w.MaxGrade
-    CROSS JOIN UserStudents us
-    INNER JOIN DimStudent s   ON s.StudentKey = us.StudentKey AND s.IsCurrent = 1
-    INNER JOIN DimGrade   sg  ON sg.GradeCode  = s.Grade
-    INNER JOIN DimProgram dp  ON dp.ProgramCode = s.ProgramCode
+    CROSS JOIN AtlanticToday at
     WHERE w.ActiveFlag = 1
+),
+-- ROLE BRANCH 1: Teacher — students in sections they taught during the window
+-- Each join gated on the window effective date being within the relevant
+-- Type 2 row's effective period.
+TeacherStudents AS (
+    SELECT
+        wed.AssessmentWindowID,
+        s.StudentKey
+    FROM Caller c
+    CROSS JOIN WindowEffectiveDates wed
+    INNER JOIN FactSectionTeachers fst
+            ON LOWER(fst.TeacherEmail) = c.Email
+           AND wed.EffectiveDate BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
+    INNER JOIN DimSection sec
+            ON sec.SectionID = fst.SectionID
+           AND wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+    INNER JOIN FactEnrollment e
+            ON e.SectionKey  = sec.SectionKey
+           AND e.StartDate  <= wed.EndDate
+           AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+    INNER JOIN DimStudent s
+            ON s.StudentKey = e.StudentKey
+    INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+    INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
+    INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
+    INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+    WHERE c.AccessLevel IS NULL                                         -- teachers have no school-tier AccessLevel
       AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-      AND (w.ProgramFamily IS NULL OR dp.ProgramFamily = w.ProgramFamily)
+      AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+),
+-- ROLE BRANCH 2: School Admin / SpecialistTeacher — students whose DimStudent
+-- (effective at window date) had SchoolID in their CURRENT StaffSchoolAccess list.
+AdminStudents AS (
+    SELECT
+        wed.AssessmentWindowID,
+        s.StudentKey
+    FROM Caller c
+    CROSS JOIN WindowEffectiveDates wed
+    INNER JOIN StaffSchoolAccess ssa
+            ON ssa.StaffKey = c.StaffKey
+    INNER JOIN DimStudent s
+            ON s.SchoolID = ssa.SchoolID
+           AND wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+    INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+    INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
+    INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
+    INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+    WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
+      AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
+      AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+),
+-- ROLE BRANCH 3: Regional Analyst — all students whose DimStudent
+-- (effective at window date) matches the window's scope.
+AnalystStudents AS (
+    SELECT
+        wed.AssessmentWindowID,
+        s.StudentKey
+    FROM Caller c
+    CROSS JOIN WindowEffectiveDates wed
+    INNER JOIN DimStudent s
+            ON wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+    INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+    INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
+    INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
+    INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+    WHERE c.AccessLevel = 'RegionalAnalyst'
+      AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
+      AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+),
+ApplicableStudents AS (
+    SELECT * FROM TeacherStudents
+    UNION ALL SELECT * FROM AdminStudents
+    UNION ALL SELECT * FROM AnalystStudents
 )
 SELECT
-    w.AssessmentWindowID,
-    w.WindowName,
-    w.AssessmentType,
-    w.SchoolYear,
-    w.StartDate,
-    w.EndDate,
-    w.MinGrade,
-    w.MaxGrade,
-    w.ProgramFamily,
-    -- Status derived from dates + ActiveFlag
-    CASE WHEN at.Today < w.StartDate          THEN 'Upcoming'
-         WHEN at.Today > w.EndDate            THEN 'Closed'
-         WHEN at.Today = w.EndDate            THEN 'ClosesToday'
-         ELSE                                       'Open' END  AS WindowStatus,
-    -- Counts
-    COUNT(DISTINCT am.StudentKey) AS ApplicableStudentCount,
+    wed.AssessmentWindowID,
+    wed.WindowName,
+    wed.AssessmentType,
+    wed.SchoolYear,
+    wed.StartDate,
+    wed.EndDate,
+    wed.MinGrade,
+    wed.MaxGrade,
+    wed.ProgramFamily,
+    wed.WindowStatus,
+    COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
     COUNT(DISTINCT CASE WHEN far.ReadingAssessmentID IS NOT NULL
-                        THEN am.StudentKey END) AS EnteredStudentCount
-FROM DimAssessmentWindow w
-INNER JOIN ApplicableMatrix am ON am.AssessmentWindowID = w.AssessmentWindowID
-CROSS JOIN AtlanticToday at
+                        THEN a.StudentKey END) AS EnteredStudentCount
+FROM WindowEffectiveDates wed
+INNER JOIN ApplicableStudents a
+        ON a.AssessmentWindowID = wed.AssessmentWindowID
 LEFT JOIN FactAssessmentReading far
-       ON far.AssessmentWindowID = w.AssessmentWindowID
-      AND far.StudentKey         = am.StudentKey
+       ON far.AssessmentWindowID = wed.AssessmentWindowID
+      AND far.StudentKey         = a.StudentKey
 GROUP BY
-    w.AssessmentWindowID, w.WindowName, w.AssessmentType, w.SchoolYear,
-    w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily,
-    at.Today;
+    wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
+    wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily, wed.WindowStatus;
 ```
 
-Note: this view uses `vw_TeacherStudents` etc. (which already gate by `CURRENT_USER`) so it inherits role-aware filtering automatically. No additional `WHERE` clause needed for role.
+**Notes:**
+- The three role-branch CTEs are written as separate UNION ALL inputs but in practice only one returns rows per caller — the `c.AccessLevel` filter in each branch ensures mutual exclusivity. This pattern keeps the role logic visible while letting the Fabric optimizer prune empty branches fast.
+- `StaffSchoolAccess` is treated as current-only — admin role changes are NOT historically reconciled. Only the student side is. Documented in the historical-roster memory as an MVP scope decision.
+- The empty-result case (user has no role / no applicable students) returns zero rows — Power Apps shows the empty-state message.
 
 ### Navigation
 Tap a row → set state and navigate:
@@ -452,9 +524,9 @@ In suggested build order:
 1. **`DimGrade`** — new lookup table + 15-row seed (PP, P, 1-12, RG). Sort-key resolver for grade-range BETWEEN comparisons.
 2. **Ingest translation update** — `usp_MergeStudent` (Wrk_Student build): add `13`→`'RG'` translation alongside the existing `0`→`'P'` and `-1`→`'PP'`.
 3. **`DimAssessmentWindow` schema migration** — drop `AppliesTo`, drop `IsCurrentWindow`, rename `ProgramCode`→`ProgramFamily`. Migration script + redeploy.
-4. **`vw_UserAssessmentWindows`** — new view powering scrWindowSelect (full SQL drafted above).
-5. **`vw_TeacherGroups`** — revised to be window-parameterized (filter by window applicability via DimGrade + DimProgram joins).
-6. **`vw_TeacherRoster`** — revised to be window-parameterized + return existing assessment for that specific window.
+4. **`vw_UserAssessmentWindows`** — new view powering scrWindowSelect (full SQL drafted above). **Role-branched historical roster reconciliation** per `project_historical_roster_reconciliation` memory.
+5. **`vw_TeacherGroups`** — revised. **Must use the same historical-reconciliation pattern as `vw_UserAssessmentWindows`** — returns one row per (user, window, group) tuple. Power Apps filters client-side by `gblSelectedWindow.AssessmentWindowID`. Grade-range applicability via DimGrade. Group key: `'HR:' + Homeroom` for PP-9 students (uses student's homeroom at the window's effective date), `'SEC:' + SectionID` for 10-12 students. Progress count is per-(group, window).
+6. **`vw_TeacherRoster`** — revised. **Same historical-reconciliation pattern** — returns one row per (user, window, group, student) tuple with existing assessment value if any. Power Apps filters client-side by `WindowID` and `GroupKey`. The "existing assessment" column matches on `AssessmentWindowID` only (one assessment per student per window by design).
 7. **`usp_UpsertReadingAssessment`** — new write proc:
    - Resolves `StudentKey` via effective-date join on `(StudentNumber, AssessmentDate)`
    - Existence check on `(StudentKey, AssessmentWindowID)`
