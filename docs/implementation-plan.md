@@ -101,6 +101,43 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+### Left Off — 2026-05-13 (Step 18 SQL prereqs DONE end-to-end; Power Apps build path pivoted to VS Code YAML)
+- **🚨 First thing next session: roundtrip sanity test.** Pack the current `powerapps/sources/` back to a `.msapp` with no edits, re-import into Studio, confirm the 5 screens + 6 data sources all load. This catches any unpack-side issues BEFORE I start adding controls and formulas. Command:
+  ```powershell
+  & "C:\Users\jeffrey.raine\AppData\Local\Microsoft\PowerAppsCli\Microsoft.PowerApps.CLI.2.7.4\tools\pac.exe" canvas pack `
+    --sources "c:\Git-Repos\Assessment-Data\powerapps\sources" `
+    --msapp "c:\Git-Repos\Assessment-Data\powerapps\Student Data Staff Portal.roundtrip.msapp"
+  ```
+  Then in Studio: File → Open → Browse → pick the `.roundtrip.msapp`. If it opens with the 5 named screens, each with a ModernButton, and the 6 data sources still wired, the workflow is proven. Only then start editing YAML.
+- **Last completed steps**: Step 18 prereqs #1-#7 all DONE end-to-end:
+  1. ✅ `usp_MergeStudent` translation: PS `grade_level=13` → `'RG'` (Returning Graduate). Phi synthetic student added to test dummies as `9100000021`; full ingest cycle re-ran clean.
+  2. ✅ `DimAssessmentWindow` v2 migration (drop `AppliesTo` + `IsCurrentWindow`, rename `ProgramCode` → `ProgramFamily`, add `ScaleSystem`, tighten `MinGrade`/`MaxGrade` to NOT NULL).
+  3. ✅ `vw_UserAssessmentWindows` deployed — role-branched + historical-roster reconciliation per `project_historical_roster_reconciliation` memory.
+  4. ✅ `vw_TeacherGroups` deployed — homeroom for PP-9 students, section for 10-12 + RG.
+  5. ✅ `vw_TeacherRoster` deployed — one row per (window, group, student) with existing assessment.
+  6. ✅ `usp_UpsertReadingAssessment` deployed — 3-layer validation per `project_submission_validation_strategy` memory (12 THROW codes: 51001 safety net, 51010-51017 input validation, 51030-51032 permission). ReadingDelta computation via DimReadingBenchmark + dominant-month rule. No OUTPUT clause. StudentKey/AssessmentDate frozen on UPDATE.
+  7. ✅ `DimAssessmentWindow` seeded with MVP pilot windows: one English Elementary P-6 + one French Immersion Elementary P-6, both currently Open (2026-05-01 to 2026-06-30).
+- **Bonus: usp_InsertSubmissionAudit retrofitted with Layer 2 validation** (NULL guard 51010 + 3 enum allow-lists 51011-51013 + email-format 51014 + LOWER normalization). Smoke tests confirm both throw paths and positive case (with email lowercasing) work.
+- **End-to-end SQL backbone smoke-tested clean** via principal-at-school-0167 impersonation: vw_UserAssessmentWindows returns 1 row (FR window, 4 applicable), vw_TeacherGroups returns 3 group rows (HR:1A × 2 students, HR:5A × 1, HR:4D × 1), vw_TeacherRoster returns 4 student rows (Gamma, Omicron, Delta, Tau). All shapes match expectations. Impersonation reverted, baseline restored.
+- **Power Apps build path PIVOTED** mid-session:
+  - Started with C+B Copilot hybrid approach (chunked workbooks, Plan tool primer, schema reference doc — all produced and saved to `docs/powerapps-build/`).
+  - **Power Apps Copilot proved unreliable** — couldn't even reliably write App.OnStart per the user. The C+B path is dead.
+  - **New approach: VS Code YAML authoring + Studio for visual tweaks.** User did a thin Studio bootstrap (5 named screens, 1 ModernButton each, 6 data sources, app named "Student Data Staff Portal"), exported the `.msapp` to `powerapps/`.
+  - **pac CLI installed** (Microsoft.PowerAppsCLI v2.7.4) at `C:\Users\jeffrey.raine\AppData\Local\Microsoft\PowerAppsCli\Microsoft.PowerApps.CLI.2.7.4\tools\pac.exe`. winget added a parent dir to PATH but the actual binary is in a versioned subfolder — use full path until PATH is rectified.
+  - **Unpack succeeded** (`--layout SourceCode`) → 5 screen YAMLs + App.pa.yaml + _EditorState.pa.yaml + binary `.msapr` blob (holds data sources / connections). Format is clean: `Screens:` map with `Properties:` (Power Fx via `=Formula`) and `Children:` (control trees).
+- **Memory adds this session**:
+  - `project_assessment_types.md` — Reading / Writing / Math; single-type per window; concurrent multi-type efforts = multiple overlapping windows.
+  - `feedback_file_links_in_instructions.md` — always wrap file references in clickable markdown links.
+  - `feedback_project_email.md` — use `jeffrey.raine@tcrce.ca` (the M365 / Entra UPN), NOT `jeff.raine@gnspes.ca` from auto-memory (personal Google Workspace account, unrelated).
+  - `feedback_no_wrap_prompts.md` — never suggest wrapping the session; user wraps on their own time schedule, not at project milestones.
+- **Pending Step 18 work**:
+  - The roundtrip sanity test (above).
+  - Then start editing YAML — `App.pa.yaml` (OnStart with `gblIsAdminOrAnalyst`), then `scrLanding.pa.yaml` (rename Button1, add lblGreeting / lblUserUPN / btnStudentData / btnDataEntry per Path-B of `docs/powerapps-build/chunks/01b-scrLanding.md`).
+  - Continue through scrWindowSelect, scrGroupSelect, scrRosterGrid using the Path-B sections of the per-screen chunked workbooks (Path-C / Copilot prompts are deprecated — ignore them).
+  - Pack and re-import periodically to test in Studio.
+  - Studio gets used only for visual tweaks (positioning, fonts, colours) after functions work.
+- **Blockers**: None. SQL backbone is fully working; Power Apps workflow is bootstrapped and ready.
+
 ### Left Off — 2026-05-12 (Step 18 SQL prereqs partial — reading scale + DimGrade done)
 - **Last completed**: DimGrade, DimReadingScale refactor, DimReadingBenchmark new, EN + FR seeds (59 levels + 160 benchmark rows). All deployed and verified. Architectural decisions for Step 18 nailed down.
 - **What landed today**:

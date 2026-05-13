@@ -21,7 +21,8 @@
 #   - All Group codes               -> DimRole seed
 #
 # Edge cases covered (deliberately):
-#   - Grades:        0 (Primary), -1 (Pre-Primary), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+#   - Grades:        0 (Primary), -1 (Pre-Primary), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+#                    13 (Returning Graduate, translates to 'RG' — added 2026-05-13)
 #   - Genders:       M, F, X
 #   - EnrollStatus:  0 (Active) and -1 (Pre-Enrolled) — production PS Students
 #                    export is filtered to Enroll_Status IN (0, -1) upstream, so
@@ -77,7 +78,7 @@ function Write-FileWithCRLF {
 }
 
 # -----------------------------------------------------------------------------
-# 1. STUDENTS  (20 rows — 18 Active + 2 Pre-Enrolled, matching production
+# 1. STUDENTS  (21 rows — 19 Active + 2 Pre-Enrolled, matching production
 #               filter Enroll_Status IN (0, -1))
 # -----------------------------------------------------------------------------
 $studentHeader = "Student_Number`tID`tFirst_Name`tMiddle_Name`tLast_Name`tSchoolID`tGrade_Level`tNS_Program`tHome_Room`tGender`tDOB`tNS_AssigndIdentity_African`tNS_aboriginal`tCurrentIPP`tCurrentAdap`tEnroll_Status"
@@ -101,6 +102,8 @@ $studentRows = @(
     "9100000018`t90018`tSigma`tSixteen`tDemo`t0716`t2`tE015`t2B`tX`t04/12/2018`tYes`t1`tN`tN`t0",
     "9100000019`t90019`tTau`t`tTest`t0167`t4`tJ015`t4D`tF`t11/19/2015`t`t`tY`tN`t0",
     "9100000020`t90020`tUpsilon`tSeventeen`tSample`t1178`t11`tS005`t11A`tM`t06/14/2008`t`t1`tN`tY`t0",
+    # Returning Graduate — grade_level=13 should translate to 'RG' in Wrk_Student
+    "9100000021`t90021`tPhi`tTwentyOne`tDemo`t0981`t13`tS005`tRG-A`tF`t04/12/2005`t`t`tN`tN`t0",
     # Pre-Enrolled (-1) — Beta has FUTURE StartDate, not yet visible on teacher roster
     "9100000002`t90002`tBeta`t`tDemo`t0716`t0`tE015`tP-Sample`tF`t08/22/2020`t`t`tN`tN`t-1",
     # Pre-Enrolled (-1) — Omicron has PAST StartDate, VISIBLE on teacher roster via date gate
@@ -180,7 +183,7 @@ Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExpo
                    -Lines (@($coTeacherHeader) + $coTeacherRows)
 
 # -----------------------------------------------------------------------------
-# 5. ENROLLMENTS  (40 rows: 34 standard + 2 edge cases + 4 pre-enrolled)
+# 5. ENROLLMENTS  (41 rows: 35 standard + 2 edge cases + 4 pre-enrolled)
 # -----------------------------------------------------------------------------
 # Date conventions per term:
 #   Year-Long (3500): DateEnrolled=09/02/2025, DateLeft=06/30/2026 (year end)
@@ -236,10 +239,11 @@ $enrollmentRows = @(
     "9100000016`t9000008`t02/02/2026`t`t70000032",             # Pi — DateLeft EMPTY (testing NULL path)
     "9100000020`t9000007`t09/02/2025`t01/30/2026`t70000033",
     "9100000020`t9000008`t02/02/2026`t06/30/2026`t70000034",
-    # School 0981 — Iota, Kappa, Rho in {9000009 LIT-12 Year-Long}
+    # School 0981 — Iota, Kappa, Rho, Phi (RG) in {9000009 LIT-12 Year-Long}
     "9100000009`t9000009`t09/02/2025`t06/30/2026`t70000035",
     "9100000010`t9000009`t09/02/2025`t06/30/2026`t70000036",
     "9100000017`t9000009`t09/02/2025`t06/30/2026`t70000037",
+    "9100000021`t9000009`t09/02/2025`t06/30/2026`t70000042",   # Phi — Returning Graduate (grade_level=13 -> 'RG')
     # Pre-Enrolled — Beta (future StartDate) at school 0716, sections 9000001/9000002
     "9100000002`t9000001`t05/15/2026`t06/30/2026`t70000038",   # Beta — FUTURE start (not yet visible)
     "9100000002`t9000002`t05/15/2026`t06/30/2026`t70000039",
