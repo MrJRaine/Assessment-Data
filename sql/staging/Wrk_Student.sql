@@ -2,7 +2,8 @@
  * Table: Wrk_Student
  * Purpose: Typed working set for student merge. Populated by usp_MergeStudent
  *          from Stg_Student with all source-value translations applied:
- *            - Grade_Level '0'  -> 'P', '-1' -> 'PP', else verbatim
+ *            - Grade_Level '0'  -> 'P', '-1' -> 'PP', '13' -> 'RG',
+ *              else verbatim
  *            - SchoolID zero-padded to 4 chars
  *            - DOB MM/DD/YYYY -> DATE
  *            - NS_AssigndIdentity_African: 'Yes' -> 1, '' -> NULL

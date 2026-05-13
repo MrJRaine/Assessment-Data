@@ -31,8 +31,9 @@
  * fields differs. NULL-safe comparison via SELECT...EXCEPT...SELECT subquery
  * (EXCEPT treats NULLs as equal — much cleaner than 14× ISNULL/CASE pairs).
  *
- * Translation rules (locked in 2026-04-29 against actual PS export):
- *   Grade_Level:  '0' -> 'P', '-1' -> 'PP', else verbatim string
+ * Translation rules (locked in 2026-04-29 against actual PS export;
+ *                    Grade_Level '13' -> 'RG' added 2026-05-13 for Step 18):
+ *   Grade_Level:  '0' -> 'P', '-1' -> 'PP', '13' -> 'RG', else verbatim string
  *   SchoolID:     LEFT-PAD with zeros to 4 chars (PS strips leading zeros)
  *   DOB:          MM/DD/YYYY parsed via CONVERT(DATE, val, 101); '' -> NULL
  *   SelfIDAfrican (NS_AssigndIdentity_African):
@@ -87,6 +88,7 @@ BEGIN
         CASE s.Grade_Level
              WHEN '0'  THEN 'P'
              WHEN '-1' THEN 'PP'
+             WHEN '13' THEN 'RG'
              ELSE s.Grade_Level END                                 AS Grade,
         RIGHT('0000' + s.SchoolID, 4)                               AS SchoolID,
         s.NS_Program                                                AS ProgramCode,
