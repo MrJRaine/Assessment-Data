@@ -8,4 +8,5 @@
 # ************************************************************************************************
 App:
   Properties:
+    OnStart: =Set(gblIsAdminOrAnalyst, !IsBlank(LookUp(DimStaff, Email = Lower(User().Email) And IsCurrent = true And AccessLevel <> Blank())))
     Theme: =PowerAppsTheme

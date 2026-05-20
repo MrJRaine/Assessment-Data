@@ -1,0 +1,8 @@
+# Disposable .msapp test artifacts — regeneratable from sources/ via pac canvas pack.
+# Keep ONLY the canonical "Student Data Staff Portal.msapp" baseline in git.
+*.dev.msapp
+*.roundtrip.msapp
+*tooling*.msapp
+
+# Studio-side test exports — promote to canonical when desired.
+*test*.msapp
