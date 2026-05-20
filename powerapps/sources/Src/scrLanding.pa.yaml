@@ -12,8 +12,21 @@ Screens:
       Fill: =RGBA(255, 255, 255, 1)
       LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
     Children:
-      - Button1:
+      - btnStudentData:
           Control: ModernButton@1.0.0
           Properties:
+            Height: =280
+            OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
+            Text: ="Student Data"
+            Width: =280
             X: =40
-            Y: =40
+            Y: =200
+      - btnDataEntry:
+          Control: ModernButton@1.0.0
+          Properties:
+            Height: =280
+            OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
+            Text: ="Data Entry"
+            Width: =280
+            X: =360
+            Y: =200

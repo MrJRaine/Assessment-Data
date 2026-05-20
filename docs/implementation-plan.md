@@ -101,6 +101,34 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+### Left Off — 2026-05-20 (VS Code YAML workflow proven; scrLanding + scrWindowSelect functional)
+- **First action next session: verify scrWindowSelect gallery binds real data.** Quick test:
+  1. Impersonate school 0167 principal: `UPDATE DimStaff SET Email = 'jeffrey.raine@tcrce.ca' WHERE LOWER(Email) = LOWER('principal.test@tcrce.ca') AND IsCurrent = 1;`
+  2. Pack sources if stale: `pac canvas pack --sources "powerapps\sources" --msapp "powerapps\Student Data Staff Portal.dev.msapp" --overwrite`
+  3. Open [powerapps/Student Data Staff Portal.dev.msapp](../powerapps/Student Data Staff Portal.dev.msapp) in Studio.
+  4. Run app: scrLanding → Data Entry → scrWindowSelect. Confirm French Reading window appears with the composed subtitle.
+  5. Tap row → should set `gblSelectedWindow` and navigate to scrGroupSelect (still has leftover placeholder).
+  6. Revert impersonation.
+- **Today's work**:
+  - **Roundtrip sanity test PASSED** — `pac canvas pack` followed by Studio open succeeded.
+  - **App.OnStart deployed** via YAML edit. Final formula: `Set(gblIsAdminOrAnalyst, !IsBlank(LookUp(DimStaff, Email = Lower(User().Email) And IsCurrent = true And AccessLevel <> Blank())))` — delegation-clean.
+  - **scrLanding functional**: btnStudentData + btnDataEntry, both navigate correctly.
+  - **scrStudentData stub**: btnBackToLanding only.
+  - **Tooling-test round-trip** with user-added Label/Gallery/ComboBox/Icon controls → learned all control templates. Captured in new memory `project_powerapps_yaml_templates.md`.
+  - **scrWindowSelect functional**: icoBack + lblTitle + galWindows (bound to vw_UserAssessmentWindows) + lblEmpty. Gallery has Title1 bound to WindowName, Subtitle1 to composed AssessmentType/Grades/Status string. OnSelect sets gblSelectedWindow and navigates.
+  - **Workspace hygiene**: powerapps/.gitignore added (excludes dev/roundtrip/tooling test .msapp files).
+- **Mistakes I made today** (now captured as feedback memories):
+  - Used `'[dbo].[DimStaff]'` for the OnStart LookUp; the Data panel actually shows DimStaff bare. Fixed.
+  - Provided `=Set(...)` formula for the user to paste into Studio's formula bar; the `=` belongs only in YAML files. Fixed; saved feedback memory.
+  - Dictated old desktop-Studio menu paths (File → Open, View → Variables). Modern web Studio is different; I shouldn't be navigating the UI for the user. Saved feedback memory.
+- **Pending next session**:
+  - Verify scrWindowSelect (above) — confirms data binding works.
+  - Build scrGroupSelect (chunks/03 workbook, Path-B only).
+  - Build scrRosterGrid (chunks/04, biggest screen — ~7 chunks of formulas).
+  - After functions work, visual polish in Studio.
+  - Pilot teacher training.
+- **Blockers**: None. Architecture settled; remaining work is implementation.
+
 ### Left Off — 2026-05-13 (Step 18 SQL prereqs DONE end-to-end; Power Apps build path pivoted to VS Code YAML)
 - **🚨 First thing next session: roundtrip sanity test.** Pack the current `powerapps/sources/` back to a `.msapp` with no edits, re-import into Studio, confirm the 5 screens + 6 data sources all load. This catches any unpack-side issues BEFORE I start adding controls and formulas. Command:
   ```powershell
