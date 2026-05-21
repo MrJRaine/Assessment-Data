@@ -1,9 +1,9 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-# 
+#
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-# 
+#
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
 Screens:
@@ -11,9 +11,173 @@ Screens:
     Properties:
       Fill: =RGBA(255, 255, 255, 1)
       LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: =Set(gblGroupsLoaded, false); ClearCollect(colGroups, SortByColumns(Filter(vw_TeacherGroups, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID), "Grade", SortOrder.Ascending, "GroupLabel", SortOrder.Ascending)); Set(gblGroupsLoaded, true)
     Children:
-      - Button4:
-          Control: ModernButton@1.0.0
+      - icoBackToWindows:
+          Control: ModernIcon@1.1.0
           Properties:
+            Icon: ="ArrowLeft"
+            Height: =40
+            Width: =40
+            X: =20
+            Y: =20
+            OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
+      - lblGroupTitle:
+          Control: Label@2.5.1
+          Properties:
+            Text: =gblSelectedWindow.WindowName
+            Font: =Font.'Segoe UI'
+            FontWeight: =FontWeight.Semibold
+            Size: =18
+            Color: =RGBA(50, 49, 48, 1)
+            X: =80
+            Y: =24
+            Width: =900
+            Height: =32
+      - lblSubtitle:
+          Control: Label@2.5.1
+          Properties:
+            Text: ="Choose a class"
+            Font: =Font.'Segoe UI'
+            Size: =13
+            Color: =RGBA(96, 94, 92, 1)
+            X: =80
+            Y: =58
+            Width: =900
+            Height: =22
+      - galGroups:
+          Control: Gallery@2.15.0
+          Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
+          Properties:
+            Items: =colGroups
+            BorderColor: =RGBA(245, 245, 245, 1)
+            TemplateSize: =96
             X: =40
-            Y: =40
+            Y: =100
+            Width: =640
+            Height: =540
+            OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
+          Children:
+            - lblGroupLabel:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(50, 49, 48, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.'Segoe UI'
+                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =12
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =14
+                  Text: =ThisItem.GroupLabel
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =Parent.TemplateWidth - 90
+                  X: =20
+                  Y: =12
+            - lblGroupMeta:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(96, 94, 92, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.'Segoe UI'
+                  FontWeight: =FontWeight.Normal
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =12
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =12
+                  Text: =Switch(ThisItem.Grade, "P", "Primary", "PP", "Pre-Primary", "RG", "Returning Graduate", "Grade " & ThisItem.Grade) & " · " & ThisItem.ApplicableStudentCount & " applicable student" & If(ThisItem.ApplicableStudentCount = 1, "", "s")
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =lblGroupLabel.Width
+                  X: =lblGroupLabel.X
+                  Y: =lblGroupLabel.Y + lblGroupLabel.Height
+            - lblProgress:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(96, 94, 92, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.'Segoe UI'
+                  FontWeight: =FontWeight.Normal
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =12
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =12
+                  Text: =If(ThisItem.EnteredStudentCount = ThisItem.ApplicableStudentCount, "✓ ", If(ThisItem.EnteredStudentCount = 0, "○ ", "◐ ")) & ThisItem.EnteredStudentCount & " of " & ThisItem.ApplicableStudentCount & " entered"
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =lblGroupLabel.Width
+                  X: =lblGroupLabel.X
+                  Y: =lblGroupMeta.Y + lblGroupMeta.Height
+            - NextArrowGroup:
+                Control: Classic/Icon@2.5.0
+                Properties:
+                  AccessibleLabel: =Self.Tooltip
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(166, 166, 166, 1)
+                  DisabledBorderColor: =RGBA(56, 56, 56, 1)
+                  DisabledColor: =RGBA(119, 119, 119, 1)
+                  Height: =50
+                  Icon: =Icon.ChevronRight
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =16
+                  PaddingLeft: =16
+                  PaddingRight: =16
+                  PaddingTop: =16
+                  Tooltip: ="Open this group"
+                  Width: =50
+                  X: =Parent.TemplateWidth - Self.Width - 12
+                  Y: =(Parent.TemplateHeight / 2) - (Self.Height / 2)
+            - SeparatorGroup:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(245, 245, 245, 1)
+                  Height: =1
+                  OnSelect: =Select(Parent)
+                  Width: =Parent.TemplateWidth
+                  Y: =Parent.TemplateHeight - Self.Height
+            - SelectionBarGroup:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 120, 212, 1)
+                  Height: =Parent.TemplateHeight - SeparatorGroup.Height
+                  OnSelect: =Select(Parent)
+                  Visible: =ThisItem.IsSelected
+                  Width: =4
+      - lblLoading:
+          Control: Label@2.5.1
+          Properties:
+            Text: ="Loading classes…"
+            Font: =Font.'Segoe UI'
+            Color: =RGBA(96, 94, 92, 1)
+            Size: =14
+            Align: =Align.Center
+            X: =40
+            Y: =340
+            Width: =640
+            Height: =40
+            Visible: =Not(gblGroupsLoaded)
+      - lblEmptyState:
+          Control: Label@2.5.1
+          Properties:
+            Text: ="No applicable groups for " & gblSelectedWindow.WindowName & ". This can happen if your applicable students don't fall under any group (homeroom for PP-9, section for 10-12)."
+            Font: =Font.'Segoe UI'
+            Color: =RGBA(96, 94, 92, 1)
+            Size: =14
+            Align: =Align.Center
+            X: =40
+            Y: =340
+            Width: =640
+            Height: =80
+            Visible: =gblGroupsLoaded And CountRows(colGroups) = 0

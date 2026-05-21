@@ -1,10 +1,17 @@
 /*******************************************************************************
  * Table: DimReadingScale
  * Purpose: Valid reading-level codes for assessment entry. Source of valid
- *          values for FactAssessmentReading.ReadingScaleID and for the Power
- *          Apps reading-level dropdown (scrRosterGrid cmbNewLevel). Benchmark
- *          expectations live separately in DimReadingBenchmark, keyed by
- *          (ScaleSystem, ProgramFamily, GradeCode, AssessmentMonth).
+ *          values for FactAssessmentReading.ReadingScaleID and (indirectly,
+ *          via vw_DimReadingScale) for the Power Apps reading-level dropdown
+ *          (scrRosterGrid cmbNewLevel). Benchmark expectations live separately
+ *          in DimReadingBenchmark, keyed by (ScaleSystem, ProgramFamily,
+ *          GradeCode, AssessmentMonth).
+ *
+ * Power Apps binding: Power Apps does NOT read this table directly. It binds
+ *          to [sql/security/vw_DimReadingScale.sql](../security/vw_DimReadingScale.sql)
+ *          which casts ReadingScaleID from BIGINT to VARCHAR(20) (Power Fx
+ *          Number can't precisely hold 19-digit BIGINT IDENTITY values — see
+ *          project_powerapps_bigint_precision memory).
  * SCD Type: N/A (static reference data)
  * Created: 2026-04-22
  * Modified: 2026-04-22 - Initial creation

@@ -101,6 +101,35 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+### Left Off — 2026-05-21 (All 5 screens built; scrRosterGrid Save blocked by THROW 51012)
+- **First action next session: debug the scrRosterGrid Save error.** Proc throws `51012 @AssessmentWindowID does not resolve to an active DimAssessmentWindow row` even though the row exists with ActiveFlag=1 and Power Apps Label.Text shows the exact 19-digit value. Two diagnostic paths in order:
+  1. **Power Apps Monitor** — open Monitor, trigger Save, inspect the literal payload sent to the connector for `AssessmentWindowID`. Determines whether Power Apps lost precision en route to the connector.
+  2. **Proc-side logging fallback** — add a debug INSERT to FactSubmissionAudit at the top of usp_UpsertReadingAssessment logging received params, redeploy, trigger Save, query audit table.
+- **Today's work**:
+  - **scrWindowSelect verified** with FR window for impersonated 0167 principal. Initial empty was due to bootstrap missing vw_UserAssessmentWindows (only the DimAssessmentWindow table was added); fixed by adding the view.
+  - **scrGroupSelect built** (Path-B chunks 03a-d) — 3 group rows show for FR window.
+  - **scrRosterGrid built** (Path-B chunks 04a-g) — gallery, ComboBox, dirty tracking, modal — all working except Save (the 51012 error).
+  - **Loading state pattern** ([project_powerapps_loading_state_pattern](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/project_powerapps_loading_state_pattern.md)) applied to scrWindowSelect, scrGroupSelect, scrRosterGrid.
+  - **BIGINT precision cast migration** — 3 views' BIGINT IDENTITY surrogate keys cast to VARCHAR(20) for Power Fx safe range. [sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql](../sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql).
+  - **vw_DimReadingScale wrapper view** created (table-level cast not possible; wrapper view exposes ReadingScaleID as VARCHAR(20)). [sql/security/vw_DimReadingScale.sql](../sql/security/vw_DimReadingScale.sql).
+  - **usp_UpsertReadingAssessment params flipped to VARCHAR(20)** — `@AssessmentWindowID` + `@ReadingScaleID`. Internal CAST to BIGINT locals. [sql/scripts/migrate_scrRosterGrid_prereqs.sql](../sql/scripts/migrate_scrRosterGrid_prereqs.sql).
+  - **usp_UpsertReadingAssessment smoke-tested end-to-end** — Gamma (StudentNumber 9100000003) got FR level 15 entry, ReadingDelta computed correctly as +6, audit row Accepted, INSERT path proven.
+  - **ScaleSystem column added to vw_UserAssessmentWindows** — original view never exposed it; cmbNewLevel filter needed it. [sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql](../sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql).
+- **Memory adds this session** (5 new):
+  - `feedback_powerapps_unique_control_names` — control names must be unique app-wide.
+  - `project_powerapps_bigint_precision` — Power Fx 16-digit limit vs BIGINT IDENTITY 19-digit values.
+  - `project_powerapps_loading_state_pattern` — ClearCollect + loaded flag pattern.
+  - `feedback_powerapps_forall_no_set` — `Set()` blocked inside ForAll, use Collect; also covers scope ambiguity inside nested calls.
+  - `feedback_powerapps_data_source_refresh` — after SQL schema changes, remove + re-add the data source is REQUIRED, not optional.
+- **Memory updates this session** (4 existing):
+  - `feedback_no_wrap_prompts` — added "break / pause / stop" coverage.
+  - `feedback_file_links_in_instructions` — N+1 rule for line ranges.
+  - `feedback_powerapps_formula_contexts` — `|` block scalar for formulas containing `{...}` or `: `.
+  - `project_powerapps_yaml_templates` — Modern control property gotchas + **proc invocation form CORRECTED to dot-stripped** (`Assessment_Warehouse.dbouspXY`).
+- **Test data state at EOD**: same as 2026-05-13 + 1 FactAssessmentReading row from smoke test (Gamma's FR level 15) + scratch `usp_TestVarcharBigint` cleaned up. Impersonation may still be active in DimStaff — revert when convenient.
+- **Pending stray artifacts in powerapps/**: `Student Data Staff Portal.UpdatedConnections.msapp`, `Student Data Staff Portal.vw_DimReadingScale Added.msapp` — both were one-time refresh files from the user, can be deleted; sources/ tree has the final connection blob already.
+- **Blockers**: scrRosterGrid Save error (above). Once resolved, MVP is feature-complete and ready for visual polish + Teams embedding + pilot UAT.
+
 ### Left Off — 2026-05-20 (VS Code YAML workflow proven; scrLanding + scrWindowSelect functional)
 - **First action next session: verify scrWindowSelect gallery binds real data.** Quick test:
   1. Impersonate school 0167 principal: `UPDATE DimStaff SET Email = 'jeffrey.raine@tcrce.ca' WHERE LOWER(Email) = LOWER('principal.test@tcrce.ca') AND IsCurrent = 1;`

@@ -6,3 +6,11 @@
 
 # Studio-side test exports — promote to canonical when desired.
 *test*.msapp
+
+# User-uploaded refresh exports (e.g. "...UpdatedConnections.msapp",
+# "...vw_DimReadingScale Added.msapp") — one-time files used to refresh
+# the .msapr blob in sources/. After unpack-and-swap they're disposable.
+Student Data Staff Portal.*.msapp
+
+# Temp unpack folders created during .msapr blob swaps.
+sources-*/
