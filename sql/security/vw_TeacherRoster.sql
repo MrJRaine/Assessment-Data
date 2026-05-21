@@ -218,17 +218,17 @@ StudentGroups AS (
     FROM ApplicableStudents
 )
 SELECT DISTINCT
-    sg.AssessmentWindowID,
+    CAST(sg.AssessmentWindowID         AS VARCHAR(20)) AS AssessmentWindowID,           -- BIGINT cast to VARCHAR for Power Fx precision (see feedback_powerapps_bigint_precision memory)
     sg.GroupKey,
-    sg.StudentKey,
-    sg.StudentNumber,
+    CAST(sg.StudentKey                 AS VARCHAR(20)) AS StudentKey,                   -- BIGINT IDENTITY — cast for Power Apps
+    sg.StudentNumber,                                                                    -- BIGINT but provincial 10-digit number, within Power Fx safe range; left as Number
     sg.FirstName,
     sg.LastName,
     sg.Grade,
     sg.ProgramCode,
     sg.ProgramFamily,
-    far.ReadingAssessmentID AS ExistingReadingAssessmentID,
-    far.ReadingScaleID      AS ExistingReadingScaleID,
+    CAST(far.ReadingAssessmentID       AS VARCHAR(20)) AS ExistingReadingAssessmentID,  -- BIGINT IDENTITY — cast for Power Apps
+    CAST(far.ReadingScaleID            AS VARCHAR(20)) AS ExistingReadingScaleID,       -- BIGINT IDENTITY — cast for Power Apps (matched against cmbNewLevel.Selected.ReadingScaleID)
     drs.LevelCode           AS ExistingScaleValue,
     far.AssessmentDate      AS ExistingAssessmentDate
 FROM StudentGroups sg

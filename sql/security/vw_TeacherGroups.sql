@@ -233,7 +233,7 @@ StudentGroups AS (
     FROM ApplicableStudents
 )
 SELECT
-    sg.AssessmentWindowID,
+    CAST(sg.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,   -- BIGINT cast to VARCHAR for Power Fx precision; see feedback_powerapps_bigint_precision memory
     sg.GroupKey,
     sg.GroupType,
     sg.GroupLabel,

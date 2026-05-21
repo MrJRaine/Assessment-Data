@@ -11,6 +11,7 @@ Screens:
     Properties:
       Fill: =RGBA(255, 255, 255, 1)
       LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      OnVisible: =Set(gblWindowsLoaded, false); ClearCollect(colWindows, vw_UserAssessmentWindows); Set(gblWindowsLoaded, true)
     Children:
       - icoBack:
           Control: ModernIcon@1.1.0
@@ -37,7 +38,7 @@ Screens:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            Items: =vw_UserAssessmentWindows
+            Items: =colWindows
             BorderColor: =RGBA(245, 245, 245, 1)
             X: =40
             Y: =80
@@ -122,6 +123,19 @@ Screens:
                   OnSelect: =Select(Parent)
                   Visible: =ThisItem.IsSelected
                   Width: =4
+      - lblLoadingWindows:
+          Control: Label@2.5.1
+          Properties:
+            Text: ="Loading assessment windows…"
+            Font: =Font.'Segoe UI'
+            Color: =RGBA(96, 94, 92, 1)
+            Size: =14
+            Align: =Align.Center
+            X: =40
+            Y: =340
+            Width: =640
+            Height: =40
+            Visible: =Not(gblWindowsLoaded)
       - lblEmpty:
           Control: Label@2.5.1
           Properties:
@@ -134,4 +148,4 @@ Screens:
             Y: =340
             Width: =640
             Height: =80
-            Visible: =CountRows(galWindows.AllItems) = 0
+            Visible: =gblWindowsLoaded And CountRows(colWindows) = 0
