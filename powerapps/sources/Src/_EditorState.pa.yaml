@@ -13,3 +13,4 @@ EditorState:
     - scrWindowSelect
     - scrGroupSelect
     - scrRosterGrid
+    - scrIngest

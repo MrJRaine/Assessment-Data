@@ -1,9 +1,9 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-#
+# 
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-#
+# 
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
 Screens:
@@ -16,47 +16,45 @@ Screens:
       - icoBackToWindows:
           Control: ModernIcon@1.1.0
           Properties:
-            Icon: ="ArrowLeft"
             Height: =40
+            Icon: ="ArrowLeft"
+            OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
             Width: =40
             X: =20
             Y: =20
-            OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
       - lblGroupTitle:
           Control: Label@2.5.1
           Properties:
-            Text: =gblSelectedWindow.WindowName
+            Color: =RGBA(50, 49, 48, 1)
             Font: =Font.'Segoe UI'
             FontWeight: =FontWeight.Semibold
+            Height: =32
             Size: =18
-            Color: =RGBA(50, 49, 48, 1)
+            Text: =gblSelectedWindow.WindowName
+            Width: =900
             X: =80
             Y: =24
-            Width: =900
-            Height: =32
       - lblSubtitle:
           Control: Label@2.5.1
           Properties:
-            Text: ="Choose a class"
-            Font: =Font.'Segoe UI'
-            Size: =13
             Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Height: =22
+            Text: ="Choose a class"
+            Width: =900
             X: =80
             Y: =58
-            Width: =900
-            Height: =22
       - galGroups:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            Items: =colGroups
             BorderColor: =RGBA(245, 245, 245, 1)
+            Height: =540
+            Items: =colGroups
+            OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
             TemplateSize: =96
             X: =40
             Y: =100
-            Width: =640
-            Height: =540
-            OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
           Children:
             - lblGroupLabel:
                 Control: Label@2.5.1
@@ -85,7 +83,6 @@ Screens:
                   Color: =RGBA(96, 94, 92, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.'Segoe UI'
-                  FontWeight: =FontWeight.Normal
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
@@ -105,7 +102,6 @@ Screens:
                   Color: =RGBA(96, 94, 92, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.'Segoe UI'
-                  FontWeight: =FontWeight.Normal
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
@@ -158,26 +154,25 @@ Screens:
       - lblLoading:
           Control: Label@2.5.1
           Properties:
-            Text: ="Loading classes…"
-            Font: =Font.'Segoe UI'
-            Color: =RGBA(96, 94, 92, 1)
-            Size: =14
             Align: =Align.Center
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Size: =14
+            Text: ="Loading classes…"
+            Visible: =Not(gblGroupsLoaded)
+            Width: =640
             X: =40
             Y: =340
-            Width: =640
-            Height: =40
-            Visible: =Not(gblGroupsLoaded)
       - lblEmptyState:
           Control: Label@2.5.1
           Properties:
-            Text: ="No applicable groups for " & gblSelectedWindow.WindowName & ". This can happen if your applicable students don't fall under any group (homeroom for PP-9, section for 10-12)."
-            Font: =Font.'Segoe UI'
-            Color: =RGBA(96, 94, 92, 1)
-            Size: =14
             Align: =Align.Center
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Height: =80
+            Size: =14
+            Text: ="No applicable groups for " & gblSelectedWindow.WindowName & ". This can happen if your applicable students don't fall under any group (homeroom for PP-9, section for 10-12)."
+            Visible: =gblGroupsLoaded And CountRows(colGroups) = 0
+            Width: =640
             X: =40
             Y: =340
-            Width: =640
-            Height: =80
-            Visible: =gblGroupsLoaded And CountRows(colGroups) = 0

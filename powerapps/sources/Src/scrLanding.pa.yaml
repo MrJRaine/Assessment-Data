@@ -18,6 +18,7 @@ Screens:
             Height: =280
             OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
             Text: ="Student Data"
+            Visible: =gblLandingLoaded
             Width: =280
             X: =40
             Y: =200
@@ -27,6 +28,30 @@ Screens:
             Height: =280
             OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
             Text: ="Data Entry"
+            Visible: =gblLandingLoaded
             Width: =280
             X: =360
             Y: =200
+      - btnIngest:
+          Control: ModernButton@1.0.0
+          Properties:
+            Height: =280
+            OnSelect: =Navigate(scrIngest, ScreenTransition.Fade)
+            Text: ="PS Data Ingest"
+            Visible: =gblLandingLoaded And gblIsRegionalAnalyst
+            Width: =280
+            X: =680
+            Y: =200
+      - lblLoadingLanding:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Height: =80
+            Size: =14
+            Text: ="Loading…"
+            Visible: =Not(gblLandingLoaded)
+            Width: =920
+            X: =40
+            Y: =310

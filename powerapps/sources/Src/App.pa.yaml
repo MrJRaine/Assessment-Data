@@ -8,5 +8,9 @@
 # ************************************************************************************************
 App:
   Properties:
-    OnStart: =Set(gblIsAdminOrAnalyst, !IsBlank(LookUp(DimStaff, Email = Lower(User().Email) And IsCurrent = true And AccessLevel <> Blank())))
+    OnStart: |
+      =Set(gblLandingLoaded, false);
+      Set(gblIsAdminOrAnalyst, !IsBlank(LookUp(DimStaff, Email = Lower(User().Email) And IsCurrent = true And AccessLevel <> Blank())));
+      Set(gblIsRegionalAnalyst, !IsBlank(LookUp(DimStaff, Email = Lower(User().Email) And IsCurrent = true And AccessLevel = "RegionalAnalyst")));
+      Set(gblLandingLoaded, true)
     Theme: =PowerAppsTheme
