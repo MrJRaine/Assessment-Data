@@ -1,9 +1,9 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-#
+# 
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-#
+# 
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
 Screens:
@@ -16,35 +16,33 @@ Screens:
       - icoBack:
           Control: ModernIcon@1.1.0
           Properties:
-            Icon: ="ArrowLeft"
             Height: =40
+            Icon: ="ArrowLeft"
+            OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
             Width: =40
             X: =20
             Y: =20
-            OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
       - lblTitle:
           Control: Label@2.5.1
           Properties:
-            Text: ="Choose an assessment window"
+            Color: =RGBA(50, 49, 48, 1)
             Font: =Font.'Segoe UI'
             FontWeight: =FontWeight.Semibold
             Size: =18
-            Color: =RGBA(50, 49, 48, 1)
+            Text: ="Choose an assessment window"
+            Width: =500
             X: =80
             Y: =24
-            Width: =500
-            Height: =40
       - galWindows:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            Items: =colWindows
             BorderColor: =RGBA(245, 245, 245, 1)
+            Height: =560
+            Items: =colWindows
+            OnSelect: =Set(gblSelectedWindow, ThisItem); Navigate(scrGroupSelect, ScreenTransition.Fade)
             X: =40
             Y: =80
-            Width: =640
-            Height: =560
-            OnSelect: =Set(gblSelectedWindow, ThisItem); Navigate(scrGroupSelect, ScreenTransition.Fade)
           Children:
             - Title1:
                 Control: Label@2.5.1
@@ -126,26 +124,25 @@ Screens:
       - lblLoadingWindows:
           Control: Label@2.5.1
           Properties:
-            Text: ="Loading assessment windows…"
-            Font: =Font.'Segoe UI'
-            Color: =RGBA(96, 94, 92, 1)
-            Size: =14
             Align: =Align.Center
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Size: =14
+            Text: ="Loading assessment windows…"
+            Visible: =Not(gblWindowsLoaded)
+            Width: =640
             X: =40
             Y: =340
-            Width: =640
-            Height: =40
-            Visible: =Not(gblWindowsLoaded)
       - lblEmpty:
           Control: Label@2.5.1
           Properties:
-            Text: ="No assessment windows currently apply to your students. New windows appear here when admins open them."
-            Font: =Font.'Segoe UI'
-            Color: =RGBA(96, 94, 92, 1)
-            Size: =14
             Align: =Align.Center
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.'Segoe UI'
+            Height: =80
+            Size: =14
+            Text: ="No assessment windows currently apply to your students. New windows appear here when admins open them."
+            Visible: =gblWindowsLoaded And CountRows(colWindows) = 0
+            Width: =640
             X: =40
             Y: =340
-            Width: =640
-            Height: =80
-            Visible: =gblWindowsLoaded And CountRows(colWindows) = 0
