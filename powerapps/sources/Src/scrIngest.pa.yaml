@@ -1,21 +1,31 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-#
+# 
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-#
+# 
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
 Screens:
   scrIngest:
     Properties:
-      Fill: =RGBA(255, 255, 255, 1)
+      Fill: =RGBA(0, 146, 201, 1)
     Children:
-      - icoBackIngest:
-          Control: ModernIcon@1.1.0
+      - recContentPanelIngest:
+          Control: Rectangle@2.3.0
           Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 100
+            Width: =Parent.Width - 40
+            X: =20
+            Y: =80
+      - icoBackIngest:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
             Height: =40
-            Icon: ="ArrowLeft"
+            Icon: =Icon.ChevronLeft
             OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
             Width: =40
             X: =20
@@ -23,9 +33,8 @@ Screens:
       - lblIngestTitle:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(50, 49, 48, 1)
-            Font: =Font.'Segoe UI'
-            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
             Height: =36
             Size: =16
             Text: ="PowerSchool Data Ingest"
@@ -37,7 +46,7 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(120, 120, 120, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Size: =14
             Text: |
               ="Upload screen build in progress. Pending: Power Automate upload flow."

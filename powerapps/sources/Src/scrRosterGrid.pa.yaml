@@ -9,8 +9,8 @@
 Screens:
   scrRosterGrid:
     Properties:
-      Fill: =RGBA(255, 255, 255, 1)
-      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
       OnVisible: |
         =Set(gblCanEdit, gblIsAdminOrAnalyst Or gblSelectedWindow.WindowStatus = "Open" Or gblSelectedWindow.WindowStatus = "ClosesToday");
         ClearCollect(colDirty, { StudentNumber: 0, ReadingScaleID: "", LevelCode: "" });
@@ -20,11 +20,21 @@ Screens:
         ClearCollect(colRoster, SortByColumns(Filter(vw_TeacherRoster, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID And GroupKey = gblSelectedGroup.GroupKey), "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
         Set(gblRosterLoaded, true)
     Children:
-      - icoBackToGroups:
-          Control: ModernIcon@1.1.0
+      - recContentPanelRoster:
+          Control: Rectangle@2.3.0
           Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 100
+            Width: =Parent.Width - 40
+            X: =20
+            Y: =80
+      - icoBackToGroups:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
             Height: =40
-            Icon: ="ArrowLeft"
+            Icon: =Icon.ChevronLeft
             OnSelect: |
               =If(CountRows(colDirty) > 0, UpdateContext({ ctxShowUnsavedConfirm: true }), Navigate(scrGroupSelect, ScreenTransition.Fade))
             Width: =40
@@ -33,9 +43,8 @@ Screens:
       - lblRosterTitle:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(50, 49, 48, 1)
-            Font: =Font.'Segoe UI'
-            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
             Height: =36
             Size: =16
             Text: =gblSelectedGroup.GroupLabel & " — " & gblSelectedWindow.WindowName
@@ -46,7 +55,7 @@ Screens:
           Control: Label@2.5.1
           Properties:
             Color: =RGBA(180, 50, 50, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =24
             Text: |-
@@ -72,10 +81,10 @@ Screens:
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
             BorderColor: =RGBA(245, 245, 245, 1)
-            Height: =460
+            Height: =Parent.Height - Self.Y - 80
             Items: =colRoster
-            TemplateSize: =72
-            Width: =1120
+            TemplateSize: =56
+            Width: =Parent.Width - 80
             X: =40
             Y: =100
           Children:
@@ -89,34 +98,38 @@ Screens:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(50, 49, 48, 1)
-                  Font: =Font.'Segoe UI'
+                  Font: =Font.Lato
                   FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight
                   OnSelect: =Select(Parent)
                   PaddingLeft: =12
                   Size: =14
                   Text: =ThisItem.LastName & ", " & ThisItem.FirstName
+                  VerticalAlign: =VerticalAlign.Middle
                   Width: =380
                   X: =20
-                  Y: =16
+                  Y: =0
             - lblExistingLevel:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(96, 94, 92, 1)
-                  Font: =Font.'Segoe UI'
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight
                   OnSelect: =Select(Parent)
                   PaddingLeft: =12
                   Size: =12
                   Text: |
                     ="Existing: " & Coalesce(ThisItem.ExistingScaleValue, "—")
+                  VerticalAlign: =VerticalAlign.Middle
                   Width: =200
                   X: =420
-                  Y: =16
+                  Y: =0
             - cmbNewLevel:
                 Control: ModernCombobox@1.1.0
                 Properties:
                   DefaultSelectedItems: =Blank()
                   DisplayMode: =If(gblCanEdit, DisplayMode.Edit, DisplayMode.View)
-                  Height: =44
+                  Height: =40
                   InputTextPlaceholder: ="Select Reading Level"
                   ItemDisplayText: =ThisItem.LevelCode
                   Items: =SortByColumns(Filter(vw_DimReadingScale, ScaleSystem = gblSelectedWindow.ScaleSystem And ActiveFlag = true), "LevelOrder", SortOrder.Ascending)
@@ -137,7 +150,7 @@ Screens:
                   SelectMultiple: =false
                   Width: =200
                   X: =640
-                  Y: =14
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
             - icoDirty:
                 Control: Classic/Icon@2.5.0
                 Properties:
@@ -148,7 +161,7 @@ Screens:
                   Visible: =!IsBlank(LookUp(colDirty, StudentNumber = ThisItem.StudentNumber))
                   Width: =28
                   X: =860
-                  Y: =22
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
             - icoDelete:
                 Control: Classic/Icon@2.5.0
                 Properties:
@@ -165,7 +178,7 @@ Screens:
                   Visible: =Not(IsBlank(ThisItem.ExistingReadingScaleID)) And gblCanEdit
                   Width: =28
                   X: =920
-                  Y: =22
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
             - NextArrowRoster:
                 Control: Classic/Icon@2.5.0
                 Properties:
@@ -197,25 +210,27 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
+            Height: =40
             Size: =14
             Text: ="Loading roster…"
             Visible: =Not(gblRosterLoaded)
             Width: =1120
             X: =40
-            Y: =300
+            Y: =(Parent.Height - Self.Height) / 2
       - lblEmptyRoster:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
             Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
+            Height: =40
             Size: =14
             Text: ="No applicable students in this group for this window."
             Visible: =gblRosterLoaded And CountRows(colRoster) = 0
             Width: =1120
             X: =40
-            Y: =300
+            Y: =(Parent.Height - Self.Height) / 2
       - btnSaveBottom:
           Control: ModernButton@1.0.0
           Properties:
@@ -242,19 +257,19 @@ Screens:
             Visible: =gblCanEdit
             Width: =220
             X: =500
-            Y: =585
+            Y: =Parent.Height - 60
       - lblReadOnlyExplain:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
             Color: =RGBA(120, 120, 120, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Height: =44
             Text: ="This window closed on " & Text(gblSelectedWindow.EndDate, "mmm d yyyy") & ". Contact a school admin if changes are needed."
             Visible: =!gblCanEdit
             Width: =1120
             X: =40
-            Y: =585
+            Y: =Parent.Height - 60
       - recUnsavedOverlay:
           Control: Rectangle@2.3.0
           Properties:
@@ -279,7 +294,7 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(50, 49, 48, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Height: =60
             Size: =14
             Text: ="You have " & CountRows(colDirty) & " unsaved change" & If(CountRows(colDirty) = 1, "", "s") & ". Leave anyway?"
@@ -332,7 +347,7 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(50, 49, 48, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Height: =80
             Size: =14
             Text: |

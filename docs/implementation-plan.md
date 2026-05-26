@@ -101,6 +101,26 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+### Left Off — 2026-05-26 (scrIPP shipped + app branded + automated ingest deferred to post-MVP)
+- **Last completed**: scrIPP screen built end-to-end with batched save pattern. App-wide branding applied (org #0092C9 + Lato + white content panels). Responsive sizing philosophy established. FactStudentIPP + DimAchievementLevel + usp_UpsertStudentIPP + vw_StudentIPP all deployed and verified clean. usp_MergeStudent updated with Step 6 IPP reconciliation (26 NULL placeholder rows generated for test students).
+- **In progress (NOT YET TESTED)**: scrIPP packed to dev.msapp but not yet validated end-to-end in Studio. The Power Fx formula tree has been pivoted from a wide-format GroupBy/AddColumns design (which produced cascading red squigglies in Studio for unknown reasons) to a long-format direct-iteration design (one gallery row per IPP cell, 26 rows for the test data).
+- **First action next session**:
+  1. Open `dev.msapp` in Studio. Play from scrIPP directly.
+  2. Verify 26 IPP cells render with vertical centering, Yes/No buttons visible on NULL rows, colors correct
+  3. Flip a few Yes/No values, watch dirty counter + blue pending labels
+  4. Save, verify FactStudentIPP rows transition with `ChangedBy = jeffrey.raine@tcrce.ca`
+  5. Back arrow with dirty changes triggers unsaved-changes modal
+- **Then next build priorities (in order)**:
+  1. Add scrIPP button to scrLanding (so users don't need Studio-Play to reach it)
+  2. scrRosterGrid additions: expected level beside dropdown, color-code current selection vs DimAchievementLevel, inline IPP gating control when NULL, "IPP" display when IsIPP=1
+  3. scrGroupSelect red alert for unresolved IPP in any section
+  4. scrStudentData v1 — biggest remaining piece. Per-student roster (6 pulls), deltas, color coding, demographic slicers for ALL roles, admin/analyst filters, role-based data scoping
+- **Scope reframe (locked in this session)**: MVP must demonstrate ALL THREE roles (teacher / admin / regional analyst) functioning, not just teacher-focused. Demographic slicers + admin/analyst filters are IN MVP scope (user explicitly corrected me when I tried to defer them).
+- **Major architectural pivot (post-MVP)**: Automated ingest is fully deferred to post-MVP. Pilot will use manual Lakehouse uploads + manual `usp_RunFullIngestCycle`. Decision tree captured in 2026-05-26 memory section. Future architecture is Dataflow Gen 2 (verified working with private channel SharePoint) writing direct to Stg_ tables, with a refactored orchestrator (split into `usp_RunFullIngestCycle` for manual file path + new `usp_RunMergesOnly` for Dataflow path).
+- **Capacity right-sizing tracking begins now**: F8 currently at 0.36% avg / 0.97% peak utilization. F2 (~$8700/yr savings) is the post-grant target. April-May 2026 review will make the SKU decision. Memory: `project_capacity_rightsizing_intent`.
+- **Behavioral feedback memories added this session**: `feedback_no_unilateral_scope_decisions` and `feedback_no_agency_between_turns`. Read both at next session-start.
+- **Blockers**: None. SQL backbone solid, scrIPP packed, just needs in-Studio verification.
+
 ### Left Off — 2026-05-22 (scrRosterGrid Save+Delete shipped; scrIngest scaffolded; architecture pivoted to SharePoint-triggered ingest; blocked on IT for Entra app)
 - **First action next session: check IT response on the Entra app registration.** Request was sent today for `sp-assessment-onelake-writer` Entra app + workspace Contributor grant on `Regional_Data_Portal`. When IT returns Client ID + secret, build the file-arrival Power Automate flow per the architecture in Session 2026-05-22 memory section (project_assessment_platform). Until then, useful parallel work:
   - Build real scrIngest screen UI (status panel with 5 topic last-upload timestamps from SharePoint; "Run ingest manually" button calling `usp_TriggerIngestCycle` directly; recent FactSubmissionAudit panel)

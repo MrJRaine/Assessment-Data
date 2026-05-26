@@ -9,8 +9,8 @@
 Screens:
   scrLanding:
     Properties:
-      Fill: =RGBA(255, 255, 255, 1)
-      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
     Children:
       - btnStudentData:
           Control: ModernButton@1.0.0
@@ -46,8 +46,8 @@ Screens:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.'Segoe UI'
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.Lato
             Height: =80
             Size: =14
             Text: ="Loading…"

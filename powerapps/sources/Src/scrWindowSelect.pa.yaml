@@ -9,15 +9,25 @@
 Screens:
   scrWindowSelect:
     Properties:
-      Fill: =RGBA(255, 255, 255, 1)
-      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
       OnVisible: =Set(gblWindowsLoaded, false); ClearCollect(colWindows, vw_UserAssessmentWindows); Set(gblWindowsLoaded, true)
     Children:
-      - icoBack:
-          Control: ModernIcon@1.1.0
+      - recContentPanelWindows:
+          Control: Rectangle@2.3.0
           Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 100
+            Width: =Parent.Width - 40
+            X: =20
+            Y: =80
+      - icoBack:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
             Height: =40
-            Icon: ="ArrowLeft"
+            Icon: =Icon.ChevronLeft
             OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
             Width: =40
             X: =20
@@ -25,9 +35,8 @@ Screens:
       - lblTitle:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(50, 49, 48, 1)
-            Font: =Font.'Segoe UI'
-            FontWeight: =FontWeight.Semibold
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
             Size: =18
             Text: ="Choose an assessment window"
             Width: =500
@@ -38,9 +47,10 @@ Screens:
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
             BorderColor: =RGBA(245, 245, 245, 1)
-            Height: =560
+            Height: =Parent.Height - Self.Y - 40
             Items: =colWindows
             OnSelect: =Set(gblSelectedWindow, ThisItem); Navigate(scrGroupSelect, ScreenTransition.Fade)
+            Width: =Parent.Width - 80
             X: =40
             Y: =80
           Children:
@@ -50,7 +60,7 @@ Screens:
                   BorderColor: =RGBA(0, 0, 0, 1)
                   Color: =RGBA(50, 49, 48, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
-                  Font: =Font.'Segoe UI'
+                  Font: =Font.Lato
                   FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
@@ -70,7 +80,7 @@ Screens:
                   BorderColor: =RGBA(0, 0, 0, 1)
                   Color: =RGBA(96, 94, 92, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
-                  Font: =Font.'Segoe UI'
+                  Font: =Font.Lato
                   FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
@@ -126,7 +136,7 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Size: =14
             Text: ="Loading assessment windows…"
             Visible: =Not(gblWindowsLoaded)
@@ -138,7 +148,7 @@ Screens:
           Properties:
             Align: =Align.Center
             Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.'Segoe UI'
+            Font: =Font.Lato
             Height: =80
             Size: =14
             Text: ="No assessment windows currently apply to your students. New windows appear here when admins open them."
