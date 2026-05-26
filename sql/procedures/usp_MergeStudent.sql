@@ -2,8 +2,13 @@
  * Procedure: usp_MergeStudent
  * Purpose: SCD Type 2 reconciliation from Stg_Student into DimStudent.
  *          All 14 business attributes are Type 2 triggers — any change to
- *          any of them produces a new versioned row.
+ *          any of them produces a new versioned row. Also reconciles
+ *          FactStudentIPP rows for students whose DimStudent.IPP = 1, creating
+ *          NULL-status placeholders that teachers/admins resolve via scrIPP.
  * Created: 2026-04-30
+ * Modified: 2026-05-13 — Grade_Level '13' -> 'RG' translation for Step 18
+ *           2026-05-26 — Step 6 added: FactStudentIPP reconciliation. Audit
+ *                       renumbered to Step 7 and gained two IPP counters.
  * Region: Canada East (PIIDPA compliant)
  *
  * Pipeline (set-based throughout — no row-by-row WHILE loops):
@@ -25,7 +30,20 @@
  *      (Inactive=2 or Graduated=3) they're in, and IsCurrent=1 filters
  *      everywhere already exclude them. Returning students get a fresh
  *      current row from Step 3 on the next ingest.
- *   6. Append one summary row to FactSubmissionAudit.
+ *   6. Reconcile FactStudentIPP against the current DimStudent state. For
+ *      students with DimStudent.IPP = 1, ensure the applicable
+ *      (Subject, ProgramFamily) triples have a current FactStudentIPP row.
+ *      Close rows whose triple is no longer applicable (student lost IPP,
+ *      changed program, dropped below grade 3 as an FI student, or was
+ *      deactivated). New rows are inserted with IsIPP = NULL (unresolved
+ *      gate) and ChangedBy = 'system'; teachers/admins flip these via
+ *      usp_UpsertStudentIPP from scrIPP / scrRosterGrid.
+ *
+ *      Applicability rules:
+ *        English-program student:           {Reading, Writing} x {English}
+ *        French-Immersion student (all):    {Reading, Writing} x {French Immersion}
+ *        French-Immersion grade >= 3:       additionally {Reading, Writing} x {English}
+ *   7. Append one summary row to FactSubmissionAudit.
  *
  * Change detection: a row counts as CHANGED if any of the 14 Type 2 trigger
  * fields differs. NULL-safe comparison via SELECT...EXCEPT...SELECT subquery
@@ -50,6 +68,9 @@
  * EffectiveEndDate (= @EffectiveDate - 1 day) of closed-out versions.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_MergeStudent;
+GO
+
 CREATE PROCEDURE usp_MergeStudent
     @EffectiveDate DATE = NULL
 AS
@@ -65,7 +86,9 @@ BEGIN
     DECLARE @InsertedVersion INT = 0;   -- Existing students with at least one Type 2 field change
     DECLARE @ClosedRows      INT = 0;   -- Current rows closed by this run (== InsertedVersion)
     DECLARE @TouchedRows     INT = 0;   -- Existing students unchanged this run (LastUpdated only)
-    DECLARE @MissingClosed   INT = 0;   -- Currently-active students in DimStudent absent from this import (closed, no replacement)
+    DECLARE @MissingClosed   INT = 0;   -- Currently-active students in DimStudent absent from this import
+    DECLARE @IPPRowsClosed   INT = 0;   -- FactStudentIPP rows closed because no longer applicable
+    DECLARE @IPPRowsCreated  INT = 0;   -- FactStudentIPP rows inserted with IsIPP = NULL
 
     -- ------------------------------------------------------------------------
     -- Step 1: Materialize the typed working set with all translations applied.
@@ -173,9 +196,7 @@ BEGIN
     SET @InsertedVersion = @ClosedRows;
 
     -- ------------------------------------------------------------------------
-    -- Step 4: Touch LastUpdated on unchanged current rows (everything in Wrk
-    -- whose StudentNumber maps to a current DimStudent row that was NOT just
-    -- inserted — i.e. predates this run).
+    -- Step 4: Touch LastUpdated on unchanged current rows.
     -- ------------------------------------------------------------------------
     UPDATE d
     SET LastUpdated = GETDATE()
@@ -188,15 +209,7 @@ BEGIN
     SET @TouchedRows = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
-    -- Step 5: Close out current DimStudent rows whose StudentNumber is absent
-    -- from this import. The PS export is pre-filtered to Enroll_Status IN
-    -- (0, -1) (Active + Pre-Enrolled), so absence == no longer in either of
-    -- those states. No replacement row is inserted because we don't know
-    -- which absent state (Inactive=2 or Graduated=3) the student moved to.
-    -- Returning students get a fresh row via Step 3 on the next ingest.
-    --
-    -- Anti-join uses LEFT JOIN with NULL guard rather than NOT EXISTS so the
-    -- @@ROWCOUNT after this UPDATE is reliable across all T-SQL flavours.
+    -- Step 5: Close out current DimStudent rows absent from this import.
     -- ------------------------------------------------------------------------
     UPDATE d
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
@@ -211,7 +224,117 @@ BEGIN
     SET @MissingClosed = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
-    -- Step 6: Audit. One summary row per run.
+    -- Step 6a: Close FactStudentIPP rows whose (StudentKey, Subject,
+    -- ProgramFamily) triple is no longer in the "expected current" set.
+    -- The expected set is derived live from the post-step-5 DimStudent state,
+    -- restricted to IsCurrent=1 students with IPP=1, applying the
+    -- program/grade applicability rules.
+    -- ------------------------------------------------------------------------
+    ;WITH ExpectedIPP AS (
+        -- English-program students: {Reading, Writing} x {English}
+        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'English'
+
+        UNION ALL
+
+        -- French-Immersion students (any grade): {Reading, Writing} x {French Immersion}
+        SELECT s.StudentKey, sub.Subject, CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'French Immersion'
+
+        UNION ALL
+
+        -- French-Immersion students grade >= 3: additionally {Reading, Writing} x {English}
+        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder >= 3
+    )
+    UPDATE fsi
+    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+        IsCurrent        = 0,
+        LastUpdated      = GETDATE()
+    FROM FactStudentIPP fsi
+    WHERE fsi.IsCurrent = 1
+      AND NOT EXISTS (
+          SELECT 1 FROM ExpectedIPP e
+          WHERE e.StudentKey    = fsi.StudentKey
+            AND e.Subject       = fsi.Subject
+            AND e.ProgramFamily = fsi.ProgramFamily
+      );
+
+    SET @IPPRowsClosed = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 6b: Insert new FactStudentIPP rows (IsIPP = NULL) for every
+    -- (StudentKey, Subject, ProgramFamily) in the expected set that does not
+    -- yet have a current row. ChangedBy = 'system' marks these as auto-created.
+    -- ------------------------------------------------------------------------
+    ;WITH ExpectedIPP AS (
+        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'English'
+
+        UNION ALL
+
+        SELECT s.StudentKey, sub.Subject, CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'French Immersion'
+
+        UNION ALL
+
+        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
+        WHERE  s.IsCurrent = 1
+          AND  s.IPP       = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder >= 3
+    )
+    INSERT INTO FactStudentIPP (
+        StudentKey, Subject, ProgramFamily, IsIPP,
+        EffectiveStartDate, EffectiveEndDate, IsCurrent, ChangedBy, LastUpdated
+    )
+    SELECT
+        e.StudentKey, e.Subject, e.ProgramFamily, NULL,
+        @EffectiveDate, NULL, 1, 'system', GETDATE()
+    FROM ExpectedIPP e
+    WHERE NOT EXISTS (
+        SELECT 1 FROM FactStudentIPP fsi
+        WHERE fsi.StudentKey    = e.StudentKey
+          AND fsi.Subject       = e.Subject
+          AND fsi.ProgramFamily = e.ProgramFamily
+          AND fsi.IsCurrent     = 1
+    );
+
+    SET @IPPRowsCreated = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 7: Audit. One summary row per run.
     -- ------------------------------------------------------------------------
     INSERT INTO FactSubmissionAudit (
         RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message,
@@ -230,9 +353,13 @@ BEGIN
             CAST(@InsertedVersion AS VARCHAR(20)), ' versioned (',
             CAST(@ClosedRows      AS VARCHAR(20)), ' closed) | ',
             CAST(@TouchedRows     AS VARCHAR(20)), ' unchanged | ',
-            CAST(@MissingClosed   AS VARCHAR(20)), ' deactivated (missing from import)'
+            CAST(@MissingClosed   AS VARCHAR(20)), ' deactivated (missing from import)',
+            ' || FactStudentIPP: ',
+            CAST(@IPPRowsCreated  AS VARCHAR(20)), ' rows created (NULL) | ',
+            CAST(@IPPRowsClosed   AS VARCHAR(20)), ' rows closed (no longer applicable)'
         ),
         @StgRowCount,
         GETDATE()
     );
 END;
+GO

@@ -1,0 +1,35 @@
+/*******************************************************************************
+ * Seed: DimAchievementLevel
+ * Purpose: Populate the four reading achievement levels with their thresholds
+ *          and display colors. Bounds match the original spec text verbatim
+ *          (-2 and 0 only) using operator columns; see DimAchievementLevel
+ *          file header for the lookup semantics.
+ * Created: 2026-05-26
+ *
+ * Thresholds verbatim from spec:
+ *   1 Not Yet Meeting: differential < -2
+ *   2 Approaching:     differential < 0 AND differential >= -2
+ *   3 Meeting:         differential = 0
+ *   4 Exceeding:       differential > 0
+ *
+ * Colors match the predecessor Excel template's conditional formatting so the
+ * Power Apps display feels visually consistent with what teachers used before.
+ ******************************************************************************/
+
+-- Safety: don't double-seed if this script is re-run
+DELETE FROM DimAchievementLevel
+WHERE AchievementLevelCode IN (1, 2, 3, 4);
+
+INSERT INTO DimAchievementLevel (
+    AchievementLevelCode, AchievementLevelName,
+    LowerBound, LowerOp, UpperBound, UpperOp,
+    HexColor, DisplayOrder, ActiveFlag, LastUpdated
+)
+SELECT 1, 'Not Yet Meeting', NULL, NULL,   -2, '<',  '#FFC7CE', 1, 1,
+       CAST(GETDATE() AS DATETIME2(0))
+UNION ALL SELECT 2, 'Approaching',   -2, '>=',   0, '<',  '#FFEB9C', 2, 1,
+       CAST(GETDATE() AS DATETIME2(0))
+UNION ALL SELECT 3, 'Meeting',        0, '=',    0, '=',  '#C6EFCE', 3, 1,
+       CAST(GETDATE() AS DATETIME2(0))
+UNION ALL SELECT 4, 'Exceeding',      0, '>',  NULL, NULL, '#92D050', 4, 1,
+       CAST(GETDATE() AS DATETIME2(0));

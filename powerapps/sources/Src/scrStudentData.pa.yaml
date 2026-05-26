@@ -9,8 +9,8 @@
 Screens:
   scrStudentData:
     Properties:
-      Fill: =RGBA(255, 255, 255, 1)
-      LoadingSpinnerColor: =RGBA(0, 120, 212, 1)
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
     Children:
       - btnBackToLanding:
           Control: ModernButton@1.0.0
