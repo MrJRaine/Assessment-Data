@@ -101,6 +101,29 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+### Left Off — 2026-05-27 (scrStudentData cohort scaffold + 2 new SQL views shipped; scrStudentDetail next)
+- **Last completed**: `vw_StudentCohort` + `vw_StudentAssessmentHistory` deployed and smoke-tested. scrStudentData cohort screen built end-to-end (functional in Studio): header, OnVisible computes 8 collections incl. `colPieData` + `colBarData`, 5 filter ModernComboboxes (school year/grade/gender/self-ID African/self-ID Indigenous + reset), student gallery with color-tinted rows + 7 column headers + ChevronRight drill, PieChart bound to `colPieData`, ColumnChart bound to `colBarData` (single series). scrStudentDetail stub created so the gallery's Navigate resolves at pack time.
+- **In progress**: scrStudentData scaffold is functional but unverified end-to-end with real assessment data (FactAssessmentReading is empty after the earlier test reset). Charts will render empty until reading assessments are entered via scrRosterGrid.
+- **First action next session**:
+  1. Open `dev.msapp` in Studio. Verify scrStudentData renders: 5 dropdowns populated, gallery shows 10 students with row-tinting, charts present but empty.
+  2. Enter test reading assessments via scrRosterGrid so the cohort charts have data to display.
+  3. Re-open scrStudentData; verify PieChart shows non-zero achievement distribution and ColumnChart shows per-window counts.
+  4. Begin building **scrStudentDetail v1**: timelines for reading level / achievement / difference + left/right student-navigation arrows. Use `gblSelectedStudent` (already set on cohort gallery tap) + filter `colStudentHistory` by StudentKey.
+- **Then next priorities (in order)**:
+  1. scrStudentDetail v1 (timelines + arrows) — biggest remaining build
+  2. Convert ColumnChart1 from single-series to clustered (4 series, one per achievement level)
+  3. Add scrIPP button to scrLanding (gated on caller having any IPP rows in scope)
+  4. Admin-only filters (teacher/course/section/homeroom) + analyst-only filter (school) on cohort
+  5. Visual polish across all screens
+  6. Step 20: embed in Teams; Step 21: share with pilot teachers
+- **Design decisions locked in today**:
+  - scrGroupSelect red alert DROPPED — IPP enforcement happens at scrRosterGrid; duplicate alert would be noise.
+  - IPP students in cohort gallery: **show plain** (no filter, no badge). Excluded only from chart aggregations via `IsChartEligibleReading`.
+  - "Most recent" semantics for pie chart = lifetime-latest per student, NOT bounded by selected school year.
+- **Memory adds this session**: `feedback_powerfx_identifier_column_args` — `ShowColumns / RenameColumns / GroupBy` take bare identifiers (NOT quoted strings) for column-name args in this app's Power Fx version, including the new aggregation column name in GroupBy. User corrected me twice this session — flagged as a mandatory pre-flight before yielding code that touches these functions.
+- **Test data state at EOD**: DimStudent 21 (unchanged), FactStudentIPP 26 NULL placeholders, FactAssessmentReading 0, vw_StudentCohort returns 10 rows for caller. Charts will be empty until assessments are entered.
+- **Blockers**: None.
+
 ### Left Off — 2026-05-26 (scrIPP shipped + app branded + automated ingest deferred to post-MVP)
 - **Last completed**: scrIPP screen built end-to-end with batched save pattern. App-wide branding applied (org #0092C9 + Lato + white content panels). Responsive sizing philosophy established. FactStudentIPP + DimAchievementLevel + usp_UpsertStudentIPP + vw_StudentIPP all deployed and verified clean. usp_MergeStudent updated with Step 6 IPP reconciliation (26 NULL placeholder rows generated for test students).
 - **In progress (NOT YET TESTED)**: scrIPP packed to dev.msapp but not yet validated end-to-end in Studio. The Power Fx formula tree has been pivoted from a wide-format GroupBy/AddColumns design (which produced cascading red squigglies in Studio for unknown reasons) to a long-format direct-iteration design (one gallery row per IPP cell, 26 rows for the test data).

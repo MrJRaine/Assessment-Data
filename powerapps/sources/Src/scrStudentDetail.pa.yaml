@@ -1,0 +1,57 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+#
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+#
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+Screens:
+  scrStudentDetail:
+    Properties:
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
+    Children:
+      - recDetailContentPanel:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 100
+            Width: =Parent.Width - 40
+            X: =20
+            Y: =80
+      - icoDetailBack:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Height: =40
+            Icon: =Icon.ChevronLeft
+            OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
+            Width: =40
+            X: =20
+            Y: =20
+      - lblDetailTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
+            Height: =36
+            Size: =16
+            Text: =Coalesce(gblSelectedStudent.FullName, "Student Detail")
+            Width: =800
+            X: =80
+            Y: =20
+      - lblDetailStub:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(120, 120, 120, 1)
+            Font: =Font.Lato
+            Height: =80
+            Size: =14
+            Text: ="Student detail view — timelines coming next iteration."
+            VerticalAlign: =VerticalAlign.Middle
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =Parent.Height / 2 - 40
