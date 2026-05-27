@@ -15,6 +15,7 @@ Screens:
         =Set(gblCanEdit, gblIsAdminOrAnalyst Or gblSelectedWindow.WindowStatus = "Open" Or gblSelectedWindow.WindowStatus = "ClosesToday");
         ClearCollect(colDirty, { StudentNumber: 0, ReadingScaleID: "", LevelCode: "" });
         Clear(colDirty);
+        ClearCollect(colAchievementLevels, DimAchievementLevel);
         Set(gblRosterLoaded, false);
         Refresh(vw_TeacherRoster);
         ClearCollect(colRoster, SortByColumns(Filter(vw_TeacherRoster, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID And GroupKey = gblSelectedGroup.GroupKey), "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
@@ -76,6 +77,84 @@ Screens:
             Width: =220
             X: =900
             Y: =20
+      - lblHdrRosterStudent:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Student"
+            Width: =200
+            X: =72
+            Y: =78
+      - lblHdrRosterExpected:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Expected"
+            Width: =180
+            X: =282
+            Y: =78
+      - lblHdrRosterExisting:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Existing"
+            Width: =130
+            X: =472
+            Y: =78
+      - lblHdrRosterDifference:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Difference"
+            Width: =100
+            X: =600
+            Y: =78
+      - lblHdrRosterNewLevel:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="New Level"
+            Width: =180
+            X: =710
+            Y: =78
+      - lblHdrRosterAchievement:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Left
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Achievement"
+            Width: =160
+            X: =920
+            Y: =78
       - galRoster:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
@@ -88,6 +167,44 @@ Screens:
             X: =40
             Y: =100
           Children:
+            - recRowBackgroundRoster:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: |
+                    =With(
+                        { pendingOrder: If(IsBlank(cmbNewLevel.Selected), Blank(), cmbNewLevel.Selected.LevelOrder),
+                          expMin:       ThisItem.ExpectedMinOrder,
+                          expMax:       ThisItem.ExpectedMaxOrder },
+                        With(
+                            { d:
+                                If(Not(IsBlank(pendingOrder)) And Not(IsBlank(expMin)) And Not(IsBlank(expMax)),
+                                    If(pendingOrder >= expMin And pendingOrder <= expMax, 0,
+                                        If(pendingOrder < expMin, pendingOrder - expMin, pendingOrder - expMax)),
+                                    ThisItem.ExistingDelta) },
+                            If(ThisItem.ReadingIPPStatus = true Or ThisItem.ReadingIPPNeedsConfirmation Or IsBlank(d),
+                                RGBA(0, 0, 0, 0),
+                                ColorFade(
+                                    ColorValue(
+                                        LookUp(colAchievementLevels,
+                                            (IsBlank(LowerBound) Or
+                                                (LowerOp = ">=" And d >= LowerBound) Or
+                                                (LowerOp = ">"  And d >  LowerBound) Or
+                                                (LowerOp = "="  And d =  LowerBound))
+                                            And
+                                            (IsBlank(UpperBound) Or
+                                                (UpperOp = "<=" And d <= UpperBound) Or
+                                                (UpperOp = "<"  And d <  UpperBound) Or
+                                                (UpperOp = "="  And d =  UpperBound))
+                                            And ActiveFlag = true
+                                        ).HexColor),
+                                    0.4)))
+                    )
+                  Height: =Parent.TemplateHeight
+                  OnSelect: =Select(Parent)
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
             - Image1Roster:
                 Control: Image@2.2.3
                 Properties:
@@ -106,8 +223,28 @@ Screens:
                   Size: =14
                   Text: =ThisItem.LastName & ", " & ThisItem.FirstName
                   VerticalAlign: =VerticalAlign.Middle
-                  Width: =380
+                  Width: =200
                   X: =20
+                  Y: =0
+            - lblRosterExpected:
+                Control: Label@2.5.1
+                Properties:
+                  Color: |
+                    =If(ThisItem.ReadingIPPNeedsConfirmation, RGBA(180, 50, 50, 1),
+                        ThisItem.ReadingIPPStatus = true, RGBA(50, 49, 48, 1),
+                        RGBA(96, 94, 92, 1))
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight
+                  OnSelect: =Select(Parent)
+                  PaddingLeft: =12
+                  Size: =12
+                  Text: |
+                    =If(ThisItem.ReadingIPPNeedsConfirmation, "Confirm IPP:",
+                        ThisItem.ReadingIPPStatus = true, "IPP",
+                        "Expected: " & Coalesce(ThisItem.ExpectedMinLevel, "?") & "-" & Coalesce(ThisItem.ExpectedMaxLevel, "?"))
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =180
+                  X: =230
                   Y: =0
             - lblExistingLevel:
                 Control: Label@2.5.1
@@ -121,8 +258,40 @@ Screens:
                   Text: |
                     ="Existing: " & Coalesce(ThisItem.ExistingScaleValue, "—")
                   VerticalAlign: =VerticalAlign.Middle
-                  Width: =200
+                  Visible: =Not(ThisItem.ReadingIPPNeedsConfirmation)
+                  Width: =130
                   X: =420
+                  Y: =0
+            - lblDifference:
+                Control: Label@2.5.1
+                Properties:
+                  Align: =Align.Left
+                  Color: =RGBA(50, 49, 48, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight
+                  OnSelect: =Select(Parent)
+                  Size: =13
+                  Text: |
+                    =With(
+                        { pendingOrder: If(IsBlank(cmbNewLevel.Selected), Blank(), cmbNewLevel.Selected.LevelOrder),
+                          expMin:       ThisItem.ExpectedMinOrder,
+                          expMax:       ThisItem.ExpectedMaxOrder },
+                        With(
+                            { d:
+                                If(Not(IsBlank(pendingOrder)) And Not(IsBlank(expMin)) And Not(IsBlank(expMax)),
+                                    If(pendingOrder >= expMin And pendingOrder <= expMax, 0,
+                                        If(pendingOrder < expMin, pendingOrder - expMin, pendingOrder - expMax)),
+                                    ThisItem.ExistingDelta) },
+                            If(ThisItem.ReadingIPPStatus = true, "IPP",
+                               ThisItem.ReadingIPPNeedsConfirmation, "—",
+                               IsBlank(d), "—",
+                               d > 0, "+" & Text(d),
+                               Text(d)))
+                    )
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =70
+                  X: =560
                   Y: =0
             - cmbNewLevel:
                 Control: ModernCombobox@1.1.0
@@ -148,9 +317,91 @@ Screens:
                         })
                     )
                   SelectMultiple: =false
-                  Width: =200
-                  X: =640
+                  Visible: =Not(ThisItem.ReadingIPPNeedsConfirmation)
+                  Width: =180
+                  X: =670
                   Y: =(Parent.TemplateHeight - Self.Height) / 2
+            - btnInlineIPPYes:
+                Control: ModernButton@1.0.0
+                Properties:
+                  Height: =36
+                  OnSelect: |
+                    =Assessment_Warehouse.dbouspUpsertStudentIPP({
+                        StudentKey:    ThisItem.StudentKey,
+                        Subject:       "Reading",
+                        ProgramFamily: ThisItem.ProgramFamily,
+                        IsIPP:         1
+                    });
+                    Set(gblRosterLoaded, false);
+                    Refresh(vw_TeacherRoster);
+                    ClearCollect(colRoster, SortByColumns(Filter(vw_TeacherRoster, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID And GroupKey = gblSelectedGroup.GroupKey), "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
+                    Set(gblRosterLoaded, true)
+                  Text: ="Yes (IPP)"
+                  Visible: =ThisItem.ReadingIPPNeedsConfirmation
+                  Width: =95
+                  X: =670
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
+            - btnInlineIPPNo:
+                Control: ModernButton@1.0.0
+                Properties:
+                  Height: =36
+                  OnSelect: |
+                    =Assessment_Warehouse.dbouspUpsertStudentIPP({
+                        StudentKey:    ThisItem.StudentKey,
+                        Subject:       "Reading",
+                        ProgramFamily: ThisItem.ProgramFamily,
+                        IsIPP:         0
+                    });
+                    Set(gblRosterLoaded, false);
+                    Refresh(vw_TeacherRoster);
+                    ClearCollect(colRoster, SortByColumns(Filter(vw_TeacherRoster, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID And GroupKey = gblSelectedGroup.GroupKey), "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
+                    Set(gblRosterLoaded, true)
+                  Text: ="No"
+                  Visible: =ThisItem.ReadingIPPNeedsConfirmation
+                  Width: =95
+                  X: =775
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
+            - lblAchievementName:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(50, 49, 48, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight
+                  OnSelect: =Select(Parent)
+                  Size: =12
+                  Text: |
+                    =With(
+                        { pendingOrder: If(IsBlank(cmbNewLevel.Selected), Blank(), cmbNewLevel.Selected.LevelOrder),
+                          expMin:       ThisItem.ExpectedMinOrder,
+                          expMax:       ThisItem.ExpectedMaxOrder },
+                        With(
+                            { d:
+                                If(Not(IsBlank(pendingOrder)) And Not(IsBlank(expMin)) And Not(IsBlank(expMax)),
+                                    If(pendingOrder >= expMin And pendingOrder <= expMax, 0,
+                                        If(pendingOrder < expMin, pendingOrder - expMin, pendingOrder - expMax)),
+                                    ThisItem.ExistingDelta) },
+                            If(ThisItem.ReadingIPPStatus = true Or ThisItem.ReadingIPPNeedsConfirmation Or IsBlank(d),
+                                "",
+                                Coalesce(
+                                    LookUp(colAchievementLevels,
+                                        (IsBlank(LowerBound) Or
+                                            (LowerOp = ">=" And d >= LowerBound) Or
+                                            (LowerOp = ">"  And d >  LowerBound) Or
+                                            (LowerOp = "="  And d =  LowerBound))
+                                        And
+                                        (IsBlank(UpperBound) Or
+                                            (UpperOp = "<=" And d <= UpperBound) Or
+                                            (UpperOp = "<"  And d <  UpperBound) Or
+                                            (UpperOp = "="  And d =  UpperBound))
+                                        And ActiveFlag = true
+                                    ).AchievementLevelName, "")))
+                    )
+                  VerticalAlign: =VerticalAlign.Middle
+                  Visible: =Not(ThisItem.ReadingIPPNeedsConfirmation)
+                  Width: =160
+                  X: =880
+                  Y: =0
             - icoDirty:
                 Control: Classic/Icon@2.5.0
                 Properties:
@@ -160,7 +411,7 @@ Screens:
                   OnSelect: =Select(Parent)
                   Visible: =!IsBlank(LookUp(colDirty, StudentNumber = ThisItem.StudentNumber))
                   Width: =28
-                  X: =860
+                  X: =Parent.TemplateWidth - 80
                   Y: =(Parent.TemplateHeight - Self.Height) / 2
             - icoDelete:
                 Control: Classic/Icon@2.5.0
@@ -175,9 +426,9 @@ Screens:
                         ctxDeleteStudentName:   ThisItem.FirstName & " " & ThisItem.LastName,
                         ctxDeleteLevelCode:     ThisItem.ExistingScaleValue
                     })
-                  Visible: =Not(IsBlank(ThisItem.ExistingReadingScaleID)) And gblCanEdit
+                  Visible: =Not(IsBlank(ThisItem.ExistingReadingScaleID)) And gblCanEdit And Not(ThisItem.ReadingIPPNeedsConfirmation)
                   Width: =28
-                  X: =920
+                  X: =Parent.TemplateWidth - 40
                   Y: =(Parent.TemplateHeight - Self.Height) / 2
             - NextArrowRoster:
                 Control: Classic/Icon@2.5.0
