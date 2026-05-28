@@ -13,7 +13,15 @@ Screens:
       LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
       OnVisible: |
         =Set(gblCohortLoaded, false);
+        Clear(colStudentCohort);
+        Clear(colStudentHistory);
         ClearCollect(colAchievementLevels, DimAchievementLevel);
+        Set(gblAchColors, [
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 1).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 2).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 3).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 4).HexColor)
+        ]);
         Refresh(vw_StudentCohort);
         Refresh(vw_StudentAssessmentHistory);
         ClearCollect(colStudentCohort, SortByColumns(vw_StudentCohort, "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
@@ -29,24 +37,7 @@ Screens:
         Set(gblFltGender, "All");
         Set(gblFltAfrican, "All");
         Set(gblFltIndigenous, "All");
-        ClearCollect(colPieData,
-          ForAll(
-            SortByColumns(Filter(colAchievementLevels, ActiveFlag = true), "DisplayOrder", SortOrder.Ascending) As lv,
-            {
-              Category: lv.AchievementLevelName,
-              Count: CountIf(colStudentCohort, IsChartEligibleReading = true And MostRecentAchievementLevelCode = lv.AchievementLevelCode)
-            }
-          )
-        );
-        ClearCollect(colBarData,
-          ForAll(
-            GroupBy(
-              Filter(colStudentHistory, WindowSchoolYear = gblSelectedSchoolYear And IsChartEligibleReading = true),
-              WindowName, _g
-            ) As w,
-            { Window: w.WindowName, Count: CountRows(w._g) }
-          )
-        );
+        Select(btnRefreshCharts);
         Set(gblCohortLoaded, true)
     Children:
       - recContentPanel:
@@ -140,7 +131,7 @@ Screens:
             Height: =40
             ItemDisplayText: =ThisItem.Value
             Items: =colGradeOptions
-            OnChange: =Set(gblFltGrade, Self.Selected.Value)
+            OnChange: =Set(gblFltGrade, Self.Selected.Value); Select(btnRefreshCharts)
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =140
@@ -167,7 +158,7 @@ Screens:
             Height: =40
             ItemDisplayText: =ThisItem.Value
             Items: =colGenderOptions
-            OnChange: =Set(gblFltGender, Self.Selected.Value)
+            OnChange: =Set(gblFltGender, Self.Selected.Value); Select(btnRefreshCharts)
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =140
@@ -194,7 +185,7 @@ Screens:
             Height: =40
             ItemDisplayText: =ThisItem.Value
             Items: =colYesNoOptions
-            OnChange: =Set(gblFltAfrican, Self.Selected.Value)
+            OnChange: =Set(gblFltAfrican, Self.Selected.Value); Select(btnRefreshCharts)
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =160
@@ -221,7 +212,7 @@ Screens:
             Height: =40
             ItemDisplayText: =ThisItem.Value
             Items: =colYesNoOptions
-            OnChange: =Set(gblFltIndigenous, Self.Selected.Value)
+            OnChange: =Set(gblFltIndigenous, Self.Selected.Value); Select(btnRefreshCharts)
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =160
@@ -239,12 +230,61 @@ Screens:
               Set(gblFltGrade, "All");
               Set(gblFltGender, "All");
               Set(gblFltAfrican, "All");
-              Set(gblFltIndigenous, "All")
+              Set(gblFltIndigenous, "All");
+              Select(btnRefreshCharts)
             Text: ="Reset Filters"
             Visible: =gblCohortLoaded
             Width: =140
             X: =900
             Y: =116
+      - btnRefreshCharts:
+          Control: ModernButton@1.0.0
+          Properties:
+            Height: =1
+            OnSelect: |
+              =ClearCollect(colChartFiltered,
+                Filter(colStudentCohort,
+                  IsChartEligibleReading = true,
+                  (gblFltGrade = "All" Or Grade = gblFltGrade),
+                  (gblFltGender = "All" Or Gender = gblFltGender),
+                  (gblFltAfrican = "All" Or (gblFltAfrican = "Yes" And SelfIDAfrican = true) Or (gblFltAfrican = "No" And SelfIDAfrican = false)),
+                  (gblFltIndigenous = "All" Or (gblFltIndigenous = "Yes" And SelfIDIndigenous = true) Or (gblFltIndigenous = "No" And SelfIDIndigenous = false))
+                )
+              );
+              Set(gblPieTotal, CountIf(colChartFiltered, Not(IsBlank(MostRecentAchievementLevelCode))));
+              ClearCollect(colPieData,
+                ForAll(
+                  SortByColumns(Filter(colAchievementLevels, ActiveFlag = true), "DisplayOrder", SortOrder.Ascending) As lv,
+                  With({_c: CountIf(colChartFiltered, MostRecentAchievementLevelCode = lv.AchievementLevelCode)},
+                    {
+                      Category: lv.AchievementLevelName,
+                      PercentLabel: If(gblPieTotal > 0, Text(_c * 100 / gblPieTotal, "0.0") & "%", "0.0%"),
+                      Count: _c
+                    }
+                  )
+                )
+              );
+              ClearCollect(colBarData,
+                ForAll(Sequence(6) As idx,
+                  With({_monthStart: DateAdd(Date(Year(Today()), Month(Today()), 1), idx.Value - 6, TimeUnit.Months)},
+                    With({_nextMonthStart: DateAdd(_monthStart, 1, TimeUnit.Months)},
+                      {
+                        Month: Text(_monthStart, "mmm"),
+                        MonthStart: _monthStart,
+                        NotYetMeeting: CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 1),
+                        Approaching:   CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 2),
+                        Meeting:       CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 3),
+                        Exceeding:     CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 4)
+                      }
+                    )
+                  )
+                )
+              )
+            Text: =""
+            Visible: =false
+            Width: =1
+            X: =0
+            Y: =0
       - lblHdrStudent:
           Control: Label@2.5.1
           Properties:
@@ -255,9 +295,9 @@ Screens:
             Size: =11
             Text: ="Student"
             Visible: =gblCohortLoaded
-            Width: =200
+            Width: =220
             X: =72
-            Y: =440
+            Y: =184
       - lblHdrGrade:
           Control: Label@2.5.1
           Properties:
@@ -268,9 +308,9 @@ Screens:
             Size: =11
             Text: ="Grade"
             Visible: =gblCohortLoaded
-            Width: =80
-            X: =282
-            Y: =440
+            Width: =60
+            X: =300
+            Y: =184
       - lblHdrProgram:
           Control: Label@2.5.1
           Properties:
@@ -281,9 +321,9 @@ Screens:
             Size: =11
             Text: ="Program"
             Visible: =gblCohortLoaded
-            Width: =180
-            X: =372
-            Y: =440
+            Width: =140
+            X: =368
+            Y: =184
       - lblHdrSchool:
           Control: Label@2.5.1
           Properties:
@@ -295,52 +335,13 @@ Screens:
             Text: ="School"
             Visible: =gblCohortLoaded
             Width: =100
-            X: =562
-            Y: =440
-      - lblHdrLevel:
-          Control: Label@2.5.1
-          Properties:
-            Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.Lato
-            FontWeight: =FontWeight.Semibold
-            Height: =20
-            Size: =11
-            Text: ="Recent Level"
-            Visible: =gblCohortLoaded
-            Width: =120
-            X: =672
-            Y: =440
-      - lblHdrDelta:
-          Control: Label@2.5.1
-          Properties:
-            Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.Lato
-            FontWeight: =FontWeight.Semibold
-            Height: =20
-            Size: =11
-            Text: ="Difference"
-            Visible: =gblCohortLoaded
-            Width: =100
-            X: =802
-            Y: =440
-      - lblHdrAchievement:
-          Control: Label@2.5.1
-          Properties:
-            Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.Lato
-            FontWeight: =FontWeight.Semibold
-            Height: =20
-            Size: =11
-            Text: ="Achievement"
-            Visible: =gblCohortLoaded
-            Width: =200
-            X: =912
-            Y: =440
+            X: =516
+            Y: =184
       - galStudents:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            Height: =Parent.Height - 552
+            Height: =Parent.Height - 510
             Items: |
               =Filter(
                 colStudentCohort,
@@ -356,11 +357,11 @@ Screens:
             OnSelect: |
               =Set(gblSelectedStudent, ThisItem);
               Navigate(scrStudentDetail, ScreenTransition.Fade)
-            TemplateSize: =56
+            TemplateSize: =28
             Visible: =gblCohortLoaded
-            Width: =Parent.Width - 80
+            Width: =Parent.Width / 2 - 80
             X: =40
-            Y: =462
+            Y: =210
           Children:
             - recStudentRowBg:
                 Control: Rectangle@2.3.0
@@ -372,112 +373,71 @@ Screens:
                       RGBA(0, 0, 0, 0),
                       ColorFade(ColorValue(ThisItem.MostRecentAchievementHexColor), 0.4)
                     )
-                  Height: =Parent.TemplateHeight - 4
+                  Height: =Parent.TemplateHeight - 2
                   OnSelect: =Select(Parent)
-                  Width: =Parent.TemplateWidth - 16
-                  X: =8
-                  Y: =2
+                  Width: =Parent.TemplateWidth - 8
+                  X: =4
+                  Y: =1
             - lblCohortStudentName:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(32, 31, 30, 1)
                   Font: =Font.Lato
                   FontWeight: =FontWeight.Semibold
-                  Height: =Parent.TemplateHeight - 4
+                  Height: =Parent.TemplateHeight - 2
                   OnSelect: =Select(Parent)
-                  PaddingLeft: =12
-                  Size: =12
+                  PaddingLeft: =8
+                  Size: =11
                   Text: =ThisItem.FullName
-                  Width: =200
-                  X: =24
-                  Y: =2
+                  Width: =220
+                  X: =28
+                  Y: =1
             - lblStudentGrade:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(32, 31, 30, 1)
                   Font: =Font.Lato
-                  Height: =Parent.TemplateHeight - 4
+                  Height: =Parent.TemplateHeight - 2
                   OnSelect: =Select(Parent)
-                  Size: =12
+                  Size: =11
                   Text: =ThisItem.Grade
-                  Width: =80
-                  X: =234
-                  Y: =2
+                  Width: =60
+                  X: =256
+                  Y: =1
             - lblStudentProgram:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(32, 31, 30, 1)
                   Font: =Font.Lato
-                  Height: =Parent.TemplateHeight - 4
+                  Height: =Parent.TemplateHeight - 2
                   OnSelect: =Select(Parent)
-                  Size: =12
+                  Size: =11
                   Text: =ThisItem.ProgramFamily
-                  Width: =180
+                  Width: =140
                   X: =324
-                  Y: =2
+                  Y: =1
             - lblStudentSchool:
                 Control: Label@2.5.1
                 Properties:
                   Color: =RGBA(32, 31, 30, 1)
                   Font: =Font.Lato
-                  Height: =Parent.TemplateHeight - 4
+                  Height: =Parent.TemplateHeight - 2
                   OnSelect: =Select(Parent)
-                  Size: =12
-                  Text: =ThisItem.SchoolID
+                  Size: =11
+                  Text: =Coalesce(ThisItem.SchoolAbbreviation, ThisItem.SchoolID)
                   Width: =100
-                  X: =514
-                  Y: =2
-            - lblStudentLevel:
-                Control: Label@2.5.1
-                Properties:
-                  Color: =RGBA(32, 31, 30, 1)
-                  Font: =Font.Lato
-                  Height: =Parent.TemplateHeight - 4
-                  OnSelect: =Select(Parent)
-                  Size: =12
-                  Text: =Coalesce(ThisItem.MostRecentLevelCode, "—")
-                  Width: =120
-                  X: =624
-                  Y: =2
-            - lblStudentDelta:
-                Control: Label@2.5.1
-                Properties:
-                  Color: =RGBA(32, 31, 30, 1)
-                  Font: =Font.Lato
-                  Height: =Parent.TemplateHeight - 4
-                  OnSelect: =Select(Parent)
-                  Size: =12
-                  Text: |
-                    =If(
-                      IsBlank(ThisItem.MostRecentReadingDelta),
-                      "—",
-                      If(ThisItem.MostRecentReadingDelta > 0, "+", "") & ThisItem.MostRecentReadingDelta
-                    )
-                  Width: =100
-                  X: =754
-                  Y: =2
-            - lblStudentAchievement:
-                Control: Label@2.5.1
-                Properties:
-                  Color: =RGBA(32, 31, 30, 1)
-                  Font: =Font.'Lato Black'
-                  Height: =Parent.TemplateHeight - 4
-                  OnSelect: =Select(Parent)
-                  Size: =12
-                  Text: =Coalesce(ThisItem.MostRecentAchievementLevelName, "")
-                  Width: =200
-                  X: =864
-                  Y: =2
+                  X: =472
+                  Y: =1
             - icoStudentDrill:
                 Control: Classic/Icon@2.5.0
                 Properties:
                   Color: =RGBA(0, 146, 201, 1)
-                  Height: =24
+                  Height: =20
                   Icon: =Icon.ChevronRight
                   OnSelect: =Select(Parent)
-                  Width: =24
-                  X: =Parent.TemplateWidth - 48
-                  Y: =Parent.TemplateHeight / 2 - 12
+                  Width: =20
+                  X: =Parent.TemplateWidth - 32
+                  Y: =Parent.TemplateHeight / 2 - 10
       - lblEmptyCohort:
           Control: Label@2.5.1
           Properties:
@@ -486,9 +446,9 @@ Screens:
             Font: =Font.Lato
             Text: ="No students match the current filters."
             Visible: =gblCohortLoaded And CountRows(galStudents.AllItems) = 0
-            Width: =Parent.Width - 80
+            Width: =Parent.Width / 2 - 80
             X: =40
-            Y: =500
+            Y: =Parent.Height / 2 - 80
       - Title2:
           Control: Label@2.5.1
           Group: CompositePieChart1
@@ -503,9 +463,9 @@ Screens:
             Size: =12
             Text: ="Current Achievement Distribution"
             Visible: =gblCohortLoaded
-            Width: =620
-            X: =40
-            Y: =178
+            Width: =Parent.Width / 2 - 10
+            X: =Parent.Width / 2 - 30
+            Y: =184
       - PieChart1:
           Control: PieChart@2.3.0
           Group: CompositePieChart1
@@ -516,18 +476,18 @@ Screens:
             Color: =RGBA(50, 49, 48, 1)
             DisabledBorderColor: =RGBA(0, 0, 0, 0)
             Font: =Font.Lato
-            Height: =210
+            Height: =Parent.Height - 540
             HoverBorderColor: =RGBA(0, 0, 0, 0)
-            ItemColorSet: =[RGBA(214, 69, 80, 1), RGBA(230, 108, 55, 1), RGBA(26, 171, 64, 1), RGBA(17, 141, 255, 1)]
+            ItemColorSet: =gblAchColors
             Items: =colPieData
-            Items.Labels: =Category
+            Items.Labels: =PercentLabel
             Items.Series: =Count
             PressedBorderColor: =RGBA(0, 0, 0, 0)
-            Size: =14
+            Size: =12
             Visible: =gblCohortLoaded
-            Width: =240
-            X: =60
-            Y: =212
+            Width: =Parent.Width / 2 - 10
+            X: =Parent.Width / 2 - 30
+            Y: =214
       - Legend1:
           Control: Legend@2.1.0
           Group: CompositePieChart1
@@ -540,17 +500,17 @@ Screens:
             DisabledColor: =RGBA(161, 159, 157, 1)
             DisabledFill: =RGBA(225, 223, 221, 1)
             Font: =Font.Lato
-            Height: =210
+            Height: =40
             HoverBorderColor: =RGBA(0, 0, 0, 0)
-            ItemColorSet: =PieChart1.ItemColorSet
-            Items: =PieChart1.SeriesLabels
-            Items.Value: =Value
+            ItemColorSet: =gblAchColors
+            Items: =colPieData
+            Items.Value: =Category
             PressedBorderColor: =RGBA(0, 0, 0, 0)
-            Size: =13
+            Size: =11
             Visible: =gblCohortLoaded
-            Width: =300
-            X: =340
-            Y: =212
+            Width: =Parent.Width / 2 - 100
+            X: =Parent.Width / 2 + 20
+            Y: =Parent.Height - 320
       - Title3:
           Control: Label@2.5.1
           Group: CompositeColumnChart1
@@ -563,11 +523,11 @@ Screens:
             FontWeight: =FontWeight.Semibold
             Height: =24
             Size: =12
-            Text: ="Students Assessed by Window — " & gblSelectedSchoolYear
+            Text: ="Achievement by Month (last 6 months)"
             Visible: =gblCohortLoaded
-            Width: =620
-            X: =700
-            Y: =178
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =Parent.Height - 280
       - ColumnChart1:
           Control: BarChart@2.4.0
           Group: CompositeColumnChart1
@@ -578,18 +538,23 @@ Screens:
             Color: =RGBA(50, 49, 48, 1)
             DisabledBorderColor: =RGBA(0, 0, 0, 0)
             Font: =Font.Lato
-            Height: =180
+            Height: =220
             HoverBorderColor: =RGBA(0, 0, 0, 0)
-            ItemColorSet: =[RGBA(17, 141, 255, 1), RGBA(230, 108, 55, 1), RGBA(26, 171, 64, 1), RGBA(214, 69, 80, 1)]
+            ItemColorSet: =gblAchColors
             Items: =colBarData
-            Items.Labels: =Window
-            Items.Series1: =Count
+            Items.Labels: =Month
+            Items.Series1: =NotYetMeeting
+            Items.Series2: =Approaching
+            Items.Series3: =Meeting
+            Items.Series4: =Exceeding
+            NumberOfSeries: =4
+            XLabelAngle: =0
             PressedBorderColor: =RGBA(0, 0, 0, 0)
-            Size: =13
+            Size: =12
             Visible: =gblCohortLoaded
-            Width: =560
-            X: =720
-            Y: =212
+            Width: =Parent.Width - 240
+            X: =40
+            Y: =Parent.Height - 250
       - Legend2:
           Control: Legend@2.1.0
           Group: CompositeColumnChart1
@@ -602,7 +567,7 @@ Screens:
             DisabledColor: =RGBA(161, 159, 157, 1)
             DisabledFill: =RGBA(225, 223, 221, 1)
             Font: =Font.Lato
-            Height: =24
+            Height: =220
             HoverBorderColor: =RGBA(0, 0, 0, 0)
             ItemColorSet: =ColumnChart1.ItemColorSet
             Items: =ColumnChart1.SeriesLabels
@@ -610,6 +575,6 @@ Screens:
             PressedBorderColor: =RGBA(0, 0, 0, 0)
             Size: =11
             Visible: =gblCohortLoaded
-            Width: =560
-            X: =720
-            Y: =400
+            Width: =180
+            X: =Parent.Width - 200
+            Y: =Parent.Height - 250

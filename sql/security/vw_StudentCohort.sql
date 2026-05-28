@@ -88,6 +88,8 @@ SELECT
     s.Grade,
     sg.GradeOrder,
     s.SchoolID,
+    sch.SchoolName,
+    sch.Abbreviation                                         AS SchoolAbbreviation,
     s.ProgramCode,
     p.ProgramFamily,
     s.Gender,
@@ -129,6 +131,8 @@ JOIN DimProgram p
     ON p.ProgramCode = s.ProgramCode
 JOIN DimGrade sg
     ON sg.GradeCode  = s.Grade
+LEFT JOIN DimSchool sch
+    ON sch.SchoolID = s.SchoolID
 LEFT JOIN CurrentReadingIPP crd
     ON  crd.StudentKey    = s.StudentKey
     AND crd.ProgramFamily = p.ProgramFamily

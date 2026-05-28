@@ -11,7 +11,7 @@ Screens:
     Properties:
       Fill: =RGBA(0, 146, 201, 1)
       LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
-      OnVisible: =Set(gblWindowsLoaded, false); ClearCollect(colWindows, vw_UserAssessmentWindows); Set(gblWindowsLoaded, true)
+      OnVisible: =Set(gblWindowsLoaded, false); Clear(colWindows); Refresh(vw_UserAssessmentWindows); ClearCollect(colWindows, vw_UserAssessmentWindows); Set(gblWindowsLoaded, true)
     Children:
       - recContentPanelWindows:
           Control: Rectangle@2.3.0
@@ -50,6 +50,7 @@ Screens:
             Height: =Parent.Height - Self.Y - 40
             Items: =colWindows
             OnSelect: =Set(gblSelectedWindow, ThisItem); Navigate(scrGroupSelect, ScreenTransition.Fade)
+            Visible: =gblWindowsLoaded
             Width: =Parent.Width - 80
             X: =40
             Y: =80

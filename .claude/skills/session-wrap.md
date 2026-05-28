@@ -28,9 +28,12 @@ Review skills in `.claude/skills/` and `.github/skills/` for anything that needs
 |---|---|
 | `fabric-warehouse-sql.md` | Any new Fabric Warehouse T-SQL errors or confirmed working syntax discovered |
 | `regional-assessment-platform.md` | Architecture decisions, scope changes, new design constraints |
+| `power-apps-canvas-build.md` | Any new Power Fx / YAML / control-template pattern that became canonical OR any failure mode the user corrected me on this session. Always check after any session that touched `powerapps/sources/`. Include: new control templates verified to work, new pre-flight items, new common-error rows, updates to the control-name §5 table when screens are added, new working-file references in §10. |
 | Any other skill touched this session | New patterns, corrections, learnings |
 
 Mirror every change to both `.claude/skills/` and `.github/skills/` to keep them in sync.
+
+**Power Apps skill update — concrete cue**: if this session ended with a user correction along the lines of "I already told you this", "we ran into this before", or you packed and re-packed for the same class of error more than once, that's a strong signal that `power-apps-canvas-build.md` needs an entry to prevent the next recurrence. Add the rule, an example of right vs. wrong, and the section reference. Don't just update a memory and assume the skill will get there on its own.
 
 ---
 
@@ -40,7 +43,9 @@ Open `docs/implementation-plan.md` and:
 
 1. **Check off** any steps fully completed this session
 2. **Uncheck** any steps marked done prematurely (if "run" wasn't completed, don't mark "write and run" as done)
-3. **Add a Left Off note** at the bottom of the Notes section in this exact format:
+3. **Re-read the DESCRIPTION of every step that's currently in-flight or got touched this session.** Checkboxes are not enough. If the approach, tooling, status notes, or sub-bullets inside a step's description are stale (e.g. they still cite a deprecated workflow, an old memory, or a previous design decision that's since been reversed), rewrite the description to match current reality. Add a parenthetical `**Status (YYYY-MM-DD)**:` line inside the step if useful so future readers can see the latest state without reading every Left Off note. **Failure mode to actively avoid**: keeping the checkbox empty while the description drifts further out of date with every session. If a step's description still references a deprecated approach from > 1 week ago and the work has moved on, treat that as a missed maintenance — fix it now.
+4. **Update the Progress Summary table** at the top of the Notes section if any step checkboxes changed. Mismatches between checkboxes and the table mean someone is reading stale numbers.
+5. **Add a Left Off note** at the bottom of the Notes section in this exact format:
 
 ```
 ### Left Off — [DATE]

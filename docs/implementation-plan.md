@@ -37,8 +37,9 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - [x] **15. Create canvas app** in Power Apps maker portal *(Manual — maker portal)*. **Done 2026-05-11.** Single-screen test app created in TCRCE default environment with a smoke-test button.
 - [x] **16. Connect app to Fabric SQL endpoint** — test connection early, may need custom connector *(Manual — connector setup in portal)*. **Done 2026-05-11.** SQL Server connector + Microsoft Entra ID Integrated auth confirmed working for reads against `Assessment_Warehouse`. **MAJOR ARCHITECTURAL FINDING**: Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables (`Defaults(<FabricTable>)` returns `{}`). Established workaround pattern (memorialized in `project_powerapps_write_pattern.md` memory + fabric-warehouse-sql skill items 15-16): wrapper stored procs called from Power Apps formulas via the same SQL connector. First proc `usp_InsertSubmissionAudit` deployed; end-to-end smoke test confirmed (Power Apps button → row in `FactSubmissionAudit` with calling user's UPN). Reference: [Shabnam Watson blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/).
 - [x] **17. Design screen layout** — `scrStudentSelect`, `scrAssessmentEntry`, `scrConfirmation` *(Claude can provide full screen logic and formulas)*. **Done 2026-05-11.** Original 3-screen single-student-at-a-time design rejected after stakeholder feedback in favor of group-then-roster batch entry. New 4-screen design lives at [`docs/powerapps-screen-design.md`](powerapps-screen-design.md): `scrLanding` → `scrWindowSelect` → `scrGroupSelect` → `scrRosterGrid` (with `scrStudentData` placeholder for Phase 5+). Supports multiple concurrent windows (e.g. P-6 Reading + 7-12 Writing simultaneously), role-based filtering, edit-during-window for teachers + edit-anytime for admins/analysts, school year dropdown for admins. Includes prerequisite SQL build list for Step 18.
-- [ ] **18. Build screens (Copilot scaffold) + write precision formulas (manual paste)** — Hybrid C+B build approach decided 2026-05-11 (see [`project_powerapps_build_approach`](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/project_powerapps_build_approach.md) memory). Lead with Power Apps Copilot meta-prompts for scaffolding (galleries, navigation skeletons, repeating UI patterns from the [screen design spec](powerapps-screen-design.md)); use formula-bar paste for precision pieces (OnSelect formulas, the `colDirty` dirty-tracking pattern, back-arrow confirm dialog, `usp_*` stored-proc invocations). *(Claude drafts both the Copilot prompts and the precision formulas; user pastes Copilot prompts into Studio's Copilot pane and pastes precision formulas into individual control properties)*
-- [ ] **19. Write audit logging logic** to `FactSubmissionAudit` on each submission *(Claude can write formula/flow)*
+- [ ] **18. Build screens via VS Code YAML authoring (pac canvas pack/unpack)** — Approach pivoted 2026-05-13 from the original Copilot-hybrid plan after Power Apps Copilot proved unreliable. Current workflow: Claude edits `powerapps/sources/Src/*.pa.yaml` directly; Claude packs via `pac canvas pack` after each change; Studio is used only for the initial bootstrap and final visual polish. Full reference: [`.claude/skills/power-apps-canvas-build.md`](../.claude/skills/power-apps-canvas-build.md). Memories: [`project_powerapps_build_approach`](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/project_powerapps_build_approach.md), [`feedback_powerfx_identifier_column_args`](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/feedback_powerfx_identifier_column_args.md), [`project_powerapps_bigint_precision`](../../../Users/jeffrey.raine/.claude/projects/c--Git-Repos-Assessment-Data/memory/project_powerapps_bigint_precision.md), and the other `*_powerapps_*` memories in the index.
+  - **Status (2026-05-28)**: 8 screens scaffolded — scrLanding, scrWindowSelect, scrGroupSelect, scrRosterGrid (Save + Delete shipped), scrIPP, scrIngest (regional-analyst manual-trigger stub), scrStudentData (cohort: filters + gallery + Pie/Bar charts), scrStudentDetail (stub only). Remaining within Step 18: build out scrStudentDetail timelines + arrow navigation; convert cohort bar chart to clustered (4 series); add scrIPP entry button to scrLanding; admin/analyst-only filters on scrStudentData; visual polish across all screens.
+- [x] **19. Write audit logging logic** to `FactSubmissionAudit` on each submission *(Claude can write formula/flow)*. **Done 2026-05-11.** `usp_InsertSubmissionAudit` deployed with three-layer validation (NULL guard 51010 + 3 enum allow-lists 51011-51013 + email-format 51014 + LOWER normalization). Power Apps writes invoke it via the dot-stripped form `Assessment_Warehouse.dbouspInsertSubmissionAudit({...})`. Audit rows also written by `usp_UpsertReadingAssessment`, `usp_DeleteReadingAssessment`, `usp_UpsertStudentIPP`, and `usp_TriggerIngestCycle` on every state change.
 - [ ] **20. Embed app in Microsoft Teams** via Teams app catalog *(Manual — Teams admin portal)*
 - [ ] **21. Share Power Apps** directly with 5–10 pilot teachers *(Manual — Power Apps share dialog)*
 
@@ -83,10 +84,10 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 |-------|-------------|-----------|
 | Phase 1: Foundation | 8 | 8 |
 | Phase 2: Security & Views | 6 | 6 |
-| Phase 3: Power Apps | 7 | 3 |
+| Phase 3: Power Apps | 7 | 4 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 10 | 0 |
-| **Total** | **36** | **17** |
+| **Total** | **36** | **18** |
 
 ---
 
@@ -100,6 +101,33 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-05-28 (scrStudentData cohort polished; charts rendering correctly; scrStudentDetail still next)
+- **Last completed**: scrStudentData cohort UX rebuilt end-to-end. Half-width gallery (4 columns, school-abbreviation cell, 28px row), pie chart right (slice = %, legend = category names), 6-month clustered bar chart bottom with 4 series (pink/yellow/light green/bright green). Reactive filters via hidden `btnRefreshCharts` — Grade/Gender/Self-ID changes now drive both pie + bar. Stale-data hardening across all 5 SQL-backed screens: `Clear()` before `ClearCollect`, `Gallery.Visible = gblXxxLoaded` so no stale ghost on screen-revisit. New `power-apps-canvas-build.md` skill consolidates all Power Apps gotchas + working patterns.
+- **In progress**: cohort screen feature-complete. scrStudentDetail still a stub.
+- **First action next session**:
+  1. Open dev.msapp, verify cohort screen still renders correctly after any latest cohort data changes.
+  2. **Build scrStudentDetail v1** — biggest remaining piece. Three timelines (reading level / achievement / difference) over time for one student, with left/right arrow navigation through the filtered cohort. Data already available via `vw_StudentAssessmentHistory` + `gblSelectedStudent` (set on cohort gallery tap).
+- **Then next priorities (in order)**:
+  1. scrIPP entry button on scrLanding (small build, gated on IPP rows in user's scope)
+  2. Admin/analyst-only cohort filters (teacher/course/section/homeroom for admin; school for analyst) — likely needs SQL view extension
+  3. Visual polish across all screens
+  4. Step 20: Teams embed
+  5. Step 21: Share with pilot teachers
+- **Memory adds/updates this session**:
+  - NEW: `feedback_percent_decimal_precision` — 1 dec on charts, 2 dec on tables. Standing convention.
+  - UPDATED: `feedback_powerfx_identifier_column_args` — GroupBy aggregation name is ALSO an identifier, no exception.
+  - UPDATED: `feedback_powerapps_data_source_refresh` — change-type-specific (additive doesn't need refresh; renames/type-changes do).
+  - UPDATED: `project_powerapps_loading_state_pattern` — Clear() + Gallery.Visible added to canonical pattern.
+- **Skill adds/updates**:
+  - NEW: `power-apps-canvas-build.md` — full Power Apps reference for this project.
+  - UPDATED: `session-wrap.md` — added power-apps-canvas-build to skill review table; added Step 3 substeps for description-staleness check + Progress Summary update.
+- **Major learning**: `NumberOfSeries: =N` is MANDATORY on multi-series Bar/Line/Column charts. Without it, only Series1 renders. Documented in skill.
+- **Test data state at EOD**: 17 chart-eligible students in cohort, 9 with reading assessments entered (1 NotYetMeeting, 1 Approaching, 4 Meeting, 3 Exceeding). Pie + clustered bar render correctly matching this distribution.
+- **Followups queued**:
+  - True carry-forward bar chart semantics (multi-assessment students) — current formula uses MostRecent which works for single-assessment test data; needs multi-assessment test data to verify the deeper formula.
+  - Stacked bar chart variant — `Stacked: =true` rejected (PA2108); need to find right property if user wants stacked over clustered.
+- **Blockers**: None.
 
 ### Left Off — 2026-05-27 (scrStudentData cohort scaffold + 2 new SQL views shipped; scrStudentDetail next)
 - **Last completed**: `vw_StudentCohort` + `vw_StudentAssessmentHistory` deployed and smoke-tested. scrStudentData cohort screen built end-to-end (functional in Studio): header, OnVisible computes 8 collections incl. `colPieData` + `colBarData`, 5 filter ModernComboboxes (school year/grade/gender/self-ID African/self-ID Indigenous + reset), student gallery with color-tinted rows + 7 column headers + ChevronRight drill, PieChart bound to `colPieData`, ColumnChart bound to `colBarData` (single series). scrStudentDetail stub created so the gallery's Navigate resolves at pack time.

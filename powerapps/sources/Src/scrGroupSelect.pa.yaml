@@ -11,7 +11,7 @@ Screens:
     Properties:
       Fill: =RGBA(0, 146, 201, 1)
       LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
-      OnVisible: =Set(gblGroupsLoaded, false); ClearCollect(colGroups, SortByColumns(Filter(vw_TeacherGroups, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID), "Grade", SortOrder.Ascending, "GroupLabel", SortOrder.Ascending)); Set(gblGroupsLoaded, true)
+      OnVisible: =Set(gblGroupsLoaded, false); Clear(colGroups); Refresh(vw_TeacherGroups); ClearCollect(colGroups, SortByColumns(Filter(vw_TeacherGroups, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID), "Grade", SortOrder.Ascending, "GroupLabel", SortOrder.Ascending)); Set(gblGroupsLoaded, true)
     Children:
       - recContentPanelGroups:
           Control: Rectangle@2.3.0
@@ -62,6 +62,7 @@ Screens:
             Items: =colGroups
             OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
             TemplateSize: =76
+            Visible: =gblGroupsLoaded
             Width: =Parent.Width - 80
             X: =40
             Y: =100
