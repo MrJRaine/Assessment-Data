@@ -17,6 +17,7 @@ Screens:
         Clear(colDirty);
         ClearCollect(colAchievementLevels, DimAchievementLevel);
         Set(gblRosterLoaded, false);
+        Clear(colRoster);
         Refresh(vw_TeacherRoster);
         ClearCollect(colRoster, SortByColumns(Filter(vw_TeacherRoster, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID And GroupKey = gblSelectedGroup.GroupKey), "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
         Set(gblRosterLoaded, true)
@@ -163,6 +164,7 @@ Screens:
             Height: =Parent.Height - Self.Y - 80
             Items: =colRoster
             TemplateSize: =56
+            Visible: =gblRosterLoaded
             Width: =Parent.Width - 80
             X: =40
             Y: =100
