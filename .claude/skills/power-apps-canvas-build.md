@@ -205,6 +205,46 @@ ModernCombobox does NOT accept `DisplayFields` or `SearchFields` (those are Clas
 
 Don't mix the two forms.
 
+### 3g. Pointer cursor / "this is clickable" affordance
+
+Canvas `Label` controls **cannot change the mouse cursor** — there is no `Cursor`/`HoverCursor` property, and a label's selectable text forces the I-beam. The only control that reliably shows the hand/pointer cursor is a **Button**.
+
+To make a label-styled cell (e.g. a hyperlink-styled student name) show the pointer cursor, overlay a fully transparent `Classic/Button@2.2.0` on top of it, placed AFTER the label in the children list so it's topmost. Keep the label for the look (blue + `Underline: =true`); the button captures hover + click:
+
+```yaml
+- btnNameLink:
+    Control: Classic/Button@2.2.0
+    Properties:
+      BorderColor: =RGBA(0, 0, 0, 0)
+      BorderStyle: =BorderStyle.None
+      Color: =RGBA(0, 0, 0, 0)
+      DisabledBorderColor: =RGBA(0, 0, 0, 0)
+      DisabledFill: =RGBA(0, 0, 0, 0)
+      Fill: =RGBA(0, 0, 0, 0)
+      HoverBorderColor: =RGBA(0, 0, 0, 0)
+      HoverFill: =RGBA(0, 0, 0, 0)
+      OnSelect: =Select(Parent)         # bubbles to the gallery row's OnSelect
+      PressedBorderColor: =RGBA(0, 0, 0, 0)
+      PressedFill: =RGBA(0, 0, 0, 0)
+      Text: =""
+      # X/Y/Width/Height match the label it covers
+```
+
+All four fill states (`Fill`/`HoverFill`/`PressedFill`/`DisabledFill`) must be zero-alpha or the button chrome shows. Inside a gallery row template the overlay scrolls with the row and does NOT block gallery scrolling (wheel/scrollbar unaffected) — same as the existing in-row buttons on scrRosterGrid/scrIPP. `ModernButton@1.0.0` can't be made cleanly transparent — use the classic button.
+
+### 3h. Persisting filter / combo state across navigation — init with Coalesce, don't re-Set
+
+`Screen.OnVisible` runs every time the screen is shown, including navigating *back* to it. If OnVisible unconditionally `Set()`s filter globals to their defaults, the user's selections are wiped on every return. Initialize filter state **only when unset**, with `Coalesce`:
+
+```powerfx
+Set(gblFltGradeMinOrd, Coalesce(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder)));
+Set(gblFltGender,      Coalesce(gblFltGender, "All"));
+```
+
+First visit: global is blank → seeded. Return visit: keeps the user's value. (`Coalesce` skips only blank/empty-string, so a legitimate numeric `0` / `-1` — e.g. Grade P/PP order — is preserved.)
+
+**The combo gotcha that makes this hard to diagnose:** a `ModernCombobox` whose `DefaultSelectedItems` *references* a global (e.g. `Table(LookUp(opts, Ord = gblFltMinOrd))`) will visibly snap back to default when OnVisible rewrites that global. A combo with a *constant* default (`Table({Value:"All"})`) won't snap back — so it *looks* persisted even though its backing global was actually reset, a silent display-vs-filter mismatch. The Coalesce-init rule fixes both at once. A force-reset "Reset Filters" button should still `Set()` directly (not Coalesce) so it overrides persistence.
+
 ---
 
 ## 4. Control Templates Verified to Work
@@ -217,10 +257,12 @@ Don't mix the two forms.
 | Modern ComboBox | `ModernCombobox@1.1.0` | Items + ItemDisplayText required. No DisplayFields |
 | Modern Icon | `ModernIcon@1.1.0` | No Color property |
 | Classic Icon | `Classic/Icon@2.5.0` | Color works; Icon is an enum (`Icon.ChevronLeft`) |
+| Classic button | `Classic/Button@2.2.0` | Use for a transparent click-overlay → pointer cursor (§3g). Settable: `Fill`/`HoverFill`/`PressedFill`/`DisabledFill` + 4 border-color props |
 | Image | `Image@2.2.3` | Used as Image1 inside gallery |
 | Rectangle | `Rectangle@2.3.0` | Backgrounds, row tints, separators |
 | Pie chart | `PieChart@2.3.0` | `Items.Labels: =<col>` + `Items.Series: =<col>` |
 | Bar/Column chart | `BarChart@2.4.0` | `Items.Labels: =<col>` + `Items.Series1: =<col>` (Series1-9 supported, clustered) |
+| Line chart | `LineChart@2.3.0` | `Items.Labels` + `Items.Series1..9`. Single series → `Items.Series1` + `NumberOfSeries: =1`. `Items` can bind to a reactive expression (e.g. `AddColumns(SortByColumns(Filter(col, ...)), AxisLabel, Text(...))`) so it updates live without a collection rebuild |
 | Legend | `Legend@2.1.0` | Binds to chart's `.SeriesLabels` |
 
 ### Chart binding pattern — multi-series requires `NumberOfSeries`
@@ -307,8 +349,8 @@ Existing safe names in this app — don't reuse them on new screens unless you'r
 | scrGroupSelect | `icoBackToWindows`, `lblGroupTitle`, `lblSubtitle`, `galGroups`, `lblLoading`, `lblEmptyState` | `lblGroupLabel`, `lblGroupMeta`, `lblProgress`, `NextArrowGroup`, `SeparatorGroup`, `SelectionBarGroup` |
 | scrRosterGrid | `icoBackToGroups`, `lblRosterTitle`, `lblReadOnlyBadge`, `btnSaveTop`, `galRoster`, `lblLoadingRoster`, `lblEmptyRoster` | `recRowBackgroundRoster`, `lblStudentName`, `lblRosterExpected`, `lblExistingLevel`, `lblDifference`, `cmbNewLevel`, `btnInlineIPPYes`, `btnInlineIPPNo`, `lblAchievementName`, `icoDirty`, `icoDelete`, `NextArrowRoster`, `SeparatorRoster`, `SelectionBarRoster` |
 | scrIPP | `icoBackToLandingIPP`, `lblIPPTitle`, `lblIPPSubtitle`, `btnSaveTopIPP`, `galStudentsIPP`, `lblLoadingIPP`, `lblEmptyIPP` | `Image1IPP`, `lblIPPStudentName`, `lblIPPStudentGrade`, `lblIPPStudentHomeroom`, `lblIPPSubjectLabel`, `lblIPPState`, `btnIPPYes`, `btnIPPNo`, `icoIPPDirty`, `NextArrowIPP`, `SeparatorIPP`, `SelectionBarIPP` |
-| scrStudentData | `icoCohortBack`, `lblCohortTitle`, `lblCohortLoading`, `cmbFltSchoolYear/Grade/Gender/African/Indigenous`, `btnResetFilters`, `galStudents`, `lblEmptyCohort` | `recStudentRowBg`, `lblCohortStudentName`, `lblStudentGrade`, `lblStudentProgram`, `lblStudentSchool`, `lblStudentLevel`, `lblStudentDelta`, `lblStudentAchievement`, `icoStudentDrill` |
-| scrStudentDetail | `icoDetailBack`, `lblDetailTitle`, `lblDetailStub`, `recDetailContentPanel` | (not yet built) |
+| scrStudentData | `icoCohortBack`, `lblCohortTitle`, `lblCohortLoading`, `cmbFltSchoolYear`, `lblFltGradeMin`/`cmbFltGradeMin`, `lblFltGradeMax`/`cmbFltGradeMax`, `cmbFltGender`/`cmbFltAfrican`/`cmbFltIndigenous`, `btnResetFilters`, `btnRefreshCharts`, `lblCohortHint`, `galStudents`, `lblEmptyCohort`, `PieChart1`/`ColumnChart1`/`Legend1`/`Legend2` | `recStudentRowBg`, `lblCohortStudentName`, `btnNameLink` (transparent click overlay), `lblStudentGrade`, `lblStudentProgram`, `lblStudentSchool`, `icoStudentDrill` |
+| scrStudentDetail | `icoDetailBack`, `lblDetailTitle`, `icoDetailPrev`, `icoDetailNext`, `lblDetailCounter`, `recDetailContentPanel`, `lblDetailMeta`, `lblDetailRecent`, `lblHdrWindow`/`lblHdrDate`/`lblHdrLevel`/`lblHdrDiff`/`lblHdrAchievement`, `galDetailTimeline`, `lblTrendTitle`, `lineDetailTrend`, `lblDetailEmpty`, `lblDetailLoading` | `recTimelineRowBg`, `lblTLWindow`, `lblTLDate`, `lblTLLevel`, `lblTLDiff`, `lblTLAchievement` |
 | scrIngest | `icoBackIngest`, `lblIngestTitle`, `lblIngestPlaceholder` | (no gallery) |
 
 When adding a new screen, audit against this list. The fast check:

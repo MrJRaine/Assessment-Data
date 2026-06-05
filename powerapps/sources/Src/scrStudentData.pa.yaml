@@ -27,16 +27,16 @@ Screens:
         ClearCollect(colStudentCohort, SortByColumns(vw_StudentCohort, "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
         ClearCollect(colStudentHistory, vw_StudentAssessmentHistory);
         ClearCollect(colSchoolYearOptions, {Value: "2025-2026"}, {Value: "2024-2025"});
-        ClearCollect(colGradeOptions, {Value: "All"});
-        Collect(colGradeOptions, RenameColumns(ShowColumns(Sort(GroupBy(colStudentCohort, Grade, GradeOrder, _g), GradeOrder, SortOrder.Ascending), Grade), Grade, Value));
+        ClearCollect(colGradeOptions, Sort(RenameColumns(GroupBy(colStudentCohort, Grade, GradeOrder, _g), GradeOrder, Ord, Grade, Value), Ord, SortOrder.Ascending));
         ClearCollect(colGenderOptions, {Value: "All"});
         Collect(colGenderOptions, Sort(ShowColumns(RenameColumns(GroupBy(colStudentCohort, Gender, _g), Gender, Value), Value), Value, SortOrder.Ascending));
         ClearCollect(colYesNoOptions, {Value: "All"}, {Value: "Yes"}, {Value: "No"});
-        Set(gblSelectedSchoolYear, "2025-2026");
-        Set(gblFltGrade, "All");
-        Set(gblFltGender, "All");
-        Set(gblFltAfrican, "All");
-        Set(gblFltIndigenous, "All");
+        Set(gblSelectedSchoolYear, Coalesce(gblSelectedSchoolYear, "2025-2026"));
+        Set(gblFltGradeMinOrd, Coalesce(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder)));
+        Set(gblFltGradeMaxOrd, Coalesce(gblFltGradeMaxOrd, Max(colStudentCohort, GradeOrder)));
+        Set(gblFltGender, Coalesce(gblFltGender, "All"));
+        Set(gblFltAfrican, Coalesce(gblFltAfrican, "All"));
+        Set(gblFltIndigenous, Coalesce(gblFltIndigenous, "All"));
         Select(btnRefreshCharts);
         Set(gblCohortLoaded, true)
     Children:
@@ -110,7 +110,7 @@ Screens:
             Width: =160
             X: =40
             Y: =116
-      - lblFltGrade:
+      - lblFltGradeMin:
           Control: Label@2.5.1
           Properties:
             Color: =RGBA(96, 94, 92, 1)
@@ -118,24 +118,49 @@ Screens:
             FontWeight: =FontWeight.Semibold
             Height: =20
             Size: =10
-            Text: ="Grade"
+            Text: ="Grade min"
             Visible: =gblCohortLoaded
-            Width: =140
-            X: =220
+            Width: =96
+            X: =208
             Y: =96
-      - cmbFltGrade:
+      - cmbFltGradeMin:
           Control: ModernCombobox@1.1.0
           Properties:
-            DefaultSelectedItems: |
-              =Table({Value: "All"})
+            DefaultSelectedItems: =Table(LookUp(colGradeOptions, Ord = gblFltGradeMinOrd))
             Height: =40
             ItemDisplayText: =ThisItem.Value
             Items: =colGradeOptions
-            OnChange: =Set(gblFltGrade, Self.Selected.Value); Select(btnRefreshCharts)
+            OnChange: =Set(gblFltGradeMinOrd, Self.Selected.Ord); Select(btnRefreshCharts)
             SelectMultiple: =false
             Visible: =gblCohortLoaded
-            Width: =140
-            X: =220
+            Width: =96
+            X: =208
+            Y: =116
+      - lblFltGradeMax:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(96, 94, 92, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="Grade max"
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =312
+            Y: =96
+      - cmbFltGradeMax:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: =Table(LookUp(colGradeOptions, Ord = gblFltGradeMaxOrd))
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colGradeOptions
+            OnChange: =Set(gblFltGradeMaxOrd, Self.Selected.Ord); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =312
             Y: =116
       - lblFltGender:
           Control: Label@2.5.1
@@ -148,7 +173,7 @@ Screens:
             Text: ="Gender"
             Visible: =gblCohortLoaded
             Width: =140
-            X: =380
+            X: =424
             Y: =96
       - cmbFltGender:
           Control: ModernCombobox@1.1.0
@@ -162,7 +187,7 @@ Screens:
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =140
-            X: =380
+            X: =424
             Y: =116
       - lblFltAfrican:
           Control: Label@2.5.1
@@ -175,7 +200,7 @@ Screens:
             Text: ="Self-ID African"
             Visible: =gblCohortLoaded
             Width: =160
-            X: =540
+            X: =576
             Y: =96
       - cmbFltAfrican:
           Control: ModernCombobox@1.1.0
@@ -189,7 +214,7 @@ Screens:
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =160
-            X: =540
+            X: =576
             Y: =116
       - lblFltIndigenous:
           Control: Label@2.5.1
@@ -202,7 +227,7 @@ Screens:
             Text: ="Self-ID Indigenous"
             Visible: =gblCohortLoaded
             Width: =160
-            X: =720
+            X: =748
             Y: =96
       - cmbFltIndigenous:
           Control: ModernCombobox@1.1.0
@@ -216,26 +241,28 @@ Screens:
             SelectMultiple: =false
             Visible: =gblCohortLoaded
             Width: =160
-            X: =720
+            X: =748
             Y: =116
       - btnResetFilters:
           Control: ModernButton@1.0.0
           Properties:
             Height: =40
             OnSelect: |
-              =Reset(cmbFltGrade);
-              Reset(cmbFltGender);
-              Reset(cmbFltAfrican);
-              Reset(cmbFltIndigenous);
-              Set(gblFltGrade, "All");
+              =Set(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder));
+              Set(gblFltGradeMaxOrd, Max(colStudentCohort, GradeOrder));
               Set(gblFltGender, "All");
               Set(gblFltAfrican, "All");
               Set(gblFltIndigenous, "All");
+              Reset(cmbFltGradeMin);
+              Reset(cmbFltGradeMax);
+              Reset(cmbFltGender);
+              Reset(cmbFltAfrican);
+              Reset(cmbFltIndigenous);
               Select(btnRefreshCharts)
             Text: ="Reset Filters"
             Visible: =gblCohortLoaded
             Width: =140
-            X: =900
+            X: =920
             Y: =116
       - btnRefreshCharts:
           Control: ModernButton@1.0.0
@@ -245,7 +272,8 @@ Screens:
               =ClearCollect(colChartFiltered,
                 Filter(colStudentCohort,
                   IsChartEligibleReading = true,
-                  (gblFltGrade = "All" Or Grade = gblFltGrade),
+                  GradeOrder >= gblFltGradeMinOrd,
+                  GradeOrder <= gblFltGradeMaxOrd,
                   (gblFltGender = "All" Or Gender = gblFltGender),
                   (gblFltAfrican = "All" Or (gblFltAfrican = "Yes" And SelfIDAfrican = true) Or (gblFltAfrican = "No" And SelfIDAfrican = false)),
                   (gblFltIndigenous = "All" Or (gblFltIndigenous = "Yes" And SelfIDIndigenous = true) Or (gblFltIndigenous = "No" And SelfIDIndigenous = false))
@@ -285,6 +313,19 @@ Screens:
             Width: =1
             X: =0
             Y: =0
+      - lblCohortHint:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(0, 146, 201, 1)
+            Font: =Font.Lato
+            Italic: =true
+            Height: =20
+            Size: =11
+            Text: ="Tap a student's name to view their assessment history"
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 40
+            X: =40
+            Y: =160
       - lblHdrStudent:
           Control: Label@2.5.1
           Properties:
@@ -345,7 +386,8 @@ Screens:
             Items: |
               =Filter(
                 colStudentCohort,
-                (gblFltGrade = "All" Or Grade = gblFltGrade),
+                GradeOrder >= gblFltGradeMinOrd,
+                GradeOrder <= gblFltGradeMaxOrd,
                 (gblFltGender = "All" Or Gender = gblFltGender),
                 (gblFltAfrican = "All"
                   Or (gblFltAfrican = "Yes" And SelfIDAfrican = true)
@@ -381,7 +423,7 @@ Screens:
             - lblCohortStudentName:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(0, 146, 201, 1)
                   Font: =Font.Lato
                   FontWeight: =FontWeight.Semibold
                   Height: =Parent.TemplateHeight - 2
@@ -389,6 +431,26 @@ Screens:
                   PaddingLeft: =8
                   Size: =11
                   Text: =ThisItem.FullName
+                  Underline: =true
+                  Width: =220
+                  X: =28
+                  Y: =1
+            - btnNameLink:
+                Control: Classic/Button@2.2.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  BorderStyle: =BorderStyle.None
+                  Color: =RGBA(0, 0, 0, 0)
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  DisabledFill: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 0, 0, 0)
+                  HoverBorderColor: =RGBA(0, 0, 0, 0)
+                  HoverFill: =RGBA(0, 0, 0, 0)
+                  Height: =Parent.TemplateHeight - 2
+                  OnSelect: =Select(Parent)
+                  PressedBorderColor: =RGBA(0, 0, 0, 0)
+                  PressedFill: =RGBA(0, 0, 0, 0)
+                  Text: =""
                   Width: =220
                   X: =28
                   Y: =1
