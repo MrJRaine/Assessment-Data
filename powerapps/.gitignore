@@ -14,3 +14,8 @@ Student Data Staff Portal.*.msapp
 
 # Temp unpack folders created during .msapr blob swaps.
 sources-*/
+unpack-*/
+
+# Archived / superseded Studio exports (discovery round-trips, old baselines) —
+# disposable; the canonical sources/ tree + "Student Data Staff Portal.msapp" are the source of truth.
+archive/
