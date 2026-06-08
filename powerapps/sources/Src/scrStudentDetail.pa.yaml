@@ -118,25 +118,10 @@ Screens:
             Height: =24
             Size: =13
             Text: |
-              ="Grade " & gblSelectedStudent.Grade & "   ·   " & gblSelectedStudent.ProgramFamily & "   ·   " & Coalesce(gblSelectedStudent.SchoolAbbreviation, gblSelectedStudent.SchoolID) & If(!IsBlank(gblSelectedStudent.Homeroom), "   ·   Homeroom " & gblSelectedStudent.Homeroom, "")
+              ="Grade " & gblSelectedStudent.Grade & "   ·   " & gblSelectedStudent.ProgramFamily & "   ·   " & Coalesce(gblSelectedStudent.SchoolAbbreviation, gblSelectedStudent.SchoolID) & If(!IsBlank(gblSelectedStudent.Homeroom), "   ·   Homeroom " & gblSelectedStudent.Homeroom, "") & "   ·   IPP (Reading): " & gblSelectedStudent.IPPStatus_Reading
             Width: =Parent.Width - 80
             X: =40
             Y: =100
-      - lblDetailRecent:
-          Control: Label@2.5.1
-          Properties:
-            Color: =RGBA(96, 94, 92, 1)
-            Font: =Font.Lato
-            Height: =24
-            Size: =12
-            Text: |
-              =If(IsBlank(gblSelectedStudent.MostRecentAssessmentDate),
-                "Most recent reading: none recorded   ·   IPP (Reading): " & gblSelectedStudent.IPPStatus_Reading,
-                "Most recent reading: " & gblSelectedStudent.MostRecentLevelCode & " (" & Coalesce(gblSelectedStudent.MostRecentAchievementLevelName, "—") & ", Δ " & If(gblSelectedStudent.MostRecentReadingDelta > 0, "+", "") & gblSelectedStudent.MostRecentReadingDelta & ") on " & Text(gblSelectedStudent.MostRecentAssessmentDate, "mmm d, yyyy") & "   ·   IPP (Reading): " & gblSelectedStudent.IPPStatus_Reading
-              )
-            Width: =Parent.Width - 80
-            X: =40
-            Y: =128
       - lblHdrWindow:
           Control: Label@2.5.1
           Properties:
@@ -206,11 +191,11 @@ Screens:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            Height: =Parent.Height - 412
+            Height: =(Parent.Height - 252) / 2
             Items: |
               =SortByColumns(
                 Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey),
-                "AssessmentDate", SortOrder.Ascending
+                "AssessmentDate", SortOrder.Descending
               )
             ShowNavigation: =false
             TemplatePadding: =0
@@ -306,11 +291,11 @@ Screens:
             FontWeight: =FontWeight.Semibold
             Height: =24
             Size: =12
-            Text: ="Reading difference vs. benchmark over time (0 = on benchmark)"
+            Text: ="Reading level over time"
             Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) > 0
             Width: =Parent.Width - 80
             X: =40
-            Y: =Parent.Height - 210
+            Y: =192 + (Parent.Height - 252) / 2 + 6
       - lineDetailTrend:
           Control: LineChart@2.3.0
           Properties:
@@ -318,7 +303,7 @@ Screens:
             BorderStyle: =BorderStyle.None
             Color: =RGBA(50, 49, 48, 1)
             Font: =Font.Lato
-            Height: =150
+            Height: =(Parent.Height - 252) / 2
             ItemColorSet: =[RGBA(0, 146, 201, 1)]
             Items: |
               =AddColumns(
@@ -329,13 +314,15 @@ Screens:
                 AxisLabel, Text(AssessmentDate, "mmm yyyy")
               )
             Items.Labels: =AxisLabel
-            Items.Series1: =ReadingDelta
+            Items.Series1: =LevelOrder
             NumberOfSeries: =1
             Size: =11
             Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) > 0
             Width: =Parent.Width - 80
             X: =40
-            Y: =Parent.Height - 182
+            Y: =192 + (Parent.Height - 252) / 2 + 32
+            YAxisMax: =31
+            YAxisMin: =0
       - lblDetailEmpty:
           Control: Label@2.5.1
           Properties:

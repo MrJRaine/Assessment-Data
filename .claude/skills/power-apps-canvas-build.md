@@ -262,7 +262,7 @@ First visit: global is blank → seeded. Return visit: keeps the user's value. (
 | Rectangle | `Rectangle@2.3.0` | Backgrounds, row tints, separators |
 | Pie chart | `PieChart@2.3.0` | `Items.Labels: =<col>` + `Items.Series: =<col>` |
 | Bar/Column chart | `BarChart@2.4.0` | `Items.Labels: =<col>` + `Items.Series1: =<col>` (Series1-9 supported, clustered) |
-| Line chart | `LineChart@2.3.0` | `Items.Labels` + `Items.Series1..9`. Single series → `Items.Series1` + `NumberOfSeries: =1`. `Items` can bind to a reactive expression (e.g. `AddColumns(SortByColumns(Filter(col, ...)), AxisLabel, Text(...))`) so it updates live without a collection rebuild |
+| Line chart | `LineChart@2.3.0` | `Items.Labels` + `Items.Series1..9`. Single series → `Items.Series1` + `NumberOfSeries: =1`. `Items` can bind to a reactive expression (e.g. `AddColumns(SortByColumns(Filter(col, ...)), AxisLabel, Text(...))`) so it updates live without a collection rebuild. **Pin the Y-axis with `YAxisMin` / `YAxisMax`** (numeric) — otherwise it auto-scales to the data range, which hides a meaningful zero baseline. Y-axis is numeric only; it cannot label categories (e.g. plotting `LevelOrder` shows 0–31, not the level letter codes) |
 | Legend | `Legend@2.1.0` | Binds to chart's `.SeriesLabels` |
 
 ### Chart binding pattern — multi-series requires `NumberOfSeries`
