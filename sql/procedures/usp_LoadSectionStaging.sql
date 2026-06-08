@@ -12,11 +12,18 @@
  * unions any matching files — operators should clear the folder before
  * each ingest.
  *
- * COPY INTO config locked in during Step 7:
+ * COPY INTO config — PowerSchool sqlReport CSV format (source updated 2026-06-08;
+ * NOT yet deployed — see docs/powerschool-report-specifications.md Appendix C):
  *   FILE_TYPE       = 'CSV'
- *   FIELDTERMINATOR = '\t'      (PS direct extracts are TAB-delimited)
- *   ROWTERMINATOR   = '0x0D'    (PS direct extracts use CR-only line endings)
+ *   FIELDTERMINATOR = ','       (sqlReport is comma-delimited)
+ *   FIELDQUOTE      = '"'       (text qualifier; handles embedded commas)
  *   FIRSTROW        = 2         (skip header)
+ *   ROWTERMINATOR   = (default — sqlReports use CRLF, default catches it)
+ * Replaces the pilot direct-table-extract format (TAB / CR-only 0x0D / .text).
+ * DEPLOY ONLY at cutover, together with the new SQL reports — the live pilot
+ * ingest still runs the previously-deployed TAB format until then.
+ * Folder-routed by '*' wildcard — any single dropped file loads, no filename
+ * prefix required.
  *
  * Path: GUID-based abfss URL into the Regional_Data_Portal workspace's
  * Assessment_Landing lakehouse — read GUIDs from the Fabric portal URL if
@@ -31,11 +38,11 @@ BEGIN
     TRUNCATE TABLE Stg_Section;
 
     COPY INTO Stg_Section
-    FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/sections/AssessmentData*'
+    FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/sections/*'
     WITH (
         FILE_TYPE       = 'CSV',
-        FIELDTERMINATOR = '\t',
-        ROWTERMINATOR   = '0x0D',
+        FIELDTERMINATOR = ',',
+        FIELDQUOTE      = '"',
         FIRSTROW        = 2
     );
 END;
