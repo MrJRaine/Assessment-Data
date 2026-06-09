@@ -47,6 +47,12 @@
  * Power Apps binding: Power Apps reads DimAchievementLevel directly. No
  *          BIGINT-precision issue here — AchievementLevelCode is plain INT
  *          (1-4) and serves as the natural key.
+ *          HexColor = solid color (chart series); HexColorTint = light wash
+ *          for gallery row backgrounds (added 2026-06-09 for the app restyle).
+ *          Both are surfaced through vw_StudentCohort
+ *          (MostRecentAchievementHexColor / MostRecentAchievementHexColorTint)
+ *          and vw_StudentAssessmentHistory
+ *          (AchievementHexColor / AchievementHexColorTint).
  ******************************************************************************/
 
 CREATE TABLE DimAchievementLevel (
@@ -56,7 +62,8 @@ CREATE TABLE DimAchievementLevel (
     LowerOp                 VARCHAR(2)      NULL,         -- '>=', '>', '=', or NULL if no lower bound
     UpperBound              DECIMAL(5,2)    NULL,         -- NULL = no upper bound
     UpperOp                 VARCHAR(2)      NULL,         -- '<=', '<', '=', or NULL if no upper bound
-    HexColor                VARCHAR(7)      NOT NULL,     -- '#FFC7CE' style; consumed by Power Apps
+    HexColor                VARCHAR(7)      NOT NULL,     -- '#RRGGBB' solid; consumed by Power Apps (chart series)
+    HexColorTint            VARCHAR(7)      NULL,         -- '#RRGGBB' light row-wash; Power Apps row backgrounds. NULL (not NOT NULL) so the migrate-ALTER on the populated warehouse matches a fresh CREATE; app guards with If(IsBlank(...))
     DisplayOrder            INT             NOT NULL,     -- Asc = worst to best
     ActiveFlag              BIT             NOT NULL,
     LastUpdated             DATETIME2(0)    NOT NULL

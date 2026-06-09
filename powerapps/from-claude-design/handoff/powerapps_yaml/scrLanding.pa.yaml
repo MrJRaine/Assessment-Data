@@ -6,23 +6,14 @@
 #
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
-# ── Direction B restyle (Edge-to-Edge) ──────────────────────────────────────
-# Three task cards: Classic/Button = card background + tap target (Navigate kept);
-# accent rectangle + icon + title + description + "go" link layered on top, each
-# overlay's OnSelect = Select(<card button>) so the whole card is one tap target.
-# Card 3 is Student IPPs (the ingest entry was retired — Power Automate path dead).
-#
-# Resize fix (2026-06-09): cards size responsively — Max(230, half the content
-# area) so they (a) always fit the text and (b) cap at ~½ height, leaving room for
-# a future second row. Description labels carry an explicit Height (card.Height-160)
-# so wrapped text never clips. No AutoHeight (unsupported convention in this app).
-#
-# Loading-state fix (2026-06-09): EVERY card sub-control (accent rect, icon, all
-# labels) is gated Visible: =gblLandingLoaded, not just the card button — otherwise
-# the overlays ghost over the "Loading…" label before the user lookup resolves.
-#
-# Icon enums (Trending / Edit / DocumentWithContent) may need swapping if they
-# don't resolve in the target environment.
+# ── Direction B restyle ─────────────────────────────────────────────────────
+# The 3 original Classic/Buttons are PRESERVED as the card background + tap target
+# (their OnSelect navigation is unchanged). Icon + title + description + accent are
+# added on top; each added control's OnSelect = Select(<the card button>) so the
+# whole card is one tap target. NOTE: Classic Rectangle/Button has square corners —
+# cards are square (no border radius is available on classic controls).
+# Icon enums (Trending / Edit / DocumentWithContent) may need swapping for ones in
+# your environment's Icon list.
 # ─────────────────────────────────────────────────────────────────────────────
 Screens:
   scrLanding:
@@ -44,7 +35,6 @@ Screens:
           Properties:
             Color: =RGBA(255, 255, 255, 1)
             Font: =Font.'Lato Black'
-            Height: =32
             Size: =17
             Text: ="Reading Assessment"
             Visible: =gblLandingLoaded
@@ -56,7 +46,6 @@ Screens:
           Properties:
             Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
-            Height: =28
             Size: =13
             Text: ="Welcome back, " & User().FullName
             Visible: =gblLandingLoaded
@@ -72,7 +61,7 @@ Screens:
             Color: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
             Font: =Font.Lato
-            Height: =Max(230, (Parent.Height - 160) / 2)
+            Height: =220
             HoverColor: =RGBA(0, 0, 0, 0)
             HoverFill: =RGBA(244, 247, 249, 1)
             OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
@@ -91,7 +80,6 @@ Screens:
             Fill: =RGBA(0, 146, 201, 1)
             Height: =btnStudentData.Height
             OnSelect: =Select(btnStudentData)
-            Visible: =gblLandingLoaded
             Width: =4
             X: =btnStudentData.X
             Y: =btnStudentData.Y
@@ -102,7 +90,6 @@ Screens:
             Height: =40
             Icon: =Icon.Trending
             OnSelect: =Select(btnStudentData)
-            Visible: =gblLandingLoaded
             Width: =40
             X: =btnStudentData.X + 28
             Y: =btnStudentData.Y + 28
@@ -111,11 +98,9 @@ Screens:
           Properties:
             Color: =RGBA(24, 43, 52, 1)
             Font: =Font.'Lato Black'
-            Height: =30
             OnSelect: =Select(btnStudentData)
             Size: =19
             Text: ="Student Data"
-            Visible: =gblLandingLoaded
             Width: =btnStudentData.Width - 56
             X: =btnStudentData.X + 28
             Y: =btnStudentData.Y + 80
@@ -124,11 +109,9 @@ Screens:
           Properties:
             Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
-            Height: =btnStudentData.Height - 160
             OnSelect: =Select(btnStudentData)
             Size: =12
             Text: ="Browse your students with summary charts, then open any student for their full assessment history and progress trend."
-            Visible: =gblLandingLoaded
             Width: =btnStudentData.Width - 56
             X: =btnStudentData.X + 28
             Y: =btnStudentData.Y + 116
@@ -138,11 +121,9 @@ Screens:
             Color: =RGBA(3, 108, 146, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Bold
-            Height: =24
             OnSelect: =Select(btnStudentData)
             Size: =12
             Text: ="View & analyze  ›"
-            Visible: =gblLandingLoaded
             Width: =btnStudentData.Width - 56
             X: =btnStudentData.X + 28
             Y: =btnStudentData.Y + btnStudentData.Height - 36
@@ -155,7 +136,7 @@ Screens:
             Color: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
             Font: =Font.Lato
-            Height: =Max(230, (Parent.Height - 160) / 2)
+            Height: =220
             HoverColor: =RGBA(0, 0, 0, 0)
             HoverFill: =RGBA(244, 247, 249, 1)
             OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
@@ -174,7 +155,6 @@ Screens:
             Fill: =RGBA(0, 146, 201, 1)
             Height: =btnDataEntry.Height
             OnSelect: =Select(btnDataEntry)
-            Visible: =gblLandingLoaded
             Width: =4
             X: =btnDataEntry.X
             Y: =btnDataEntry.Y
@@ -185,7 +165,6 @@ Screens:
             Height: =40
             Icon: =Icon.Edit
             OnSelect: =Select(btnDataEntry)
-            Visible: =gblLandingLoaded
             Width: =40
             X: =btnDataEntry.X + 28
             Y: =btnDataEntry.Y + 28
@@ -194,11 +173,9 @@ Screens:
           Properties:
             Color: =RGBA(24, 43, 52, 1)
             Font: =Font.'Lato Black'
-            Height: =30
             OnSelect: =Select(btnDataEntry)
             Size: =19
             Text: ="Data Entry"
-            Visible: =gblLandingLoaded
             Width: =btnDataEntry.Width - 56
             X: =btnDataEntry.X + 28
             Y: =btnDataEntry.Y + 80
@@ -207,11 +184,9 @@ Screens:
           Properties:
             Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
-            Height: =btnDataEntry.Height - 160
             OnSelect: =Select(btnDataEntry)
             Size: =12
             Text: ="Record reading levels for a class during an open assessment window. The roster grid lets you enter a whole class at once."
-            Visible: =gblLandingLoaded
             Width: =btnDataEntry.Width - 56
             X: =btnDataEntry.X + 28
             Y: =btnDataEntry.Y + 116
@@ -221,11 +196,9 @@ Screens:
             Color: =RGBA(3, 108, 146, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Bold
-            Height: =24
             OnSelect: =Select(btnDataEntry)
             Size: =12
             Text: ="Enter assessments  ›"
-            Visible: =gblLandingLoaded
             Width: =btnDataEntry.Width - 56
             X: =btnDataEntry.X + 28
             Y: =btnDataEntry.Y + btnDataEntry.Height - 36
@@ -238,7 +211,7 @@ Screens:
             Color: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
             Font: =Font.Lato
-            Height: =Max(230, (Parent.Height - 160) / 2)
+            Height: =220
             HoverColor: =RGBA(0, 0, 0, 0)
             HoverFill: =RGBA(244, 247, 249, 1)
             OnSelect: =Navigate(scrIPP, ScreenTransition.Fade)
@@ -257,7 +230,6 @@ Screens:
             Fill: =RGBA(0, 146, 201, 1)
             Height: =btnStudentIPPs.Height
             OnSelect: =Select(btnStudentIPPs)
-            Visible: =gblLandingLoaded
             Width: =4
             X: =btnStudentIPPs.X
             Y: =btnStudentIPPs.Y
@@ -268,7 +240,6 @@ Screens:
             Height: =40
             Icon: =Icon.DocumentWithContent
             OnSelect: =Select(btnStudentIPPs)
-            Visible: =gblLandingLoaded
             Width: =40
             X: =btnStudentIPPs.X + 28
             Y: =btnStudentIPPs.Y + 28
@@ -277,11 +248,9 @@ Screens:
           Properties:
             Color: =RGBA(24, 43, 52, 1)
             Font: =Font.'Lato Black'
-            Height: =30
             OnSelect: =Select(btnStudentIPPs)
             Size: =19
             Text: ="Student IPPs"
-            Visible: =gblLandingLoaded
             Width: =btnStudentIPPs.Width - 56
             X: =btnStudentIPPs.X + 28
             Y: =btnStudentIPPs.Y + 80
@@ -290,11 +259,9 @@ Screens:
           Properties:
             Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
-            Height: =btnStudentIPPs.Height - 160
             OnSelect: =Select(btnStudentIPPs)
             Size: =12
             Text: ="Confirm which students have an Individual Program Plan by subject, so assessment data is interpreted correctly."
-            Visible: =gblLandingLoaded
             Width: =btnStudentIPPs.Width - 56
             X: =btnStudentIPPs.X + 28
             Y: =btnStudentIPPs.Y + 116
@@ -304,11 +271,9 @@ Screens:
             Color: =RGBA(3, 108, 146, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Bold
-            Height: =24
             OnSelect: =Select(btnStudentIPPs)
             Size: =12
             Text: ="Confirm plans  ›"
-            Visible: =gblLandingLoaded
             Width: =btnStudentIPPs.Width - 56
             X: =btnStudentIPPs.X + 28
             Y: =btnStudentIPPs.Y + btnStudentIPPs.Height - 36

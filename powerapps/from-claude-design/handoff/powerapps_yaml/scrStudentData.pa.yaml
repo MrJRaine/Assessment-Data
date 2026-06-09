@@ -1,0 +1,682 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+#
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+#
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+# ── Direction B restyle ─────────────────────────────────────────────────────
+# Visual only, EXCEPT the approved tint swap on recStudentRowBg.Fill
+# (MostRecentAchievementHexColorTint instead of ColorFade(...,0.4)).
+# gblAchColors still reads the SOLID HexColor — correct for pie/bar series.
+# ADDED: recFilterBar strip, recCohortRowLine divider. Self-ID labels use Char(10)
+# to wrap to two lines. NOTE: PA combobox widths are fixed; for the mock's
+# content-sized auto-wrapping filter row, wrap these in a horizontal layout
+# container. Untouched: OnVisible, btnRefreshCharts build, all OnChange, gallery
+# Items/OnSelect, chart Items/ItemColorSet/Group, Visible bindings.
+# ─────────────────────────────────────────────────────────────────────────────
+Screens:
+  scrStudentData:
+    Properties:
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
+      OnVisible: |
+        =Set(gblCohortLoaded, false);
+        Clear(colStudentCohort);
+        Clear(colStudentHistory);
+        ClearCollect(colAchievementLevels, DimAchievementLevel);
+        Set(gblAchColors, [
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 1).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 2).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 3).HexColor),
+          ColorValue(LookUp(colAchievementLevels, AchievementLevelCode = 4).HexColor)
+        ]);
+        Refresh(vw_StudentCohort);
+        Refresh(vw_StudentAssessmentHistory);
+        ClearCollect(colStudentCohort, SortByColumns(vw_StudentCohort, "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
+        ClearCollect(colStudentHistory, vw_StudentAssessmentHistory);
+        ClearCollect(colSchoolYearOptions, {Value: "2025-2026"}, {Value: "2024-2025"});
+        ClearCollect(colGradeOptions, Sort(RenameColumns(GroupBy(colStudentCohort, Grade, GradeOrder, _g), GradeOrder, Ord, Grade, Value), Ord, SortOrder.Ascending));
+        ClearCollect(colGenderOptions, {Value: "All"});
+        Collect(colGenderOptions, Sort(ShowColumns(RenameColumns(GroupBy(colStudentCohort, Gender, _g), Gender, Value), Value), Value, SortOrder.Ascending));
+        ClearCollect(colYesNoOptions, {Value: "All"}, {Value: "Yes"}, {Value: "No"});
+        Set(gblSelectedSchoolYear, Coalesce(gblSelectedSchoolYear, "2025-2026"));
+        Set(gblFltGradeMinOrd, Coalesce(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder)));
+        Set(gblFltGradeMaxOrd, Coalesce(gblFltGradeMaxOrd, Max(colStudentCohort, GradeOrder)));
+        Set(gblFltGender, Coalesce(gblFltGender, "All"));
+        Set(gblFltAfrican, Coalesce(gblFltAfrican, "All"));
+        Set(gblFltIndigenous, Coalesce(gblFltIndigenous, "All"));
+        Select(btnRefreshCharts);
+        Set(gblCohortLoaded, true)
+    Children:
+      - recContentPanel:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
+      - recFilterBar:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(228, 234, 237, 1)
+            BorderThickness: =1
+            Fill: =RGBA(244, 247, 249, 1)
+            Height: =84
+            Width: =Parent.Width
+            X: =0
+            Y: =80
+      - icoCohortBack:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Height: =32
+            Icon: =Icon.ChevronLeft
+            OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
+            Width: =32
+            X: =16
+            Y: =10
+      - lblCohortTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
+            Height: =32
+            Size: =17
+            Text: ="Student Data"
+            Width: =400
+            X: =56
+            Y: =14
+      - lblCohortLoading:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Size: =14
+            Text: ="Loading student data…"
+            Visible: =!gblCohortLoaded
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =400
+      - lblFltSchoolYear:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="School Year"
+            Visible: =gblCohortLoaded
+            Width: =160
+            X: =40
+            Y: =96
+      - cmbFltSchoolYear:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: |
+              =Table({Value: gblSelectedSchoolYear})
+            Height: =40
+            InputTextPlaceholder: ="School year"
+            ItemDisplayText: =ThisItem.Value
+            Items: =colSchoolYearOptions
+            OnChange: =Set(gblSelectedSchoolYear, Self.Selected.Value)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =150
+            X: =40
+            Y: =118
+      - lblFltGradeMin:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="Grade min"
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =202
+            Y: =96
+      - cmbFltGradeMin:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: =Table(LookUp(colGradeOptions, Ord = gblFltGradeMinOrd))
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colGradeOptions
+            OnChange: =Set(gblFltGradeMinOrd, Self.Selected.Ord); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =202
+            Y: =118
+      - lblFltGradeMax:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="Grade max"
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =306
+            Y: =96
+      - cmbFltGradeMax:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: =Table(LookUp(colGradeOptions, Ord = gblFltGradeMaxOrd))
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colGradeOptions
+            OnChange: =Set(gblFltGradeMaxOrd, Self.Selected.Ord); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =96
+            X: =306
+            Y: =118
+      - lblFltGender:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="Gender"
+            Visible: =gblCohortLoaded
+            Width: =140
+            X: =410
+            Y: =96
+      - cmbFltGender:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: |
+              =Table({Value: "All"})
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colGenderOptions
+            OnChange: =Set(gblFltGender, Self.Selected.Value); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =130
+            X: =410
+            Y: =118
+      - lblFltAfrican:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =30
+            Size: =10
+            Text: ="Self-ID" & Char(10) & "African"
+            Visible: =gblCohortLoaded
+            Width: =90
+            X: =552
+            Y: =88
+      - cmbFltAfrican:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: |
+              =Table({Value: "All"})
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colYesNoOptions
+            OnChange: =Set(gblFltAfrican, Self.Selected.Value); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =110
+            X: =552
+            Y: =118
+      - lblFltIndigenous:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =30
+            Size: =10
+            Text: ="Self-ID" & Char(10) & "Indigenous"
+            Visible: =gblCohortLoaded
+            Width: =110
+            X: =674
+            Y: =88
+      - cmbFltIndigenous:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            DefaultSelectedItems: |
+              =Table({Value: "All"})
+            Height: =40
+            ItemDisplayText: =ThisItem.Value
+            Items: =colYesNoOptions
+            OnChange: =Set(gblFltIndigenous, Self.Selected.Value); Select(btnRefreshCharts)
+            SelectMultiple: =false
+            Visible: =gblCohortLoaded
+            Width: =130
+            X: =674
+            Y: =118
+      - btnResetFilters:
+          Control: ModernButton@1.0.0
+          Properties:
+            BorderColor: =RGBA(228, 234, 237, 1)
+            BorderThickness: =1
+            Color: =RGBA(3, 108, 146, 1)
+            Fill: =RGBA(255, 255, 255, 1)
+            Font: =Font.Lato
+            Height: =40
+            OnSelect: |
+              =Set(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder));
+              Set(gblFltGradeMaxOrd, Max(colStudentCohort, GradeOrder));
+              Set(gblFltGender, "All");
+              Set(gblFltAfrican, "All");
+              Set(gblFltIndigenous, "All");
+              Reset(cmbFltGradeMin);
+              Reset(cmbFltGradeMax);
+              Reset(cmbFltGender);
+              Reset(cmbFltAfrican);
+              Reset(cmbFltIndigenous);
+              Select(btnRefreshCharts)
+            RadiusBottomLeft: =6
+            RadiusBottomRight: =6
+            RadiusTopLeft: =6
+            RadiusTopRight: =6
+            Size: =13
+            Text: ="Reset filters"
+            Visible: =gblCohortLoaded
+            Width: =140
+            X: =Parent.Width - 164
+            Y: =118
+      - btnRefreshCharts:
+          Control: ModernButton@1.0.0
+          Properties:
+            Height: =1
+            OnSelect: |
+              =ClearCollect(colChartFiltered,
+                Filter(colStudentCohort,
+                  IsChartEligibleReading = true,
+                  GradeOrder >= gblFltGradeMinOrd,
+                  GradeOrder <= gblFltGradeMaxOrd,
+                  (gblFltGender = "All" Or Gender = gblFltGender),
+                  (gblFltAfrican = "All" Or (gblFltAfrican = "Yes" And SelfIDAfrican = true) Or (gblFltAfrican = "No" And SelfIDAfrican = false)),
+                  (gblFltIndigenous = "All" Or (gblFltIndigenous = "Yes" And SelfIDIndigenous = true) Or (gblFltIndigenous = "No" And SelfIDIndigenous = false))
+                )
+              );
+              Set(gblPieTotal, CountIf(colChartFiltered, Not(IsBlank(MostRecentAchievementLevelCode))));
+              ClearCollect(colPieData,
+                ForAll(
+                  SortByColumns(Filter(colAchievementLevels, ActiveFlag = true), "DisplayOrder", SortOrder.Ascending) As lv,
+                  With({_c: CountIf(colChartFiltered, MostRecentAchievementLevelCode = lv.AchievementLevelCode)},
+                    {
+                      Category: lv.AchievementLevelName,
+                      PercentLabel: If(gblPieTotal > 0, Text(_c * 100 / gblPieTotal, "0.0") & "%", "0.0%"),
+                      Count: _c
+                    }
+                  )
+                )
+              );
+              ClearCollect(colBarData,
+                ForAll(Sequence(6) As idx,
+                  With({_monthStart: DateAdd(Date(Year(Today()), Month(Today()), 1), idx.Value - 6, TimeUnit.Months)},
+                    With({_nextMonthStart: DateAdd(_monthStart, 1, TimeUnit.Months)},
+                      {
+                        Month: Text(_monthStart, "mmm"),
+                        MonthStart: _monthStart,
+                        NotYetMeeting: CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 1),
+                        Approaching:   CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 2),
+                        Meeting:       CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 3),
+                        Exceeding:     CountIf(colChartFiltered, Not(IsBlank(MostRecentAssessmentDate)) And MostRecentAssessmentDate < _nextMonthStart And MostRecentAchievementLevelCode = 4)
+                      }
+                    )
+                  )
+                )
+              )
+            Text: =""
+            Visible: =false
+            Width: =1
+            X: =0
+            Y: =0
+      - lblCohortHint:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(3, 108, 146, 1)
+            Font: =Font.Lato
+            Italic: =true
+            Height: =20
+            Size: =11
+            Text: ="Tap a student's name to view their assessment history"
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 40
+            X: =40
+            Y: =176
+      - lblHdrStudent:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Student"
+            Visible: =gblCohortLoaded
+            Width: =220
+            X: =72
+            Y: =200
+      - lblHdrGrade:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Grade"
+            Visible: =gblCohortLoaded
+            Width: =60
+            X: =300
+            Y: =200
+      - lblHdrProgram:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Program"
+            Visible: =gblCohortLoaded
+            Width: =140
+            X: =368
+            Y: =200
+      - lblHdrSchool:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="School"
+            Visible: =gblCohortLoaded
+            Width: =100
+            X: =516
+            Y: =200
+      - galStudents:
+          Control: Gallery@2.15.0
+          Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
+          Properties:
+            Height: =Parent.Height - 510
+            Items: |
+              =Filter(
+                colStudentCohort,
+                GradeOrder >= gblFltGradeMinOrd,
+                GradeOrder <= gblFltGradeMaxOrd,
+                (gblFltGender = "All" Or Gender = gblFltGender),
+                (gblFltAfrican = "All"
+                  Or (gblFltAfrican = "Yes" And SelfIDAfrican = true)
+                  Or (gblFltAfrican = "No"  And SelfIDAfrican = false)),
+                (gblFltIndigenous = "All"
+                  Or (gblFltIndigenous = "Yes" And SelfIDIndigenous = true)
+                  Or (gblFltIndigenous = "No"  And SelfIDIndigenous = false))
+              )
+            OnSelect: |
+              =Set(gblSelectedStudent, ThisItem);
+              Navigate(scrStudentDetail, ScreenTransition.Fade)
+            TemplateSize: =30
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 80
+            X: =40
+            Y: =226
+          Children:
+            - recStudentRowBg:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: |
+                    =If(
+                      IsBlank(ThisItem.MostRecentAchievementHexColorTint),
+                      RGBA(0, 0, 0, 0),
+                      ColorValue(ThisItem.MostRecentAchievementHexColorTint)
+                    )
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
+            - recCohortRowLine:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(212, 221, 226, 1)
+                  Height: =1
+                  OnSelect: =Select(Parent)
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =Parent.TemplateHeight - 1
+            - lblCohortStudentName:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(3, 108, 146, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  PaddingLeft: =8
+                  Size: =11
+                  Text: =ThisItem.FullName
+                  Underline: =true
+                  Width: =220
+                  X: =20
+                  Y: =0
+            - btnNameLink:
+                Control: Classic/Button@2.2.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  BorderStyle: =BorderStyle.None
+                  Color: =RGBA(0, 0, 0, 0)
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  DisabledFill: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 0, 0, 0)
+                  HoverBorderColor: =RGBA(0, 0, 0, 0)
+                  HoverFill: =RGBA(0, 0, 0, 0)
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  PressedBorderColor: =RGBA(0, 0, 0, 0)
+                  PressedFill: =RGBA(0, 0, 0, 0)
+                  Text: =""
+                  Width: =220
+                  X: =20
+                  Y: =0
+            - lblStudentGrade:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  Size: =11
+                  Text: =ThisItem.Grade
+                  Width: =60
+                  X: =256
+                  Y: =0
+            - lblStudentProgram:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  Size: =11
+                  Text: =ThisItem.ProgramFamily
+                  Width: =140
+                  X: =324
+                  Y: =0
+            - lblStudentSchool:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight - 1
+                  OnSelect: =Select(Parent)
+                  Size: =11
+                  Text: =Coalesce(ThisItem.SchoolAbbreviation, ThisItem.SchoolID)
+                  Width: =100
+                  X: =472
+                  Y: =0
+            - icoStudentDrill:
+                Control: Classic/Icon@2.5.0
+                Properties:
+                  Color: =RGBA(3, 108, 146, 1)
+                  Height: =20
+                  Icon: =Icon.ChevronRight
+                  OnSelect: =Select(Parent)
+                  Width: =20
+                  X: =Parent.TemplateWidth - 32
+                  Y: =Parent.TemplateHeight / 2 - 10
+      - lblEmptyCohort:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Text: ="No students match the current filters."
+            Visible: =gblCohortLoaded And CountRows(galStudents.AllItems) = 0
+            Width: =Parent.Width / 2 - 80
+            X: =40
+            Y: =Parent.Height / 2 - 80
+      - Title2:
+          Control: Label@2.5.1
+          Group: CompositePieChart1
+          Properties:
+            Align: =Align.Center
+            BorderColor: =RGBA(0, 0, 0, 1)
+            Color: =RGBA(24, 43, 52, 1)
+            DisabledColor: =RGBA(161, 159, 157, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Bold
+            Height: =24
+            Size: =14
+            Text: ="Current Achievement Distribution"
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 10
+            X: =Parent.Width / 2 - 30
+            Y: =200
+      - PieChart1:
+          Control: PieChart@2.3.0
+          Group: CompositePieChart1
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            BorderThickness: =2
+            Color: =RGBA(74, 91, 100, 1)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            Font: =Font.Lato
+            Height: =Parent.Height - 540
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            ItemColorSet: =gblAchColors
+            Items: =colPieData
+            Items.Labels: =PercentLabel
+            Items.Series: =Count
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            Size: =12
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 10
+            X: =Parent.Width / 2 - 30
+            Y: =230
+      - Legend1:
+          Control: Legend@2.1.0
+          Group: CompositePieChart1
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            BorderThickness: =2
+            Color: =RGBA(74, 91, 100, 1)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            DisabledColor: =RGBA(161, 159, 157, 1)
+            DisabledFill: =RGBA(225, 223, 221, 1)
+            Font: =Font.Lato
+            Height: =40
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            ItemColorSet: =gblAchColors
+            Items: =colPieData
+            Items.Value: =Category
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            Size: =11
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width / 2 - 100
+            X: =Parent.Width / 2 + 20
+            Y: =Parent.Height - 320
+      - Title3:
+          Control: Label@2.5.1
+          Group: CompositeColumnChart1
+          Properties:
+            Align: =Align.Center
+            BorderColor: =RGBA(0, 0, 0, 1)
+            Color: =RGBA(24, 43, 52, 1)
+            DisabledColor: =RGBA(161, 159, 157, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Bold
+            Height: =24
+            Size: =14
+            Text: ="Achievement by Month (last 6 months)"
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =Parent.Height - 280
+      - ColumnChart1:
+          Control: BarChart@2.4.0
+          Group: CompositeColumnChart1
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            BorderThickness: =2
+            Color: =RGBA(74, 91, 100, 1)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            Font: =Font.Lato
+            Height: =220
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            ItemColorSet: =gblAchColors
+            Items: =colBarData
+            Items.Labels: =Month
+            Items.Series1: =NotYetMeeting
+            Items.Series2: =Approaching
+            Items.Series3: =Meeting
+            Items.Series4: =Exceeding
+            NumberOfSeries: =4
+            XLabelAngle: =0
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            Size: =12
+            Visible: =gblCohortLoaded
+            Width: =Parent.Width - 240
+            X: =40
+            Y: =Parent.Height - 250
+      - Legend2:
+          Control: Legend@2.1.0
+          Group: CompositeColumnChart1
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            BorderThickness: =2
+            Color: =RGBA(74, 91, 100, 1)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            DisabledColor: =RGBA(161, 159, 157, 1)
+            DisabledFill: =RGBA(225, 223, 221, 1)
+            Font: =Font.Lato
+            Height: =220
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            ItemColorSet: =ColumnChart1.ItemColorSet
+            Items: =ColumnChart1.SeriesLabels
+            Items.Value: =Value
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            Size: =11
+            Visible: =gblCohortLoaded
+            Width: =180
+            X: =Parent.Width - 200
+            Y: =Parent.Height - 250

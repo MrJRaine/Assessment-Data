@@ -11,12 +11,15 @@ Run these steps in order at the end of every session. Do not skip steps.
 
 ## Step 1 — Update Project Memory
 
-Update `C:\Users\jeffrey.raine\.claude\projects\c--Git-Repos-Assessment-Data\memory\project_assessment_platform.md` with:
-- What was accomplished this session (decisions made, steps completed, errors resolved)
-- Any new constraints or discoveries that affect future work
-- Current blocking issues or open questions
+Project memory is split in two (since 2026-06-09). Keep each in its lane:
 
-Keep entries factual and forward-useful. Remove stale entries.
+**A. `project_assessment_platform.md` — the DISTILLED decision record (lean, auto-read at session start).** Edit it ONLY when this session produced a *durable* change: a new architecture / data-model / scope decision, a reversal of a prior decision, a change to deployment state, or a new/closed open question. When you do, **replace the prior state in the relevant topic section — don't append.** This file must stay a current-state snapshot, never a log. Do NOT add a dated session-narrative block here.
+
+**B. `project_session_archive.md` — the chronological NARRATIVE log (large, read-on-demand).** Append this session's `## Session YYYY-MM-DD — ...` block here: what was accomplished, decisions made (including ones likely to change later), errors resolved, end-of-session test-data state. This is the running history; verbosity is fine because it is NOT in the auto-read path.
+
+**Rule of thumb: narrative → archive; resolved current state → distilled file.** Most sessions append to the archive every time and touch the distilled file only when a decision actually changed. If you are about to paste a dated session block into the distilled file, stop — that belongs in the archive.
+
+Keep the distilled file factual, lean, and free of superseded state. If it has drifted or regrown, prune it back toward current-state-only (the archive already holds the history).
 
 ---
 

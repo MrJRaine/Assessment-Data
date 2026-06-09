@@ -247,11 +247,19 @@ First visit: global is blank → seeded. Return visit: keeps the user's value. (
 
 ---
 
+### 3i. Porting the Direction B restyle (Claude Design handoff → live source) — three recurring signatures
+
+The Direction B handoff (`powerapps/from-claude-design/handoff/powerapps_yaml/`) is a clean **visual-only** restyle (data bindings / OnVisible / OnSelect / proc calls verified untouched), but it ships three issues on nearly every screen. **Pre-audit each screen for all three BEFORE packing** — `pac canvas pack` succeeds regardless; #1 and #2 misrender silently, #3 errors only at Studio open:
+
+1. **Clipped label text:** multi-line labels (card descriptions, etc.) get a fixed/short `Height` and clip. No `AutoHeight` in this app (§7b) — give an explicit `Height` sized to fit or derived from the container (e.g. card desc `Height: =<card>.Height - 160`). See scrLanding.
+2. **Load ghosting:** only the primary control is gated `Visible: =gbl*Loaded`; the overlay chrome (accent rects, icons, labels, column headers, save buttons) is ungated and renders over the "Loading…" label. Gate ALL non-header content controls on the screen's loaded flag; keep only the header band's back-icon + title always-on.
+3. **`Fill` on `ModernButton` → PA2108** (§9): the handoff brands modern buttons with `Fill`/`HoverFill`/`PressedFill`. Convert branded buttons to `Classic/Button@2.2.0` and drop the `Radius*` props (classic = square corners, matching scrLanding).
+
 ## 4. Control Templates Verified to Work
 
 | Control type | Template ID | Notes |
 |---|---|---|
-| Modern button | `ModernButton@1.0.0` | OnSelect, Text, X/Y/Width/Height |
+| Modern button | `ModernButton@1.0.0` | OnSelect, Text, X/Y/Width/Height. **No `Fill`/`HoverFill`/`PressedFill`** (PA2108 — modern buttons take bg from theme; `Color` and `Radius*` ARE valid). For a custom-colored/branded button use `Classic/Button@2.2.0`. |
 | Classic label | `Label@2.5.1` | All labels in this app. PaddingLeft, VerticalAlign supported |
 | Vertical gallery | `Gallery@2.15.0` + `Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0` | Default children: Image1, Title1, Subtitle1, NextArrow1, Separator1, Rectangle1 (rename to avoid PA2110 — see §5) |
 | Modern ComboBox | `ModernCombobox@1.1.0` | Items + ItemDisplayText required. No DisplayFields |
@@ -593,6 +601,15 @@ Group by both `Grade` and `GradeOrder` (1:1 from the SQL view) so you can sort b
 
 ---
 
+### 7f. Click-to-sort gallery headers
+
+Drive a gallery's `Items` through a sort switch keyed on two globals; make each header (plus a dedicated arrow label) toggle them:
+- **State:** `gblXSortCol` (text) + `gblXSortAsc` (bool), init in `OnVisible`.
+- **Gallery `Items`:** `=With({ ord: If(gblXSortAsc, SortOrder.Ascending, SortOrder.Descending) }, Switch(gblXSortCol, "Grade", SortByColumns(col, "Grade", ord), ..., <default = SortByColumns(col, "LastName", ord, "FirstName", ord)>))`. NB `SortByColumns` takes **string** column names (unlike the §3a identifier functions).
+- **Header `OnSelect`:** `=Set(gblXSortAsc, If(gblXSortCol = "<key>", Not(gblXSortAsc), true)); Set(gblXSortCol, "<key>")`.
+- **Indicator:** a *separate, always-present* arrow label per header (constant width so the title never reflows onto two lines — adding the arrow only when active causes that). Grey `↕` when inactive, blue `↑`/`↓` when active; keep the title label neutral and only recolor the arrow. Left-align the arrow at a hand-tuned offset just past the title (no AutoWidth to chain off). Labels have no hand cursor — open pilot-UAT question whether teachers notice headers are clickable.
+- **Caveat:** a text column sorts by its stored value — `Grade` sorts lexicographically (`1,2,…,P`) unless the view exposes a numeric `GradeOrder`. See scrIPP.
+
 ## 8. Pre-flight Checklist (read before yielding YAML)
 
 Before yielding any block of Power Apps YAML or Power Fx, do this scan:
@@ -617,7 +634,7 @@ Before yielding any block of Power Apps YAML or Power Fx, do this scan:
 |---|---|
 | `PA1001 ... invalid mapping` at line N | Power Fx with `{` or `: ` not wrapped in block scalar `|` (§2) |
 | `PA2110 ... entity with name 'X' already exists` | Control-name collision across screens (§5) |
-| `PA2108 ... Unknown property 'X' for control type 'Y'` | Modern control rejecting a Classic-only property (e.g. `Color` on ModernIcon) — switch to Classic/Icon |
+| `PA2108 ... Unknown property 'X' for control type 'Y'` | Modern control rejecting a Classic-only property: `Color` on ModernIcon → Classic/Icon; **`Fill`/`HoverFill`/`PressedFill` on `ModernButton` → `Classic/Button@2.2.0`** (§3i). NB `pac canvas pack` does NOT catch PA2108 — it only surfaces on Studio open, so "Packing succeeded" ≠ valid. |
 | "invalid arguments" on ShowColumns/RenameColumns/GroupBy | Quoted column-name arg — strip quotes (§3a) |
 | Dropdown renders empty even though Items has rows | Missing `ItemDisplayText: =ThisItem.Value` (§3d) |
 | Filter on `=` against surrogate key returns zero rows | BIGINT precision loss — cast to VARCHAR(20) in the view (§6c) |

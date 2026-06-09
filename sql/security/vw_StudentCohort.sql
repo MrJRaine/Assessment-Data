@@ -125,7 +125,8 @@ SELECT
     lr.ReadingDelta                                          AS MostRecentReadingDelta,
     dal.AchievementLevelCode                                 AS MostRecentAchievementLevelCode,
     dal.AchievementLevelName                                 AS MostRecentAchievementLevelName,
-    dal.HexColor                                             AS MostRecentAchievementHexColor
+    dal.HexColor                                             AS MostRecentAchievementHexColor,
+    dal.HexColorTint                                         AS MostRecentAchievementHexColorTint
 FROM DimStudent s
 JOIN DimProgram p
     ON p.ProgramCode = s.ProgramCode
