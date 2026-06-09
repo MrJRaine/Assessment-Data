@@ -7,8 +7,8 @@ Centralized platform for collecting and analyzing student reading/writing assess
 - ~6000 students (grades Primary–12), ~200 teachers
 - **Compliance**: PIIDPA — all data must remain in a **Canadian region**. Fabric workspace deliberately deployed to **Canada East**; other components (Power Automate, etc.) only need to be in *some* Canadian region (Canada East or Canada Central are both valid).
 - **Status**: Pre-MVP development
-- **MVP (June 2025)**: French Immersion pilot, 5–10 teachers, reading assessments only
-- **Full rollout (September 2025)**: All programs (EN + FR), all schools, ~200 teachers
+- **MVP (June 2026)**: French Immersion pilot, 5–10 teachers, reading assessments only
+- **Full rollout (September 2026)**: All programs (EN + FR), all schools, ~200 teachers
 
 ## Technology Stack
 

@@ -1,0 +1,219 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+#
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+#
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+# ── Direction B restyle ─────────────────────────────────────────────────────
+# Visual only + ADDED progress-bar (recProgressTrack/recProgressFill) driven by the
+# existing EnteredStudentCount / ApplicableStudentCount fields. lblProgress keeps its
+# original ✓/◐/○ text formula and is moved into the aligned right column.
+# OnVisible / Items / OnSelect and all data bindings unchanged.
+# ─────────────────────────────────────────────────────────────────────────────
+Screens:
+  scrGroupSelect:
+    Properties:
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
+      OnVisible: =Set(gblGroupsLoaded, false); Clear(colGroups); Refresh(vw_TeacherGroups); ClearCollect(colGroups, SortByColumns(Filter(vw_TeacherGroups, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID), "Grade", SortOrder.Ascending, "GroupLabel", SortOrder.Ascending)); Set(gblGroupsLoaded, true)
+    Children:
+      - recContentPanelGroups:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
+      - icoBackToWindows:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Height: =32
+            Icon: =Icon.ChevronLeft
+            OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
+            Width: =32
+            X: =16
+            Y: =10
+      - lblGroupTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
+            Height: =32
+            Size: =17
+            Text: =gblSelectedWindow.WindowName
+            Width: =900
+            X: =56
+            Y: =14
+      - lblSubtitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Height: =22
+            Size: =13
+            Text: ="Choose a class"
+            Width: =900
+            X: =24
+            Y: =72
+      - galGroups:
+          Control: Gallery@2.15.0
+          Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
+          Properties:
+            BorderColor: =RGBA(228, 234, 237, 1)
+            Height: =Parent.Height - Self.Y - 24
+            Items: =colGroups
+            OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
+            TemplateSize: =76
+            Visible: =gblGroupsLoaded
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =104
+          Children:
+            - lblGroupLabel:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(24, 43, 52, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.Lato
+                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Bold, FontWeight.Semibold)
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =16
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =14
+                  Text: =ThisItem.GroupLabel
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =320
+                  X: =16
+                  Y: =(Parent.TemplateHeight - (Self.Height + lblGroupMeta.Height)) / 2
+            - lblGroupMeta:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(110, 126, 134, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.Lato
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =16
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =12
+                  Text: =Switch(ThisItem.Grade, "P", "Primary", "PP", "Pre-Primary", "RG", "Returning Graduate", "Grade " & ThisItem.Grade) & " · " & ThisItem.ApplicableStudentCount & " applicable student" & If(ThisItem.ApplicableStudentCount = 1, "", "s")
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =lblGroupLabel.Width
+                  X: =lblGroupLabel.X
+                  Y: =lblGroupLabel.Y + lblGroupLabel.Height
+            # progress moved into an aligned column (X:360) — text keeps original formula,
+            # bar is added off the existing counts.
+            - lblProgress:
+                Control: Label@2.5.1
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(110, 126, 134, 1)
+                  DisabledColor: =RGBA(161, 159, 157, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Self.Size * 1.8
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =0
+                  PaddingLeft: =0
+                  PaddingRight: =0
+                  PaddingTop: =0
+                  Size: =12
+                  Text: =If(ThisItem.EnteredStudentCount = ThisItem.ApplicableStudentCount, "✓ ", If(ThisItem.EnteredStudentCount = 0, "○ ", "◐ ")) & ThisItem.EnteredStudentCount & " of " & ThisItem.ApplicableStudentCount & " entered"
+                  VerticalAlign: =VerticalAlign.Top
+                  Width: =200
+                  X: =360
+                  Y: =lblGroupLabel.Y
+            - recProgressTrack:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(237, 241, 244, 1)
+                  Height: =6
+                  OnSelect: =Select(Parent)
+                  Width: =180
+                  X: =360
+                  Y: =lblProgress.Y + lblProgress.Height + 2
+            - recProgressFill:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =If(ThisItem.EnteredStudentCount = ThisItem.ApplicableStudentCount, RGBA(46, 125, 91, 1), RGBA(0, 146, 201, 1))
+                  Height: =6
+                  OnSelect: =Select(Parent)
+                  Width: =If(ThisItem.ApplicableStudentCount = 0, 0, 180 * ThisItem.EnteredStudentCount / ThisItem.ApplicableStudentCount)
+                  X: =360
+                  Y: =recProgressTrack.Y
+            - NextArrowGroup:
+                Control: Classic/Icon@2.5.0
+                Properties:
+                  AccessibleLabel: =Self.Tooltip
+                  BorderColor: =RGBA(0, 0, 0, 1)
+                  Color: =RGBA(3, 108, 146, 1)
+                  DisabledBorderColor: =RGBA(56, 56, 56, 1)
+                  DisabledColor: =RGBA(119, 119, 119, 1)
+                  Height: =44
+                  Icon: =Icon.ChevronRight
+                  OnSelect: =Select(Parent)
+                  PaddingBottom: =14
+                  PaddingLeft: =14
+                  PaddingRight: =14
+                  PaddingTop: =14
+                  Tooltip: ="Open this group"
+                  Width: =44
+                  X: =Parent.TemplateWidth - Self.Width - 14
+                  Y: =(Parent.TemplateHeight / 2) - (Self.Height / 2)
+            - SeparatorGroup:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(212, 221, 226, 1)
+                  Height: =1
+                  OnSelect: =Select(Parent)
+                  Width: =Parent.TemplateWidth
+                  Y: =Parent.TemplateHeight - Self.Height
+            - SelectionBarGroup:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 146, 201, 1)
+                  Height: =Parent.TemplateHeight - SeparatorGroup.Height
+                  OnSelect: =Select(Parent)
+                  Visible: =ThisItem.IsSelected
+                  Width: =4
+      - lblLoading:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Size: =14
+            Text: ="Loading classes…"
+            Visible: =Not(gblGroupsLoaded)
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - 80) / 2
+      - lblEmptyState:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Height: =80
+            Size: =14
+            Text: ="No applicable groups for " & gblSelectedWindow.WindowName & ". This can happen if your applicable students don't fall under any group (homeroom for PP-9, section for 10-12)."
+            Visible: =gblGroupsLoaded And CountRows(colGroups) = 0
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - 80) / 2

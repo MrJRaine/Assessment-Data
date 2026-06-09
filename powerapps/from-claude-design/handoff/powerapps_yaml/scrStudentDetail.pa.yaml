@@ -1,0 +1,423 @@
+# ************************************************************************************************
+# Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
+# Use the maker portal to create and edit your Power Apps.
+#
+# The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
+#
+# For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
+# ************************************************************************************************
+# ── Direction B restyle ─────────────────────────────────────────────────────
+# Visual only. ADDED: recDetailMetaStrip (meta backdrop), recNavPrev/recNavNext
+# (white circles behind the nav icons → prominent paging), lblHistTitle.
+# CHANGED PER YOUR CALL: recTimelineRowBg.Fill now reads the new tint column
+# (AchievementHexColorTint) instead of ColorFade(...,0.4).
+# Untouched: OnVisible, nav OnSelect, Items, Visible/Text bindings, line-chart
+# YAxisMin/Max (0/31), and the equal split between history & trend.
+# (Circle@2.3.0 — swap for your environment's circle shape if the name differs.)
+# ─────────────────────────────────────────────────────────────────────────────
+Screens:
+  scrStudentDetail:
+    Properties:
+      Fill: =RGBA(0, 146, 201, 1)
+      LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
+      OnVisible: |
+        =Set(gblDetailLoaded, false);
+        Refresh(vw_StudentAssessmentHistory);
+        ClearCollect(colStudentHistory, vw_StudentAssessmentHistory);
+        ClearCollect(colDetailFiltered,
+          Filter(colStudentCohort,
+            GradeOrder >= gblFltGradeMinOrd,
+            GradeOrder <= gblFltGradeMaxOrd,
+            (gblFltGender = "All" Or Gender = gblFltGender),
+            (gblFltAfrican = "All" Or (gblFltAfrican = "Yes" And SelfIDAfrican = true) Or (gblFltAfrican = "No" And SelfIDAfrican = false)),
+            (gblFltIndigenous = "All" Or (gblFltIndigenous = "Yes" And SelfIDIndigenous = true) Or (gblFltIndigenous = "No" And SelfIDIndigenous = false))
+          )
+        );
+        ClearCollect(colDetailNav,
+          ForAll(
+            Sequence(CountRows(colDetailFiltered)) As seq,
+            Patch(Last(FirstN(colDetailFiltered, seq.Value)), {RowIndex: seq.Value})
+          )
+        );
+        Set(gblDetailCount, CountRows(colDetailNav));
+        Set(gblDetailIndex, Coalesce(LookUp(colDetailNav, StudentKey = gblSelectedStudent.StudentKey, RowIndex), 1));
+        Set(gblDetailLoaded, true)
+    Children:
+      - recDetailContentPanel:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
+      - icoDetailBack:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Height: =32
+            Icon: =Icon.ChevronLeft
+            OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
+            Width: =32
+            X: =16
+            Y: =10
+      - lblDetailTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.'Lato Black'
+            Height: =32
+            Size: =17
+            Text: =Coalesce(gblSelectedStudent.FullName, "Student Detail")
+            Width: =Parent.Width - 360
+            X: =56
+            Y: =14
+      - recNavPrev:
+          Control: Circle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =32
+            OnSelect: =Select(icoDetailPrev)
+            Width: =32
+            X: =Parent.Width - 208
+            Y: =10
+      - icoDetailPrev:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(3, 108, 146, 1)
+            DisabledColor: =RGBA(176, 196, 205, 1)
+            DisplayMode: =If(gblDetailIndex <= 1, DisplayMode.Disabled, DisplayMode.Edit)
+            Height: =32
+            Icon: =Icon.ChevronLeft
+            OnSelect: |
+              =If(gblDetailIndex > 1,
+                Set(gblDetailIndex, gblDetailIndex - 1);
+                Set(gblSelectedStudent, LookUp(colDetailNav, RowIndex = gblDetailIndex))
+              )
+            PaddingBottom: =7
+            PaddingLeft: =7
+            PaddingRight: =7
+            PaddingTop: =7
+            Width: =32
+            X: =Parent.Width - 208
+            Y: =10
+      - lblDetailCounter:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(255, 255, 255, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =32
+            Size: =12
+            Text: ="Student " & gblDetailIndex & " of " & gblDetailCount
+            VerticalAlign: =VerticalAlign.Middle
+            Width: =112
+            X: =Parent.Width - 168
+            Y: =10
+      - recNavNext:
+          Control: Circle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =32
+            OnSelect: =Select(icoDetailNext)
+            Width: =32
+            X: =Parent.Width - 48
+            Y: =10
+      - icoDetailNext:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            Color: =RGBA(3, 108, 146, 1)
+            DisabledColor: =RGBA(176, 196, 205, 1)
+            DisplayMode: =If(gblDetailIndex >= gblDetailCount, DisplayMode.Disabled, DisplayMode.Edit)
+            Height: =32
+            Icon: =Icon.ChevronRight
+            OnSelect: |
+              =If(gblDetailIndex < gblDetailCount,
+                Set(gblDetailIndex, gblDetailIndex + 1);
+                Set(gblSelectedStudent, LookUp(colDetailNav, RowIndex = gblDetailIndex))
+              )
+            PaddingBottom: =7
+            PaddingLeft: =7
+            PaddingRight: =7
+            PaddingTop: =7
+            Width: =32
+            X: =Parent.Width - 48
+            Y: =10
+      - recDetailMetaStrip:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(244, 247, 249, 1)
+            Height: =40
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =64
+      - lblDetailMeta:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(24, 43, 52, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =40
+            Size: =13
+            Text: |
+              ="Grade " & gblSelectedStudent.Grade & "   ·   " & gblSelectedStudent.ProgramFamily & "   ·   " & Coalesce(gblSelectedStudent.SchoolAbbreviation, gblSelectedStudent.SchoolID) & If(!IsBlank(gblSelectedStudent.Homeroom), "   ·   Homeroom " & gblSelectedStudent.Homeroom, "") & "   ·   IPP (Reading): " & gblSelectedStudent.IPPStatus_Reading
+            VerticalAlign: =VerticalAlign.Middle
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =64
+      - lblHistTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(24, 43, 52, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Bold
+            Height: =24
+            Size: =14
+            Text: ="Assessment history"
+            Visible: =gblDetailLoaded
+            Width: =400
+            X: =24
+            Y: =118
+      - lblHdrWindow:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Assessment Window"
+            Visible: =gblDetailLoaded
+            Width: =300
+            X: =56
+            Y: =168
+      - lblHdrDate:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Date"
+            Visible: =gblDetailLoaded
+            Width: =120
+            X: =372
+            Y: =168
+      - lblHdrLevel:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Level"
+            Visible: =gblDetailLoaded
+            Width: =70
+            X: =500
+            Y: =168
+      - lblHdrDiff:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Difference"
+            Visible: =gblDetailLoaded
+            Width: =90
+            X: =576
+            Y: =168
+      - lblHdrAchievement:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =11
+            Text: ="Achievement"
+            Visible: =gblDetailLoaded
+            Width: =240
+            X: =672
+            Y: =168
+      - galDetailTimeline:
+          Control: Gallery@2.15.0
+          Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
+          Properties:
+            Height: =(Parent.Height - 252) / 2
+            Items: |
+              =SortByColumns(
+                Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey),
+                "AssessmentDate", SortOrder.Descending
+              )
+            ShowNavigation: =false
+            TemplatePadding: =0
+            TemplateSize: =44
+            Visible: =gblDetailLoaded
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =192
+          Children:
+            - recTimelineRowBg:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: |
+                    =If(
+                      IsBlank(ThisItem.AchievementHexColorTint),
+                      RGBA(0, 0, 0, 0),
+                      ColorValue(ThisItem.AchievementHexColorTint)
+                    )
+                  Height: =Parent.TemplateHeight - 1
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
+            - recTimelineRowLine:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(212, 221, 226, 1)
+                  Height: =1
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =Parent.TemplateHeight - 1
+            - lblTLWindow:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight
+                  PaddingLeft: =0
+                  Size: =12
+                  Text: =ThisItem.WindowName & " · " & ThisItem.WindowSchoolYear
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =300
+                  X: =16
+                  Y: =0
+            - lblTLDate:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(74, 91, 100, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight
+                  Size: =12
+                  Text: =Text(ThisItem.AssessmentDate, "mmm d, yyyy")
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =120
+                  X: =332
+                  Y: =0
+            - lblTLLevel:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
+                  Height: =Parent.TemplateHeight
+                  Size: =12
+                  Text: =ThisItem.LevelCode
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =70
+                  X: =460
+                  Y: =0
+            - lblTLDiff:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(74, 91, 100, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight
+                  Size: =12
+                  Text: |
+                    =If(IsBlank(ThisItem.ReadingDelta), "—", If(ThisItem.ReadingDelta > 0, "+", "") & ThisItem.ReadingDelta)
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =90
+                  X: =536
+                  Y: =0
+            - lblTLAchievement:
+                Control: Label@2.5.1
+                Properties:
+                  Color: =RGBA(24, 43, 52, 1)
+                  Font: =Font.Lato
+                  Height: =Parent.TemplateHeight
+                  Size: =12
+                  Text: =Coalesce(ThisItem.AchievementLevelName, "—")
+                  VerticalAlign: =VerticalAlign.Middle
+                  Width: =Parent.TemplateWidth - 640
+                  X: =632
+                  Y: =0
+      - lblTrendTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(24, 43, 52, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Bold
+            Height: =24
+            Size: =14
+            Text: ="Reading level over time"
+            Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) > 0
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =192 + (Parent.Height - 252) / 2 + 6
+      - lineDetailTrend:
+          Control: LineChart@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            Color: =RGBA(74, 91, 100, 1)
+            Font: =Font.Lato
+            Height: =(Parent.Height - 252) / 2
+            ItemColorSet: =[RGBA(0, 146, 201, 1)]
+            Items: |
+              =AddColumns(
+                SortByColumns(
+                  Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey),
+                  "AssessmentDate", SortOrder.Ascending
+                ),
+                AxisLabel, Text(AssessmentDate, "mmm yyyy")
+              )
+            Items.Labels: =AxisLabel
+            Items.Series1: =LevelOrder
+            NumberOfSeries: =1
+            Size: =11
+            Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) > 0
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =192 + (Parent.Height - 252) / 2 + 32
+            YAxisMax: =31
+            YAxisMin: =0
+      - lblDetailEmpty:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Height: =40
+            Size: =13
+            Text: ="No reading assessments recorded for this student yet."
+            VerticalAlign: =VerticalAlign.Middle
+            Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) = 0
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =Parent.Height / 2
+      - lblDetailLoading:
+          Control: Label@2.5.1
+          Properties:
+            Align: =Align.Center
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            Height: =40
+            Size: =14
+            Text: ="Loading student history…"
+            VerticalAlign: =VerticalAlign.Middle
+            Visible: =Not(gblDetailLoaded)
+            Width: =Parent.Width - 80
+            X: =40
+            Y: =Parent.Height / 2

@@ -85,7 +85,8 @@ SELECT
     far.ReadingDelta,
     dal.AchievementLevelCode,
     dal.AchievementLevelName,
-    dal.HexColor                                             AS AchievementHexColor
+    dal.HexColor                                             AS AchievementHexColor,
+    dal.HexColorTint                                         AS AchievementHexColorTint
 FROM FactAssessmentReading far
 JOIN DimStudent s
     ON  s.StudentKey = far.StudentKey

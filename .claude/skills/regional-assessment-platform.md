@@ -21,8 +21,8 @@ description: Technical architecture and implementation guide for a regional stud
 - 10-year data retention
 
 **Timeline**:
-- **MVP by June 2025**: French Immersion pilot with small teacher group
-- **Full rollout September 2025**: All programs (English + French)
+- **MVP by June 2026**: French Immersion pilot with small teacher group
+- **Full rollout September 2026**: All programs (English + French)
 
 **Compliance**: 
 - Canadian data residency required (PIIDPA)
@@ -196,7 +196,7 @@ CREATE TABLE DimStudent (
 
 **SCD policy: every business attribute is Type 2.** Any change creates a new versioned row. The only fields exempt from versioning are the lifecycle/audit columns: `StudentKey`, `StudentNumber`, `EffectiveStartDate`, `EffectiveEndDate`, `IsCurrent`, `SourceSystemID`, `LastUpdated`.
 
-**Rationale:** reports often cite point-in-time values (e.g. "X students with IPPs in Q3 2025"). Without Type 2 on these attributes, a later re-run would produce different numbers when names, homerooms, IPP statuses, etc. change — sending stakeholders chasing phantom discrepancies. Treating every business field as Type 2 makes any historical query reproducible.
+**Rationale:** reports often cite point-in-time values (e.g. "X students with IPPs in Q3 2026"). Without Type 2 on these attributes, a later re-run would produce different numbers when names, homerooms, IPP statuses, etc. change — sending stakeholders chasing phantom discrepancies. Treating every business field as Type 2 makes any historical query reproducible.
 
 **Type 2 trigger fields:**
 - `Grade` - Student promoted
@@ -338,7 +338,7 @@ CREATE TABLE DimSchool (
 ```sql
 CREATE TABLE DimAssessmentWindow (
     AssessmentWindowID INT PRIMARY KEY,
-    WindowName NVARCHAR(100),             -- e.g., "Fall 2025 Reading - Primary"
+    WindowName NVARCHAR(100),             -- e.g., "Fall 2026 Reading - Primary"
     AssessmentType NVARCHAR(20),          -- 'Reading' or 'Writing'
     SchoolYear NVARCHAR(9),               -- '2025-2026'
     StartDate DATE,
@@ -366,11 +366,11 @@ CREATE TABLE DimAssessmentWindow (
 ```sql
 INSERT INTO DimAssessmentWindow VALUES (
     1,
-    'June 2025 Reading - French Immersion Pilot',
+    'June 2026 Reading - French Immersion Pilot',
     'Reading',
-    '2024-2025',
-    '2025-06-01',
-    '2025-06-30',
+    '2025-2026',
+    '2026-06-01',
+    '2026-06-30',
     'All',
     'P',
     '12',
@@ -825,7 +825,7 @@ WHERE LOWER(fst.TeacherEmail) = LOWER(CURRENT_USER)
 
 ---
 
-## MVP Implementation Plan (June 2025)
+## MVP Implementation Plan (June 2026)
 
 ### Scope Reduction for Pilot
 

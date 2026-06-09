@@ -1,0 +1,391 @@
+/* ============================================================
+   Regional Student Assessment Platform — concept design system
+   Power Apps canvas primitives only: headers, labels, buttons,
+   galleries (tables), comboboxes, icons, rectangles/cards,
+   modals, native pie/bar/line charts.
+   Two directions share ALL tokens (palette, type, achievement
+   scale); they differ only in chrome, density & breathing room.
+   ============================================================ */
+
+:root {
+  /* Brand */
+  --brand:        #0092C9;   /* primary cyan, field + actions */
+  --brand-deep:   #007AA8;   /* pressed / hover on cyan */
+  --brand-ink:    #036C92;   /* cyan that passes AA as text on white */
+  --brand-tint:   #E6F4FA;   /* soft cyan wash */
+  --brand-tint-2: #D2ECF6;
+
+  /* Cool neutrals */
+  --ink:        #182B34;     /* primary text  ~14:1 on white */
+  --ink-2:      #4A5B64;     /* secondary text ~7:1 */
+  --ink-3:      #6E7E86;     /* muted / captions ~4.7:1 */
+  --line:       #E4EAED;     /* hairline divider */
+  --line-2:     #EEF2F4;
+  --row-line:   #D4DDE2;     /* stronger divider between gallery rows */
+  --surface:    #FFFFFF;
+  --surface-2:  #F4F7F9;     /* subtle section / toolbar fill */
+  --surface-3:  #EDF1F4;
+
+  /* Achievement semantic scale (Not Yet → Approaching → Meeting → Exceeding) */
+  --ach1:       #D1495B;  --ach1-tint:#FCEDEF;  --ach1-ink:#B23347;
+  --ach2:       #E8A33D;  --ach2-tint:#FDF4E6;  --ach2-ink:#946310;
+  --ach3:       #8FB339;  --ach3-tint:#EEF4D6;  --ach3-ink:#5A7321;
+  --ach4:       #2E7D5B;  --ach4-tint:#CCE8DB;  --ach4-ink:#226A4A;
+
+  /* status */
+  --ok:    #2E7D5B;
+  --warn:  #B23347;
+  --pend:  #036C92;
+
+  /* type */
+  --font: 'Lato', -apple-system, 'Segoe UI', system-ui, sans-serif;
+
+  /* radii / shadow (overridden per direction) */
+  --r-card: 16px;
+  --r-ctrl: 9px;
+  --shadow: 0 1px 2px rgba(16,48,64,.06), 0 8px 28px rgba(16,48,64,.10);
+
+  /* density (overridden per direction) */
+  --row-h: 44px;
+  --pad:   28px;
+  --topbar-h: 64px;
+}
+
+/* ---- Direction A · Quiet Canvas : identity-forward, airy ---- */
+[data-dir="A"] {
+  --r-card: 16px;  --r-ctrl: 9px;
+  --row-h: 44px;   --pad: 28px;  --topbar-h: 66px;
+  --shadow: 0 2px 4px rgba(16,48,64,.06), 0 14px 40px rgba(16,48,64,.16);
+}
+
+/* ---- Direction B · Edge-to-Edge : max data area, compact ---- */
+[data-dir="B"] {
+  --r-card: 8px;   --r-ctrl: 6px;
+  --row-h: 34px;   --pad: 18px;  --topbar-h: 50px;
+  --shadow: none;
+}
+
+/* ============================================================
+   App shell
+   ============================================================ */
+.pa-app {
+  width: 100%; height: 100%;
+  background: var(--brand);
+  font-family: var(--font);
+  color: var(--ink);
+  display: flex; flex-direction: column;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+.pa-app *, .pa-app *::before, .pa-app *::after { box-sizing: border-box; }
+
+/* top bar : A transparent over cyan field · B slim cyan band */
+.pa-topbar {
+  flex: 0 0 auto; height: var(--topbar-h);
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 22px; color: #fff;
+}
+[data-dir="B"] .pa-topbar { padding: 0 16px; }
+.pa-back {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; flex: 0 0 auto; cursor: pointer;
+  transition: background .12s;
+}
+.pa-back:hover { background: rgba(255,255,255,.16); }
+.pa-navbtn { width: 32px; height: 32px; border-radius: 50%; background: #fff;
+  color: var(--brand-ink); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex: 0 0 auto; box-shadow: 0 1px 3px rgba(8,40,55,.25);
+  transition: background .12s, transform .12s; }
+.pa-navbtn:hover { background: var(--brand-tint); transform: translateY(-1px); }
+.pa-title {
+  font-weight: 800; font-size: 19px; letter-spacing: -.2px;
+  color: #fff; line-height: 1.1; white-space: nowrap;
+}
+[data-dir="B"] .pa-title { font-size: 17px; }
+.pa-title .pa-title-sub { font-weight: 400; opacity: .82; }
+.pa-topbar-spacer { flex: 1 1 auto; }
+
+/* main white surface : A inset rounded card · B flush full-bleed */
+.pa-surface {
+  flex: 1 1 auto; background: var(--surface);
+  overflow: hidden; position: relative;
+  display: flex; flex-direction: column;
+}
+[data-dir="A"] .pa-surface {
+  margin: 0 22px 22px; border-radius: var(--r-card);
+  box-shadow: var(--shadow);
+}
+[data-dir="B"] .pa-surface { margin: 0; border-radius: 0; }
+
+.pa-pad { padding: var(--pad); display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+
+/* ============================================================
+   Typography helpers
+   ============================================================ */
+.t-screen { font-size: 19px; font-weight: 800; letter-spacing: -.2px; color: var(--ink); }
+.t-section{ font-size: 14px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
+.t-row    { font-size: 13px; font-weight: 400; color: var(--ink); }
+.t-strong { font-size: 13px; font-weight: 700; color: var(--ink); }
+.t-cap    { font-size: 10.5px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.t-hint   { font-size: 12px; font-weight: 400; color: var(--ink-3); font-style: italic; }
+.t-num    { font-variant-numeric: tabular-nums; }
+.mut { color: var(--ink-3); } .mut2 { color: var(--ink-2); }
+
+/* ============================================================
+   Buttons (Power Apps Button / ModernButton)
+   ============================================================ */
+.pa-btn {
+  font-family: var(--font); font-size: 13px; font-weight: 700;
+  height: 40px; padding: 0 18px; border: none; border-radius: var(--r-ctrl);
+  background: var(--brand); color: #fff; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: background .12s;
+}
+.pa-btn:hover { background: var(--brand-deep); }
+.pa-btn--ghost {
+  background: #fff; color: var(--brand-ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.pa-btn--ghost:hover { background: var(--surface-2); }
+.pa-btn--danger { background: #fff; color: var(--ach1-ink); box-shadow: inset 0 0 0 1px #EBD3D7; }
+.pa-btn--danger:hover { background: var(--ach1-tint); }
+.pa-btn--invert { background: #fff; color: var(--brand-ink); box-shadow: 0 1px 3px rgba(8,40,55,.20); }
+.pa-btn--invert:hover { background: var(--brand-tint); }
+.pa-btn[disabled], .pa-btn.is-disabled {
+  background: var(--surface-3); color: var(--ink-3);
+  cursor: default; pointer-events: none;
+}
+.pa-btn--sm { height: 32px; padding: 0 12px; font-size: 12px; }
+
+/* ============================================================
+   Combobox (Power Apps ModernCombobox)
+   ============================================================ */
+.pa-field { display: flex; flex-direction: column; gap: 5px; }
+.pa-combo {
+  height: 38px; min-width: 120px; background: #fff;
+  border-radius: var(--r-ctrl); box-shadow: inset 0 0 0 1px var(--line);
+  display: flex; align-items: center; padding: 0 10px 0 12px;
+  font-size: 13px; color: var(--ink); gap: 8px; cursor: pointer;
+  transition: box-shadow .12s;
+}
+.pa-combo:hover { box-shadow: inset 0 0 0 1px #C7D3D9; }
+.pa-combo.is-focus { box-shadow: inset 0 0 0 2px var(--brand); }
+.pa-combo .v { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pa-combo .ph { color: var(--ink-3); }
+.pa-combo .chev { color: var(--ink-3); flex: 0 0 auto; }
+
+/* ============================================================
+   Pills / chips / status dots
+   ============================================================ */
+.pa-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.pa-pill .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.ach1 { background: var(--ach1-tint); color: var(--ach1-ink); }
+.ach1 .dot { background: var(--ach1); }
+.ach2 { background: var(--ach2-tint); color: var(--ach2-ink); }
+.ach2 .dot { background: var(--ach2); }
+.ach3 { background: var(--ach3-tint); color: var(--ach3-ink); }
+.ach3 .dot { background: var(--ach3); }
+.ach4 { background: var(--ach4-tint); color: var(--ach4-ink); }
+.ach4 .dot { background: var(--ach4); }
+.pill-ipp  { background: var(--brand-tint); color: var(--brand-ink); }
+.pill-warn { background: var(--ach1-tint); color: var(--ach1-ink); }
+.pill-lock { background: var(--surface-3); color: var(--ink-2); }
+
+.delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ach-text { color: var(--ink); font-weight: 600; font-size: 12.5px; }
+.delta--pos { color: var(--ach4-ink); }
+.delta--neg { color: var(--ach1-ink); }
+.delta--zero{ color: var(--ink-3); }
+
+/* ============================================================
+   Table / gallery
+   ============================================================ */
+.pa-table { display: flex; flex-direction: column; min-height: 0; }
+.pa-thead {
+  display: flex; align-items: center; gap: 0;
+  padding: 0 12px 8px; border-bottom: 1px solid var(--line);
+}
+.pa-thead .pa-th { font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3); }
+.pa-tbody { display: flex; flex-direction: column; overflow: hidden; }
+.pa-row {
+  display: flex; align-items: center; gap: 0;
+  height: var(--row-h); padding: 0 12px; position: relative;
+  border-bottom: 1px solid var(--row-line);
+  font-size: 13px; color: var(--ink);
+}
+.pa-row:hover { background: var(--surface-2) !important; }
+.pa-cell { display: flex; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; }
+.pa-cell.r { justify-content: flex-end; text-align: right; }
+.pa-link { color: var(--brand-ink); font-weight: 700; cursor: pointer; white-space: nowrap; }
+.pa-link:hover { text-decoration: underline; }
+
+/* tiny inline combobox used inside roster rows */
+.pa-combo--inline { height: 30px; min-width: 0; font-size: 12.5px; padding: 0 8px 0 10px; }
+
+.pa-icobtn { color: var(--ink-3); cursor: pointer; display: inline-flex;
+  width: 26px; height: 26px; align-items: center; justify-content: center; border-radius: 6px; }
+.pa-icobtn:hover { background: var(--surface-3); }
+.pa-icobtn--del:hover { background: var(--ach1-tint); color: var(--ach1-ink); }
+.pa-icobtn--ok { color: var(--ok); }
+
+/* ============================================================
+   Filter / toolbar bar
+   ============================================================ */
+.pa-toolbar {
+  display: flex; align-items: flex-end; gap: 12px 14px; flex-wrap: wrap;
+}
+.pa-toolbar .filters { flex: 1 1 520px; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; }
+.pa-toolbar .pa-field { flex: 0 0 auto; }
+.pa-toolbar .t-cap { min-height: 28px; display: flex; align-items: center; line-height: 1.2; }
+.pa-toolbar .pa-combo { width: auto; min-width: 64px; align-self: stretch; }
+.pa-toolbar > .pa-btn { flex: 0 0 auto; }
+[data-dir="B"] .pa-toolbar {
+  background: var(--surface-2); margin: 0 calc(-1 * var(--pad)); padding: 12px var(--pad);
+  border-bottom: 1px solid var(--line); gap: 12px 14px;
+}
+
+/* ============================================================
+   Cards / panels inside surface
+   ============================================================ */
+.pa-card {
+  background: #fff; border-radius: var(--r-ctrl);
+  box-shadow: inset 0 0 0 1px var(--line);
+  padding: 16px; display: flex; flex-direction: column;
+}
+[data-dir="B"] .pa-card { background: var(--surface-2); box-shadow: none; }
+
+/* ============================================================
+   Charts (representing native pie / bar / line controls)
+   ============================================================ */
+.chart-title { font-size: 12.5px; font-weight: 800; color: var(--ink); margin-bottom: 2px; }
+
+/* donut / pie */
+.pa-donut { border-radius: 50%; position: relative; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; aspect-ratio: 1; max-height: 250px; }
+.donut-row { flex: 1 1 auto; display: flex; align-items: center; justify-content: center;
+  gap: 30px; min-height: 0; padding: 8px 0; }
+.pa-donut .hole {
+  position: absolute; inset: 30%; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 1px rgba(16,48,64,.05);
+}
+.pa-donut .ctr { position: relative; z-index: 1; text-align: center; line-height: 1.04; }
+.pa-donut .ctr .big { font-size: 30px; font-weight: 800; color: var(--ink); }
+.pa-donut .ctr .sub { font-size: 9.5px; font-weight: 800; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: .06em; }
+
+.legend { display: flex; flex-direction: column; justify-content: center; gap: 13px; }
+.legend .li { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--ink); }
+.legend .pct { width: 40px; text-align: right; font-weight: 800; color: var(--ink);
+  font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px; flex: 0 0 auto; }
+.legend .nm { color: var(--ink-2); }
+.legend .cnt { color: var(--ink-3); font-size: 11.5px; font-weight: 700;
+  font-variant-numeric: tabular-nums; margin-left: -3px; }
+
+/* clustered bar with y-axis scale + gridlines */
+.barchart { display: flex; gap: 10px; }
+.barchart .yaxis { width: 22px; height: 150px; display: flex; flex-direction: column;
+  justify-content: space-between; align-items: flex-end; font-size: 10px; font-weight: 700;
+  color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.barchart .plotwrap { flex: 1 1 auto; min-width: 0; }
+.barchart .plot { position: relative; height: 150px; border-bottom: 1.5px solid var(--line); }
+.barchart .gl { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--line-2); }
+.barchart .bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 18px; }
+.barchart .group { flex: 1 1 0; height: 100%; display: flex; align-items: flex-end;
+  justify-content: center; gap: 3px; }
+.barchart .bar { width: 14px; border-radius: 3px 3px 0 0; }
+.barchart .xrow { display: flex; gap: 18px; margin-top: 6px; }
+.barchart .xrow span { flex: 1 1 0; text-align: center; font-size: 10.5px; font-weight: 700;
+  color: var(--ink-3); }
+
+/* loading / empty */
+.pa-empty, .pa-loading {
+  flex: 1 1 auto; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px;
+}
+.pa-empty .glyph, .pa-loading .glyph {
+  width: 44px; height: 44px; border-radius: 12px; background: var(--brand-tint);
+  display: flex; align-items: center; justify-content: center; color: var(--brand-ink);
+}
+.pa-empty .msg { font-size: 13px; color: var(--ink-3); max-width: 360px; line-height: 1.5; }
+.spinner {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 3px solid var(--brand-tint-2); border-top-color: var(--brand);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   Landing hub cards
+   ============================================================ */
+.hub { display: flex; gap: 22px; flex: 1 1 auto; align-items: flex-start; }
+.hub-card {
+  flex: 1 1 0; background: #fff; border-radius: var(--r-card);
+  padding: 30px; display: flex; flex-direction: column; gap: 14px;
+  cursor: pointer; transition: transform .14s, box-shadow .14s;
+  position: relative; overflow: hidden;
+}
+[data-dir="A"] .hub-card { box-shadow: var(--shadow); }
+[data-dir="B"] .hub-card { box-shadow: inset 0 0 0 1px var(--line); }
+.hub-card:hover { transform: translateY(-3px); }
+.hub-card .ic {
+  width: 52px; height: 52px; border-radius: 14px; background: var(--brand-tint);
+  color: var(--brand-ink); display: flex; align-items: center; justify-content: center;
+}
+.hub-card h3 { font-size: 20px; font-weight: 800; color: var(--ink); margin: 6px 0 0; }
+.hub-card p { font-size: 13px; color: var(--ink-3); line-height: 1.5; margin: 0; }
+.hub-card .go { margin-top: 20px; color: var(--brand-ink); font-weight: 800; font-size: 12.5px;
+  display: flex; align-items: center; gap: 6px; }
+.hub-card .edge { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--brand); }
+
+/* foundations sheet */
+.fs { display: flex; flex-direction: column; gap: 22px; }
+.fs-grid { display: grid; gap: 10px; }
+.sw { border-radius: 10px; height: 64px; display: flex; align-items: flex-end; padding: 8px;
+  color: #fff; font-size: 11px; font-weight: 700; }
+.sw.lt { color: var(--ink); }
+.sw-meta { font-size: 10.5px; color: var(--ink-3); margin-top: 4px; font-weight: 600; }
+.modal-mini {
+  border-radius: var(--r-card); background: #fff; box-shadow: var(--shadow);
+  border: 1px solid var(--line); padding: 18px; width: 260px;
+}
+[data-dir="B"] .modal-mini { box-shadow: 0 12px 40px rgba(16,48,64,.22); }
+
+/* ============================================================
+   Selectable list (Window / Group select)
+   ============================================================ */
+.pa-listgroup { border-radius: var(--r-ctrl); overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--line); }
+.pa-listrow { display: flex; align-items: center; padding: 14px 16px;
+  border-bottom: 1px solid var(--row-line); cursor: pointer; transition: background .12s; }
+.pa-listrow:last-child { border-bottom: none; }
+.pa-listrow:hover { background: var(--surface-2); }
+.pa-prog { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.pa-prog span { display: block; height: 100%; border-radius: 3px; }
+
+/* ============================================================
+   Student detail — meta strip + line chart
+   ============================================================ */
+.detail-meta { display: flex; flex-wrap: wrap; gap: 7px 20px; padding: 14px 16px;
+  background: var(--surface-2); border-radius: var(--r-ctrl); margin-bottom: 16px; }
+.detail-meta .m { font-size: 13px; color: var(--ink-2); }
+.detail-meta .m b { color: var(--ink); font-weight: 700; }
+.detail-meta .sep { color: var(--line); }
+
+.linechart { width: 100%; display: block; }
+.linechart .grid { stroke: var(--line-2); stroke-width: 1; }
+.linechart .axis { stroke: var(--line); stroke-width: 1.5; }
+.linechart .ln { fill: none; stroke: var(--brand); stroke-width: 2.5;
+  stroke-linejoin: round; stroke-linecap: round; }
+.linechart .dot { fill: #fff; stroke: var(--brand); stroke-width: 2.5; }
+.linechart .ylab, .linechart .xlab { fill: var(--ink-3); font: 700 11px var(--font); }
+.linechart .ylab { text-anchor: end; } .linechart .xlab { text-anchor: middle; }

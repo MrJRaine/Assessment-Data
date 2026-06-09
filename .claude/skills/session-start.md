@@ -14,11 +14,13 @@ Run these steps in order before doing any other work. Do not skip steps.
 Read every file listed in:
 `C:\Users\jeffrey.raine\.claude\projects\c--Git-Repos-Assessment-Data\memory\MEMORY.md`
 
-Then read each memory file linked from that index. Pay attention to:
-- Current implementation progress and step status
+Then read each memory file linked from that index — **with one exception: do NOT auto-read `project_session_archive.md`.** That file is the verbatim historical session log (large, append-only) and is intentionally kept out of the auto-read path to hold down session-start cost. The distilled `project_assessment_platform.md` carries the current state of every decision in it. Open the archive only on demand — when the distillation points you there, or when you need a specific superseded/historical detail or the rationale behind a reversed decision.
+
+Pay attention to:
+- Current implementation progress and deployment state (the distilled `project_assessment_platform.md` "Deployment state" + "Open / deferred decisions" sections)
 - Architecture decisions already made (don't re-litigate these)
 - Known Fabric Warehouse limitations
-- The "Next Session — Start Here" section if present
+- Current next-actions live in `docs/implementation-plan.md` Left Off note (Step 3), not in project memory
 
 ---
 
