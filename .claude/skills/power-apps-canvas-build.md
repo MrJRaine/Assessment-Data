@@ -610,6 +610,27 @@ Drive a gallery's `Items` through a sort switch keyed on two globals; make each 
 - **Indicator:** a *separate, always-present* arrow label per header (constant width so the title never reflows onto two lines — adding the arrow only when active causes that). Grey `↕` when inactive, blue `↑`/`↓` when active; keep the title label neutral and only recolor the arrow. Left-align the arrow at a hand-tuned offset just past the title (no AutoWidth to chain off). Labels have no hand cursor — open pilot-UAT question whether teachers notice headers are clickable.
 - **Caveat:** a text column sorts by its stored value — `Grade` sorts lexicographically (`1,2,…,P`) unless the view exposes a numeric `GradeOrder`. See scrIPP.
 
+---
+
+### 7g. Multi-select filter combos + collapsible filter bar (scrStudentData)
+
+**Centralize the filter once.** When a screen filters a gallery AND charts, build ONE collection and have everything read it — don't duplicate the `Filter(...)` predicate in `Gallery.Items` and in the chart-builder (they drift). Build `colCohortFiltered` in the (hidden `btnRefreshCharts`) builder; gallery `Items: =colCohortFiltered`; empty-state and match-count use `CountRows(colCohortFiltered)`; chart subset = `Filter(colCohortFiltered, <extra gate>)`.
+
+**Multi-select combo pattern** (`ModernCombobox@1.1.0`):
+- Options = a stable, single-column collection from the full cohort: `Sort(Filter(ShowColumns(RenameColumns(GroupBy(col, Homeroom, _g), Homeroom, Value), Value), Not(IsBlank(Value))), Value, SortOrder.Ascending)`. `ShowColumns` drops the nested `_g` group column so the combo only carries what it displays. For a multi-field option (School), `ShowColumns(GroupBy(col, SchoolID, SchoolName, SchoolAbbreviation, _g), SchoolID, SchoolName, SchoolAbbreviation)`.
+- Combo: `SelectMultiple: =true`, `ItemDisplayText: =ThisItem.Value` (or `Coalesce(...)`), no `DefaultSelectedItems` (empty = none = all). `OnChange: =Set(gblFltX, Self.SelectedItems); Select(btnRefreshCharts)`.
+- Init the global as an **empty table of the right shape** in `OnVisible`: `Set(gblFltX, Filter(colXOptions, false))` (so `.Col` references resolve). Reset does the same + `Reset(cmbFltX)`.
+- Filter predicate: `(CountRows(gblFltX) = 0 Or <RowCol> in gblFltX.<Col>)`. The `value in singleColumnTable` membership test is the idiom; the `CountRows = 0` guard makes "nothing selected" mean "no filter".
+
+**Collapsible section pattern** (filter bar that hides and lets content reclaim the space):
+- One bool `gblFiltersExpanded` (init via `Coalesce` to persist across visits; default chosen per design — scrStudentData defaults **collapsed**).
+- Gate the bar + EVERY filter label/combo `Visible: =gblCohortLoaded And gblFiltersExpanded` (there's no group-visibility; each control needs it).
+- Content **below** the bar offsets by a constant, pinning its *bottom*: `Y: =<baseY> - If(gblFiltersExpanded, 0, <H>)` and, for the gallery, `Height: =<baseH> + If(gblFiltersExpanded, 0, <H>)`. Bottom stays put; only the top moves.
+- A **sibling centered in the same band** (e.g. the pie, centered on the gallery band) tracks **half** the offset — the band's top moves `<H>` but its bottom is pinned, so its center moves `<H>/2`: `Y: =… - If(gblFiltersExpanded, 0, <H>/2) - …`. Without this you get a blank gap beside the collapsed content.
+- Toggle + always-visible actions (match-count, Reset) go in the **header band**, gated only on the loaded flag, not on `gblFiltersExpanded`.
+
+**Native chart internal padding (donut build).** `PieChart@2.3.0` / `BarChart@2.4.0` render the visible plot at only **~58% of the control box** (fixed internal padding, no property to change it). To get a large visible donut: oversize the control box and let its transparent padding overlap neighbours that draw **later** in z-order (move the title to *after* the chart; keep interactive controls out from under the padding or they'll eat clicks). Fake the donut hole with a white `Circle@2.3.0` sized off the box; replace the native `Legend` with a custom gallery when you need per-row percent + count.
+
 ## 8. Pre-flight Checklist (read before yielding YAML)
 
 Before yielding any block of Power Apps YAML or Power Fx, do this scan:

@@ -1,11 +1,34 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-# 
+#
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-# 
+#
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
+# ── Direction B restyle (Edge-to-Edge) ──────────────────────────────────────
+# Visual-only restyle, ported from handoff/powerapps_yaml/scrWindowSelect.pa.yaml.
+# UNTOUCHED: OnVisible, galWindows Items/OnSelect/Visible, Title1/Subtitle1 Text,
+# navigation — all verified identical to the prior live screen.
+#
+# Bug pre-audit (§3i) — this screen is clean on all three signatures:
+#   A (text clip): only single-line labels (Title/Subtitle = Self.Size*1.8);
+#       lblEmpty carries an explicit Height. No multi-line clip risk.
+#   B (load ghosting): the only content control is galWindows, already gated
+#       Visible: =gblWindowsLoaded; loading/empty labels gate inversely; the
+#       header (back + title) + white panel are intentionally always-on.
+#   C (Fill on ModernButton): no buttons on this screen — N/A.
+#
+# Local polish vs handoff:
+#   - lblLoadingWindows given an explicit Height(40) and true vertical centering
+#     to match lblEmpty (handoff left it height-less).
+#   - btnWindowRowLink: transparent topmost overlay per row (§3g) so the whole
+#     row shows the hand/pointer cursor (labels force the I-beam). OnSelect =
+#     Select(Parent) bubbles to the row's Set+Navigate. Faint cyan hover wash.
+#
+# Token map: brand RGBA(0,146,201) · brand-ink RGBA(3,108,146) · ink RGBA(24,43,52)
+#   · ink-3 RGBA(110,126,134) · line RGBA(228,234,237) · row-line RGBA(212,221,226)
+# ─────────────────────────────────────────────────────────────────────────────
 Screens:
   scrWindowSelect:
     Properties:
@@ -13,80 +36,82 @@ Screens:
       LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
       OnVisible: =Set(gblWindowsLoaded, false); Clear(colWindows); Refresh(vw_UserAssessmentWindows); ClearCollect(colWindows, vw_UserAssessmentWindows); Set(gblWindowsLoaded, true)
     Children:
+      # Edge-to-Edge: white workspace fills below a slim 52px cyan header band.
       - recContentPanelWindows:
           Control: Rectangle@2.3.0
           Properties:
             BorderColor: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
-            Height: =Parent.Height - 100
-            Width: =Parent.Width - 40
-            X: =20
-            Y: =80
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
       - icoBack:
           Control: Classic/Icon@2.5.0
           Properties:
             Color: =RGBA(255, 255, 255, 1)
-            Height: =40
+            Height: =32
             Icon: =Icon.ChevronLeft
             OnSelect: =Navigate(scrLanding, ScreenTransition.Fade)
-            Width: =40
-            X: =20
-            Y: =20
+            Width: =32
+            X: =16
+            Y: =10
       - lblTitle:
           Control: Label@2.5.1
           Properties:
             Color: =RGBA(255, 255, 255, 1)
             Font: =Font.'Lato Black'
-            Size: =18
+            Size: =17
             Text: ="Choose an assessment window"
-            Width: =500
-            X: =80
-            Y: =24
+            Width: =600
+            X: =56
+            Y: =14
       - galWindows:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            BorderColor: =RGBA(245, 245, 245, 1)
-            Height: =Parent.Height - Self.Y - 40
+            BorderColor: =RGBA(228, 234, 237, 1)
+            Height: =Parent.Height - Self.Y - 24
             Items: =colWindows
             OnSelect: =Set(gblSelectedWindow, ThisItem); Navigate(scrGroupSelect, ScreenTransition.Fade)
+            TemplateSize: =72
             Visible: =gblWindowsLoaded
-            Width: =Parent.Width - 80
-            X: =40
-            Y: =80
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =72
           Children:
             - Title1:
                 Control: Label@2.5.1
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(50, 49, 48, 1)
+                  Color: =RGBA(24, 43, 52, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.Lato
-                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
+                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Bold, FontWeight.Semibold)
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
-                  PaddingLeft: =12
+                  PaddingLeft: =16
                   PaddingRight: =0
                   PaddingTop: =0
                   Size: =14
                   Text: =ThisItem.WindowName
                   VerticalAlign: =VerticalAlign.Top
                   Width: =Parent.TemplateWidth - 90
-                  X: =20
+                  X: =16
                   Y: =(Parent.TemplateHeight - (Self.Size * 1.8 + Subtitle1.Size * 1.8)) / 2
             - Subtitle1:
                 Control: Label@2.5.1
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(96, 94, 92, 1)
+                  Color: =RGBA(110, 126, 134, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.Lato
-                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
+                  FontWeight: =FontWeight.Normal
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
-                  PaddingLeft: =12
+                  PaddingLeft: =16
                   PaddingRight: =0
                   PaddingTop: =0
                   Size: =12
@@ -100,25 +125,25 @@ Screens:
                 Properties:
                   AccessibleLabel: =Self.Tooltip
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(166, 166, 166, 1)
+                  Color: =RGBA(3, 108, 146, 1)
                   DisabledBorderColor: =RGBA(56, 56, 56, 1)
                   DisabledColor: =RGBA(119, 119, 119, 1)
-                  Height: =50
+                  Height: =44
                   Icon: =Icon.ChevronRight
                   OnSelect: =Select(Parent)
-                  PaddingBottom: =16
-                  PaddingLeft: =16
-                  PaddingRight: =16
-                  PaddingTop: =16
+                  PaddingBottom: =14
+                  PaddingLeft: =14
+                  PaddingRight: =14
+                  PaddingTop: =14
                   Tooltip: ="Open this window"
-                  Width: =50
-                  X: =Parent.TemplateWidth - Self.Width - 12
+                  Width: =44
+                  X: =Parent.TemplateWidth - Self.Width - 14
                   Y: =(Parent.TemplateHeight / 2) - (Self.Height / 2)
             - Separator1:
                 Control: Rectangle@2.3.0
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 0)
-                  Fill: =RGBA(245, 245, 245, 1)
+                  Fill: =RGBA(212, 221, 226, 1)
                   Height: =1
                   OnSelect: =Select(Parent)
                   Width: =Parent.TemplateWidth
@@ -127,33 +152,56 @@ Screens:
                 Control: Rectangle@2.3.0
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 0)
-                  Fill: =RGBA(0, 120, 212, 1)
+                  Fill: =RGBA(0, 146, 201, 1)
                   Height: =Parent.TemplateHeight - Separator1.Height
                   OnSelect: =Select(Parent)
                   Visible: =ThisItem.IsSelected
                   Width: =4
+            # Pointer-cursor overlay (§3g) — topmost, transparent, full-row.
+            - btnWindowRowLink:
+                Control: Classic/Button@2.2.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  BorderStyle: =BorderStyle.None
+                  Color: =RGBA(0, 0, 0, 0)
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  DisabledFill: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 0, 0, 0)
+                  Height: =Parent.TemplateHeight - Separator1.Height
+                  HoverBorderColor: =RGBA(0, 0, 0, 0)
+                  HoverColor: =RGBA(0, 0, 0, 0)
+                  HoverFill: =RGBA(0, 146, 201, 0.06)
+                  OnSelect: =Select(Parent)
+                  PressedBorderColor: =RGBA(0, 0, 0, 0)
+                  PressedColor: =RGBA(0, 0, 0, 0)
+                  PressedFill: =RGBA(0, 146, 201, 0.1)
+                  Text: =""
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
       - lblLoadingWindows:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
+            Height: =40
             Size: =14
             Text: ="Loading assessment windows…"
             Visible: =Not(gblWindowsLoaded)
-            Width: =640
-            X: =40
-            Y: =340
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - Self.Height) / 2
       - lblEmpty:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             Height: =80
             Size: =14
             Text: ="No assessment windows currently apply to your students. New windows appear here when admins open them."
             Visible: =gblWindowsLoaded And CountRows(colWindows) = 0
-            Width: =640
-            X: =40
-            Y: =340
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - Self.Height) / 2

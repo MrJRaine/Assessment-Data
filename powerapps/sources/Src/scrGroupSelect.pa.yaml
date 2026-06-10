@@ -1,11 +1,40 @@
 # ************************************************************************************************
 # Warning: YAML source code for Canvas Apps should only be used to review changes made within Power Apps Studio and for minor edits (Preview).
 # Use the maker portal to create and edit your Power Apps.
-# 
+#
 # The schema file for Canvas Apps is available at https://go.microsoft.com/fwlink/?linkid=2304907
-# 
+#
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
+# ── Direction B restyle (Edge-to-Edge) ──────────────────────────────────────
+# Visual restyle ported from handoff/powerapps_yaml/scrGroupSelect.pa.yaml.
+# UNTOUCHED: OnVisible, galGroups Items/OnSelect/Visible, lblGroupLabel/Meta/
+# Progress Text, navigation — verified identical to the prior live screen.
+#
+# Functional additions beyond the pure restyle:
+#   - Progress bar (recProgressTrack/recProgressFill) off the existing
+#     EnteredStudentCount / ApplicableStudentCount counts; lblProgress keeps its
+#     ✓/◐/○ text formula and moves to an aligned right column (X:360).
+#     recProgressFill.Width hardened vs the handoff's If(count=0,0,…) guard:
+#     denominator is Max(Coalesce(Applicable,0),1) so it is NEVER zero, and the
+#     numerator is Coalesce(Entered,0). The handoff guard threw "division by
+#     zero" on screen revisit, when the row template momentarily evaluates
+#     against a Blank count during Clear()+ClearCollect (Blank() = 0 doesn't
+#     catch it; Power Apps can also eagerly evaluate the un-taken If branch).
+#   - btnGroupRowLink: transparent topmost per-row overlay (§3g) for the hand
+#     cursor; OnSelect = Select(Parent) bubbles to the row's Set+Navigate.
+#
+# Bug pre-audit (§3i):
+#   A (text clip): single-line labels only; lblEmptyState has explicit Height.
+#       lblLoading given an explicit Height(40)+centering (handoff left it bare).
+#   B (load ghosting): galGroups gated =gblGroupsLoaded; lblSubtitle ALSO gated
+#       (content on the white panel, matching scrIPP); header title/back + white
+#       panel intentionally always-on.
+#   C (Fill on ModernButton): no buttons besides the transparent overlay — N/A.
+#
+# Token map: brand RGBA(0,146,201) · brand-ink RGBA(3,108,146) · ink RGBA(24,43,52)
+#   · ink-3 RGBA(110,126,134) · line RGBA(228,234,237) · row-line RGBA(212,221,226)
+# ─────────────────────────────────────────────────────────────────────────────
 Screens:
   scrGroupSelect:
     Properties:
@@ -13,91 +42,94 @@ Screens:
       LoadingSpinnerColor: =RGBA(255, 255, 255, 1)
       OnVisible: =Set(gblGroupsLoaded, false); Clear(colGroups); Refresh(vw_TeacherGroups); ClearCollect(colGroups, SortByColumns(Filter(vw_TeacherGroups, AssessmentWindowID = gblSelectedWindow.AssessmentWindowID), "Grade", SortOrder.Ascending, "GroupLabel", SortOrder.Ascending)); Set(gblGroupsLoaded, true)
     Children:
+      # Edge-to-Edge: white workspace fills below a slim 52px cyan header band.
       - recContentPanelGroups:
           Control: Rectangle@2.3.0
           Properties:
             BorderColor: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
-            Height: =Parent.Height - 110
-            Width: =Parent.Width - 40
-            X: =20
-            Y: =90
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
       - icoBackToWindows:
           Control: Classic/Icon@2.5.0
           Properties:
             Color: =RGBA(255, 255, 255, 1)
-            Height: =40
+            Height: =32
             Icon: =Icon.ChevronLeft
             OnSelect: =Navigate(scrWindowSelect, ScreenTransition.Fade)
-            Width: =40
-            X: =20
-            Y: =20
+            Width: =32
+            X: =16
+            Y: =10
       - lblGroupTitle:
           Control: Label@2.5.1
           Properties:
             Color: =RGBA(255, 255, 255, 1)
             Font: =Font.'Lato Black'
             Height: =32
-            Size: =18
+            Size: =17
             Text: =gblSelectedWindow.WindowName
             Width: =900
-            X: =80
-            Y: =24
+            X: =56
+            Y: =14
       - lblSubtitle:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(255, 255, 255, 0.85)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             Height: =22
+            Size: =13
             Text: ="Choose a class"
+            Visible: =gblGroupsLoaded
             Width: =900
-            X: =80
-            Y: =58
+            X: =24
+            Y: =72
       - galGroups:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
           Properties:
-            BorderColor: =RGBA(245, 245, 245, 1)
-            Height: =Parent.Height - Self.Y - 40
+            BorderColor: =RGBA(228, 234, 237, 1)
+            Height: =Parent.Height - Self.Y - 24
             Items: =colGroups
             OnSelect: =Set(gblSelectedGroup, ThisItem); Navigate(scrRosterGrid, ScreenTransition.None)
             TemplateSize: =76
             Visible: =gblGroupsLoaded
-            Width: =Parent.Width - 80
-            X: =40
-            Y: =100
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =104
           Children:
             - lblGroupLabel:
                 Control: Label@2.5.1
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(50, 49, 48, 1)
+                  Color: =RGBA(24, 43, 52, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.Lato
-                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Semibold, FontWeight.Normal)
+                  FontWeight: =If(ThisItem.IsSelected, FontWeight.Bold, FontWeight.Semibold)
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
-                  PaddingLeft: =12
+                  PaddingLeft: =16
                   PaddingRight: =0
                   PaddingTop: =0
                   Size: =14
                   Text: =ThisItem.GroupLabel
                   VerticalAlign: =VerticalAlign.Top
-                  Width: =Parent.TemplateWidth - 90
-                  X: =20
-                  Y: =(Parent.TemplateHeight - (Self.Height + lblGroupMeta.Height + lblProgress.Height)) / 2
+                  Width: =320
+                  X: =16
+                  Y: =(Parent.TemplateHeight - (Self.Height + lblGroupMeta.Height)) / 2
             - lblGroupMeta:
                 Control: Label@2.5.1
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(96, 94, 92, 1)
+                  Color: =RGBA(110, 126, 134, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.Lato
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
-                  PaddingLeft: =12
+                  PaddingLeft: =16
                   PaddingRight: =0
                   PaddingTop: =0
                   Size: =12
@@ -106,49 +138,72 @@ Screens:
                   Width: =lblGroupLabel.Width
                   X: =lblGroupLabel.X
                   Y: =lblGroupLabel.Y + lblGroupLabel.Height
+            # progress moved into an aligned column (X:360) — text keeps original formula,
+            # bar is added off the existing counts.
             - lblProgress:
                 Control: Label@2.5.1
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(96, 94, 92, 1)
+                  Color: =RGBA(110, 126, 134, 1)
                   DisabledColor: =RGBA(161, 159, 157, 1)
                   Font: =Font.Lato
+                  FontWeight: =FontWeight.Semibold
                   Height: =Self.Size * 1.8
                   OnSelect: =Select(Parent)
                   PaddingBottom: =0
-                  PaddingLeft: =12
+                  PaddingLeft: =0
                   PaddingRight: =0
                   PaddingTop: =0
                   Size: =12
                   Text: =If(ThisItem.EnteredStudentCount = ThisItem.ApplicableStudentCount, "✓ ", If(ThisItem.EnteredStudentCount = 0, "○ ", "◐ ")) & ThisItem.EnteredStudentCount & " of " & ThisItem.ApplicableStudentCount & " entered"
                   VerticalAlign: =VerticalAlign.Top
-                  Width: =lblGroupLabel.Width
-                  X: =lblGroupLabel.X
-                  Y: =lblGroupMeta.Y + lblGroupMeta.Height
+                  Width: =200
+                  X: =360
+                  Y: =lblGroupLabel.Y
+            - recProgressTrack:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(237, 241, 244, 1)
+                  Height: =6
+                  OnSelect: =Select(Parent)
+                  Width: =180
+                  X: =360
+                  Y: =lblProgress.Y + lblProgress.Height + 2
+            - recProgressFill:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =If(ThisItem.EnteredStudentCount = ThisItem.ApplicableStudentCount, RGBA(46, 125, 91, 1), RGBA(0, 146, 201, 1))
+                  Height: =6
+                  OnSelect: =Select(Parent)
+                  Width: =180 * Coalesce(ThisItem.EnteredStudentCount, 0) / Max(Coalesce(ThisItem.ApplicableStudentCount, 0), 1)
+                  X: =360
+                  Y: =recProgressTrack.Y
             - NextArrowGroup:
                 Control: Classic/Icon@2.5.0
                 Properties:
                   AccessibleLabel: =Self.Tooltip
                   BorderColor: =RGBA(0, 0, 0, 1)
-                  Color: =RGBA(166, 166, 166, 1)
+                  Color: =RGBA(3, 108, 146, 1)
                   DisabledBorderColor: =RGBA(56, 56, 56, 1)
                   DisabledColor: =RGBA(119, 119, 119, 1)
-                  Height: =50
+                  Height: =44
                   Icon: =Icon.ChevronRight
                   OnSelect: =Select(Parent)
-                  PaddingBottom: =16
-                  PaddingLeft: =16
-                  PaddingRight: =16
-                  PaddingTop: =16
+                  PaddingBottom: =14
+                  PaddingLeft: =14
+                  PaddingRight: =14
+                  PaddingTop: =14
                   Tooltip: ="Open this group"
-                  Width: =50
-                  X: =Parent.TemplateWidth - Self.Width - 12
+                  Width: =44
+                  X: =Parent.TemplateWidth - Self.Width - 14
                   Y: =(Parent.TemplateHeight / 2) - (Self.Height / 2)
             - SeparatorGroup:
                 Control: Rectangle@2.3.0
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 0)
-                  Fill: =RGBA(245, 245, 245, 1)
+                  Fill: =RGBA(212, 221, 226, 1)
                   Height: =1
                   OnSelect: =Select(Parent)
                   Width: =Parent.TemplateWidth
@@ -157,33 +212,56 @@ Screens:
                 Control: Rectangle@2.3.0
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 0)
-                  Fill: =RGBA(0, 120, 212, 1)
+                  Fill: =RGBA(0, 146, 201, 1)
                   Height: =Parent.TemplateHeight - SeparatorGroup.Height
                   OnSelect: =Select(Parent)
                   Visible: =ThisItem.IsSelected
                   Width: =4
+            # Pointer-cursor overlay (§3g) — topmost, transparent, full-row.
+            - btnGroupRowLink:
+                Control: Classic/Button@2.2.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  BorderStyle: =BorderStyle.None
+                  Color: =RGBA(0, 0, 0, 0)
+                  DisabledBorderColor: =RGBA(0, 0, 0, 0)
+                  DisabledFill: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(0, 0, 0, 0)
+                  Height: =Parent.TemplateHeight - SeparatorGroup.Height
+                  HoverBorderColor: =RGBA(0, 0, 0, 0)
+                  HoverColor: =RGBA(0, 0, 0, 0)
+                  HoverFill: =RGBA(0, 146, 201, 0.06)
+                  OnSelect: =Select(Parent)
+                  PressedBorderColor: =RGBA(0, 0, 0, 0)
+                  PressedColor: =RGBA(0, 0, 0, 0)
+                  PressedFill: =RGBA(0, 146, 201, 0.1)
+                  Text: =""
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
       - lblLoading:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
+            Height: =40
             Size: =14
             Text: ="Loading classes…"
             Visible: =Not(gblGroupsLoaded)
-            Width: =640
-            X: =40
-            Y: =340
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - Self.Height) / 2
       - lblEmptyState:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             Height: =80
             Size: =14
             Text: ="No applicable groups for " & gblSelectedWindow.WindowName & ". This can happen if your applicable students don't fall under any group (homeroom for PP-9, section for 10-12)."
             Visible: =gblGroupsLoaded And CountRows(colGroups) = 0
-            Width: =640
-            X: =40
-            Y: =340
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =(Parent.Height - Self.Height) / 2

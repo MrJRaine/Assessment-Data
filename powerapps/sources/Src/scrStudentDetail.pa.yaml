@@ -6,6 +6,33 @@
 #
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
+# ── Direction B restyle (Edge-to-Edge) ──────────────────────────────────────
+# Visual restyle ported from handoff/powerapps_yaml/scrStudentDetail.pa.yaml.
+# UNTOUCHED: OnVisible (cohort filter + RowIndex nav build), prev/next OnSelect,
+# galDetailTimeline/lineDetailTrend Items, line-chart YAxisMin/Max (0/31), the
+# 50/50 history-vs-trend vertical split — all verified identical to live.
+#
+# Handoff additions kept: recDetailMetaStrip (meta backdrop), lblHistTitle,
+# recTimelineRowLine (1px row separator), recNavPrev/recNavNext (white circles
+# behind the nav chevrons → prominent paging).
+#
+# Row tint reads the dedicated AchievementHexColorTint column — the staged
+# HexColorTint SQL was DEPLOYED 2026-06-10 (migrate + seed + the two views), so
+# this is the verbatim handoff binding. REQUIRES that SQL to be live; open this
+# screen only after the 4 scripts have run.
+#
+# DELIBERATE DEVIATION from the handoff:
+#   - Nav cluster gated Visible: =gblDetailLoaded (handoff left it ungated) so a
+#     stale "Student X of Y" count doesn't flash during OnVisible (Bug B).
+#
+# WATCH ON STUDIO OPEN: Circle@2.3.0 (recNavPrev/recNavNext) is unverified in
+# this app's §4 control list. If it errors, swap to Rectangle@2.3.0 (square chip)
+# or remove — the icons work standalone (live had no circle backdrop).
+#
+# Token map: brand RGBA(0,146,201) · brand-ink RGBA(3,108,146) · ink RGBA(24,43,52)
+#   · ink-2 RGBA(74,91,100) · ink-3 RGBA(110,126,134) · line RGBA(228,234,237)
+#   · row-line RGBA(212,221,226) · meta-strip RGBA(244,247,249)
+# ─────────────────────────────────────────────────────────────────────────────
 Screens:
   scrStudentDetail:
     Properties:
@@ -39,36 +66,47 @@ Screens:
           Properties:
             BorderColor: =RGBA(0, 0, 0, 0)
             Fill: =RGBA(255, 255, 255, 1)
-            Height: =Parent.Height - 100
-            Width: =Parent.Width - 40
-            X: =20
-            Y: =80
+            Height: =Parent.Height - 52
+            Width: =Parent.Width
+            X: =0
+            Y: =52
       - icoDetailBack:
           Control: Classic/Icon@2.5.0
           Properties:
             Color: =RGBA(255, 255, 255, 1)
-            Height: =40
+            Height: =32
             Icon: =Icon.ChevronLeft
             OnSelect: =Navigate(scrStudentData, ScreenTransition.Fade)
-            Width: =40
-            X: =20
-            Y: =20
+            Width: =32
+            X: =16
+            Y: =10
       - lblDetailTitle:
           Control: Label@2.5.1
           Properties:
             Color: =RGBA(255, 255, 255, 1)
             Font: =Font.'Lato Black'
-            Height: =36
-            Size: =16
+            Height: =32
+            Size: =17
             Text: =Coalesce(gblSelectedStudent.FullName, "Student Detail")
             Width: =Parent.Width - 360
-            X: =80
-            Y: =20
+            X: =56
+            Y: =14
+      - recNavPrev:
+          Control: Circle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =32
+            OnSelect: =Select(icoDetailPrev)
+            Visible: =gblDetailLoaded
+            Width: =32
+            X: =Parent.Width - 208
+            Y: =10
       - icoDetailPrev:
           Control: Classic/Icon@2.5.0
           Properties:
-            Color: =RGBA(255, 255, 255, 1)
-            DisabledColor: =RGBA(255, 255, 255, 0.35)
+            Color: =RGBA(3, 108, 146, 1)
+            DisabledColor: =RGBA(176, 196, 205, 1)
             DisplayMode: =If(gblDetailIndex <= 1, DisplayMode.Disabled, DisplayMode.Edit)
             Height: =32
             Icon: =Icon.ChevronLeft
@@ -77,27 +115,45 @@ Screens:
                 Set(gblDetailIndex, gblDetailIndex - 1);
                 Set(gblSelectedStudent, LookUp(colDetailNav, RowIndex = gblDetailIndex))
               )
+            PaddingBottom: =7
+            PaddingLeft: =7
+            PaddingRight: =7
+            PaddingTop: =7
+            Visible: =gblDetailLoaded
             Width: =32
-            X: =Parent.Width - 240
-            Y: =24
+            X: =Parent.Width - 208
+            Y: =10
       - lblDetailCounter:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
             Color: =RGBA(255, 255, 255, 1)
             Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
             Height: =32
             Size: =12
             Text: ="Student " & gblDetailIndex & " of " & gblDetailCount
             VerticalAlign: =VerticalAlign.Middle
-            Width: =140
-            X: =Parent.Width - 204
-            Y: =24
+            Visible: =gblDetailLoaded
+            Width: =112
+            X: =Parent.Width - 168
+            Y: =10
+      - recNavNext:
+          Control: Circle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(255, 255, 255, 1)
+            Height: =32
+            OnSelect: =Select(icoDetailNext)
+            Visible: =gblDetailLoaded
+            Width: =32
+            X: =Parent.Width - 48
+            Y: =10
       - icoDetailNext:
           Control: Classic/Icon@2.5.0
           Properties:
-            Color: =RGBA(255, 255, 255, 1)
-            DisabledColor: =RGBA(255, 255, 255, 0.35)
+            Color: =RGBA(3, 108, 146, 1)
+            DisabledColor: =RGBA(176, 196, 205, 1)
             DisplayMode: =If(gblDetailIndex >= gblDetailCount, DisplayMode.Disabled, DisplayMode.Edit)
             Height: =32
             Icon: =Icon.ChevronRight
@@ -106,26 +162,54 @@ Screens:
                 Set(gblDetailIndex, gblDetailIndex + 1);
                 Set(gblSelectedStudent, LookUp(colDetailNav, RowIndex = gblDetailIndex))
               )
+            PaddingBottom: =7
+            PaddingLeft: =7
+            PaddingRight: =7
+            PaddingTop: =7
+            Visible: =gblDetailLoaded
             Width: =32
-            X: =Parent.Width - 56
-            Y: =24
+            X: =Parent.Width - 48
+            Y: =10
+      - recDetailMetaStrip:
+          Control: Rectangle@2.3.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(244, 247, 249, 1)
+            Height: =40
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =64
       - lblDetailMeta:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(50, 49, 48, 1)
+            Color: =RGBA(24, 43, 52, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
-            Height: =24
+            Height: =40
             Size: =13
             Text: |
               ="Grade " & gblSelectedStudent.Grade & "   ·   " & gblSelectedStudent.ProgramFamily & "   ·   " & Coalesce(gblSelectedStudent.SchoolAbbreviation, gblSelectedStudent.SchoolID) & If(!IsBlank(gblSelectedStudent.Homeroom), "   ·   Homeroom " & gblSelectedStudent.Homeroom, "") & "   ·   IPP (Reading): " & gblSelectedStudent.IPPStatus_Reading
+            VerticalAlign: =VerticalAlign.Middle
             Width: =Parent.Width - 80
             X: =40
-            Y: =100
+            Y: =64
+      - lblHistTitle:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(24, 43, 52, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Bold
+            Height: =24
+            Size: =14
+            Text: ="Assessment history"
+            Visible: =gblDetailLoaded
+            Width: =400
+            X: =24
+            Y: =118
       - lblHdrWindow:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =20
@@ -138,7 +222,7 @@ Screens:
       - lblHdrDate:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =20
@@ -151,7 +235,7 @@ Screens:
       - lblHdrLevel:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =20
@@ -164,7 +248,7 @@ Screens:
       - lblHdrDiff:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =20
@@ -177,7 +261,7 @@ Screens:
       - lblHdrAchievement:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             FontWeight: =FontWeight.Semibold
             Height: =20
@@ -205,30 +289,41 @@ Screens:
             X: =40
             Y: =192
           Children:
+            # Row tint reads the dedicated AchievementHexColorTint column (staged
+            # HexColorTint SQL deployed 2026-06-10). Untinted rows guard to transparent.
             - recTimelineRowBg:
                 Control: Rectangle@2.3.0
                 Properties:
                   BorderColor: =RGBA(0, 0, 0, 0)
                   Fill: |
                     =If(
-                      IsBlank(ThisItem.AchievementHexColor),
+                      IsBlank(ThisItem.AchievementHexColorTint),
                       RGBA(0, 0, 0, 0),
-                      ColorFade(ColorValue(ThisItem.AchievementHexColor), 0.4)
+                      ColorValue(ThisItem.AchievementHexColorTint)
                     )
-                  Height: =Parent.TemplateHeight - 4
-                  Width: =Parent.TemplateWidth - 8
-                  X: =4
-                  Y: =2
+                  Height: =Parent.TemplateHeight - 1
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =0
+            - recTimelineRowLine:
+                Control: Rectangle@2.3.0
+                Properties:
+                  BorderColor: =RGBA(0, 0, 0, 0)
+                  Fill: =RGBA(212, 221, 226, 1)
+                  Height: =1
+                  Width: =Parent.TemplateWidth
+                  X: =0
+                  Y: =Parent.TemplateHeight - 1
             - lblTLWindow:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(24, 43, 52, 1)
                   Font: =Font.Lato
                   FontWeight: =FontWeight.Semibold
                   Height: =Parent.TemplateHeight
                   PaddingLeft: =0
-                  Size: =11
-                  Text: =ThisItem.WindowName & " (" & ThisItem.WindowSchoolYear & ")"
+                  Size: =12
+                  Text: =ThisItem.WindowName & " · " & ThisItem.WindowSchoolYear
                   VerticalAlign: =VerticalAlign.Middle
                   Width: =300
                   X: =16
@@ -236,10 +331,10 @@ Screens:
             - lblTLDate:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(74, 91, 100, 1)
                   Font: =Font.Lato
                   Height: =Parent.TemplateHeight
-                  Size: =11
+                  Size: =12
                   Text: =Text(ThisItem.AssessmentDate, "mmm d, yyyy")
                   VerticalAlign: =VerticalAlign.Middle
                   Width: =120
@@ -248,11 +343,11 @@ Screens:
             - lblTLLevel:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(24, 43, 52, 1)
                   Font: =Font.Lato
                   FontWeight: =FontWeight.Semibold
                   Height: =Parent.TemplateHeight
-                  Size: =11
+                  Size: =12
                   Text: =ThisItem.LevelCode
                   VerticalAlign: =VerticalAlign.Middle
                   Width: =70
@@ -261,10 +356,10 @@ Screens:
             - lblTLDiff:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(74, 91, 100, 1)
                   Font: =Font.Lato
                   Height: =Parent.TemplateHeight
-                  Size: =11
+                  Size: =12
                   Text: |
                     =If(IsBlank(ThisItem.ReadingDelta), "—", If(ThisItem.ReadingDelta > 0, "+", "") & ThisItem.ReadingDelta)
                   VerticalAlign: =VerticalAlign.Middle
@@ -274,10 +369,10 @@ Screens:
             - lblTLAchievement:
                 Control: Label@2.5.1
                 Properties:
-                  Color: =RGBA(32, 31, 30, 1)
+                  Color: =RGBA(24, 43, 52, 1)
                   Font: =Font.Lato
                   Height: =Parent.TemplateHeight
-                  Size: =11
+                  Size: =12
                   Text: =Coalesce(ThisItem.AchievementLevelName, "—")
                   VerticalAlign: =VerticalAlign.Middle
                   Width: =Parent.TemplateWidth - 640
@@ -286,11 +381,11 @@ Screens:
       - lblTrendTitle:
           Control: Label@2.5.1
           Properties:
-            Color: =RGBA(50, 49, 48, 1)
+            Color: =RGBA(24, 43, 52, 1)
             Font: =Font.Lato
-            FontWeight: =FontWeight.Semibold
+            FontWeight: =FontWeight.Bold
             Height: =24
-            Size: =12
+            Size: =14
             Text: ="Reading level over time"
             Visible: =gblDetailLoaded And CountRows(Filter(colStudentHistory, StudentKey = gblSelectedStudent.StudentKey)) > 0
             Width: =Parent.Width - 80
@@ -301,7 +396,7 @@ Screens:
           Properties:
             BorderColor: =RGBA(0, 0, 0, 0)
             BorderStyle: =BorderStyle.None
-            Color: =RGBA(50, 49, 48, 1)
+            Color: =RGBA(74, 91, 100, 1)
             Font: =Font.Lato
             Height: =(Parent.Height - 252) / 2
             ItemColorSet: =[RGBA(0, 146, 201, 1)]
@@ -327,7 +422,7 @@ Screens:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(120, 120, 120, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             Height: =40
             Size: =13
@@ -341,7 +436,7 @@ Screens:
           Control: Label@2.5.1
           Properties:
             Align: =Align.Center
-            Color: =RGBA(96, 94, 92, 1)
+            Color: =RGBA(110, 126, 134, 1)
             Font: =Font.Lato
             Height: =40
             Size: =14
