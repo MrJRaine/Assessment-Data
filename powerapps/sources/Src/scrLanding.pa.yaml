@@ -312,6 +312,78 @@ Screens:
             Width: =btnStudentIPPs.Width - 56
             X: =btnStudentIPPs.X + 28
             Y: =btnStudentIPPs.Y + btnStudentIPPs.Height - 36
+      # ── Pointer-cursor overlays (§3g) ──────────────────────────────────────
+      # One fully-transparent button per card, layered ON TOP of that card's
+      # labels so the whole card shows the hand cursor (labels force the I-beam).
+      # OnSelect = Select(<card>) so the Navigate target stays defined once, on
+      # the card button. Faint cyan Hover/Pressed wash keeps hover feedback,
+      # since the card button's own HoverFill no longer fires under the overlay.
+      - btnCardLinkStudentData:
+          Control: Classic/Button@2.2.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            Color: =RGBA(0, 0, 0, 0)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            DisabledFill: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(0, 0, 0, 0)
+            Height: =btnStudentData.Height
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            HoverColor: =RGBA(0, 0, 0, 0)
+            HoverFill: =RGBA(0, 146, 201, 0.06)
+            OnSelect: =Select(btnStudentData)
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            PressedColor: =RGBA(0, 0, 0, 0)
+            PressedFill: =RGBA(0, 146, 201, 0.1)
+            Text: =""
+            Visible: =gblLandingLoaded
+            Width: =btnStudentData.Width
+            X: =btnStudentData.X
+            Y: =btnStudentData.Y
+      - btnCardLinkDataEntry:
+          Control: Classic/Button@2.2.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            Color: =RGBA(0, 0, 0, 0)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            DisabledFill: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(0, 0, 0, 0)
+            Height: =btnDataEntry.Height
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            HoverColor: =RGBA(0, 0, 0, 0)
+            HoverFill: =RGBA(0, 146, 201, 0.06)
+            OnSelect: =Select(btnDataEntry)
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            PressedColor: =RGBA(0, 0, 0, 0)
+            PressedFill: =RGBA(0, 146, 201, 0.1)
+            Text: =""
+            Visible: =gblLandingLoaded
+            Width: =btnDataEntry.Width
+            X: =btnDataEntry.X
+            Y: =btnDataEntry.Y
+      - btnCardLinkStudentIPPs:
+          Control: Classic/Button@2.2.0
+          Properties:
+            BorderColor: =RGBA(0, 0, 0, 0)
+            BorderStyle: =BorderStyle.None
+            Color: =RGBA(0, 0, 0, 0)
+            DisabledBorderColor: =RGBA(0, 0, 0, 0)
+            DisabledFill: =RGBA(0, 0, 0, 0)
+            Fill: =RGBA(0, 0, 0, 0)
+            Height: =btnStudentIPPs.Height
+            HoverBorderColor: =RGBA(0, 0, 0, 0)
+            HoverColor: =RGBA(0, 0, 0, 0)
+            HoverFill: =RGBA(0, 146, 201, 0.06)
+            OnSelect: =Select(btnStudentIPPs)
+            PressedBorderColor: =RGBA(0, 0, 0, 0)
+            PressedColor: =RGBA(0, 0, 0, 0)
+            PressedFill: =RGBA(0, 146, 201, 0.1)
+            Text: =""
+            Visible: =gblLandingLoaded
+            Width: =btnStudentIPPs.Width
+            X: =btnStudentIPPs.X
+            Y: =btnStudentIPPs.Y
       - lblLoadingLanding:
           Control: Label@2.5.1
           Properties:

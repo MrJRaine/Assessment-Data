@@ -7,9 +7,14 @@
 # For more information, visit https://go.microsoft.com/fwlink/?linkid=2292623
 # ************************************************************************************************
 # ── Direction B restyle (Edge-to-Edge) ──────────────────────────────────────
-# Visual-only restyle. UNTOUCHED: OnVisible, every OnSelect (incl. the
-# dbouspUpsertStudentIPP save), Visible data-bindings, Collect/Remove/LookUp,
-# Items, modal flow — all verified identical to the prior live screen.
+# Visual-only restyle. UNTOUCHED: OnVisible, the dbouspUpsertStudentIPP save,
+# data-bindings, Items, modal flow — all verified identical to the prior live
+# screen. EXCEPTION (2026-06-10 functional change, not restyle): the Yes/No
+# action cluster is now a segmented toggle shown on EVERY row (previously the
+# buttons were Visible only on needs-confirmation rows), so a confirmed IPP can
+# be changed when a student's status changes — Yes->No removes the IPP. The
+# underlying proc already supports the flip; NULL-reset stays unsupported.
+# Sort hint (lblIPPSortHint) added at Y=96; header row + gallery shifted +24px.
 #
 # Loading-state fix (2026-06-09): the need-pill, subtitle, 6 column headers, and
 # both save buttons are gated Visible: =gblIPPLoaded so they don't ghost over the
@@ -132,6 +137,21 @@ Screens:
             Width: =Max(200, Parent.Width - 340)
             X: =316
             Y: =66
+      - lblIPPSortHint:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(3, 108, 146, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =24
+            Size: =12
+            Text: |
+              ="↕  Tip: click any column heading to sort the list — click it again to reverse the order."
+            VerticalAlign: =VerticalAlign.Middle
+            Visible: =gblIPPLoaded
+            Width: =Parent.Width - 48
+            X: =24
+            Y: =96
       - lblIPPHdrName:
           Control: Label@2.5.1
           Properties:
@@ -145,7 +165,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =150 + Max(0, Parent.Width - 828) * 0.4
             X: =36
-            Y: =104
+            Y: =128
       - arrIPPHdrName:
           Control: Label@2.5.1
           Properties:
@@ -159,7 +179,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =16
             X: =lblIPPHdrName.X + 66
-            Y: =104
+            Y: =128
       - lblIPPHdrGrade:
           Control: Label@2.5.1
           Properties:
@@ -173,7 +193,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =68
             X: =lblIPPHdrName.X + lblIPPHdrName.Width
-            Y: =104
+            Y: =128
       - arrIPPHdrGrade:
           Control: Label@2.5.1
           Properties:
@@ -187,7 +207,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =16
             X: =lblIPPHdrGrade.X + 52
-            Y: =104
+            Y: =128
       - lblIPPHdrHR:
           Control: Label@2.5.1
           Properties:
@@ -201,7 +221,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =104
             X: =lblIPPHdrGrade.X + lblIPPHdrGrade.Width
-            Y: =104
+            Y: =128
       - arrIPPHdrHR:
           Control: Label@2.5.1
           Properties:
@@ -215,7 +235,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =16
             X: =lblIPPHdrHR.X + 86
-            Y: =104
+            Y: =128
       - lblIPPHdrSubject:
           Control: Label@2.5.1
           Properties:
@@ -229,7 +249,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =124 + Max(0, Parent.Width - 828) * 0.35
             X: =lblIPPHdrHR.X + lblIPPHdrHR.Width
-            Y: =104
+            Y: =128
       - arrIPPHdrSubject:
           Control: Label@2.5.1
           Properties:
@@ -243,7 +263,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =16
             X: =lblIPPHdrSubject.X + 96
-            Y: =104
+            Y: =128
       - lblIPPHdrState:
           Control: Label@2.5.1
           Properties:
@@ -257,7 +277,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =110 + Max(0, Parent.Width - 828) * 0.25
             X: =lblIPPHdrSubject.X + lblIPPHdrSubject.Width
-            Y: =104
+            Y: =128
       - arrIPPHdrState:
           Control: Label@2.5.1
           Properties:
@@ -271,7 +291,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =16
             X: =lblIPPHdrState.X + 58
-            Y: =104
+            Y: =128
       - lblIPPHdrAction:
           Control: Label@2.5.1
           Properties:
@@ -284,7 +304,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =200
             X: =Parent.Width - 224
-            Y: =104
+            Y: =128
       - galStudentsIPP:
           Control: Gallery@2.15.0
           Variant: BrowseLayout_Vertical_TwoTextOneImageVariant_ver5.0
@@ -305,7 +325,7 @@ Screens:
             Visible: =gblIPPLoaded
             Width: =Parent.Width - 40
             X: =20
-            Y: =132
+            Y: =156
           Children:
             - Image1IPP:
                 Control: Image@2.2.3
@@ -396,44 +416,29 @@ Screens:
                   Width: =110 + Max(0, Parent.TemplateWidth - 788) * 0.25
                   X: =lblIPPSubjectLabel.X + lblIPPSubjectLabel.Width
                   Y: =0
+            # Segmented Yes/No toggle — shown on EVERY row (not just unconfirmed)
+            # so a confirmed IPP can be changed if the student's status changes
+            # (Yes->No removes the IPP; No->Yes adds it). Selected state = green
+            # (Yes) / grey (No) fill, matching the status-label colors; unselected
+            # = white outline; a needs-confirmation row shows neither selected.
+            # Re-clicking the stored value just drops the pending change (revert).
+            # Blank-safe selection via nested With (Blank() = false coerces, so an
+            # unconfirmed row must be guarded with Not(IsBlank(e)), not "e = false").
             - btnIPPYes:
-                Control: Classic/Button@2.2.0
-                Properties:
-                  Color: =RGBA(255, 255, 255, 1)
-                  Fill: =RGBA(0, 146, 201, 1)
-                  Font: =Font.Lato
-                  Height: =36
-                  HoverColor: =RGBA(255, 255, 255, 1)
-                  HoverFill: =RGBA(0, 122, 168, 1)
-                  OnSelect: |
-                    =Remove(colDirtyIPP,
-                        LookUp(colDirtyIPP,
-                            _SK = ThisItem.StudentKey And
-                            _Subj = ThisItem.Subject And
-                            _PF = ThisItem.IPPProgramFamily
-                        )
-                    );
-                    Collect(colDirtyIPP, {
-                        _SK:   ThisItem.StudentKey,
-                        _Subj: ThisItem.Subject,
-                        _PF:   ThisItem.IPPProgramFamily,
-                        IsIPP: true
-                    })
-                  PressedColor: =RGBA(255, 255, 255, 1)
-                  PressedFill: =RGBA(0, 122, 168, 1)
-                  Size: =12
-                  Text: ="Yes (IPP)"
-                  Visible: =IsBlank(ThisItem.IsIPP)
-                  Width: =88
-                  X: =Parent.TemplateWidth - 204
-                  Y: =(Parent.TemplateHeight - Self.Height) / 2
-            - btnIPPNo:
                 Control: Classic/Button@2.2.0
                 Properties:
                   BorderColor: =RGBA(228, 234, 237, 1)
                   BorderThickness: =1
-                  Color: =RGBA(3, 108, 146, 1)
-                  Fill: =RGBA(255, 255, 255, 1)
+                  Color: |
+                    =With(
+                        { e: With({ p: LookUp(colDirtyIPP, _SK = ThisItem.StudentKey And _Subj = ThisItem.Subject And _PF = ThisItem.IPPProgramFamily) }, If(!IsBlank(p), p.IsIPP, ThisItem.IsIPP)) },
+                        If(Not(IsBlank(e)) And e, RGBA(255, 255, 255, 1), RGBA(3, 108, 146, 1))
+                    )
+                  Fill: |
+                    =With(
+                        { e: With({ p: LookUp(colDirtyIPP, _SK = ThisItem.StudentKey And _Subj = ThisItem.Subject And _PF = ThisItem.IPPProgramFamily) }, If(!IsBlank(p), p.IsIPP, ThisItem.IsIPP)) },
+                        If(Not(IsBlank(e)) And e, RGBA(34, 106, 74, 1), RGBA(255, 255, 255, 1))
+                    )
                   Font: =Font.Lato
                   Height: =36
                   HoverColor: =RGBA(3, 108, 146, 1)
@@ -446,17 +451,60 @@ Screens:
                             _PF = ThisItem.IPPProgramFamily
                         )
                     );
-                    Collect(colDirtyIPP, {
-                        _SK:   ThisItem.StudentKey,
-                        _Subj: ThisItem.Subject,
-                        _PF:   ThisItem.IPPProgramFamily,
-                        IsIPP: false
-                    })
+                    If(IsBlank(ThisItem.IsIPP) Or Not(ThisItem.IsIPP),
+                        Collect(colDirtyIPP, {
+                            _SK:   ThisItem.StudentKey,
+                            _Subj: ThisItem.Subject,
+                            _PF:   ThisItem.IPPProgramFamily,
+                            IsIPP: true
+                        })
+                    )
+                  PressedColor: =RGBA(3, 108, 146, 1)
+                  PressedFill: =RGBA(230, 244, 250, 1)
+                  Size: =12
+                  Text: ="Yes (IPP)"
+                  Width: =88
+                  X: =Parent.TemplateWidth - 204
+                  Y: =(Parent.TemplateHeight - Self.Height) / 2
+            - btnIPPNo:
+                Control: Classic/Button@2.2.0
+                Properties:
+                  BorderColor: =RGBA(228, 234, 237, 1)
+                  BorderThickness: =1
+                  Color: |
+                    =With(
+                        { e: With({ p: LookUp(colDirtyIPP, _SK = ThisItem.StudentKey And _Subj = ThisItem.Subject And _PF = ThisItem.IPPProgramFamily) }, If(!IsBlank(p), p.IsIPP, ThisItem.IsIPP)) },
+                        If(Not(IsBlank(e)) And Not(e), RGBA(255, 255, 255, 1), RGBA(3, 108, 146, 1))
+                    )
+                  Fill: |
+                    =With(
+                        { e: With({ p: LookUp(colDirtyIPP, _SK = ThisItem.StudentKey And _Subj = ThisItem.Subject And _PF = ThisItem.IPPProgramFamily) }, If(!IsBlank(p), p.IsIPP, ThisItem.IsIPP)) },
+                        If(Not(IsBlank(e)) And Not(e), RGBA(110, 126, 134, 1), RGBA(255, 255, 255, 1))
+                    )
+                  Font: =Font.Lato
+                  Height: =36
+                  HoverColor: =RGBA(3, 108, 146, 1)
+                  HoverFill: =RGBA(244, 247, 249, 1)
+                  OnSelect: |
+                    =Remove(colDirtyIPP,
+                        LookUp(colDirtyIPP,
+                            _SK = ThisItem.StudentKey And
+                            _Subj = ThisItem.Subject And
+                            _PF = ThisItem.IPPProgramFamily
+                        )
+                    );
+                    If(IsBlank(ThisItem.IsIPP) Or ThisItem.IsIPP,
+                        Collect(colDirtyIPP, {
+                            _SK:   ThisItem.StudentKey,
+                            _Subj: ThisItem.Subject,
+                            _PF:   ThisItem.IPPProgramFamily,
+                            IsIPP: false
+                        })
+                    )
                   PressedColor: =RGBA(3, 108, 146, 1)
                   PressedFill: =RGBA(230, 244, 250, 1)
                   Size: =12
                   Text: ="No"
-                  Visible: =IsBlank(ThisItem.IsIPP)
                   Width: =60
                   X: =Parent.TemplateWidth - 108
                   Y: =(Parent.TemplateHeight - Self.Height) / 2
