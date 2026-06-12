@@ -11,6 +11,10 @@ Run these steps in order at the end of every session. Do not skip steps.
 
 ## Step 1 — Update Project Memory
 
+Memory lives in the repo at `.claude/memory/` (since 2026-06-11; the harness reaches it
+via a per-machine directory junction). Memory edits are therefore part of the session's
+working tree — stage and commit them with the wrap like any other file.
+
 Project memory is split in two (since 2026-06-09). Keep each in its lane:
 
 **A. `project_assessment_platform.md` — the DISTILLED decision record (lean, auto-read at session start).** Edit it ONLY when this session produced a *durable* change: a new architecture / data-model / scope decision, a reversal of a prior decision, a change to deployment state, or a new/closed open question. When you do, **replace the prior state in the relevant topic section — don't append.** This file must stay a current-state snapshot, never a log. Do NOT add a dated session-narrative block here.
@@ -20,6 +24,10 @@ Project memory is split in two (since 2026-06-09). Keep each in its lane:
 **Rule of thumb: narrative → archive; resolved current state → distilled file.** Most sessions append to the archive every time and touch the distilled file only when a decision actually changed. If you are about to paste a dated session block into the distilled file, stop — that belongs in the archive.
 
 Keep the distilled file factual, lean, and free of superseded state. If it has drifted or regrown, prune it back toward current-state-only (the archive already holds the history).
+
+**C. MEMORY.md hook lines must state the actual rule.** The lean session-start procedure (since 2026-06-11) does NOT auto-read the topic/feedback memory files — the one-line hooks in MEMORY.md are the always-loaded enforcement surface, and the file bodies are read just-in-time. So when adding or updating a memory this session:
+- Write the MEMORY.md line as the rule itself ("Never X; do Y instead"), not a topic title ("Notes about X").
+- If a session refines an existing memory's rule (e.g. narrows an absolute rule to specific cases), update its MEMORY.md hook line to match — a stale hook now means the stale rule is what gets enforced.
 
 ---
 

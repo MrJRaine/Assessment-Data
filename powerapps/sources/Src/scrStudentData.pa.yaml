@@ -17,8 +17,11 @@
 # Filters (Pack A + collapsible upgrade 2026-06-10):
 #   - All filtering is centralised in colCohortFiltered (built in btnRefreshCharts).
 #     The gallery, charts, empty-state and match-count all read from it.
-#   - Multi-select filters: Homeroom, Program, School (analyst-only), Achievement.
-#     Stable lists built from the full cohort; membership tested with `in`.
+#   - Multi-select filters: Homeroom, Program, School (analyst-only), Achievement,
+#     Teacher (admin/analyst-only, Pack B 2026-06-11 — options + per-student pairs
+#     from vw_StudentCohortTeachers; predicate precomputes colTeacherMatchKeys then
+#     tests StudentKey membership). Stable lists built from the full cohort;
+#     membership tested with `in`.
 #   - Collapsible filter bar: gblFiltersExpanded gates recFilterBar + every filter
 #     label/combo. When collapsed the hint/headers/gallery slide up 184px; the
 #     pie/bar are bottom-anchored so they stay put. Match count + Reset + the
@@ -52,8 +55,10 @@ Screens:
         ]);
         Refresh(vw_StudentCohort);
         Refresh(vw_StudentAssessmentHistory);
+        Refresh(vw_StudentCohortTeachers);
         ClearCollect(colStudentCohort, SortByColumns(vw_StudentCohort, "LastName", SortOrder.Ascending, "FirstName", SortOrder.Ascending));
         ClearCollect(colStudentHistory, vw_StudentAssessmentHistory);
+        ClearCollect(colCohortTeachers, vw_StudentCohortTeachers);
         ClearCollect(colSchoolYearOptions, {Value: "2025-2026"}, {Value: "2024-2025"});
         ClearCollect(colGradeOptions, Sort(RenameColumns(GroupBy(colStudentCohort, Grade, GradeOrder, _g), GradeOrder, Ord, Grade, Value), Ord, SortOrder.Ascending));
         ClearCollect(colGenderOptions, {Value: "All"});
@@ -61,7 +66,8 @@ Screens:
         ClearCollect(colYesNoOptions, {Value: "All"}, {Value: "Yes"}, {Value: "No"});
         ClearCollect(colHomeroomOptions, Sort(Filter(ShowColumns(RenameColumns(GroupBy(colStudentCohort, Homeroom, _g), Homeroom, Value), Value), Not(IsBlank(Value))), Value, SortOrder.Ascending));
         ClearCollect(colProgramOptions, Sort(Filter(ShowColumns(RenameColumns(GroupBy(colStudentCohort, ProgramFamily, _g), ProgramFamily, Value), Value), Not(IsBlank(Value))), Value, SortOrder.Ascending));
-        ClearCollect(colSchoolOptions, Sort(ShowColumns(GroupBy(colStudentCohort, SchoolID, SchoolName, SchoolAbbreviation, _g), SchoolID, SchoolName, SchoolAbbreviation), SchoolName, SortOrder.Ascending));
+        ClearCollect(colSchoolOptions, Sort(AddColumns(ShowColumns(GroupBy(colStudentCohort, SchoolID, SchoolName, SchoolAbbreviation, _g), SchoolID, SchoolName, SchoolAbbreviation), SchoolLabel, Coalesce(SchoolAbbreviation, SchoolName, SchoolID)), SchoolName, SortOrder.Ascending));
+        ClearCollect(colTeacherOptions, Sort(ShowColumns(GroupBy(colCohortTeachers, TeacherEmail, TeacherName, _g), TeacherEmail, TeacherName), TeacherName, SortOrder.Ascending));
         ClearCollect(colAchievementOptions, Sort(Filter(colAchievementLevels, ActiveFlag = true), AchievementLevelCode, SortOrder.Ascending));
         Set(gblSelectedSchoolYear, Coalesce(gblSelectedSchoolYear, "2025-2026"));
         Set(gblFltGradeMinOrd, Coalesce(gblFltGradeMinOrd, Min(colStudentCohort, GradeOrder)));
@@ -69,10 +75,11 @@ Screens:
         Set(gblFltGender, Coalesce(gblFltGender, "All"));
         Set(gblFltAfrican, Coalesce(gblFltAfrican, "All"));
         Set(gblFltIndigenous, Coalesce(gblFltIndigenous, "All"));
-        Set(gblFltHomerooms, Filter(colHomeroomOptions, false));
-        Set(gblFltPrograms, Filter(colProgramOptions, false));
-        Set(gblFltSchools, Filter(colSchoolOptions, false));
-        Set(gblFltAchievement, Filter(colAchievementOptions, false));
+        Set(gblFltHomerooms, FirstN(colHomeroomOptions, 0));
+        Set(gblFltPrograms, FirstN(colProgramOptions, 0));
+        Set(gblFltSchools, FirstN(colSchoolOptions, 0));
+        Set(gblFltAchievement, FirstN(colAchievementOptions, 0));
+        Set(gblFltTeachers, FirstN(colTeacherOptions, 0));
         Set(gblFiltersExpanded, Coalesce(gblFiltersExpanded, false));
         Select(btnRefreshCharts);
         Set(gblCohortLoaded, true)
@@ -159,10 +166,11 @@ Screens:
               Set(gblFltGender, "All");
               Set(gblFltAfrican, "All");
               Set(gblFltIndigenous, "All");
-              Set(gblFltHomerooms, Filter(colHomeroomOptions, false));
-              Set(gblFltPrograms, Filter(colProgramOptions, false));
-              Set(gblFltSchools, Filter(colSchoolOptions, false));
-              Set(gblFltAchievement, Filter(colAchievementOptions, false));
+              Set(gblFltHomerooms, FirstN(colHomeroomOptions, 0));
+              Set(gblFltPrograms, FirstN(colProgramOptions, 0));
+              Set(gblFltSchools, FirstN(colSchoolOptions, 0));
+              Set(gblFltAchievement, FirstN(colAchievementOptions, 0));
+              Set(gblFltTeachers, FirstN(colTeacherOptions, 0));
               Reset(cmbFltGradeMin);
               Reset(cmbFltGradeMax);
               Reset(cmbFltGender);
@@ -172,6 +180,7 @@ Screens:
               Reset(cmbFltProgram);
               Reset(cmbFltSchool);
               Reset(cmbFltAchievement);
+              Reset(cmbFltTeacher);
               Select(btnRefreshCharts)
             PressedColor: =RGBA(3, 108, 146, 1)
             PressedFill: =RGBA(230, 244, 250, 1)
@@ -461,7 +470,7 @@ Screens:
           Properties:
             Height: =40
             InputTextPlaceholder: ="All schools"
-            ItemDisplayText: =Coalesce(ThisItem.SchoolAbbreviation, ThisItem.SchoolName, ThisItem.SchoolID)
+            ItemDisplayText: =ThisItem.SchoolLabel
             Items: =colSchoolOptions
             OnChange: =Set(gblFltSchools, Self.SelectedItems); Select(btnRefreshCharts)
             SelectMultiple: =true
@@ -469,12 +478,17 @@ Screens:
             Width: =150
             X: =484
             Y: =188
+      # lblFltTeacher + cmbFltTeacher are declared at the END of this file (after the
+      # chart cluster) — their X range (648-818) sits under PieChart1's oversized
+      # transparent padding, and they must be later in z-order or edit-mode Alt+click
+      # hits the pie instead of the combo. Runtime hit-testing is unaffected either way.
       - btnRefreshCharts:
           Control: ModernButton@1.0.0
           Properties:
             Height: =1
             OnSelect: |
-              =ClearCollect(colCohortFiltered,
+              =ClearCollect(colTeacherMatchKeys, Filter(colCohortTeachers, TeacherEmail in gblFltTeachers.TeacherEmail));
+              ClearCollect(colCohortFiltered,
                 Filter(colStudentCohort,
                   GradeOrder >= gblFltGradeMinOrd,
                   GradeOrder <= gblFltGradeMaxOrd,
@@ -484,7 +498,8 @@ Screens:
                   (CountRows(gblFltHomerooms) = 0 Or Homeroom in gblFltHomerooms.Value),
                   (CountRows(gblFltPrograms) = 0 Or ProgramFamily in gblFltPrograms.Value),
                   (CountRows(gblFltSchools) = 0 Or SchoolID in gblFltSchools.SchoolID),
-                  (CountRows(gblFltAchievement) = 0 Or MostRecentAchievementLevelCode in gblFltAchievement.AchievementLevelCode)
+                  (CountRows(gblFltAchievement) = 0 Or MostRecentAchievementLevelCode in gblFltAchievement.AchievementLevelCode),
+                  (CountRows(gblFltTeachers) = 0 Or StudentKey in colTeacherMatchKeys.StudentKey)
                 )
               );
               ClearCollect(colChartFiltered, Filter(colCohortFiltered, IsChartEligibleReading = true));
@@ -924,3 +939,34 @@ Screens:
             Width: =180
             X: =Parent.Width - 200
             Y: =Parent.Height - 200
+      # Teacher filter — declared LAST deliberately: its footprint (X 648-818, filter
+      # bar row 2) lies under PieChart1's oversized transparent padding, and a control
+      # under the pie box loses edit-mode Alt+click to the chart. Being last in the
+      # children list puts these on top. Visually harmless: the pie's visible circle
+      # is centred ~200px away; this corner of its box is empty padding.
+      - lblFltTeacher:
+          Control: Label@2.5.1
+          Properties:
+            Color: =RGBA(110, 126, 134, 1)
+            Font: =Font.Lato
+            FontWeight: =FontWeight.Semibold
+            Height: =20
+            Size: =10
+            Text: ="Teacher"
+            Visible: =gblCohortLoaded And gblFiltersExpanded And gblIsAdminOrAnalyst
+            Width: =170
+            X: =648
+            Y: =166
+      - cmbFltTeacher:
+          Control: ModernCombobox@1.1.0
+          Properties:
+            Height: =40
+            InputTextPlaceholder: ="All teachers"
+            ItemDisplayText: =ThisItem.TeacherName
+            Items: =colTeacherOptions
+            OnChange: =Set(gblFltTeachers, Self.SelectedItems); Select(btnRefreshCharts)
+            SelectMultiple: =true
+            Visible: =gblCohortLoaded And gblFiltersExpanded And gblIsAdminOrAnalyst
+            Width: =170
+            X: =648
+            Y: =188

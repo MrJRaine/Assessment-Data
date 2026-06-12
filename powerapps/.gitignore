@@ -19,3 +19,11 @@ unpack-*/
 # Archived / superseded Studio exports (discovery round-trips, old baselines) —
 # disposable; the canonical sources/ tree + "Student Data Staff Portal.msapp" are the source of truth.
 archive/
+
+# Waypoints — tent-pole milestone builds, deliberately KEPT in git (exception to the
+# msapp patterns above so they survive clones and travel between machines).
+# Naming: "Student Data Staff Portal.<YYYY-MM-DD>.<milestone>.msapp" — see waypoints/README.md.
+!waypoints/*.msapp
+
+# Stray installers / binaries dropped into the design handoff folder
+from-claude-design/*.exe
