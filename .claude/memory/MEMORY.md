@@ -1,6 +1,7 @@
 # Memory Index
 
 - [Licensing Gate on Every Design Decision](feedback_licensing_gate_on_design.md) — NEVER validate a connector/service on capability alone; state its license class + end-user cost at full scale in the same breath. Maker-account tests prove nothing about end-user licensing. (Power Apps SQL premium connector miss, 2026-06-12)
+- [Entra App Registration Is IT-Gated](project_entra_appreg_it_gated.md) — User CANNOT self-register Entra apps in the TCRCE tenant (401, confirmed 2026-06-18); IT must create registrations AND grant admin consent. Every Entra step (web-app sign-in, Fabric user-token, bridge daemon) sits on the IT critical path — bundle requests, treat IT turnaround as the schedule driver.
 - [Licensing Crisis, Entry-Layer Pivot, Pinned Supabase Option](project_licensing_pivot_2026_06.md) — DECIDED 2026-06-12: **BINDING CONSTRAINT — $0 per-user recurring licensing in the production path; PAYG/premium are off the table, period.** Teacher entry AND school admins pivot to SharePoint lists; analysts via Power BI (A5 includes Pro, NOT Power Apps premium); bridge must be Fabric-side $0 (Entra app registration from IT = critical path). PINNED post-pilot: Supabase migration (~$41 vs $241 CAD/mo; privacy review is the long pole)
 
 - [Project: Assessment Platform](project_assessment_platform.md) — **READ THIS** — distilled current-state decision record (final/resolved decisions by topic) for the Nova Scotia student assessment platform

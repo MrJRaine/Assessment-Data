@@ -2,18 +2,22 @@
 
 **Requested by:** jeffrey.raine@tcrce.ca
 **Date:** 2026-06-18
-**Use only if self-service app registration is blocked** (most of this is user-consentable
-and may not need IT — try the self-service steps first; see `docs/implementation-plan.md`
-Phase 3b / B2).
+**Status:** Self-service registration **confirmed blocked** — the App registrations blade
+returns "You don't have access" (error 401) for this account. IT action required.
 
 ## Context
 
-The student assessment platform's entry app is being rebuilt as a self-hosted web app
-(Phase 3b fork) so it can authenticate users with Entra ID and read/write the Fabric
-Warehouse **server-side** — eliminating the per-user premium-connector cost that blocked the
-Power Apps path. This request covers the **identity** piece (sign-in + ID validation).
+The student assessment platform's data-entry app is being rebuilt as a self-hosted web app
+so it can authenticate staff with Entra ID and read/write the Fabric Warehouse
+**server-side** — which removes the per-user premium-connector licence cost that blocked the
+Power Apps approach. This request sets up the app's identity and its data access in one pass.
 
-## What's needed
+Please action **Part 1** (required to unblock testing) and, ideally in the same pass,
+**Part 2** (data access) to avoid a second request.
+
+---
+
+## Part 1 — App registration + sign-in (required)
 
 A **single-tenant** Entra ID **app registration**:
 
@@ -23,29 +27,41 @@ A **single-tenant** Entra ID **app registration**:
 | Supported account types | Single tenant (this directory only) |
 | Platform | Web |
 | Redirect URI (dev) | `http://localhost:3000/api/auth/callback/microsoft-entra-id` |
-| Redirect URI (pilot/prod) | TBD — a Canadian-region host URL, added when we deploy |
-| Credential | One client secret (or certificate). Held only in the dev `.env` for now; for shared/hosted use, a secret with a rotation schedule. |
+| Redirect URI (pilot/prod) | TBD — a Canadian-region host URL, to be added when we deploy |
+| Credential | One **client secret** (12-month is fine). Please share the secret **Value** with me securely (not by email) — see note below. |
 
-### API permissions (Microsoft Graph, **delegated**)
+**API permissions — Microsoft Graph, delegated:** `openid`, `profile`, `email`, `User.Read`
 
-`openid`, `profile`, `email`, `User.Read`
+## Part 2 — Fabric Warehouse data access (please include)
 
-These are **user-consentable — no admin consent required** for sign-in + ID validation.
+So the signed-in user's token can query the Fabric Warehouse (`Assessment_Warehouse`,
+Canada East) with row-level security intact:
 
-### Later (separate follow-up, not this request)
+- **API permission — Azure SQL Database, delegated:** `user_impersonation`
+  (APIs my organization uses → *Azure SQL Database* → Delegated → `user_impersonation`).
+  This lets the web app obtain a SQL-resource token on the user's behalf.
+- **Confirm** the developer account (jeffrey.raine@tcrce.ca) has at least read access to the
+  Fabric workspace / warehouse SQL endpoint (real teachers already do via the secured views;
+  the dev account needs it to test).
 
-To let the signed-in user's token read/write the **Fabric Warehouse** with native row-level
-security (Phase 3b / B3-B4), we will additionally need a **delegated** permission to the
-Azure SQL / Fabric data resource (e.g. Azure SQL Database `user_impersonation`). The user
-(teacher) must also have access to the Fabric workspace/warehouse — which real users already
-have via the secured RLS views. We will raise that as a small amendment once B2 is confirmed.
+## Admin consent (required)
+
+Because user consent appears to be restricted in this tenant, please **grant admin consent**
+for the app's delegated permissions above, so sign-in doesn't prompt each user for approval.
+
+## Secret handoff
+
+The client secret is a credential — please deliver the **Value** via a secure channel
+(Teams private message, a secrets vault, or in person), **not** plain email. It will be
+stored only in a local `.env` (never committed) for dev, and in a Canadian-region secret
+store when the app is hosted.
 
 ## Least-privilege notes
 
-- **Delegated only** (acts as the signed-in user), **single tenant**, **no admin-consent
-  scopes** for B2.
+- **Delegated only** (the app acts strictly as the signed-in user), **single tenant**.
+- Initial use: the developer account only (jeffrey.raine@tcrce.ca).
 - This is a **different, lighter** registration than the SharePoint-bridge daemon request
   (`docs/it-request-entra-bridge.md`), which needs an *application* permission
-  (`Sites.Selected`) + admin consent. If the web-app path (3b) supersedes the bridge (3a),
-  the bridge request may no longer be needed — flag before actioning both.
-- Initial assignment: the developer account (jeffrey.raine@tcrce.ca) only.
+  (`Sites.Selected`) + admin consent. **The web-app path (Phase 3b) is likely to supersede
+  the bridge (Phase 3a) — please check with the requester before actioning both**, to avoid
+  standing up an app identity we won't use.
