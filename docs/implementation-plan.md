@@ -63,6 +63,7 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - [x] **B-scaffold. Navigation + layout for all screens** — done 2026-06-18. App shell (header, nav, identity widget reflecting `AUTH_MODE`), routes for every screen (`/enter` → `[windowId]` → `[groupKey]`, `/students` → `[studentKey]`, `/ipp`, `/ingest`), Direction-B palette in `globals.css`, placeholder data (`lib/mock.ts`) so navigation is clickable end to end. Verified under Podman: all routes 200, shell renders on deep pages. Data binding deferred to B3/B5.
 - [ ] **B5. Port first real screen** (window/group select) end-to-end against the secured view.
 - [ ] **B6+. Port remaining screens** from the Direction B design; deploy to a Canadian region; Teams embed.
+- [ ] **B-polish (after testing). Favicon transparency** — revisit the favicon assets to make the area around the lighthouse mark transparent (currently a solid square background). Applies mainly to the browser-tab icons (`favicon.ico`, `favicon-16x16`, `favicon-32x32`); leave `apple-touch-icon` / `android-chrome` opaque since iOS/Android mask and tile them. Regenerate the package from a transparent-background source and re-drop into `webapp/public/`.
 
 ---
 
