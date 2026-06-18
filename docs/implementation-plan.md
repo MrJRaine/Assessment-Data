@@ -31,8 +31,13 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 
 ---
 
-## Phase 3: Power Apps Entry Form (Weeks 5–6)
+## Phase 3a: Power Apps / SharePoint Entry App (Weeks 5–6)
 *Goal: Teachers can submit reading assessments from Teams*
+
+> **FORK (2026-06-18):** Phase 3 split into two parallel entry-layer tracks after the premium-connector licensing wall.
+> **3a** (this section, Steps 15–20) — the Power Apps app, now on the SharePoint-list pivot ([`docs/sharepoint-entry-pivot.md`](sharepoint-entry-pivot.md)).
+> **3b** (below) — a self-hosted Next.js web app that connects to Fabric server-side (no per-user license), the long-term target that also carries the eventual Postgres/Supabase move.
+> Both satisfy the **$0 per-user** constraint; 3b is being spiked to de-risk Entra auth + Fabric read/write before the pilot commits to it. 3a remains the documented fallback. Branch: `phase-3b-webapp`.
 
 - [x] **15. Create canvas app** in Power Apps maker portal *(Manual — maker portal)*. **Done 2026-05-11.** Single-screen test app created in TCRCE default environment with a smoke-test button.
 - [x] **16. Connect app to Fabric SQL endpoint** — test connection early, may need custom connector *(Manual — connector setup in portal)*. **Done 2026-05-11.** SQL Server connector + Microsoft Entra ID Integrated auth confirmed working for reads against `Assessment_Warehouse`. **MAJOR ARCHITECTURAL FINDING**: Power Apps `Patch()` and `SubmitForm()` do NOT work against Fabric Warehouse tables (`Defaults(<FabricTable>)` returns `{}`). Established workaround pattern (memorialized in `project_powerapps_write_pattern.md` memory + fabric-warehouse-sql skill items 15-16): wrapper stored procs called from Power Apps formulas via the same SQL connector. First proc `usp_InsertSubmissionAudit` deployed; end-to-end smoke test confirmed (Power Apps button → row in `FactSubmissionAudit` with calling user's UPN). Reference: [Shabnam Watson blog](https://shabnamwatson.com/2024/10/26/updating-microsoft-fabric-warehouse-with-power-apps-visual-in-power-bi/).
@@ -42,7 +47,21 @@ Check off each item as it's completed. Manual steps require portal/admin access;
   - **Status (2026-06-10)**: Direction B restyle ported & validated for **6 of 7 screens** (scrLanding, scrIPP, scrWindowSelect, scrGroupSelect, scrStudentDetail, scrStudentData); **only scrRosterGrid remains**. `HexColorTint` tint SQL **deployed**. scrStudentData cohort filters built: centralized `colCohortFiltered`; multi-select Homeroom/Program/School(analyst-only)/Achievement; collapsible filter bar (header-mounted count + Reset + toggle). **Pending**: Teacher cohort filter (needs a `vw_StudentCohort` teacher-exposure SQL change, gated to `gblIsAdminOrAnalyst`) + optional Assessment-Window as-of-window recompute. Still also open: scrIPP entry button on scrLanding; cross-screen polish.
   - **Status (2026-06-12)**: restyle **COMPLETE (7/7 validated)**; Pack B Teacher filter **built** (`vw_StudentCohortTeachers` deployed; combo gated to `gblIsAdminOrAnalyst`); scrIPP entry button confirmed already present (restyled scrLanding card). **⚠ LICENSING PIVOT supersedes remaining Step 18 scope**: the SQL Server connector is premium (A3/A5 don't cover it) → end-user apps rebind to **SharePoint lists** per [`docs/sharepoint-entry-pivot.md`](sharepoint-entry-pivot.md); the SQL-bound app becomes maker-only reference; the app **splits** (Teacher Entry, lists-only / admin screens ported to school-scoped lists). Binding constraint: **$0 per-user licensing — no PAYG, no premium**. Full record: `.claude/memory/project_licensing_pivot_2026_06.md`.
 - [x] **19. Write audit logging logic** to `FactSubmissionAudit` on each submission *(Claude can write formula/flow)*. **Done 2026-05-11.** `usp_InsertSubmissionAudit` deployed with three-layer validation (NULL guard 51010 + 3 enum allow-lists 51011-51013 + email-format 51014 + LOWER normalization). Power Apps writes invoke it via the dot-stripped form `Assessment_Warehouse.dbouspInsertSubmissionAudit({...})`. Audit rows also written by `usp_UpsertReadingAssessment`, `usp_DeleteReadingAssessment`, `usp_UpsertStudentIPP`, and `usp_TriggerIngestCycle` on every state change.
-- [ ] **20. Share Power Apps** directly with 5–10 pilot teachers *(Manual — Power Apps share dialog)*. Pilot uses direct sharing only — the Teams app catalog embed is deferred to full rollout (Step 27). **Status (2026-06-12)**: gated on the SharePoint entry pivot (share the lists-bound apps, NOT the SQL-bound app — sharing it would demand premium licenses per user). **Pilot includes school admins** (confirmed 2026-06-12) → both the Teacher Entry app and the admin port ship before sharing. Pilot timing ~mid-July (pivot ~4-7 wks from 2026-06-12); critical path = IT Entra app registration ([`docs/it-request-entra-bridge.md`](it-request-entra-bridge.md)).
+- [ ] **20. Share Power Apps** directly with 5–10 pilot teachers *(Manual — Power Apps share dialog)*. Pilot uses direct sharing only — the Teams app catalog embed is deferred to full rollout (Step 27). **Status (2026-06-12)**: gated on the SharePoint entry pivot (share the lists-bound apps, NOT the SQL-bound app — sharing it would demand premium licenses per user). **Pilot includes school admins** (confirmed 2026-06-12) → both the Teacher Entry app and the admin port ship before sharing. Pilot timing: fall assessment window (TBD) — July–August unavailable (pilot teachers and project lead are both 10-month staff); critical path = IT Entra app registration ([`docs/it-request-entra-bridge.md`](it-request-entra-bridge.md)).
+
+---
+
+## Phase 3b: Self-Hosted Web App (fork — started 2026-06-18)
+*Goal: Replace the canvas app with a containerized Next.js app that connects to the data layer server-side — no per-user licensing — and ports cleanly from Fabric to Postgres/Supabase later.*
+
+Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + TypeScript, `mssql` driver, OCI container under Podman, Entra (MSAL) auth. Lives in [`webapp/`](../webapp/).
+
+- [x] **B1. Container skeleton** — Next.js + TS scaffold, multi-stage Dockerfile (non-root), health/readiness endpoint, server-only Fabric connection module (`queryAsUser` passes `@UPN` for RLS), surrogate-key string guards. **Built + verified under Podman 2026-06-18** (`podman build` clean via `npm ci` off a committed lockfile; container serves `/` 200 + `/api/health` JSON as non-root).
+- [ ] **B2. Entra login — access control + ID validation** *(NEXT — highest-risk spike)*. MSAL auth-code flow; validate the signed-in identity; resolve UPN. Needs an Entra app registration (dev redirect `http://localhost:3000/...`). De-risks the whole fork.
+- [ ] **B3. Fabric read** — authenticated user → `queryAsUser` against a secured/bridge view; confirm a real row set returns scoped to the caller.
+- [ ] **B4. Fabric write** — call an existing wrapper proc (e.g. `usp_InsertSubmissionAudit`) from the app; confirm the row lands with the caller's UPN.
+- [ ] **B5. Port first real screen** (window/group select) end-to-end against the secured view.
+- [ ] **B6+. Port remaining screens** from the Direction B design; deploy to a Canadian region; Teams embed.
 
 ---
 
@@ -86,10 +105,12 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 |-------|-------------|-----------|
 | Phase 1: Foundation | 8 | 8 |
 | Phase 2: Security & Views | 6 | 6 |
-| Phase 3: Power Apps | 6 | 4 |
+| Phase 3a: Power Apps | 6 | 4 |
 | Phase 4: Pilot Testing | 5 | 0 |
 | Phase 5: Full Rollout | 11 | 0 |
 | **Total** | **36** | **18** |
+
+*Phase 3b (self-hosted web app fork, started 2026-06-18) is tracked separately — see its section above; not included in the 36-step total.*
 
 ---
 
@@ -103,6 +124,13 @@ Check off each item as it's completed. Manual steps require portal/admin access;
 - **DimCalendar**: Original WHILE loop version is slow (~5+ min for 5844 rows). Rewritten as a single bulk INSERT using cross-join CTE — use the current file version.
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
+
+### Left Off — 2026-06-18 (PHASE 3 FORK → 3b self-hosted web app; container skeleton built + verified; next = Entra auth, then Fabric read/write)
+- **Last completed**: Phase 3b kickoff. Self-hosted **Next.js 15 + TypeScript** web app scaffolded in [`webapp/`](../webapp/) and **verified end-to-end under Podman** (image builds via `npm ci` off a committed lockfile; container serves `/` 200 + `/api/health` JSON, running as non-root). Boundaries set up front: server-only Fabric connection (`src/lib/db.ts` — `queryAsUser` passes `@UPN` because a service-principal connection can't satisfy `USERPRINCIPALNAME()`), surrogate-key string guards (`src/lib/keys.ts`), `dev`/`entra` auth modes (`src/lib/auth.ts`). Branch `phase-3b-webapp`.
+- **Why the fork**: the web app makes the premium-connector problem vanish (server-side connection = no per-user license), restores validation-at-save (no bridge replay), and is the same front end the pinned Postgres/Supabase move needs. 3a (Power Apps + SharePoint bridge) remains the documented fallback; 3b is being spiked to confirm its two riskiest assumptions before the pilot commits to it.
+- **Next action (in order)**: (1) **Entra login — access control + ID validation** (B2): MSAL auth-code flow + identity validation; gated on an Entra app registration (a dev/self-service app reg with redirect `http://localhost:3000` unblocks the spike without waiting on the full IT request). (2) **Fabric read** (B3) then **write** (B4): authenticated user → `queryAsUser` against a secured view; then call `usp_InsertSubmissionAudit` and confirm the row + UPN.
+- **Calendar**: both teachers AND the user are 10-month (off July–August); build happens only in-session. June = de-risk 3b (Entra + Fabric read/write) and fire the IT Entra request into the summer queue; substantive build resumes late Aug/Sept; pilot targets a fall assessment window (date TBD by user).
+- **Blockers**: Entra app registration for the auth spike (a dev app reg suffices to start). The production bridge-side IT request (3a) remains the long pole if 3a is used.
 
 ### Left Off — 2026-06-12 (restyle DONE 7/7 + Pack B + LICENSING CRISIS → SharePoint-list pivot; $0-license constraint; session-infra overhaul)
 - **Last completed step**: Step 18 build items — Direction B restyle validated on all 7 screens (waypoint kept: `powerapps/waypoints/`); Pack B Teacher filter built (`vw_StudentCohortTeachers` DEPLOYED); fixes: `ItemDisplayText` Coalesce restriction (precompute display columns), `FirstN(col, 0)` warning silencer, edit-mode z-order under pie padding.

@@ -1,0 +1,12 @@
+# Local dev convenience: `podman compose up --build`
+# (Podman reads compose files via its Docker Compose provider.)
+services:
+  webapp:
+    build:
+      context: .
+    image: assessment-webapp:dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    restart: unless-stopped
