@@ -7,10 +7,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <>
       <header className="header">
         <div className="brand">
-          {/* Swap this file (webapp/public/logo.svg) for the official TCRCE logo. */}
+          {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="" className="logo" width={28} height={28} />
-          <span>Assessment Data</span>
+          <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
+          <span className="brand-app">Assessment Data</span>
         </div>
         <Nav />
         <div className="auth">
