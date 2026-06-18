@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+.git
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+npm-debug.log*
+
+# never bake local env / secrets into an image
+.env
+.env.local
+.env.*.local
+!.env.example

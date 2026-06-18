@@ -22,6 +22,16 @@ The app is `Student Data Staff Portal`. Sources live in `powerapps/sources/Src/`
    ```bash
    "C:\Users\jeffrey.raine\AppData\Local\Microsoft\PowerAppsCli\Microsoft.PowerApps.CLI.2.7.4\tools\pac.exe" canvas pack --sources "powerapps\sources" --msapp "powerapps\Student Data Staff Portal.dev.msapp" --overwrite
    ```
+   **Pack target**: `dev.msapp` is the standard test target (gitignored disposable, regenerable
+   from `sources/`). `Student Data Staff Portal.msapp` is the canonical baseline in git — never
+   pack over it casually; it's promoted deliberately. (A `cd-test.msapp` target was used for
+   Claude-Design restyle port testing through 2026-06-11; retired once all 7 screens validated.
+   If a future side-effort needs its own isolated test artifact, use a distinct `<effort>-test.msapp`
+   name the same way — and record it here while it's active.)
+
+   **Waypoints**: `powerapps/waypoints/` holds tent-pole milestone builds that ARE committed
+   (gitignore exception). When a multi-session effort completes and is validated, pack a copy as
+   `Student Data Staff Portal.<YYYY-MM-DD>.<milestone>.msapp` and add a row to `waypoints/README.md`.
 3. User opens the `.msapp` in Studio (you don't dictate the menu path — just say "open it in Studio").
 4. If Studio errors on import (PA1001 / PA2110 / PA2108), parse the error, fix the YAML, re-pack.
 5. If Studio reports a runtime Power Fx error (red squiggle, wrong type), iterate.
@@ -187,6 +197,8 @@ Without it, dropdowns render as empty even though Items is populated. Working pa
 Read `Selected.Value` (the column name from the Items collection) in OnChange — that's how ModernCombobox surfaces the chosen row.
 
 ModernCombobox does NOT accept `DisplayFields` or `SearchFields` (those are Classic ComboBox only). Use `ItemDisplayText` instead.
+
+**`ItemDisplayText` is a restricted-function property — `Coalesce` is rejected** ("The Coalesce function cannot be used in expressions on this property", red error). Discovered 2026-06-11 on cmbFltSchool, on a formula that had validated cleanly on 2026-06-10 — Microsoft tightens modern-control property analyzers server-side, so this class of error can appear without any app change. **Fix pattern: keep `ItemDisplayText` a plain field reference** (`=ThisItem.X`) and precompute any fallback/concat logic into a column when building the options collection (`AddColumns(..., DisplayLabel, Coalesce(A, B, C))`) or in the SQL view itself. Assume other complex functions may be similarly restricted on `ItemDisplayText`.
 
 ### 3e. DateAdd / DateDiff units are enum members, not bare identifiers
 
@@ -630,6 +642,8 @@ Drive a gallery's `Items` through a sort switch keyed on two globals; make each 
 - Toggle + always-visible actions (match-count, Reset) go in the **header band**, gated only on the loaded flag, not on `gblFiltersExpanded`.
 
 **Native chart internal padding (donut build).** `PieChart@2.3.0` / `BarChart@2.4.0` render the visible plot at only **~58% of the control box** (fixed internal padding, no property to change it). To get a large visible donut: oversize the control box and let its transparent padding overlap neighbours that draw **later** in z-order (move the title to *after* the chart; keep interactive controls out from under the padding or they'll eat clicks). Fake the donut hole with a white `Circle@2.3.0` sized off the box; replace the native `Legend` with a custom gallery when you need per-row percent + count.
+
+**Edit-mode vs preview hit-testing under the padding differs** (discovered 2026-06-12 on cmbFltTeacher): an interactive control UNDER the oversized chart box still works fine at runtime/preview (the chart's empty padding passes pointer events through) but loses **edit-mode Alt+click** to the chart — it can't be interacted with in the designer. Fix: declare the covered control LATER in the children list than the chart (z-order on top); visually harmless when it only overlaps empty padding. If a control under the chart box "can't be clicked", always ask whether that's preview or edit mode before treating it as a runtime bug.
 
 ## 8. Pre-flight Checklist (read before yielding YAML)
 

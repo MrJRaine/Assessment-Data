@@ -1,0 +1,13 @@
+# dependencies / build output
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# local env (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# logs
+npm-debug.log*
