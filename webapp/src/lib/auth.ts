@@ -1,17 +1,17 @@
 import 'server-only'
+import { auth } from '@/auth'
 
 /**
- * Identity resolution (SERVER-ONLY). Two modes, selected by AUTH_MODE:
+ * Resolve the current user's UPN (SERVER-ONLY). Two modes via AUTH_MODE:
  *  - 'dev'   : returns DEV_FAKE_UPN so the app runs end to end before Entra is wired.
  *              LOCAL ONLY -- never deploy with this.
- *  - 'entra' : MSAL on-behalf-of flow -> validate the signed-in teacher's token and pull
- *              their UPN. NOT WIRED YET (blocked on the Entra app registration from IT,
- *              the same critical-path dependency tracked for the bridge).
+ *  - 'entra' : reads the validated Auth.js session (Microsoft Entra sign-in) and returns
+ *              the UPN lifted onto the session in `src/auth.ts`.
  *
  * The resolved UPN flows into db.queryAsUser() as the @UPN parameter the secured views
  * filter on.
  */
-export function getCurrentUpn(): string {
+export async function getCurrentUpn(): Promise<string> {
   const mode = process.env.AUTH_MODE ?? 'dev'
 
   if (mode === 'dev') {
@@ -20,6 +20,9 @@ export function getCurrentUpn(): string {
     return upn
   }
 
-  // TODO(entra): wire @azure/msal-node OBO; resolve UPN from the validated access token.
-  throw new Error('AUTH_MODE=entra is not wired yet (MSAL OBO pending the Entra app registration)')
+  const session = await auth()
+  const user = session?.user as ({ upn?: string; email?: string } | undefined)
+  const upn = user?.upn ?? user?.email
+  if (!upn) throw new Error('No authenticated user (AUTH_MODE=entra) -- sign in required')
+  return upn
 }
