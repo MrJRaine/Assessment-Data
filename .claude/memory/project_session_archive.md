@@ -974,3 +974,34 @@ After multiple sessions of failed multi-series rendering on `BarChart@2.4.0` (on
 - Warehouse: vw_StudentCohortTeachers deployed; bridge views not deployed; everything else unchanged.
 - App: dev.msapp = restyle-complete + Pack B + fixes; SQL-bound app destined for maker-only reference post-pivot.
 - Open user actions: create SharePoint site (send URL), send IT request, deploy bridge_views.sql, verify premium-trial expiry.
+
+## Session 2026-06-18 — PHASE 3 FORK: self-hosted Next.js web app (3b) spiked; container + Entra login + full-screen nav/layout scaffold; TCRCE branding; hosting brief
+
+### Decision: fork the entry layer into a self-hosted web app (3b)
+- Explored "convert the app to React": established it's a rewrite, not a conversion; the UI is the smaller half, the real work is the backend tier Power Apps gave for free (auth + a data connection). React+Fabric needs a custom API tier; React+Supabase (supabase-js, RLS in DB) is the clean endpoint.
+- Compared **SharePoint bridge (3a) vs Node/TS container (3b)** keeping Fabric for now: roughly equal effort, but 3a's big chunk (bidirectional sync engine) is throwaway scaffolding carrying permanent debt (replay-time validation, silent delegation truncation, eventual consistency), while 3b's big chunk (the React UI) is the actual long-term product. Key reframe: the premium-connector wall was a *Power Platform* problem, not a Fabric problem — a server-side connection has **no per-user licensing**. 3b favored; 3a kept as documented fallback.
+- Stack chosen: **Node/TS + Next.js (single container)** over .NET (avoids deepening MS lock-in the user is trying to escape) and over SPA+API (one image, server holds the DB/auth boundary). Point at **Fabric now → Postgres/Supabase later** behind a thin explicit-SQL data layer so the swap is a driver+dialect port, not a rewrite. Two gotchas carried over: surrogate keys must be strings in JS (same IEEE-754 trap as Power Fx — VARCHAR(20) casts reused); `USERPRINCIPALNAME()` RLS views break under a service-principal connection → pass UPN as `@UPN` (or use OBO user-token for native RLS).
+
+### Built (all in `webapp/`, verified under Podman 5.8; host has no Node — toolchain runs inside node:20-alpine)
+- **B1 skeleton**: Next.js 15 + TS, multi-stage Dockerfile (non-root, standalone output), `.dockerignore`/`.gitignore`, compose, health/readiness endpoint, server-only Fabric connection module (`db.ts` `queryAsUser` w/ `@UPN`), surrogate-key string guards (`keys.ts`), dev/entra auth modes. `package-lock.json` committed (reproducible `npm ci`). Fix: `mssql` needs `@types/mssql`.
+- **B2 Entra login**: Auth.js v5 + Microsoft Entra ID provider (`src/auth.ts`), `[...nextauth]` route, UPN lifted onto session, landing/header access-control widget. Compiles + runs; **OAuth round-trip untested — app registration is IT-gated**.
+- **B-scaffold**: app shell (header, nav with active state, identity widget), route for every screen — `/enter` → `[windowId]` → `[groupKey]` (window/group/roster), `/students` → `[studentKey]`, `/ipp`, `/ingest` — Direction-B palette (`globals.css`), placeholder data (`lib/mock.ts`) so navigation is clickable end to end. Next 15 async `params` handled. All routes return 200.
+- **Branding**: TCRCE logo (user supplied PNG → `public/logo.png`) stacked above "Assessment Data" in the header; full favicon package wired via app metadata (`favicon.ico`, 16/32, apple-touch, `site.webmanifest` named + brand-cyan theme). Placeholders removed. **B-polish noted (deferred)**: regenerate favicon with transparent surround around the lighthouse mark after testing (tab icons only; keep apple/android opaque).
+
+### IT-gated app registration (confirmed)
+- User hit **401 "You don't have access"** on the App registrations blade → app registration is **IT-only** in the TCRCE tenant; user likely can't grant admin consent either. New memory `project_entra_appreg_it_gated`. Every Entra step (web-app sign-in, Fabric user-token, bridge daemon) now sits on the IT critical path.
+- `docs/it-request-entra-webapp-dev.md` rewritten as a **one-pass bundled request**: Part 1 app reg + sign-in (delegated openid/profile/email/User.Read), Part 2 delegated Azure SQL `user_impersonation` for Fabric read/write, + admin consent + secure secret handoff. **Send only the 3b request; hold the 3a bridge-daemon request** unless 3a is confirmed.
+
+### Docs
+- `docs/brief-server-hosting-requirements.md` — one-page Technology-Services brief to host the container at **data.tcrce.ca**: existing-server resource footprint (~1 vCPU, 1–2 GB, 3–5 GB free), Podman (recommended; security-by-default rootless/daemonless — Docker cost point removed since Engine is free), DNS/TLS, firewall in/out (443 in; 443 + 1433 out), Podman-secrets handling (ephemeral tmpfs mount; encryption-at-rest via `pass`/KMS), ops, action checklist. (A copy-paste reformat prompt for claude.ai was also produced.)
+
+### Calendar reality (drives the schedule)
+- Both pilot teachers AND the project lead are **10-month staff (off July–August)**; Claude builds only in working sessions. June = de-risk 3b + fire the IT request into the summer queue; build resumes late Aug/Sept; pilot targets a fall assessment window (date TBD). Corrected the impossible "~mid-July pilot" date in the plan.
+
+### Git
+- Branch `phase-3b-webapp` (forked from `phase-3-power-apps`). ~8 commits this session, pushed. PR against `main` to be opened via GitHub web (gh unauthenticated): https://github.com/MrJRaine/Assessment-Data/pull/new/phase-3b-webapp
+
+### End-of-session state
+- Warehouse: unchanged this session (bridge views still NOT deployed). No SQL ran.
+- Web app: scaffold complete (container + auth wiring + nav/layout + branding), all verified under Podman; NO live auth, NO Fabric connection, NO data binding yet.
+- Open user actions: (1) send the bundled web-app IT request (critical path); (2) open the PR; (3) optionally test B2 mechanics in a free/dev Entra tenant. Claude next: wire `queryAsUser` data layer on spec, or build one screen's real controls.
