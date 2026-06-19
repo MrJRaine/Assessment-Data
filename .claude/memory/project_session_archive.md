@@ -1005,3 +1005,38 @@ After multiple sessions of failed multi-series rendering on `BarChart@2.4.0` (on
 - Warehouse: unchanged this session (bridge views still NOT deployed). No SQL ran.
 - Web app: scaffold complete (container + auth wiring + nav/layout + branding), all verified under Podman; NO live auth, NO Fabric connection, NO data binding yet.
 - Open user actions: (1) send the bundled web-app IT request (critical path); (2) open the PR; (3) optionally test B2 mechanics in a free/dev Entra tenant. Claude next: wire `queryAsUser` data layer on spec, or build one screen's real controls.
+
+---
+
+## Session 2026-06-19 — Phase 3b B3/B4/B5 PROVEN (Fabric read + write + first real screen); tedious-18-vs-19 root cause; OBO blocked on admin consent only
+
+### Headline
+The web app now reads and writes Fabric server-side and renders its first real screen on live, `@UPN`-scoped data. The multi-day "tedious can't connect to Fabric" mystery resolved to a driver-version issue, not a protocol incompatibility.
+
+### Connection saga (B3) — root cause + fix
+- Symptom: `ConnectionError: Connection lost - socket hang up` (ESOCKET), dying right after Login7. Survived several theories (high-port/redirect, tenant SPN setting, cert).
+- A Reddit thread (user pasted the HTML; Reddit was blocked) pointed at ODBC/`msnodesqlv8`. Tried it on a Debian + `msodbcsql18` image: it builds but **segfaults (exit 139) on Linux the instant the ODBC driver does AAD ServicePrincipal auth** (libcurl/OpenSSL clash with Node's embedded OpenSSL); `msnodesqlv8` has no access-token escape hatch → dead end. Reverted to Alpine.
+- **Actual root cause: `tedious` 18 cannot complete Fabric's TDS login; `tedious` 19 can** (tediousjs/tedious PR #1668). `mssql@11` pins `tedious@^18` (broken); **`mssql@12` uses `tedious@^19` (works).** Plus two more required pieces: (a) do NOT let tedious mint the SP token — Fabric rejects it; mint it with `@azure/identity` `ClientSecretCredential` (`https://database.windows.net/.default`) and pass `azure-active-directory-access-token`; (b) Next standalone can't trace `tedious` (mssql dynamic-requires it) → `serverExternalPackages: ['mssql','tedious','@azure/identity']` + ship `node_modules` into the runner. Also: regenerate `package-lock.json` with a REAL `npm install`, never `--package-lock-only` (it mis-flagged `tedious` as `dev`, so `--omit=dev` dropped it). Full detail in new memory project_webapp_fabric_connection.
+- Proof: `/api/dbcheck` → `{ok:true, connected_as:"StudentDataAssessment"}`. Milestone tag `webapp-v0.1-tedious-baseline` cut before the swap (recoverable).
+
+### B4 write
+- Called `usp_InsertSubmissionAudit` through the SP connection (RecordType/Source/Status = Test/system/Test); row landed in FactSubmissionAudit and read back. Confirms `GRANT EXECUTE` is in place AND ownership chaining works (SP has EXECUTE-only, no table DML). AuditID returned a 19-digit BIGINT (cast to VARCHAR in the readback, as expected). Added `execProc(name, inputs)` write primitive to `db.ts`. One Test/system audit row left in the table as evidence.
+
+### B5 first real screen (window/group select)
+- Architecture call: the caller-scoped RLS views (`vw_UserAssessmentWindows`, `vw_TeacherGroups`) filter on `CURRENT_USER` = the SP → return nothing. So the web app reads the **bridge views** (`vw_BridgeTeacherRosterAll`), which strip RLS by design and expose `TeacherEmail` as a column; scoping is enforced **in code** (`WHERE LOWER(TeacherEmail)=LOWER(@UPN)`, baked into `src/lib/data.ts`, never exposed raw). This is the documented SP + `@UPN` model.
+- User **deployed `sql/security/bridge_views.sql`** to the warehouse (SP reads them via existing ReadData). New `src/lib/data.ts` (`getTeacherWindows` / `getTeacherGroups`); both `/enter` screens rebound off mock to live data with empty + error states; `queryAsUser` extended for extra named params; added `EmptyState` / `ErrorNote` UI + CSS.
+- Verified with data as `classroom.teacher1@tcrce.ca`: `/enter` → 2 real window cards (English + FR Immersion Elementary, entered/applicable counts); drill-in → "Homeroom 6A" (label derived from GroupKey `HR:6A`). `@UPN` scoping confirmed (only that teacher's windows/groups).
+- Synthetic test set (probed via bridge view): teacher emails counsellor.test / classroom.teacher1 / classroom.teacher2; 2 windows; ~21 students; 10 readings.
+
+### OBO / user-token path — tested, blocked on admin consent ONLY
+- User asked to test the true "connect as the teacher" (OBO) path and challenged my unverified "waits on IT" claim (rightly — it was an assumption). Built a temp probe: an OBO exchange first failed with `AADSTS50013` (assertion signature — Graph tokens are poor OBO assertions), so pivoted to requesting the `https://database.windows.net/user_impersonation` scope directly at sign-in.
+- Sign-in returned **"Need admin approval" / AADSTS65001**. User clarified IT had **added** the `user_impersonation` permission *before* the test → the sole remaining gap is **admin consent** ("Grant admin consent for TCRCE"; the grant-admin-consent Learn doc the user linked is exactly the step). NOT needed for the working model (SP+`@UPN` already scopes at $0), and pursuing OBO would also need resolving whether per-teacher Fabric access is $0. Probe fully reverted (auth.ts back to default scope; route deleted) so normal sign-in works. Memory project_entra_appreg_it_gated updated with the precise status.
+
+### Git / commits (branch `phase-3b-webapp`)
+- Tag `webapp-v0.1-tedious-baseline`; B3 `844d511`; B4 `d48a119`; B5 `eae0534`; B5-verify `11fc03c`; plus this wrap.
+
+### End-of-session state
+- Warehouse: `bridge_views.sql` DEPLOYED (5 bridge views). One Test/system audit row in FactSubmissionAudit from the B4 smoke test. Otherwise unchanged; synthetic test set intact.
+- Web app: B2/B3/B4/B5 proven; image `assessment-webapp:token` (Alpine, ~583 MB). Temp `/api/dbcheck` still present (remove pre-deploy). `webapp/.env` holds working SP creds (gitignored, never commit).
+- IT: Part 1 done; Part 2 = permission added, admin consent NOT granted (only blocker for OBO, which we are not pursuing).
+- Next session (Monday 2026-06-22): **B6** — port roster grid (`/enter/[windowId]/[groupKey]`), student detail (`/students/[studentKey]`), and IPP screens to live Fabric on the SP+`@UPN` path, same pattern as B5.
