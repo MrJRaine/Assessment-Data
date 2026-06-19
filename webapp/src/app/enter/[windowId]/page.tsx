@@ -1,35 +1,48 @@
 import Link from 'next/link'
-import { PageHeader, CardLink, ScaffoldNote } from '@/components/ui'
-import { mockGroups, MOCK_WINDOWS } from '@/lib/mock'
+import { PageHeader, CardLink, EmptyState, ErrorNote } from '@/components/ui'
+import { getCurrentUpn } from '@/lib/auth'
+import { getTeacherGroups, type TeacherGroup } from '@/lib/data'
 
 export const dynamic = 'force-dynamic'
 
 export default async function GroupSelect({ params }: { params: Promise<{ windowId: string }> }) {
   const { windowId } = await params
-  const win = MOCK_WINDOWS.find((w) => w.id === windowId)
-  const groups = mockGroups(windowId)
+  const upn = await getCurrentUpn()
+  let groups: TeacherGroup[] = []
+  let error: string | null = null
+  try {
+    groups = await getTeacherGroups(upn, windowId)
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+
   return (
     <>
-      <PageHeader title="Choose a group" subtitle={`Step 2 — ${win?.name ?? windowId}`} />
+      <PageHeader title="Choose a group" subtitle="Step 2 — your homerooms / sections for this window" />
       <p>
         <Link href="/enter" className="back-link">
           &larr; Back to windows
         </Link>
       </p>
-      <ScaffoldNote>
-        Groups are placeholder data &mdash; to be replaced by a roster-derived grouping for this window +
-        teacher.
-      </ScaffoldNote>
-      <div className="card-grid">
-        {groups.map((g) => (
-          <CardLink
-            key={g.key}
-            href={`/enter/${windowId}/${g.key}`}
-            title={g.label}
-            meta={`${g.count} students`}
-          />
-        ))}
-      </div>
+      {error ? (
+        <ErrorNote message={error} />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          title="No groups for this window"
+          hint="You have no homeroom or section roster in this window's grade/program scope."
+        />
+      ) : (
+        <div className="card-grid">
+          {groups.map((g) => (
+            <CardLink
+              key={g.key}
+              href={`/enter/${windowId}/${g.key}`}
+              title={g.label}
+              meta={`${g.enteredCount}/${g.applicableCount} entered`}
+            />
+          ))}
+        </div>
+      )}
     </>
   )
 }

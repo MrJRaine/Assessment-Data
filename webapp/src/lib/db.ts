@@ -104,10 +104,14 @@ export async function query<T extends Record<string, unknown> = Record<string, u
 export async function queryAsUser<T extends Record<string, unknown> = Record<string, unknown>>(
   upn: string,
   text: string,
+  params: Record<string, unknown> = {},
 ): Promise<T[]> {
   const pool = await getPool()
   const request = pool.request()
   request.input('UPN', sql.VarChar(256), upn)
+  for (const [name, value] of Object.entries(params)) {
+    request.input(name, value)
+  }
   const result = await request.query<T>(text)
   return result.recordset
 }
