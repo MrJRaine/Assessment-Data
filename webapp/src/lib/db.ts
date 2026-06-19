@@ -111,3 +111,22 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
   const result = await request.query<T>(text)
   return result.recordset
 }
+
+/**
+ * Call a writeable wrapper stored proc. This is the ONLY write path: the SP has no direct
+ * INSERT/UPDATE/DELETE -- ownership chaining lets each proc write its own fact tables, so we
+ * only ever EXECUTE the procs (see `sql/security/grant_webapp_sp.sql`). Wrapper procs have no
+ * OUTPUT clause (a Fabric Warehouse limitation), so this resolves to void; read the row back
+ * with a follow-up query if confirmation is needed. `inputs` maps proc param name -> value;
+ * mssql infers SQL types from the JS values (our wrapper params are VARCHAR / INT).
+ *
+ * Proven against `usp_InsertSubmissionAudit` 2026-06-19 (B4): the audit row lands and reads back.
+ */
+export async function execProc(procName: string, inputs: Record<string, unknown> = {}): Promise<void> {
+  const pool = await getPool()
+  const request = pool.request()
+  for (const [name, value] of Object.entries(inputs)) {
+    request.input(name, value)
+  }
+  await request.execute(procName)
+}
