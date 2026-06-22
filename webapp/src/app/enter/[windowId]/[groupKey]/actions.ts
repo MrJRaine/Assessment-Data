@@ -51,3 +51,39 @@ export async function saveReadingAssessments(
   revalidatePath(`/enter/${windowId}/${groupKey}`)
   return { saved, errors }
 }
+
+export interface IPPResult {
+  ok: boolean
+  message?: string
+}
+
+/**
+ * Confirm (or flip) a student's Reading-IPP status from the roster's inline prompt. Mirrors the
+ * Power App's scrRosterGrid inline Yes/No buttons: fires immediately (not batched), then revalidates
+ * so the row leaves the "needs confirmation" gate. UPN is resolved server-side (never from the
+ * client) and passed as @CallerUPN; @ProgramFamily must be the value the roster TVF returned
+ * (IPPProgramFamily = window-over-student) so the proc finds the matching current FactStudentIPP row.
+ */
+export async function setStudentIPP(
+  windowId: string,
+  groupKey: string,
+  studentKey: string,
+  programFamily: string,
+  isIPP: boolean,
+): Promise<IPPResult> {
+  const upn = await getCurrentUpn()
+  try {
+    await execProc('usp_UpsertStudentIPP', {
+      StudentKey: studentKey,
+      Subject: 'Reading',
+      ProgramFamily: programFamily,
+      IsIPP: isIPP ? 1 : 0,
+      CallerUPN: upn,
+    })
+    revalidatePath(`/enter/${windowId}/${groupKey}`)
+    return { ok: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, message: msg }
+  }
+}

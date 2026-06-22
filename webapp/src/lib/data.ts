@@ -89,6 +89,7 @@ export interface RosterStudent {
   lastName: string
   grade: string | null
   scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
+  programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   currentLevel: string | null // existing LevelCode for this window, or null if not yet entered
   currentDelta: number | null
   assessmentDate: string | null
@@ -121,6 +122,7 @@ export async function getTeacherRoster(
     ExpectedMaxLevel: string | null
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
+    IPPProgramFamily: string | null
     AchievementLevel: string | null
     AchievementLevelName: string | null
     AchievementHexColor: string | null
@@ -137,6 +139,7 @@ export async function getTeacherRoster(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     scaleSystem: r.ScaleSystem ?? null,
+    programFamily: r.IPPProgramFamily ?? null,
     currentLevel: r.ExistingScaleValue ?? null,
     currentDelta: r.ExistingDelta ?? null,
     assessmentDate:

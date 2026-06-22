@@ -12,6 +12,10 @@ import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  // Where the middleware sends unauthenticated users — a thin page that bounces
+  // straight to Entra (see src/app/login/page.tsx), so a protected link never
+  // dead-ends on an access error.
+  pages: { signIn: '/login' },
   providers: [
     MicrosoftEntraID({
       clientId: process.env.ENTRA_CLIENT_ID ?? '',
@@ -22,6 +26,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    // Route gate used by the middleware. In dev mode there is no Entra session
+    // (getCurrentUpn returns DEV_FAKE_UPN), so never gate; in entra mode require a user.
+    authorized({ auth }) {
+      if ((process.env.AUTH_MODE ?? 'dev') !== 'entra') return true
+      return !!auth?.user
+    },
     async jwt({ token, profile }) {
       if (profile) {
         const p = profile as { upn?: string; preferred_username?: string }

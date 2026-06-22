@@ -160,6 +160,10 @@ RETURN
         ipp.IsIPP            AS ReadingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation,
+        -- ProgramFamily of the reading-IPP row, matching the FactStudentIPP join key below
+        -- (COALESCE window-over-student). The web app passes this verbatim to
+        -- usp_UpsertStudentIPP so the proc finds the same current row (else THROW 51014).
+        COALESCE(wed.ProgramFamily, sg.ProgramFamily) AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
@@ -197,4 +201,9 @@ RETURN
                OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
     WHERE sg.GroupKey = @GroupKey
 );
+GO
+
+-- DROP+CREATE above drops object-level grants. Re-grant here so a redeploy of this
+-- file is self-contained (the web-app SP reads this TVF as SELECT ... FROM dbo.tvf_X(...)).
+GRANT SELECT ON [dbo].[tvf_TeacherRoster] TO [StudentDataAssessment];
 GO

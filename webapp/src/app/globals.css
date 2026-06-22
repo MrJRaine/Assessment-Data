@@ -74,8 +74,17 @@ a { color: inherit; text-decoration: none; }
 .notice-empty { border-style: dashed; }
 .notice-error { background: #fdecec; border-color: #f3b4b4; }
 .notice-error .notice-title { color: #9b1c1c; }
-.ipp-confirm { color: #7a5b12; font-weight: 600; }
+.ipp-confirm { color: var(--danger); font-weight: 600; }
 .delta-chip { display: inline-block; min-width: 1.6rem; text-align: center; padding: 0.1rem 0.45rem; border-radius: 999px; font-weight: 600; font-size: 0.85rem; }
+/* IPP inline confirmation prompt (needs-confirmation rows) + confirmed badge */
+.ipp-actions { display: inline-flex; gap: 0.35rem; }
+.btn-ipp-yes, .btn-ipp-no { padding: 0.3rem 0.55rem; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; }
+.btn-ipp-yes { border: 1px solid #226a4a; background: #226a4a; color: #fff; }
+.btn-ipp-yes:hover:not(:disabled) { background: #1b5740; border-color: #1b5740; }
+.btn-ipp-no { border: 1px solid var(--border); background: #fff; color: var(--ink); }
+.btn-ipp-no:hover:not(:disabled) { background: var(--bg); }
+.btn-ipp-yes:disabled, .btn-ipp-no:disabled { opacity: 0.5; cursor: not-allowed; }
+.ipp-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #cce8db; color: #226a4a; font-weight: 600; font-size: 0.82rem; }
 /* dirty (unsaved) row: left accent bar — coexists with the achievement-tint row background */
 .row-dirty td:first-child { box-shadow: inset 3px 0 0 0 var(--primary); }
 .actions { margin-top: 1rem; display: flex; align-items: center; gap: 0.75rem; }
