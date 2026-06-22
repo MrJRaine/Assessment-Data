@@ -6,15 +6,16 @@ import { queryAsUser, query } from './db'
  *
  * SECURITY MODEL -- read carefully:
  *   The web app connects as the `StudentDataAssessment` service principal, so the warehouse's
- *   caller-scoped RLS views (which filter on CURRENT_USER) return NOTHING to us. Instead we call
- *   the @UPN-parameterized entry-flow procs (`usp_GetUserAssessmentWindows`, `usp_GetTeacherGroups`,
- *   `usp_GetTeacherRoster`) -- they run the SAME teacher / school-admin / regional-analyst role
- *   branches as the caller-scoped views, but take the caller as @UPN. Scoping (incl. an analyst's
- *   multi-school reach) is enforced in SQL INSIDE the procs; `queryAsUser` always binds the
- *   signed-in UPN, which the proc trusts, and the procs are EXECUTE-granted to the SP only. These
- *   replace the earlier bridge-view reads (which only covered the teacher branch -- the bug that
- *   dropped admin/analyst access). When we move to user-token/OBO auth, the caller-scoped views can
- *   be used directly and the @UPN arg dropped.
+ *   caller-scoped RLS views (which filter on CURRENT_USER) return NOTHING to us. Instead we QUERY
+ *   the @UPN-parameterized inline TVFs (`tvf_UserAssessmentWindows`, `tvf_TeacherGroups`,
+ *   `tvf_TeacherRoster`) -- `SELECT ... FROM dbo.tvf_X(@UPN, ...)`. They run the SAME teacher /
+ *   school-admin / regional-analyst role branches as the caller-scoped views but take the caller as
+ *   @UPN. Scoping (incl. an analyst's multi-school reach) is enforced in SQL INSIDE the TVF;
+ *   `queryAsUser` always binds the signed-in UPN, which the TVF trusts, and the TVFs are
+ *   SELECT-granted to the SP only. These replace the earlier bridge-view reads (which only covered
+ *   the teacher branch -- the bug that dropped admin/analyst access). Reads are TVFs (queryable);
+ *   writes stay stored procs (they INSERT/UPDATE + audit). When we move to user-token/OBO auth, the
+ *   caller-scoped views can be used directly and the @UPN arg dropped.
  */
 
 export interface TeacherWindow {
@@ -43,7 +44,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     ScaleSystem: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
-  }>(upn, 'EXEC dbo.usp_GetUserAssessmentWindows @UPN = @UPN')
+  }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY WindowName')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     name: r.WindowName,
@@ -64,7 +65,7 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
     EnteredStudentCount: number
   }>(
     upn,
-    'EXEC dbo.usp_GetTeacherGroups @UPN = @UPN, @AssessmentWindowID = @WindowID',
+    'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @WindowID) ORDER BY GroupKey',
     { WindowID: windowId },
   )
   return rows.map((r) => ({
@@ -114,7 +115,7 @@ export async function getTeacherRoster(
     ReadingIPPNeedsConfirmation: boolean | null
   }>(
     upn,
-    'EXEC dbo.usp_GetTeacherRoster @UPN = @UPN, @AssessmentWindowID = @WindowID, @GroupKey = @GroupKey',
+    'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
     { WindowID: windowId, GroupKey: groupKey },
   )
   return rows.map((r) => ({

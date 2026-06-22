@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Procedure: usp_GetTeacherRoster
+ * Function: tvf_TeacherRoster  (INLINE table-valued function)
  * Purpose: @UPN-parameterized roster for the web app entry grid (Phase 3b).
  *          Combines vw_TeacherRoster's three role branches (Teacher /
  *          SchoolAdmin+SpecialistTeacher / RegionalAnalyst) with the per-student
@@ -9,27 +9,22 @@
  * Created: 2026-06-22
  * Region: Canada East (PIIDPA compliant)
  *
- * See usp_GetUserAssessmentWindows header for rationale + SECURITY note (trusts
- * @UPN; EXECUTE granted to the SP only). Role logic mirrors vw_TeacherRoster;
- * the benchmark/IPP enrichment mirrors vw_BridgeTeacherRosterAll. No section
- * columns are projected, so SELECT DISTINCT collapses the PP-9 per-section
- * fan-out to one row per student.
+ * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
+ * (trusts @UPN; SELECT granted to the SP only). Role logic mirrors
+ * vw_TeacherRoster; benchmark/IPP enrichment mirrors vw_BridgeTeacherRosterAll.
+ * No section columns are projected, so SELECT DISTINCT collapses the PP-9
+ * per-section fan-out to one row per student. ORDER BY omitted -- caller sorts.
  ******************************************************************************/
 
-DROP PROCEDURE IF EXISTS usp_GetTeacherRoster;
+DROP FUNCTION IF EXISTS dbo.tvf_TeacherRoster;
 GO
 
-CREATE PROCEDURE usp_GetTeacherRoster
-    @UPN                VARCHAR(255),
-    @AssessmentWindowID VARCHAR(20),
-    @GroupKey           VARCHAR(60)
+CREATE FUNCTION dbo.tvf_TeacherRoster(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(60))
+RETURNS TABLE
 AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @AssessmentWindowID_BI BIGINT = CAST(@AssessmentWindowID AS BIGINT);
-
-    ;WITH AtlanticToday AS (
+RETURN
+(
+    WITH AtlanticToday AS (
         SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
     ),
     Caller AS (
@@ -39,18 +34,13 @@ BEGIN
     ),
     WindowEffectiveDates AS (
         SELECT
-            w.AssessmentWindowID,
-            w.StartDate AS WindowStartDate,
-            w.EndDate   AS WindowEndDate,
-            w.MinGrade,
-            w.MaxGrade,
-            w.ProgramFamily,
-            w.ScaleSystem,
+            w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
-          AND w.AssessmentWindowID = @AssessmentWindowID_BI
+          AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     ),
     WindowDominantMonth AS (
         SELECT
@@ -65,8 +55,7 @@ BEGIN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.ProgramCode, dp.ProgramFamily,
-            sec.SectionID
+            s.Grade, sg.GradeOrder, s.Homeroom, s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN FactSectionTeachers fst
@@ -128,8 +117,7 @@ BEGIN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.ProgramCode, a.ProgramFamily,
-            sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -151,8 +139,7 @@ BEGIN
     ),
     StudentGroups AS (
         SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-            Grade, ProgramFamily,
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
             CASE WHEN GradeOrder <= 9  THEN 'HR:'  + COALESCE(Homeroom, '(none)')
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
             END AS GroupKey
@@ -192,6 +179,5 @@ BEGIN
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
     WHERE sg.GroupKey = @GroupKey
-    ORDER BY sg.LastName, sg.FirstName;
-END;
+);
 GO

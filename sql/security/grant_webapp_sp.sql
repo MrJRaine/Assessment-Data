@@ -34,12 +34,13 @@ GRANT EXECUTE ON [dbo].[usp_DeleteReadingAssessment] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_UpsertStudentIPP]        TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_InsertSubmissionAudit]   TO [StudentDataAssessment];
 
--- ---- Read surface: @UPN-parameterized role-aware entry-flow procs (Phase 3b).
+-- ---- Read surface: @UPN-parameterized role-aware entry-flow INLINE TVFs (Phase 3b).
 --      These REPLACE the web app's use of the bridge views — they carry the full
---      teacher/admin/analyst role branches with the caller passed as @UPN. ----
-GRANT EXECUTE ON [dbo].[usp_GetUserAssessmentWindows] TO [StudentDataAssessment];
-GRANT EXECUTE ON [dbo].[usp_GetTeacherGroups]         TO [StudentDataAssessment];
-GRANT EXECUTE ON [dbo].[usp_GetTeacherRoster]         TO [StudentDataAssessment];
+--      teacher/admin/analyst role branches with the caller passed as @UPN, and the app
+--      QUERIES them: SELECT ... FROM dbo.tvf_X(@UPN, ...). SELECT (not EXECUTE) on a TVF. ----
+GRANT SELECT ON [dbo].[tvf_UserAssessmentWindows] TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_TeacherGroups]         TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_TeacherRoster]         TO [StudentDataAssessment];
 
 -- ---- Analyst-only ingest trigger. Grant ONLY if the app exposes the ingest
 --      screen on the analyst path; leave commented for a teacher/admin-only build. ----

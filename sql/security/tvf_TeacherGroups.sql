@@ -1,31 +1,27 @@
 /*******************************************************************************
- * Procedure: usp_GetTeacherGroups
+ * Function: tvf_TeacherGroups  (INLINE table-valued function)
  * Purpose: @UPN-parameterized equivalent of vw_TeacherGroups for the web app
- *          (Phase 3b). Same three role branches (Teacher / SchoolAdmin+
- *          SpecialistTeacher / RegionalAnalyst) and group-resolution rules
- *          (PP-9 -> 'HR:'+Homeroom; 10-12/RG -> 'SEC:'+SectionID). Takes the
- *          signed-in UPN + the target window; returns one row per group.
+ *          (Phase 3b). Same three role branches + group-resolution rules (PP-9
+ *          -> 'HR:'+Homeroom; 10-12/RG -> 'SEC:'+SectionID). Takes the signed-in
+ *          UPN + target window; returns one row per group.
  * Created: 2026-06-22
  * Region: Canada East (PIIDPA compliant)
  *
- * See usp_GetUserAssessmentWindows header for the rationale + SECURITY note
- * (trusts @UPN; EXECUTE granted to the SP only). Mirrors vw_TeacherGroups with
- * CURRENT_USER -> @UPN; keep in sync until the Power App is retired.
+ * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
+ * (trusts @UPN; SELECT granted to the SP only). Mirrors vw_TeacherGroups with
+ * CURRENT_USER -> @UPN. @AssessmentWindowID is VARCHAR (Power-Fx/JS precision);
+ * cast inline to BIGINT. ORDER BY omitted -- the caller sorts.
  ******************************************************************************/
 
-DROP PROCEDURE IF EXISTS usp_GetTeacherGroups;
+DROP FUNCTION IF EXISTS dbo.tvf_TeacherGroups;
 GO
 
-CREATE PROCEDURE usp_GetTeacherGroups
-    @UPN                VARCHAR(255),
-    @AssessmentWindowID VARCHAR(20)
+CREATE FUNCTION dbo.tvf_TeacherGroups(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20))
+RETURNS TABLE
 AS
-BEGIN
-    SET NOCOUNT ON;
-
-    DECLARE @AssessmentWindowID_BI BIGINT = CAST(@AssessmentWindowID AS BIGINT);
-
-    ;WITH AtlanticToday AS (
+RETURN
+(
+    WITH AtlanticToday AS (
         SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
     ),
     Caller AS (
@@ -35,17 +31,13 @@ BEGIN
     ),
     WindowEffectiveDates AS (
         SELECT
-            w.AssessmentWindowID,
-            w.StartDate AS WindowStartDate,
-            w.EndDate   AS WindowEndDate,
-            w.MinGrade,
-            w.MaxGrade,
-            w.ProgramFamily,
+            w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
-          AND w.AssessmentWindowID = @AssessmentWindowID_BI
+          AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     ),
     TeacherApplicable AS (
         SELECT
@@ -72,7 +64,7 @@ BEGIN
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
     ),
-    AdminApplicable AS (
+    AdminAnalystApplicable AS (
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom
@@ -89,8 +81,9 @@ BEGIN
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-    ),
-    AnalystApplicable AS (
+
+        UNION ALL
+
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom
@@ -110,11 +103,7 @@ BEGIN
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.Grade, a.GradeOrder, a.Homeroom,
             sec.SectionID, sec.SectionNumber, sec.CourseName
-        FROM (
-            SELECT * FROM AdminApplicable
-            UNION ALL
-            SELECT * FROM AnalystApplicable
-        ) a
+        FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
               AND e.StudentKey  = a.StudentKey
@@ -133,9 +122,7 @@ BEGIN
     ),
     StudentGroups AS (
         SELECT
-            AssessmentWindowID,
-            StudentKey,
-            Grade,
+            AssessmentWindowID, StudentKey, Grade,
             CASE WHEN GradeOrder <= 9  THEN 'HR:'  + COALESCE(Homeroom, '(none)')
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
             END AS GroupKey,
@@ -161,6 +148,5 @@ BEGIN
           AND far.StudentKey         = sg.StudentKey
     WHERE sg.GroupKey IS NOT NULL
     GROUP BY sg.AssessmentWindowID, sg.GroupKey, sg.GroupType, sg.GroupLabel
-    ORDER BY sg.GroupKey;
-END;
+);
 GO

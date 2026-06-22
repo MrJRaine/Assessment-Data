@@ -1,66 +1,49 @@
 /*******************************************************************************
- * Procedure: usp_GetUserAssessmentWindows
+ * Function: tvf_UserAssessmentWindows  (INLINE table-valued function)
  * Purpose: @UPN-parameterized equivalent of vw_UserAssessmentWindows for the
- *          self-hosted web app (Phase 3b). The web app connects as the
- *          StudentDataAssessment service principal, so CURRENT_USER is the SP,
- *          not the teacher -- the caller-scoped views return nothing. This proc
- *          takes the signed-in user's UPN explicitly and runs the SAME
- *          role-branched logic (Teacher / SchoolAdmin+SpecialistTeacher /
- *          RegionalAnalyst), so admins and analysts get their full multi-school
- *          scope (needed for coverage when a teacher is out).
+ *          web app (Phase 3b). The web app connects as the StudentDataAssessment
+ *          service principal, so CURRENT_USER is the SP, not the teacher -- the
+ *          caller-scoped views return nothing. This iTVF takes the signed-in
+ *          user's UPN and runs the SAME role-branched logic (Teacher /
+ *          SchoolAdmin+SpecialistTeacher / RegionalAnalyst), so admins/analysts
+ *          get their full multi-school scope (coverage when a teacher is out).
  * Created: 2026-06-22
  * Region: Canada East (PIIDPA compliant)
  *
- * Replaces the web app's dependency on the SharePoint-era bridge views
- * (vw_Bridge*). Those stay only for any legacy/bridge use; the web app reads
- * this proc. The caller-scoped vw_UserAssessmentWindows remains for the
- * (deprecated) Power App + is the logic this mirrors -- keep them in sync until
- * the Power App is retired.
+ * Why an inline TVF (not a proc): reads should be QUERYABLE -- the app does
+ *   SELECT ... FROM dbo.tvf_UserAssessmentWindows(@UPN) [WHERE/ORDER BY ...]
+ * keeping the role logic in one place in SQL while staying composable. Inline
+ * TVFs are expanded into the calling query by the optimizer (view-like perf).
+ * Reads = iTVFs; writes stay stored procs (they INSERT/UPDATE + audit).
  *
- * SECURITY: trusts the caller to pass a truthful @UPN. Safe only because EXECUTE
+ * SECURITY: trusts the caller to pass a truthful @UPN. Safe only because SELECT
  * is granted to the SP alone and the web app passes an Entra-validated UPN (same
  * boundary as the @UPN write procs). Never expose with a client-supplied UPN.
- *
- * Identity: resolves the caller from DimStaff by @UPN (lowercased) instead of
- * CURRENT_USER. Everything else is identical to vw_UserAssessmentWindows
- * (historical-roster reconciliation, dominant-month-free window aggregates).
+ * Mirrors vw_UserAssessmentWindows (CURRENT_USER -> @UPN); keep in sync until the
+ * Power App is retired. ORDER BY is intentionally omitted (the caller sorts).
  ******************************************************************************/
 
-DROP PROCEDURE IF EXISTS usp_GetUserAssessmentWindows;
+DROP FUNCTION IF EXISTS dbo.tvf_UserAssessmentWindows;
 GO
 
-CREATE PROCEDURE usp_GetUserAssessmentWindows
-    @UPN VARCHAR(255)
+CREATE FUNCTION dbo.tvf_UserAssessmentWindows(@UPN VARCHAR(255))
+RETURNS TABLE
 AS
-BEGIN
-    SET NOCOUNT ON;
-
-    ;WITH AtlanticToday AS (
+RETURN
+(
+    WITH AtlanticToday AS (
         SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
     ),
     Caller AS (
-        SELECT TOP 1
-            d.StaffKey,
-            LOWER(d.Email) AS Email,
-            d.AccessLevel
+        SELECT TOP 1 d.StaffKey, LOWER(d.Email) AS Email, d.AccessLevel
         FROM DimStaff d
-        WHERE LOWER(d.Email) = LOWER(@UPN)
-          AND d.IsCurrent = 1
+        WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
     ),
     WindowEffectiveDates AS (
         SELECT
-            w.AssessmentWindowID,
-            w.WindowName,
-            w.AssessmentType,
-            w.SchoolYear,
-            w.StartDate,
-            w.EndDate,
-            w.MinGrade,
-            w.MaxGrade,
-            w.ProgramFamily,
-            w.ScaleSystem,
-            CASE WHEN at.Today > w.EndDate THEN w.EndDate
-                 ELSE at.Today END AS EffectiveDate,
+            w.AssessmentWindowID, w.WindowName, w.AssessmentType, w.SchoolYear,
+            w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem,
+            CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate,
             CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
                  WHEN at.Today > w.EndDate   THEN 'Closed'
                  WHEN at.Today = w.EndDate   THEN 'ClosesToday'
@@ -150,6 +133,5 @@ BEGIN
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
         wed.ScaleSystem, wed.WindowStatus
-    ORDER BY wed.WindowName;
-END;
+);
 GO

@@ -39,6 +39,17 @@ export function ErrorNote({ message }: { message: string }) {
   )
 }
 
+// Navigation/loading indicator. Rendered by route-segment loading.tsx files so a click on a
+// card gives immediate feedback while the destination server-renders (the proc query runs).
+export function Loading({ label = 'Loading…' }: { label?: string }) {
+  return (
+    <div className="loading" role="status" aria-live="polite">
+      <span className="spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  )
+}
+
 export function CardLink({ href, title, meta }: { href: string; title: string; meta?: string }) {
   return (
     <Link href={href} className="card card-link">
