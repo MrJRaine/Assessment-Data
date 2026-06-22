@@ -107,3 +107,75 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
     }
   })
 }
+
+export interface RosterStudent {
+  studentKey: string
+  studentNumber: string // provincial 10-digit (string for display; within JS-safe range)
+  firstName: string
+  lastName: string
+  grade: string | null
+  scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
+  currentLevel: string | null // existing LevelCode for this window, or null if not yet entered
+  currentDelta: number | null
+  assessmentDate: string | null
+  expectedMin: string | null
+  expectedMax: string | null
+  ippStatus: boolean | null // IsIPP (Reading): true/false/null(=unresolved)
+  ippNeedsConfirmation: boolean
+}
+
+/** One window's roster for the signed-in teacher + group, with each student's existing entry. */
+export async function getTeacherRoster(
+  upn: string,
+  windowId: string,
+  groupKey: string,
+): Promise<RosterStudent[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    ScaleSystem: string | null
+    ExistingScaleValue: string | null
+    ExistingDelta: number | null
+    ExistingAssessmentDate: Date | string | null
+    ExpectedMinLevel: string | null
+    ExpectedMaxLevel: string | null
+    ReadingIPPStatus: boolean | null
+    ReadingIPPNeedsConfirmation: boolean | null
+  }>(
+    upn,
+    // DISTINCT collapses the view's per-section fan-out: a PP-9 homeroom student whose teacher
+    // takes them in >1 section yields multiple view rows differing only by SectionNumber/
+    // CourseName (not selected here), so the projected rows are identical -> one row per student.
+    `SELECT DISTINCT
+        StudentKey, StudentNumber, FirstName, LastName, Grade, ScaleSystem,
+        ExistingScaleValue, ExistingDelta, ExistingAssessmentDate,
+        ExpectedMinLevel, ExpectedMaxLevel, ReadingIPPStatus, ReadingIPPNeedsConfirmation
+     FROM ${BRIDGE_ROSTER}
+     WHERE LOWER(TeacherEmail) = LOWER(@UPN)
+       AND AssessmentWindowID = @WindowID
+       AND GroupKey = @GroupKey
+     ORDER BY LastName, FirstName`,
+    { WindowID: windowId, GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    scaleSystem: r.ScaleSystem ?? null,
+    currentLevel: r.ExistingScaleValue ?? null,
+    currentDelta: r.ExistingDelta ?? null,
+    assessmentDate:
+      r.ExistingAssessmentDate instanceof Date
+        ? r.ExistingAssessmentDate.toISOString().slice(0, 10)
+        : (r.ExistingAssessmentDate ?? null),
+    expectedMin: r.ExpectedMinLevel ?? null,
+    expectedMax: r.ExpectedMaxLevel ?? null,
+    ippStatus: r.ReadingIPPStatus ?? null,
+    ippNeedsConfirmation: Boolean(r.ReadingIPPNeedsConfirmation),
+  }))
+}

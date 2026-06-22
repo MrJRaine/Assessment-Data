@@ -74,6 +74,7 @@ a { color: inherit; text-decoration: none; }
 .notice-empty { border-style: dashed; }
 .notice-error { background: #fdecec; border-color: #f3b4b4; }
 .notice-error .notice-title { color: #9b1c1c; }
+.ipp-confirm { color: #7a5b12; font-weight: 600; }
 
 /* cards */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 1rem; }
