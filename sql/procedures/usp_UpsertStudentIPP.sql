@@ -70,14 +70,15 @@ CREATE PROCEDURE usp_UpsertStudentIPP
     @StudentKey     VARCHAR(20),
     @Subject        VARCHAR(20),
     @ProgramFamily  VARCHAR(50),
-    @IsIPP          BIT
+    @IsIPP          BIT,
+    @CallerUPN      VARCHAR(255) = NULL   -- web-app/SP path: signed-in teacher UPN; NULL -> CURRENT_USER (legacy). See usp_UpsertReadingAssessment header for the security note.
 AS
 BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Now              DATETIME2(0) = GETDATE();
     DECLARE @EffectiveDate    DATE         = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
-    DECLARE @CallerEmail      VARCHAR(255) = LOWER(CURRENT_USER);
+    DECLARE @CallerEmail      VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey   BIGINT;
     DECLARE @StudentKey_BI    BIGINT;
     DECLARE @ResolvedStudentN BIGINT;       -- student number (for audit message)
@@ -190,7 +191,7 @@ BEGIN
     )
     VALUES (
         'StudentIPPStatus',
-        'PowerApps',
+        CASE WHEN @CallerUPN IS NOT NULL THEN 'WebApp' ELSE 'PowerApps' END,
         @CallerEmail,
         @Now,
         'Accepted',
