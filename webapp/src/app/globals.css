@@ -197,6 +197,12 @@ a { color: inherit; text-decoration: none; }
 .ipp-status-yes { color: #226a4a; font-weight: 600; }
 .ipp-status-no { color: var(--muted); }
 
+/* ingest */
+.ingest-ok { color: #226a4a; font-weight: 600; }
+.ingest-err { color: var(--danger); font-weight: 600; }
+.ingest-run { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.ingest-skip { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+
 /* misc */
 .actions { margin-top: 1rem; }
 .toolbar { margin: 1rem 0; }

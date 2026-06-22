@@ -6,6 +6,7 @@ export interface Readiness {
   fabricConfigured: boolean
   authMode: string
   entraConfigured: boolean
+  onelakeConfigured: boolean
   region: string
   regionCompliant: boolean
 }
@@ -18,6 +19,8 @@ export function getReadiness(): Readiness {
     entraConfigured: Boolean(
       process.env.ENTRA_TENANT_ID && process.env.ENTRA_CLIENT_ID && process.env.ENTRA_CLIENT_SECRET,
     ),
+    // OneLake upload (ingest screen) needs the workspace + landing-lakehouse GUIDs.
+    onelakeConfigured: Boolean(process.env.ONELAKE_WORKSPACE && process.env.ONELAKE_LANDING_LAKEHOUSE),
     region,
     regionCompliant: region.toLowerCase().startsWith('canada'),
   }

@@ -45,9 +45,10 @@ GRANT SELECT ON [dbo].[tvf_StudentCohort]            TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_StudentAssessmentHistory] TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_StudentIPP]               TO [StudentDataAssessment];
 
--- ---- Analyst-only ingest trigger. Grant ONLY if the app exposes the ingest
---      screen on the analyst path; leave commented for a teacher/admin-only build. ----
--- GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];
+-- ---- Analyst-only ingest trigger (the web app's /ingest screen). The proc itself
+--      enforces the RegionalAnalyst role gate against @CallerUPN, so granting EXECUTE to
+--      the SP is safe. (Also self-granted at the bottom of usp_TriggerIngestCycle.sql.) ----
+GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];
 
 -- ---- If your Read grant turned out to be connect-only (no ReadData), also grant
 --      SELECT on the specific views the app reads (view list TBD when the data

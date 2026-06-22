@@ -30,7 +30,7 @@ const SQL_SCOPE = 'https://database.windows.net/.default'
 
 let credential: ClientSecretCredential | null = null
 
-function getCredential(): ClientSecretCredential {
+export function getCredential(): ClientSecretCredential {
   if (!credential) {
     const tenantId = process.env.ENTRA_TENANT_ID
     const clientId = process.env.ENTRA_CLIENT_ID

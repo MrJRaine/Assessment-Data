@@ -181,6 +181,19 @@ export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]>
   }))
 }
 
+/**
+ * The signed-in user's DimStaff AccessLevel ('RegionalAnalyst' | 'Administrator' |
+ * 'SpecialistTeacher' | null=Teacher), or null if not in DimStaff. Used to gate analyst-only
+ * actions (e.g. ingest upload/trigger) server-side, mirroring the proc role checks.
+ */
+export async function getCallerAccessLevel(upn: string): Promise<string | null> {
+  const rows = await query<{ AccessLevel: string | null }>(
+    `SELECT TOP 1 AccessLevel FROM dbo.DimStaff WHERE LOWER(Email) = LOWER(@UPN) AND IsCurrent = 1`,
+    { UPN: upn },
+  )
+  return rows.length ? rows[0].AccessLevel ?? null : null
+}
+
 export interface CohortStudent {
   studentKey: string
   studentNumber: string

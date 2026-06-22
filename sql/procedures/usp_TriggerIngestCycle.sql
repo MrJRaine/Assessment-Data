@@ -48,12 +48,13 @@ DROP PROCEDURE IF EXISTS usp_TriggerIngestCycle;
 GO
 
 CREATE PROCEDURE usp_TriggerIngestCycle
-    @SkipCoTeachers BIT = 0
+    @SkipCoTeachers BIT = 0,
+    @CallerUPN      VARCHAR(255) = NULL   -- web-app/SP path: signed-in analyst UPN; NULL -> CURRENT_USER (legacy Power Apps). The role gate below resolves against this.
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @CallerEmail       VARCHAR(255) = LOWER(CURRENT_USER);
+    DECLARE @CallerEmail       VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey    BIGINT;
     DECLARE @CallerAccessLevel VARCHAR(50);
 
@@ -85,4 +86,9 @@ BEGIN
     -- =========================================================================
     EXEC usp_RunFullIngestCycle @SkipCoTeachers = @SkipCoTeachers;
 END;
+GO
+
+-- DROP+CREATE drops object grants; re-grant so a redeploy is self-contained. The web app
+-- triggers ingest as the StudentDataAssessment SP (the analyst role gate runs against @CallerUPN).
+GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];
 GO
