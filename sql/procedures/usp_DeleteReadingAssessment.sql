@@ -51,14 +51,15 @@ GO
 
 CREATE PROCEDURE usp_DeleteReadingAssessment
     @StudentNumber      BIGINT,
-    @AssessmentWindowID VARCHAR(20)
+    @AssessmentWindowID VARCHAR(20),
+    @CallerUPN          VARCHAR(255) = NULL   -- web-app/SP path: signed-in teacher UPN; NULL -> CURRENT_USER (legacy). See usp_UpsertReadingAssessment header for the security note.
 AS
 BEGIN
     SET NOCOUNT ON;
 
     DECLARE @Now                    DATETIME2(0)  = GETDATE();
     DECLARE @Today                  DATE          = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
-    DECLARE @CallerEmail            VARCHAR(255)  = LOWER(CURRENT_USER);
+    DECLARE @CallerEmail            VARCHAR(255)  = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey         BIGINT;
     DECLARE @CallerAccessLevel      VARCHAR(50);
     DECLARE @AssessmentWindowID_BI  BIGINT;
@@ -164,7 +165,7 @@ BEGIN
     )
     VALUES (
         'ReadingAssessment',
-        'PowerApps',
+        CASE WHEN @CallerUPN IS NOT NULL THEN 'WebApp' ELSE 'PowerApps' END,
         @CallerEmail,
         @Now,
         'Accepted',

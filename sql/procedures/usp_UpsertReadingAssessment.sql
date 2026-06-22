@@ -9,6 +9,16 @@
  *                       BIGINT to VARCHAR(20) for Power Fx precision. CAST
  *                       to BIGINT locals on entry; internal logic unchanged.
  *                       See project_powerapps_bigint_precision memory.
+ * Modified: 2026-06-22 — added optional @CallerUPN for the web-app/service-
+ *                       principal path (Phase 3b). When passed, the caller
+ *                       identity (EnteredByStaffKey + the 51030/51031 gate)
+ *                       resolves from @CallerUPN instead of CURRENT_USER, which
+ *                       under the SP connection is the app, not the teacher.
+ *                       NULL preserves the legacy CURRENT_USER behaviour.
+ *                       SECURITY: the proc now TRUSTS the caller to pass a
+ *                       truthful UPN — safe only because EXECUTE is granted to
+ *                       the SP alone and the web app passes an Entra-validated
+ *                       UPN (same trust boundary as the @UPN bridge reads).
  * Region: Canada East (PIIDPA compliant)
  *
  * Behavior:
@@ -81,11 +91,15 @@
  *            (handles DST automatically). Stored timestamps are UTC.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_UpsertReadingAssessment;
+GO
+
 CREATE PROCEDURE usp_UpsertReadingAssessment
     @StudentNumber      BIGINT,
     @AssessmentWindowID VARCHAR(20),
     @ReadingScaleID     VARCHAR(20),
-    @AssessmentDate     DATE
+    @AssessmentDate     DATE,
+    @CallerUPN          VARCHAR(255) = NULL   -- web-app/SP path: signed-in teacher UPN; NULL -> CURRENT_USER (legacy)
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -93,7 +107,7 @@ BEGIN
     -- All variables declared up front (Fabric-friendly).
     DECLARE @Now                    DATETIME2(0)  = GETDATE();
     DECLARE @Today                  DATE          = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
-    DECLARE @CallerEmail            VARCHAR(255)  = LOWER(CURRENT_USER);
+    DECLARE @CallerEmail            VARCHAR(255)  = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey         BIGINT;
     DECLARE @CallerAccessLevel      VARCHAR(50);
     DECLARE @AssessmentWindowID_BI  BIGINT;   -- BIGINT form of VARCHAR @AssessmentWindowID for joins
@@ -368,7 +382,7 @@ BEGIN
     )
     VALUES (
         'ReadingAssessment',
-        'PowerApps',
+        CASE WHEN @CallerUPN IS NOT NULL THEN 'WebApp' ELSE 'PowerApps' END,
         @CallerEmail,
         @Now,
         CASE WHEN @AuditWarning IS NULL THEN 'Accepted' ELSE 'AcceptedWithWarnings' END,
