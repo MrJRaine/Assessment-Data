@@ -260,6 +260,50 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
   }))
 }
 
+export interface StudentNavItem {
+  studentKey: string
+  fullName: string
+  grade: string | null
+  programFamily: string | null
+  schoolLabel: string | null
+  homeroom: string | null
+  ippStatusReading: string
+}
+
+/**
+ * Lightweight ordered roster for the detail screen's prev/next navigation: keys + the meta-strip
+ * fields only, NO per-student history. Fetched ONCE on detail load so paging is client-side
+ * (the heavy history is fetched per student + prefetched for neighbours). Same ordering as the
+ * cohort table so "Student X of Y" lines up.
+ */
+export async function getStudentNavList(upn: string): Promise<StudentNavItem[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    FullName: string
+    Grade: string | null
+    ProgramFamily: string | null
+    SchoolLabel: string | null
+    Homeroom: string | null
+    IPPStatus_Reading: string | null
+  }>(
+    upn,
+    `SELECT StudentKey, FullName, Grade, ProgramFamily,
+            COALESCE(SchoolAbbreviation, SchoolName, SchoolID) AS SchoolLabel,
+            Homeroom, IPPStatus_Reading
+     FROM dbo.tvf_StudentCohort(@UPN)
+     ORDER BY LastName, FirstName`,
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    fullName: String(r.FullName),
+    grade: r.Grade ?? null,
+    programFamily: r.ProgramFamily ?? null,
+    schoolLabel: r.SchoolLabel ?? null,
+    homeroom: r.Homeroom ?? null,
+    ippStatusReading: r.IPPStatus_Reading ?? 'N/A',
+  }))
+}
+
 export interface HistoryRow {
   readingAssessmentId: string
   windowName: string
