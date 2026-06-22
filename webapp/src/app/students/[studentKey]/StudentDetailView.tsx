@@ -93,6 +93,13 @@ export default function StudentDetailView({
   const loading = history === undefined
   const timeline = history ? [...history].reverse() : [] // newest-first table; trend reads asc
 
+  // IPP students follow an individualized plan: their reading level is tracked for personal
+  // progress, but they are NOT measured against grade benchmarks — so suppress Δ (distance from
+  // expected) and the achievement band/colour. Unresolved (NULL gate) is likewise not measured
+  // until the IPP type is confirmed. Mirrors the roster grid + the IsChartEligibleReading rule.
+  const measured = current.ippStatusReading === 'Not IPP' || current.ippStatusReading === 'N/A'
+  const ippConfirmed = current.ippStatusReading === 'IPP'
+
   const meta = [
     `Grade ${current.grade ?? '—'}`,
     current.programFamily ?? '—',
@@ -115,6 +122,18 @@ export default function StudentDetailView({
 
       <div className="meta-strip">{meta.join('   ·   ')}</div>
 
+      {ippConfirmed ? (
+        <div className="ipp-note">
+          On an individualized program plan — reading level is tracked for personal progress and is
+          <strong> not measured against grade-level benchmarks</strong>, so no expected level or achievement is shown.
+        </div>
+      ) : current.ippStatusReading === 'Unresolved' ? (
+        <div className="ipp-note">
+          Reading IPP needs confirmation — achievement is not shown until the IPP type is confirmed
+          (on the roster or the IPPs screen).
+        </div>
+      ) : null}
+
       <h2 className="section-title">Assessment history</h2>
       {loading ? (
         <div className="loading"><span className="spinner" />Loading student history…</div>
@@ -136,14 +155,17 @@ export default function StudentDetailView({
             </thead>
             <tbody>
               {timeline.map((h) => (
-                <tr key={h.readingAssessmentId} style={h.achievementHexColorTint ? { background: h.achievementHexColorTint } : undefined}>
+                <tr
+                  key={h.readingAssessmentId}
+                  style={measured && h.achievementHexColorTint ? { background: h.achievementHexColorTint } : undefined}
+                >
                   <td>{h.windowName}{h.windowSchoolYear ? ` · ${h.windowSchoolYear}` : ''}</td>
                   <td className="muted">{h.assessmentDate ?? '—'}</td>
                   <td>{h.levelCode ?? '—'}</td>
-                  <td style={h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
-                    {h.delta == null ? '—' : h.delta > 0 ? `+${h.delta}` : h.delta}
+                  <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
+                    {!measured ? (ippConfirmed ? 'IPP' : '—') : h.delta == null ? '—' : h.delta > 0 ? `+${h.delta}` : h.delta}
                   </td>
-                  <td>{h.achievementName ?? '—'}</td>
+                  <td>{!measured ? (ippConfirmed ? 'IPP' : '—') : h.achievementName ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

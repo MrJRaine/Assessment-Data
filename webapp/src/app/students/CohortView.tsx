@@ -376,22 +376,27 @@ export default function CohortView({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s) => (
-              <tr key={s.studentKey} style={s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
-                <td>
-                  <Link href={`/students/${s.studentKey}`} className="back-link">
-                    {s.lastName}, {s.firstName}
-                  </Link>
-                </td>
-                <td>{s.grade ?? '—'}</td>
-                <td>{s.programFamily ?? '—'}</td>
-                <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
-                <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
-                <td style={s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
-                  {s.ippStatusReading === 'IPP' ? 'IPP' : s.achievementName ?? '—'}
-                </td>
-              </tr>
-            ))}
+            {filtered.map((s) => {
+              // IPP / unresolved students aren't measured against benchmarks — no achievement
+              // tint or band (their reading level still shows). chartEligible = no IPP or IsIPP=0.
+              const measured = s.chartEligible
+              return (
+                <tr key={s.studentKey} style={measured && s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
+                  <td>
+                    <Link href={`/students/${s.studentKey}`} className="back-link">
+                      {s.lastName}, {s.firstName}
+                    </Link>
+                  </td>
+                  <td>{s.grade ?? '—'}</td>
+                  <td>{s.programFamily ?? '—'}</td>
+                  <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
+                  <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
+                  <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
+                    {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}
