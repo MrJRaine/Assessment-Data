@@ -159,7 +159,11 @@ RETURN
         drb.ExpectedMaxLevel AS ExpectedMaxLevel,
         ipp.IsIPP            AS ReadingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
-             THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation
+             THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation,
+        dal.AchievementLevelCode AS AchievementLevel,
+        dal.AchievementLevelName AS AchievementLevelName,
+        dal.HexColor             AS AchievementHexColor,
+        dal.HexColorTint         AS AchievementHexColorTint
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
@@ -178,6 +182,19 @@ RETURN
           AND ipp.Subject       = 'Reading'
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
+    -- Achievement level + colour for the existing entry's delta (same bounds-join as the
+    -- cohort/history views). Non-overlapping bounds -> at most one level per delta.
+    LEFT JOIN DimAchievementLevel dal
+           ON dal.ActiveFlag = 1
+          AND far.ReadingDelta IS NOT NULL
+          AND (dal.LowerBound IS NULL
+               OR (dal.LowerOp = '>=' AND far.ReadingDelta >= dal.LowerBound)
+               OR (dal.LowerOp = '>'  AND far.ReadingDelta >  dal.LowerBound)
+               OR (dal.LowerOp = '='  AND far.ReadingDelta =  dal.LowerBound))
+          AND (dal.UpperBound IS NULL
+               OR (dal.UpperOp = '<=' AND far.ReadingDelta <= dal.UpperBound)
+               OR (dal.UpperOp = '<'  AND far.ReadingDelta <  dal.UpperBound)
+               OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
     WHERE sg.GroupKey = @GroupKey
 );
 GO

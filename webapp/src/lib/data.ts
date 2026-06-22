@@ -68,13 +68,18 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
     'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @WindowID) ORDER BY GroupKey',
     { WindowID: windowId },
   )
-  return rows.map((r) => ({
-    key: String(r.GroupKey),
-    label: r.GroupLabel ?? String(r.GroupKey),
-    grade: r.Grade ?? null,
-    applicableCount: Number(r.ApplicableStudentCount ?? 0),
-    enteredCount: Number(r.EnteredStudentCount ?? 0),
-  }))
+  return rows.map((r) => {
+    const key = String(r.GroupKey)
+    // Build homeroom labels in the app (reliable spacing); use the TVF label for section groups.
+    const label = key.startsWith('HR:') ? `Homeroom ${key.slice(3)}` : (r.GroupLabel ?? key)
+    return {
+      key,
+      label,
+      grade: r.Grade ?? null,
+      applicableCount: Number(r.ApplicableStudentCount ?? 0),
+      enteredCount: Number(r.EnteredStudentCount ?? 0),
+    }
+  })
 }
 
 export interface RosterStudent {
@@ -91,6 +96,9 @@ export interface RosterStudent {
   expectedMax: string | null
   ippStatus: boolean | null // IsIPP (Reading): true/false/null(=unresolved)
   ippNeedsConfirmation: boolean
+  achievementLevel: string | null // DimAchievementLevel code/name for the current delta
+  achievementHexColor: string | null // strong colour (text/border)
+  achievementHexColorTint: string | null // light colour (cell background)
 }
 
 /** One window's roster for the signed-in teacher + group, with each student's existing entry. */
@@ -113,6 +121,10 @@ export async function getTeacherRoster(
     ExpectedMaxLevel: string | null
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
+    AchievementLevel: string | null
+    AchievementLevelName: string | null
+    AchievementHexColor: string | null
+    AchievementHexColorTint: string | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
@@ -135,6 +147,9 @@ export async function getTeacherRoster(
     expectedMax: r.ExpectedMaxLevel ?? null,
     ippStatus: r.ReadingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.ReadingIPPNeedsConfirmation),
+    achievementLevel: r.AchievementLevelName ?? r.AchievementLevel ?? null,
+    achievementHexColor: r.AchievementHexColor ?? null,
+    achievementHexColorTint: r.AchievementHexColorTint ?? null,
   }))
 }
 

@@ -56,6 +56,7 @@ export default function RosterEntry({
             <th>Grade</th>
             <th>Current</th>
             <th>Expected</th>
+            <th>Δ</th>
             <th>New level</th>
             <th>IPP</th>
           </tr>
@@ -72,6 +73,23 @@ export default function RosterEntry({
                 <td>{s.currentLevel ?? <span className="muted">—</span>}</td>
                 <td className="muted">
                   {s.expectedMin && s.expectedMax ? `${s.expectedMin}–${s.expectedMax}` : '—'}
+                </td>
+                <td>
+                  {s.currentDelta === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <span
+                      className="delta-chip"
+                      title={s.achievementLevel ?? undefined}
+                      style={
+                        s.achievementHexColorTint && s.achievementHexColor
+                          ? { background: s.achievementHexColorTint, color: s.achievementHexColor }
+                          : undefined
+                      }
+                    >
+                      {s.currentDelta > 0 ? `+${s.currentDelta}` : s.currentDelta}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <select
