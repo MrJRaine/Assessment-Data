@@ -87,9 +87,14 @@ export function getPool(): Promise<sql.ConnectionPool> {
 /** Run a query that takes no per-user filtering (e.g. reference/lookup reads). */
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
+  params: Record<string, unknown> = {},
 ): Promise<T[]> {
   const pool = await getPool()
-  const result = await pool.request().query<T>(text)
+  const request = pool.request()
+  for (const [name, value] of Object.entries(params)) {
+    request.input(name, value)
+  }
+  const result = await request.query<T>(text)
   return result.recordset
 }
 

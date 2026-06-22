@@ -1,5 +1,5 @@
 import 'server-only'
-import { queryAsUser } from './db'
+import { queryAsUser, query } from './db'
 
 /**
  * Secured data-access layer (SERVER-ONLY).
@@ -177,5 +177,30 @@ export async function getTeacherRoster(
     expectedMax: r.ExpectedMaxLevel ?? null,
     ippStatus: r.ReadingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.ReadingIPPNeedsConfirmation),
+  }))
+}
+
+export interface ScaleLevel {
+  readingScaleId: string
+  levelCode: string
+  levelOrder: number
+}
+
+/**
+ * Valid reading levels for a scale system (e.g. EN_Reading), ordered. Drives the roster New-Level
+ * dropdown. Reference data (not user-scoped), so it reads the bridge scale view directly.
+ */
+export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]> {
+  const rows = await query<{ ReadingScaleID: string; LevelCode: string; LevelOrder: number }>(
+    `SELECT ReadingScaleID, LevelCode, LevelOrder
+     FROM dbo.vw_BridgeScaleLevels
+     WHERE ScaleSystem = @ScaleSystem AND ActiveFlag = 1
+     ORDER BY LevelOrder`,
+    { ScaleSystem: scaleSystem },
+  )
+  return rows.map((r) => ({
+    readingScaleId: String(r.ReadingScaleID),
+    levelCode: r.LevelCode,
+    levelOrder: Number(r.LevelOrder),
   }))
 }
