@@ -1,7 +1,14 @@
 import Link from 'next/link'
 import { PageHeader, EmptyState, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getTeacherRoster, getScaleLevels, type RosterStudent, type ScaleLevel } from '@/lib/data'
+import {
+  getTeacherRoster,
+  getScaleLevels,
+  getAchievementLevels,
+  type RosterStudent,
+  type ScaleLevel,
+  type AchievementBand,
+} from '@/lib/data'
 import RosterEntry from './RosterEntry'
 
 export const dynamic = 'force-dynamic'
@@ -21,11 +28,13 @@ export default async function RosterGrid({
 
   let roster: RosterStudent[] = []
   let levels: ScaleLevel[] = []
+  let achievementLevels: AchievementBand[] = []
   let error: string | null = null
   try {
     roster = await getTeacherRoster(upn, windowId, groupKey)
     const scaleSystem = roster[0]?.scaleSystem ?? null
     if (scaleSystem) levels = await getScaleLevels(scaleSystem)
+    achievementLevels = await getAchievementLevels()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -44,7 +53,13 @@ export default async function RosterGrid({
       ) : roster.length === 0 ? (
         <EmptyState title="No students in this group for this window" />
       ) : (
-        <RosterEntry windowId={windowId} groupKey={groupKey} roster={roster} levels={levels} />
+        <RosterEntry
+          windowId={windowId}
+          groupKey={groupKey}
+          roster={roster}
+          levels={levels}
+          achievementLevels={achievementLevels}
+        />
       )}
     </>
   )

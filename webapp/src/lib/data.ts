@@ -177,3 +177,46 @@ export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]>
     levelOrder: Number(r.LevelOrder),
   }))
 }
+
+export interface AchievementBand {
+  code: string
+  name: string
+  lowerBound: number | null
+  lowerOp: string | null // '>=' | '>' | '='
+  upperBound: number | null
+  upperOp: string | null // '<=' | '<' | '='
+  hexColor: string
+  hexColorTint: string
+}
+
+/**
+ * Achievement bands (delta -> colour). Reference data so the roster grid can colour rows LIVE as
+ * the level dropdown changes (compute delta client-side, then match a band), mirroring the
+ * server-side bounds logic in usp_UpsertReadingAssessment / tvf_TeacherRoster.
+ */
+export async function getAchievementLevels(): Promise<AchievementBand[]> {
+  const rows = await query<{
+    AchievementLevelCode: string
+    AchievementLevelName: string
+    LowerBound: number | string | null
+    LowerOp: string | null
+    UpperBound: number | string | null
+    UpperOp: string | null
+    HexColor: string
+    HexColorTint: string
+  }>(
+    `SELECT AchievementLevelCode, AchievementLevelName, LowerBound, LowerOp, UpperBound, UpperOp, HexColor, HexColorTint
+     FROM dbo.DimAchievementLevel
+     WHERE ActiveFlag = 1`,
+  )
+  return rows.map((r) => ({
+    code: r.AchievementLevelCode,
+    name: r.AchievementLevelName,
+    lowerBound: r.LowerBound == null ? null : Number(r.LowerBound),
+    lowerOp: r.LowerOp ?? null,
+    upperBound: r.UpperBound == null ? null : Number(r.UpperBound),
+    upperOp: r.UpperOp ?? null,
+    hexColor: r.HexColor,
+    hexColorTint: r.HexColorTint,
+  }))
+}
