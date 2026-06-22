@@ -34,6 +34,13 @@ GRANT EXECUTE ON [dbo].[usp_DeleteReadingAssessment] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_UpsertStudentIPP]        TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_InsertSubmissionAudit]   TO [StudentDataAssessment];
 
+-- ---- Read surface: @UPN-parameterized role-aware entry-flow procs (Phase 3b).
+--      These REPLACE the web app's use of the bridge views — they carry the full
+--      teacher/admin/analyst role branches with the caller passed as @UPN. ----
+GRANT EXECUTE ON [dbo].[usp_GetUserAssessmentWindows] TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_GetTeacherGroups]         TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_GetTeacherRoster]         TO [StudentDataAssessment];
+
 -- ---- Analyst-only ingest trigger. Grant ONLY if the app exposes the ingest
 --      screen on the analyst path; leave commented for a teacher/admin-only build. ----
 -- GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];

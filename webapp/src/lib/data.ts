@@ -6,14 +6,15 @@ import { queryAsUser, query } from './db'
  *
  * SECURITY MODEL -- read carefully:
  *   The web app connects as the `StudentDataAssessment` service principal, so the warehouse's
- *   caller-scoped RLS views (which filter on CURRENT_USER) return NOTHING to us. Instead we read
- *   the *bridge* views (`vw_BridgeTeacherRosterAll`, ...) which expose every row with the scoping
- *   key (`TeacherEmail`) as a COLUMN -- they bypass RLS BY DESIGN (see `sql/security/
- *   bridge_views.sql`). Row-level scoping is therefore enforced HERE, in code: every function
- *   filters `WHERE LOWER(TeacherEmail) = LOWER(@UPN)` via `queryAsUser`, which always binds the
- *   signed-in UPN. NEVER expose a bridge view to a screen without that predicate, and never add a
- *   bridge view as a client-reachable source. (When we move to user-token / OBO auth, switch these
- *   back to the caller-scoped views and drop the @UPN filter; native RLS takes over.)
+ *   caller-scoped RLS views (which filter on CURRENT_USER) return NOTHING to us. Instead we call
+ *   the @UPN-parameterized entry-flow procs (`usp_GetUserAssessmentWindows`, `usp_GetTeacherGroups`,
+ *   `usp_GetTeacherRoster`) -- they run the SAME teacher / school-admin / regional-analyst role
+ *   branches as the caller-scoped views, but take the caller as @UPN. Scoping (incl. an analyst's
+ *   multi-school reach) is enforced in SQL INSIDE the procs; `queryAsUser` always binds the
+ *   signed-in UPN, which the proc trusts, and the procs are EXECUTE-granted to the SP only. These
+ *   replace the earlier bridge-view reads (which only covered the teacher branch -- the bug that
+ *   dropped admin/analyst access). When we move to user-token/OBO auth, the caller-scoped views can
+ *   be used directly and the @UPN arg dropped.
  */
 
 export interface TeacherWindow {
@@ -33,9 +34,7 @@ export interface TeacherGroup {
   enteredCount: number
 }
 
-const BRIDGE_ROSTER = 'dbo.vw_BridgeTeacherRosterAll'
-
-/** Assessment windows applicable to the signed-in teacher, with per-window progress counts. */
+/** Assessment windows applicable to the signed-in user (any role), with per-window progress counts. */
 export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   const rows = await queryAsUser<{
     AssessmentWindowID: string
@@ -44,20 +43,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     ScaleSystem: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
-  }>(
-    upn,
-    `SELECT
-        AssessmentWindowID,
-        WindowName,
-        WindowStatus,
-        ScaleSystem,
-        COUNT(DISTINCT StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT CASE WHEN ExistingReadingAssessmentID IS NOT NULL THEN StudentKey END) AS EnteredStudentCount
-     FROM ${BRIDGE_ROSTER}
-     WHERE LOWER(TeacherEmail) = LOWER(@UPN)
-     GROUP BY AssessmentWindowID, WindowName, WindowStatus, ScaleSystem
-     ORDER BY WindowName`,
-  )
+  }>(upn, 'EXEC dbo.usp_GetUserAssessmentWindows @UPN = @UPN')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     name: r.WindowName,
@@ -72,40 +58,22 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
 export async function getTeacherGroups(upn: string, windowId: string): Promise<TeacherGroup[]> {
   const rows = await queryAsUser<{
     GroupKey: string
+    GroupLabel: string | null
     Grade: string | null
-    SectionNumber: string | null
-    CourseName: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
   }>(
     upn,
-    `SELECT
-        GroupKey,
-        MAX(Grade) AS Grade,
-        MAX(SectionNumber) AS SectionNumber,
-        MAX(CourseName) AS CourseName,
-        COUNT(DISTINCT StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT CASE WHEN ExistingReadingAssessmentID IS NOT NULL THEN StudentKey END) AS EnteredStudentCount
-     FROM ${BRIDGE_ROSTER}
-     WHERE LOWER(TeacherEmail) = LOWER(@UPN)
-       AND AssessmentWindowID = @WindowID
-     GROUP BY GroupKey
-     ORDER BY GroupKey`,
+    'EXEC dbo.usp_GetTeacherGroups @UPN = @UPN, @AssessmentWindowID = @WindowID',
     { WindowID: windowId },
   )
-  return rows.map((r) => {
-    const key = String(r.GroupKey)
-    const label = key.startsWith('HR:')
-      ? `Homeroom ${key.slice(3)}`
-      : [r.SectionNumber, r.CourseName].filter(Boolean).join(' — ') || key
-    return {
-      key,
-      label,
-      grade: r.Grade ?? null,
-      applicableCount: Number(r.ApplicableStudentCount ?? 0),
-      enteredCount: Number(r.EnteredStudentCount ?? 0),
-    }
-  })
+  return rows.map((r) => ({
+    key: String(r.GroupKey),
+    label: r.GroupLabel ?? String(r.GroupKey),
+    grade: r.Grade ?? null,
+    applicableCount: Number(r.ApplicableStudentCount ?? 0),
+    enteredCount: Number(r.EnteredStudentCount ?? 0),
+  }))
 }
 
 export interface RosterStudent {
@@ -146,18 +114,7 @@ export async function getTeacherRoster(
     ReadingIPPNeedsConfirmation: boolean | null
   }>(
     upn,
-    // DISTINCT collapses the view's per-section fan-out: a PP-9 homeroom student whose teacher
-    // takes them in >1 section yields multiple view rows differing only by SectionNumber/
-    // CourseName (not selected here), so the projected rows are identical -> one row per student.
-    `SELECT DISTINCT
-        StudentKey, StudentNumber, FirstName, LastName, Grade, ScaleSystem,
-        ExistingScaleValue, ExistingDelta, ExistingAssessmentDate,
-        ExpectedMinLevel, ExpectedMaxLevel, ReadingIPPStatus, ReadingIPPNeedsConfirmation
-     FROM ${BRIDGE_ROSTER}
-     WHERE LOWER(TeacherEmail) = LOWER(@UPN)
-       AND AssessmentWindowID = @WindowID
-       AND GroupKey = @GroupKey
-     ORDER BY LastName, FirstName`,
+    'EXEC dbo.usp_GetTeacherRoster @UPN = @UPN, @AssessmentWindowID = @WindowID, @GroupKey = @GroupKey',
     { WindowID: windowId, GroupKey: groupKey },
   )
   return rows.map((r) => ({
@@ -192,8 +149,8 @@ export interface ScaleLevel {
  */
 export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]> {
   const rows = await query<{ ReadingScaleID: string; LevelCode: string; LevelOrder: number }>(
-    `SELECT ReadingScaleID, LevelCode, LevelOrder
-     FROM dbo.vw_BridgeScaleLevels
+    `SELECT CAST(ReadingScaleID AS VARCHAR(20)) AS ReadingScaleID, LevelCode, LevelOrder
+     FROM dbo.DimReadingScale
      WHERE ScaleSystem = @ScaleSystem AND ActiveFlag = 1
      ORDER BY LevelOrder`,
     { ScaleSystem: scaleSystem },
