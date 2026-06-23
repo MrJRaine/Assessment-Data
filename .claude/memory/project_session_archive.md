@@ -1040,3 +1040,37 @@ The web app now reads and writes Fabric server-side and renders its first real s
 - Web app: B2/B3/B4/B5 proven; image `assessment-webapp:token` (Alpine, ~583 MB). Temp `/api/dbcheck` still present (remove pre-deploy). `webapp/.env` holds working SP creds (gitignored, never commit).
 - IT: Part 1 done; Part 2 = permission added, admin consent NOT granted (only blocker for OBO, which we are not pursuing).
 - Next session (Monday 2026-06-22): **B6** — port roster grid (`/enter/[windowId]/[groupKey]`), student detail (`/students/[studentKey]`), and IPP screens to live Fabric on the SP+`@UPN` path, same pattern as B5.
+
+---
+
+## Session 2026-06-23 — B6 screens complete + in-app ingest + dev environment + security audit + SCD same-day-reversion fix
+
+Big build session on the Phase 3b web app. Read the Power App YAML/decisions before each screen to stay faithful to prior design calls.
+
+### B6 screens (all built, on the SP + `@UPN` iTVF/bridge pattern)
+- **Roster grid** (`/enter/[windowId]/[groupKey]`, `RosterEntry.tsx`): reading-level select per student + inline IPP confirm. IPP UX decisions: the Yes button reads **"Yes (Literacy IPP)"** (Reading+Writing roll up to Literacy; Math → "Math IPP" later) — the teacher already knows the student is on an IPP, the gate confirms the *type*. For IPP students, **both Expected and Δ render "IPP"** (an individualized plan isn't measured against the standard curriculum). IPP confirm was first fired per-click (froze the screen with no feedback) → reworked to **stage client-side (`ippSel`) and commit on Save** in one `useTransition`, alongside the level saves; re-clicking the chosen value un-stages it.
+- **Dedicated IPP manager** (`/ipp`) — mirrors scrIPP; batched save, scope-gated via `getStudentIPPList(upn)`.
+- **Cohort** (`/students`, `CohortView.tsx`) — collapsible filters (shown only when >1 distinct value), donut + 6-month stacked bar, tinted table; IPP/unresolved students carry no tint/band.
+- **Student detail** (`/students/[studentKey]`) — prev/next was slow (each nav re-ran the full cohort query). Fixed: page fetches a lightweight nav list + initial history; `StudentDetailView` caches per studentKey and **prefetches both neighbours** via a server action; URL via `history.replaceState`. IPP suppression mirrors the roster.
+- **Not logged in → redirect to Entra sign-in** (middleware `authorized`), not an access error.
+
+### In-app ingest (replaces manual lakehouse upload)
+Breaking from Power Apps lets the app own ingest: `/ingest` uploads a PS export → **OneLake ADLS Gen2 REST** (storage.azure.com token) into `Files/imports/{topic}/` → runs `usp_TriggerIngestCycle`. Analyst-only gate resolved server-side; 25 MB cap; `bodySizeLimit: 30mb`. Discussed (future) **SFTP auto-pickup** as viable now that we control the runtime; OneLake→SharePoint shortcuts already pinned as the planned automated path ([[project_onelake_sharepoint_shortcuts]]).
+
+### Dev environment (Claude's synthetic sandbox)
+Stood up a **non-live Dev warehouse + lakehouse in the SAME workspace** (Dev folder, `_Dev`-suffixed items) to avoid new permissions/capacity. `.env.dev`/`.env.live` swap; dev and live containers can run on different ports (3000/3001). Dev uses `AUTH_MODE=dev` (no Entra round-trip) — **`:3001` not yet on the SP's Entra redirect URIs** (deferred IT ask; [[project_entra_appreg_it_gated]]). Generated `sql/deploy/deploy_all_dev.sql` (78 files, grants stripped, dev lakehouse GUID, **TAB** loaders for the 4 direct extracts). Validated the full app-driven ingest end-to-end on dev (upload → COPY INTO → merges → DQ PASS). **PII boundary set** ([[feedback_live_pii_boundary]]): once real PS data is live, Claude must not run row-level-PII queries against live — schema/COUNT/deploys only; dev is the sandbox. [[project_dev_live_environment_split]].
+
+### Security audit (10 items) + remediations
+Full code-base audit before live PII. Built: `lib/authMode.ts` **fail-closed** (`AUTH_MODE=dev` refused unless `ALLOW_DEV_AUTH=true`); `lib/errors.ts` `UserError`/`toUserMessage` (pass intentional 51xxx THROWs + UserError; genericize everything else in prod — no schema/PII leak); baseline security headers in `next.config.ts`; generic `/api/health` + status strip in prod; **deleted** `/api/dbcheck` + `lib/mock.ts`; ingest size caps. `sql/security/grant_webapp_sp.sql` written for least-privilege (explicit SELECT on the 6 TVFs + 2 ref dims, EXECUTE on 4 procs + trigger, **DENY** on the 5 bridge views, plan to remove broad ReadData) — **pending deploy** (test ReadData removal on dev via ownership chaining first). Optional #3 (proc-layer scope enforcement) and #10 (postcss transitive vulns) noted, not done.
+
+### Dev DQ troubleshooting (resolved)
+Several dev-data issues, all process/data not code: (a) repeated manual `jeffrey.raine` analyst INSERTs + the staff merge produced duplicate IsCurrent rows + a `'0000'` HomeSchoolID — fixed by adding jeffrey.raine to the staff **file** (Group 40) + truncate-all reset; (b) wrong students file uploaded (`_SCDTest` vs main — main has 2 in Primary); (c) re-ingesting the main file **without truncate** changed a homeroom **same-day** → reversed effective window. Confirmed by the audit: the 18:09:28 run had exactly the predicted violations (DimStudent + DimStaff `Start=06-23 End=06-22` + the `0000` orphan); the **18:12:50 run after a truncate-all reset is a full PASS** — dev is green with the main students file (P-Sample = 2).
+
+### SCD same-day-reversion fix (the actual proc bug behind (c))
+The DQ gate did its job, but the close+insert-on-same-day pattern is a **latent production bug**: any morning-export + afternoon-fix re-run would be blocked. Fixed in all 4 SCD merge procs — same-day attribute changes **update the current row IN PLACE** (no close+insert → no reversed/overlapping window; surrogate key preserved); missing-closes guarded; bridges guarded. Procs now self-drop + report a `same-day in-place` count. **In source, NOT deployed anywhere yet.** Full detail: [[project_scd_same_day_reversion_fix]].
+
+### End-of-session state
+- **Dev:** green — main students file loaded, DQ PASS (18:12:50), P-Sample/1A = 2 each.
+- **Source ahead of deployed:** the 4 merge-proc fixes + `grant_webapp_sp.sql` + the new `@UPN` iTVFs/`@CallerUPN` procs (to live) + the web-app image (to live) — see the PENDING DEPLOY bullet in [[project_assessment_platform]].
+- **Git:** session work committed locally on `phase-3b-webapp`; **not pushed** (user: "no need to keep pushing after every change").
+- **Next action:** deploy the 4 merge procs to dev → test same-day re-ingest of `_SCDTest` students (expect DQ PASS + in-place update) → restore main → then deploy the fix + the rest of the pending list to live.

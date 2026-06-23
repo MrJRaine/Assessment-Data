@@ -15,7 +15,7 @@ export function getReadiness(): Readiness {
   const region = process.env.DATA_REGION ?? '(unset)'
   return {
     fabricConfigured: Boolean(process.env.FABRIC_SQL_SERVER && process.env.FABRIC_SQL_DATABASE),
-    authMode: process.env.AUTH_MODE ?? 'dev',
+    authMode: process.env.AUTH_MODE ?? 'entra',
     entraConfigured: Boolean(
       process.env.ENTRA_TENANT_ID && process.env.ENTRA_CLIENT_ID && process.env.ENTRA_CLIENT_SECRET,
     ),

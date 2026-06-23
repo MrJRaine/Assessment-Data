@@ -9,10 +9,11 @@
              (client id c33fb2d3-b64e-4818-aa9b-0ac7515f1710).
              The SP's display name in the warehouse is StudentDataAssessment
              (shared with the warehouse 2026-06-19).
-  Reads:     NOT granted here. Covered by the workspace/warehouse *Read* role you
-             assign the SP in the Fabric portal (ReadData = SELECT on the views the
-             app queries). This script adds only what Read does not include:
-             EXECUTE on the write procs.
+  Reads:     Granted EXPLICITLY here (least-privilege, audit 2026-06-23): SELECT on the 6
+             @UPN role-scoped TVFs + 2 non-PII reference dims the app reads directly. The SP
+             should NOT rely on the blanket workspace ReadData role — see the LEAST-PRIVILEGE
+             HARDENING section below for removing it (verify on dev first) so the SP can reach
+             PII only through the role-scoped TVFs, never raw tables or the bridge views.
   Prereqs:   1) Tenant setting "Service principals can use Fabric APIs" enabled.
              2) SP added to the workspace / warehouse with Read (so the principal
                 exists in this database and can connect + SELECT).
@@ -50,10 +51,38 @@ GRANT SELECT ON [dbo].[tvf_StudentIPP]               TO [StudentDataAssessment];
 --      the SP is safe. (Also self-granted at the bottom of usp_TriggerIngestCycle.sql.) ----
 GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];
 
--- ---- If your Read grant turned out to be connect-only (no ReadData), also grant
---      SELECT on the specific views the app reads (view list TBD when the data
---      layer is built — keep to exactly those views, not blanket ReadData):
--- GRANT SELECT ON [dbo].[<view_the_app_reads>] TO [StudentDataAssessment];
+-- ---- Reference dimensions the app reads DIRECTLY (db.query, not @UPN-scoped — these are
+--      non-PII lookup data: reading levels + achievement bands). Grant explicitly so the SP does
+--      NOT need the blanket workspace ReadData role to function. ----
+GRANT SELECT ON [dbo].[DimReadingScale]     TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[DimAchievementLevel] TO [StudentDataAssessment];
+
+-- ============================================================================
+-- LEAST-PRIVILEGE HARDENING (security audit 2026-06-23, finding #4)
+-- ----------------------------------------------------------------------------
+-- Goal: the SP should be able to reach PII ONLY through the @UPN role-scoped TVFs
+-- above — never read raw tables or the RLS-BYPASSING bridge views directly. Today
+-- the SP carries the workspace *Read* (ReadData) role, which is SELECT on EVERYTHING
+-- (raw DimStudent/FactAssessmentReading + every vw_Bridge* view). That makes the SP a
+-- god-mode reader: an app-server compromise or a stray code path = full unscoped PII.
+--
+-- (A) IMMEDIATE, SAFE: deny the RLS-bypassing bridge views to the SP. The web app never
+--     queries them (it uses the @UPN TVFs); they exist only for the deprecated SharePoint
+--     bridge. DENY overrides any role-granted SELECT. No app impact.
+DENY SELECT ON [dbo].[vw_BridgeTeacherRosterAll]    TO [StudentDataAssessment];
+DENY SELECT ON [dbo].[vw_BridgeSchoolRosterAll]     TO [StudentDataAssessment];
+DENY SELECT ON [dbo].[vw_BridgeStudentCohortAll]    TO [StudentDataAssessment];
+DENY SELECT ON [dbo].[vw_BridgeAssessmentHistoryAll] TO [StudentDataAssessment];
+DENY SELECT ON [dbo].[vw_BridgeScaleLevels]         TO [StudentDataAssessment];
+--
+-- (B) STRONGER (verify on DEV before live): remove the SP's broad ReadData entirely so it
+--     holds ONLY the explicit grants above (6 TVFs + 2 dims + proc EXECUTE). The TVFs read the
+--     underlying PII tables via OWNERSHIP CHAINING (TVF + tables share the dbo owner), so the SP
+--     should not need table-level SELECT. CONFIRM on Assessment_Warehouse_Dev first: drop the
+--     SP's Viewer/Read access, keep these grants, and check the app's /enter, /students, /ipp
+--     screens still return rows (proves ownership chaining covers the TVF->table path). If they
+--     do, replicate on live. If they go empty, ownership chaining isn't covering it — keep the
+--     bridge-view DENYs from (A) at minimum and revisit.
 
 -- ---- Verify the EXECUTE grants landed for the principal ----
 -- SELECT pr.name AS principal, perm.permission_name, obj.name AS object_name

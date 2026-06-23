@@ -4,7 +4,9 @@ import { PageHeader, CardLink, ScaffoldNote } from '@/components/ui'
 export const dynamic = 'force-dynamic'
 
 export default function Home() {
-  const r = getReadiness()
+  // Config strip is a dev-diagnostic only — don't disclose posture to unauthenticated visitors in prod.
+  const devDiag = process.env.AUTH_MODE === 'dev' && process.env.ALLOW_DEV_AUTH === 'true'
+  const r = devDiag ? getReadiness() : null
   return (
     <>
       <PageHeader title="Assessment Data Platform" subtitle="Reading & writing assessment entry and review" />
@@ -18,10 +20,12 @@ export default function Home() {
         <CardLink href="/ipp" title="IPPs" meta="Individual Program Plan flags" />
         <CardLink href="/ingest" title="Ingest" meta="Analyst-triggered ingestion" />
       </div>
-      <div className="status-strip muted">
-        Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
-        Fabric configured: {r.fabricConfigured ? 'yes' : 'no'}
-      </div>
+      {r ? (
+        <div className="status-strip muted">
+          Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
+          Fabric configured: {r.fabricConfigured ? 'yes' : 'no'}
+        </div>
+      ) : null}
     </>
   )
 }

@@ -333,6 +333,9 @@ export interface HistoryRow {
 
 /** One student's reading-assessment history (scoped by @UPN), newest sorting done by the caller. */
 export async function getStudentHistory(upn: string, studentKey: string): Promise<HistoryRow[]> {
+  // Reject a malformed surrogate key before it reaches SQL (the TVF CASTs it to BIGINT). RLS in
+  // the TVF already scopes results; this just turns a garbage key into a clean empty result.
+  if (!/^\d{1,20}$/.test(studentKey)) return []
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
     'SELECT * FROM dbo.tvf_StudentAssessmentHistory(@UPN, @StudentKey) ORDER BY AssessmentDate',

@@ -65,6 +65,9 @@
  * EffectiveEndDate (= @EffectiveDate - 1 day) of closed rows.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_MergeSectionTeachers;
+GO
+
 CREATE PROCEDURE usp_MergeSectionTeachers
     @EffectiveDate DATE = NULL
 AS
@@ -137,10 +140,13 @@ BEGIN
 
     -- ------------------------------------------------------------------------
     -- Step 2: Close current rows whose triple is missing from Wrk.
-    -- Close-only, no replacement insert.
+    -- Close-only, no replacement insert. EndDate guarded so a triple created
+    -- TODAY but already gone (same-day add-then-remove) closes as a valid 0-day
+    -- window rather than a reversed one (EffectiveEndDate < EffectiveStartDate).
     -- ------------------------------------------------------------------------
     UPDATE f
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN f.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN f.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM FactSectionTeachers f

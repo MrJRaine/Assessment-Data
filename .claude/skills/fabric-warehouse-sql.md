@@ -243,3 +243,19 @@ These T-SQL reserved words have bitten this project as column names or aliases. 
 | `Current` | column alias in baseline-count query | `SUM(...) AS [Current]` — discovered 2026-05-11 while validating Step 14 ran clean |
 
 Don't rely on `"Double quotes"` for identifier quoting in this project — it depends on `QUOTED_IDENTIFIER ON` session state. Brackets are unconditional.
+
+## SCD Type 2 merge — same-day re-version reverses the effective window (2026-06-23)
+
+**Symptom:** a same-day **corrective re-ingest** (the source file changes a record again on the same day its current row was created) trips the data-quality gate with `EffectiveEndDate < EffectiveStartDate` (reversed window) and, on the dimensions, a self-overlap.
+
+**Cause:** the standard close+insert close step sets `EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate)`. If the current row's `EffectiveStartDate = @EffectiveDate` (created today), the close stamps it `@EffectiveDate - 1` < its start → reversed; and the new version inserted at `@EffectiveDate` shares "today" with the just-closed row → overlap. Hit on dev 2026-06-23 (DimStudent + DimStaff). The truncate-all reset clears the *data* but not the proc bug.
+
+**Fix pattern (applied to all 4 merge procs):**
+- **Change-close step**: add `AND d.EffectiveStartDate < @EffectiveDate` so it only versions rows that started on an earlier day.
+- **Same-day change** (`d.EffectiveStartDate = @EffectiveDate` + attributes differ): **UPDATE the current row IN PLACE** with the incoming business columns — no close, no new version. The surrogate key is preserved (so fact-table references stay valid), and a same-day re-run correctly collapses into today's row.
+- **Missing/deactivation close** (close-only, no replacement insert): guard the end date —
+  `EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY,-1,@EffectiveDate) THEN d.EffectiveStartDate ELSE DATEADD(DAY,-1,@EffectiveDate) END`
+  (closes a same-day-created-then-missing row as a valid 0-day window instead of a reversed one).
+- **Bridge facts** (`FactStaffAssignment`, `FactSectionTeachers`): no overlap DQ check exists for them, only reversed-window — so the end-date guard alone suffices; no in-place needed.
+
+DimSection is the most-exposed dimension because `EnrollmentCount` versions it on nearly every ingest. Full detail in memory `project_scd_same_day_reversion_fix`.

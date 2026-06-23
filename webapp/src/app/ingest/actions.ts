@@ -3,6 +3,7 @@
 import { getCurrentUpn } from '@/lib/auth'
 import { getCallerAccessLevel } from '@/lib/data'
 import { execProc } from '@/lib/db'
+import { toUserMessage, UserError } from '@/lib/errors'
 import { uploadImportFile, IMPORT_TOPICS, type ImportTopic } from '@/lib/onelake'
 import { revalidatePath } from 'next/cache'
 
@@ -12,7 +13,7 @@ async function assertAnalyst(): Promise<string> {
   const upn = await getCurrentUpn()
   const role = await getCallerAccessLevel(upn)
   if (role !== 'RegionalAnalyst') {
-    throw new Error('Only Regional Analysts can run ingest. Contact a regional analyst if a PowerSchool refresh is needed.')
+    throw new UserError('Only Regional Analysts can run ingest. Contact a regional analyst if a PowerSchool refresh is needed.')
   }
   return upn
 }
@@ -28,14 +29,20 @@ export interface UploadResult {
 export async function uploadIngestFile(topic: string, formData: FormData): Promise<UploadResult> {
   try {
     await assertAnalyst()
-    if (!IMPORT_TOPICS.includes(topic as ImportTopic)) throw new Error(`Unknown ingest topic: ${topic}`)
+    if (!IMPORT_TOPICS.includes(topic as ImportTopic)) throw new UserError(`Unknown ingest topic: ${topic}`)
     const file = formData.get('file')
-    if (!(file instanceof File) || file.size === 0) throw new Error('No file provided.')
+    if (!(file instanceof File) || file.size === 0) throw new UserError('No file provided.')
+    // Cap upload size: the whole file is buffered in memory before the OneLake write, so an
+    // unbounded upload could OOM the container. 25 MB comfortably covers a full-rollout export.
+    const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+    if (file.size > MAX_UPLOAD_BYTES) {
+      throw new UserError(`File is ${(file.size / 1048576).toFixed(1)} MB; the limit is 25 MB.`)
+    }
     await uploadImportFile(topic as ImportTopic, file.name, await file.arrayBuffer())
     revalidatePath('/ingest')
     return { ok: true, topic, filename: file.name }
   } catch (e) {
-    return { ok: false, topic, message: e instanceof Error ? e.message : String(e) }
+    return { ok: false, topic, message: toUserMessage(e) }
   }
 }
 

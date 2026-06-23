@@ -69,6 +69,9 @@
  * EffectiveEndDate (= @EffectiveDate - 1 day) of closed-out versions.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_MergeSection;
+GO
+
 CREATE PROCEDURE usp_MergeSection
     @EffectiveDate DATE = NULL
 AS
@@ -85,6 +88,7 @@ BEGIN
     DECLARE @InsertedNew         INT = 0;   -- New sections (no prior row)
     DECLARE @InsertedVersion     INT = 0;   -- Existing sections with at least one Type 2 field change
     DECLARE @ClosedRows          INT = 0;   -- Current rows closed by this run (== InsertedVersion)
+    DECLARE @SameDayUpdated      INT = 0;   -- Current rows updated IN PLACE (same-day correction)
     DECLARE @TouchedRows         INT = 0;   -- Existing sections unchanged this run (LastUpdated only)
     DECLARE @MissingClosed       INT = 0;   -- Currently-active sections in DimSection absent from this import
 
@@ -133,8 +137,12 @@ BEGIN
     SET @WrkRowCount = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
-    -- Step 2: Close out current DimSection rows whose business attributes
-    -- differ from the incoming Wrk row. EXCEPT is NULL-safe.
+    -- Step 2: Close out current DimSection rows whose business attributes differ
+    -- from the incoming Wrk row AND that started on an EARLIER day (normal SCD
+    -- versioning). EXCEPT is NULL-safe. Same-day changes go to Step 2b: a
+    -- close+insert on the same day the current row was created would reverse the
+    -- effective window (End = @EffectiveDate-1 < Start) and self-overlap. This is
+    -- the most-hit case here because EnrollmentCount versions DimSection often.
     -- ------------------------------------------------------------------------
     UPDATE d
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
@@ -144,6 +152,7 @@ BEGIN
     INNER JOIN Wrk_Section w
             ON w.SectionID = d.SectionID
     WHERE d.IsCurrent = 1
+      AND d.EffectiveStartDate < @EffectiveDate
       AND EXISTS (
           SELECT w.SchoolID, w.TermID, w.CourseCode, w.SectionNumber,
                  w.CourseName, w.EnrollmentCount, w.MaxEnrollment,
@@ -155,6 +164,32 @@ BEGIN
       );
 
     SET @ClosedRows = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 2b: SAME-DAY correction — current row created TODAY, update IN PLACE
+    -- (no close+insert -> no reversed/overlapping window). SectionKey preserved.
+    -- ------------------------------------------------------------------------
+    UPDATE d
+    SET SchoolID = w.SchoolID, TermID = w.TermID, CourseCode = w.CourseCode,
+        SectionNumber = w.SectionNumber, CourseName = w.CourseName,
+        EnrollmentCount = w.EnrollmentCount, MaxEnrollment = w.MaxEnrollment,
+        TeacherStaffKey = w.TeacherStaffKey, LastUpdated = GETDATE()
+    FROM DimSection d
+    INNER JOIN Wrk_Section w
+            ON w.SectionID = d.SectionID
+    WHERE d.IsCurrent = 1
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND EXISTS (
+          SELECT w.SchoolID, w.TermID, w.CourseCode, w.SectionNumber,
+                 w.CourseName, w.EnrollmentCount, w.MaxEnrollment,
+                 w.TeacherStaffKey
+          EXCEPT
+          SELECT d.SchoolID, d.TermID, d.CourseCode, d.SectionNumber,
+                 d.CourseName, d.EnrollmentCount, d.MaxEnrollment,
+                 d.TeacherStaffKey
+      );
+
+    SET @SameDayUpdated = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
     -- Step 3: INSERT new versions. Two populations covered in one pass:
@@ -201,10 +236,11 @@ BEGIN
     -- Step 5: Close out current DimSection rows whose SectionID is absent
     -- from this import. The PS export is filtered to current school-year
     -- sections — absence means out of scope. Close-only, no replacement
-    -- (multi-valued absent state).
+    -- (multi-valued absent state). EndDate guarded against same-day reversal.
     -- ------------------------------------------------------------------------
     UPDATE d
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN d.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM DimSection d
@@ -236,6 +272,7 @@ BEGIN
             CAST(@InsertedNew      AS VARCHAR(20)), ' new | ',
             CAST(@InsertedVersion  AS VARCHAR(20)), ' versioned (',
             CAST(@ClosedRows       AS VARCHAR(20)), ' closed) | ',
+            CAST(@SameDayUpdated   AS VARCHAR(20)), ' same-day in-place | ',
             CAST(@TouchedRows      AS VARCHAR(20)), ' unchanged | ',
             CAST(@MissingClosed    AS VARCHAR(20)), ' deactivated (missing from import)',
             CASE WHEN @UnresolvedTeachers > 0

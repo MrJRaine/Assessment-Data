@@ -1,5 +1,6 @@
 import 'server-only'
 import { auth } from '@/auth'
+import { authMode } from './authMode'
 
 /**
  * Resolve the current user's UPN (SERVER-ONLY). Two modes via AUTH_MODE:
@@ -12,9 +13,8 @@ import { auth } from '@/auth'
  * filter on.
  */
 export async function getCurrentUpn(): Promise<string> {
-  const mode = process.env.AUTH_MODE ?? 'dev'
-
-  if (mode === 'dev') {
+  // authMode() throws if AUTH_MODE=dev without the explicit ALLOW_DEV_AUTH opt-in (fail closed).
+  if (authMode() === 'dev') {
     const upn = process.env.DEV_FAKE_UPN
     if (!upn) throw new Error('AUTH_MODE=dev requires DEV_FAKE_UPN to be set')
     return upn
