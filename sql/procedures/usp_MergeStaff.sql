@@ -86,6 +86,7 @@ BEGIN
     -- DimStaff counters
     DECLARE @PersonsClosedChanged     INT = 0;
     DECLARE @PersonsSameDayUpdated    INT = 0;   -- DimStaff rows updated IN PLACE (same-day correction)
+    DECLARE @PersonsSameDayRevived    INT = 0;   -- DimStaff rows re-opened IN PLACE on same-day return
     DECLARE @PersonsClosedMissing     INT = 0;
     DECLARE @PersonsInsertedActive    INT = 0;   -- NEW + CHANGED + RETURNING combined
     DECLARE @PersonsInsertedInactive  INT = 0;   -- Deactivation inserts (== ClosedMissing)
@@ -149,7 +150,13 @@ BEGIN
             First_Name        AS FirstName,
             Last_Name         AS LastName,
             Title             AS Title,
-            CASE WHEN HomeSchoolID = '' OR HomeSchoolID = '0' THEN NULL
+            -- Sentinel "no home school" => NULL. Catch ALL all-zero / blank forms
+            -- ('', '0', '00', '000', '0000'), not just a single '0' -- otherwise a
+            -- multi-zero value left-pads to '0000', which is no real school and trips
+            -- the DimSchool orphan check.
+            CASE WHEN NULLIF(LTRIM(RTRIM(HomeSchoolID)), '') IS NULL
+                   OR HomeSchoolID NOT LIKE '%[1-9]%'
+                 THEN NULL
                  ELSE RIGHT('0000' + HomeSchoolID, 4) END AS HomeSchoolID,
             NULLIF(CanChangeSchool, '') AS CanChangeSchool,
             CAST(ID AS INT)   AS PSStaffID,
@@ -277,9 +284,15 @@ BEGIN
     SET @PersonsSameDayUpdated = @@ROWCOUNT;
 
     -- 4b. Close missing-active rows: Email currently active in DimStaff but
-    --     absent from this import.
+    --     absent from this import. EndDate guarded so a row created TODAY but
+    --     already missing (same-day add-then-remove) closes as a valid 0-day window
+    --     instead of a reversed one. Such same-day closures get EndDate=today, so 4c
+    --     (which keys on EndDate=yesterday) correctly skips them -- a person added and
+    --     gone within the same day leaves no deactivation row; if they return the same
+    --     day, 4c-prime revives the closed row in place.
     UPDATE d
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN d.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM DimStaff d
@@ -313,6 +326,31 @@ BEGIN
       AND w.Email IS NULL;
 
     SET @PersonsInsertedInactive = @@ROWCOUNT;
+
+    -- 4c-prime. SAME-DAY REVIVAL: a person closed earlier TODAY (same-day removal
+    --     left a 0-day [today, today] closed row; 4b's guard meant 4c created no
+    --     deactivation row for them) who is back in this import. Re-open that row
+    --     IN PLACE so 4d does NOT insert a second current row that overlaps (rule D).
+    --     Refresh Type 2 fields, reactivate, restore AccessLevel. Targets ONLY
+    --     same-day 0-day closures with no surviving current row.
+    UPDATE d
+    SET FirstName = w.FirstName, LastName = w.LastName, Title = w.Title,
+        HomeSchoolID = w.HomeSchoolID, CanChangeSchool = w.CanChangeSchool,
+        IsDistrictLevel = w.IsDistrictLevel, ActiveFlag = CAST(1 AS BIT), AccessLevel = w.AccessLevel,
+        EffectiveEndDate = NULL, IsCurrent = 1, LastUpdated = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Wrk_StaffPersons w
+            ON w.Email = d.Email
+    WHERE d.IsCurrent = 0
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND d.EffectiveEndDate   = @EffectiveDate
+      AND NOT EXISTS (
+          SELECT 1 FROM DimStaff c
+          WHERE c.Email = d.Email
+            AND c.IsCurrent = 1
+      );
+
+    SET @PersonsSameDayRevived = @@ROWCOUNT;
 
     -- 4d. Insert active versions for everything in Wrk that lacks a current
     --     active row. Covers NEW (no rows at all) + CHANGED (just closed in
@@ -530,6 +568,7 @@ BEGIN
                 CAST(@PersonsInsertedActive   AS VARCHAR(20)), ' active inserts (new+changed+returning) | ',
                 CAST(@PersonsClosedChanged    AS VARCHAR(20)), ' versioned (closed) | ',
                 CAST(@PersonsSameDayUpdated   AS VARCHAR(20)), ' same-day in-place | ',
+                CAST(@PersonsSameDayRevived   AS VARCHAR(20)), ' same-day revived | ',
                 CAST(@PersonsInsertedInactive AS VARCHAR(20)), ' deactivated | ',
                 CAST(@PersonsTouched          AS VARCHAR(20)), ' touched | ',
                 CAST(@AccessLevelUpdated      AS VARCHAR(20)), ' access-level updated || ',

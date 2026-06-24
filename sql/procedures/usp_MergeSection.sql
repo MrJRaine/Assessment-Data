@@ -89,6 +89,7 @@ BEGIN
     DECLARE @InsertedVersion     INT = 0;   -- Existing sections with at least one Type 2 field change
     DECLARE @ClosedRows          INT = 0;   -- Current rows closed by this run (== InsertedVersion)
     DECLARE @SameDayUpdated      INT = 0;   -- Current rows updated IN PLACE (same-day correction)
+    DECLARE @SameDayRevived      INT = 0;   -- Same-day-closed rows re-opened IN PLACE on same-day return (no overlap)
     DECLARE @TouchedRows         INT = 0;   -- Existing sections unchanged this run (LastUpdated only)
     DECLARE @MissingClosed       INT = 0;   -- Currently-active sections in DimSection absent from this import
 
@@ -192,6 +193,33 @@ BEGIN
     SET @SameDayUpdated = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
+    -- Step 2c: SAME-DAY REVIVAL (mirror of usp_MergeStudent). A section closed
+    -- earlier TODAY (Step 5 same-day missing-close left a 0-day [today, today]
+    -- closed row) that is back in this import: re-open it IN PLACE so Step 3 does
+    -- NOT insert a second current row that would overlap (rule D). Targets ONLY
+    -- same-day 0-day closures with no surviving current row.
+    -- ------------------------------------------------------------------------
+    UPDATE d
+    SET SchoolID = w.SchoolID, TermID = w.TermID, CourseCode = w.CourseCode,
+        SectionNumber = w.SectionNumber, CourseName = w.CourseName,
+        EnrollmentCount = w.EnrollmentCount, MaxEnrollment = w.MaxEnrollment,
+        TeacherStaffKey = w.TeacherStaffKey,
+        EffectiveEndDate = NULL, IsCurrent = 1, LastUpdated = GETDATE()
+    FROM DimSection d
+    INNER JOIN Wrk_Section w
+            ON w.SectionID = d.SectionID
+    WHERE d.IsCurrent = 0
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND d.EffectiveEndDate   = @EffectiveDate
+      AND NOT EXISTS (
+          SELECT 1 FROM DimSection c
+          WHERE c.SectionID = d.SectionID
+            AND c.IsCurrent = 1
+      );
+
+    SET @SameDayRevived = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
     -- Step 3: INSERT new versions. Two populations covered in one pass:
     --   (a) NEW: SectionID not present in DimSection at all.
     --   (b) CHANGED: SectionID present, but no current row remains for it
@@ -273,6 +301,7 @@ BEGIN
             CAST(@InsertedVersion  AS VARCHAR(20)), ' versioned (',
             CAST(@ClosedRows       AS VARCHAR(20)), ' closed) | ',
             CAST(@SameDayUpdated   AS VARCHAR(20)), ' same-day in-place | ',
+            CAST(@SameDayRevived   AS VARCHAR(20)), ' same-day revived | ',
             CAST(@TouchedRows      AS VARCHAR(20)), ' unchanged | ',
             CAST(@MissingClosed    AS VARCHAR(20)), ' deactivated (missing from import)',
             CASE WHEN @UnresolvedTeachers > 0
