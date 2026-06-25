@@ -259,3 +259,30 @@ Don't rely on `"Double quotes"` for identifier quoting in this project — it de
 - **Bridge facts** (`FactStaffAssignment`, `FactSectionTeachers`): no overlap DQ check exists for them, only reversed-window — so the end-date guard alone suffices; no in-place needed.
 
 DimSection is the most-exposed dimension because `EnrollmentCount` versions it on nearly every ingest. Full detail in memory `project_scd_same_day_reversion_fix`.
+
+## Ongoing-assessment / multiple-entry fact patterns (2026-06-25)
+
+When an assessment fact allows **multiple rows per (student, window)** (the ongoing-assessment model — grain Student×Window×Date), every read that joins that fact per (student, window) MUST pick the latest, or a plain `LEFT JOIN ... ON (window, student)` fans a student out to one row per entry:
+```sql
+LatestInWindow AS (
+    SELECT ..., ROW_NUMBER() OVER (PARTITION BY StudentKey, AssessmentWindowID
+                                   ORDER BY AssessmentDate DESC, <FactID> DESC) AS rn
+    FROM FactAssessmentX WHERE AssessmentWindowID = CAST(@WindowID AS BIGINT)
+)
+... LEFT JOIN LatestInWindow f ON f.StudentKey = sg.StudentKey AND f.AssessmentWindowID = sg.AssessmentWindowID AND f.rn = 1
+```
+This bit `tvf_TeacherRoster` (reading) after the upsert grain changed — it duplicated rows until the rn=1 pick was added. The cohort TVF already partitioned by StudentKey, so it was fine.
+
+**Reuse a shared lookup dim "by code" instead of duplicating it.** Writing's 4-trait average maps to the SAME achievement bands as reading. Rather than add a `Domain` column to `DimAchievementLevel` (which would force a `Domain='Reading'` filter into every existing reading read — miss one and a value matches two rows → duplicate output), map the derived value to a band **code** in the writing read and join by code for name+colour only:
+```sql
+LEFT JOIN DimAchievementLevel dal ON dal.ActiveFlag = 1 AND f.AvgScore IS NOT NULL
+     AND dal.AchievementLevelCode = CASE WHEN f.AvgScore >= 3.50 THEN 4 WHEN f.AvgScore >= 2.75 THEN 3
+                                         WHEN f.AvgScore >= 1.75 THEN 2 ELSE 1 END
+```
+Zero change to the proven reading reads; the dim's reading-delta bounds simply aren't used on the writing path.
+
+**Monthly-window generator gotchas** (`usp_GenerateMonthlyWindows`):
+- Month-end via `DATEADD(DAY, -1, DATEADD(MONTH, n+1, @firstOfMonth))` — don't rely on `EOMONTH`/`FORMAT`/`DATEFROMPARTS` (CLR-ish; treat as unavailable in Fabric Warehouse). Month-name via a `CASE MONTH(d)` map, not `FORMAT`.
+- **NULL-safe idempotency**: when a key column can be NULL (writing's `ScaleSystem`), `w.Col = sc.Col` is UNKNOWN for NULLs and the `NOT EXISTS` re-inserts every run — use `ISNULL(w.Col,'~') = ISNULL(sc.Col,'~')`.
+
+**`DROP PROCEDURE IF EXISTS` hygiene**: a bare `CREATE PROCEDURE` errors `Msg 2714 (object already exists)` on redeploy. Every proc/function file should start with `DROP ... IF EXISTS; GO` so a re-run is self-contained (bit us on `usp_RunDataQualityChecks`).

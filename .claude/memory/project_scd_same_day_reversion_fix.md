@@ -9,7 +9,9 @@ A same-day **corrective re-ingest** of a changed record breaks the SCD Type 2 me
 
 Observed on **dev 2026-06-23**: re-ingesting the students file the same day (without truncate) changed a homeroom → DimStudent + DimStaff each threw `Start=2026-06-23 End=2026-06-22`. A full truncate-all reset cleared the *data*, but the **proc bug is still in live**.
 
-**Fix (2026-06-23, in source, NOT yet deployed):** in every Type 2 merge proc, split the change-close into two cases —
+**Status: DEPLOYED TO LIVE 2026-06-24** (all 4 merge procs), after dev-proving the `_SCDTest` re-ingest. A follow-on **same-day REVIVAL** case (a record dropped earlier today and re-added today was being inserted as a second, overlapping current row) was added to Student/Section/Staff, and the staff HomeSchoolID `'0000'` orphan was fixed in the same pass — all live.
+
+**Fix (in every Type 2 merge proc):** split the change-close into two cases —
 - **Started earlier** (`EffectiveStartDate < @EffectiveDate`): normal SCD close+insert (valid history).
 - **Started today** (`EffectiveStartDate = @EffectiveDate`): **UPDATE the current row IN PLACE** with the incoming values — no new version, surrogate key preserved (fact references stay valid), no reversed/overlapping window. A same-day re-run collapses into today's row, which is the correct semantics.
 
