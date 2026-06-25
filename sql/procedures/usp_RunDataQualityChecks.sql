@@ -49,6 +49,9 @@
  * years should stay sub-minute. Cheap to run on demand.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_RunDataQualityChecks;
+GO
+
 CREATE PROCEDURE usp_RunDataQualityChecks
 AS
 BEGIN
