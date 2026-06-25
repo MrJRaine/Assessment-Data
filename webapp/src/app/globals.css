@@ -99,11 +99,14 @@ a { color: inherit; text-decoration: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* cards */
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 1rem; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
-.card-link { display: block; transition: border-color 0.12s, box-shadow 0.12s; }
-.card-link:hover { border-color: var(--primary); box-shadow: 0 1px 6px rgba(0, 146, 201, 0.12); }
-.card-title { font-weight: 600; margin-bottom: 0.25rem; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.1rem 1.1rem 1.25rem; }
+/* card-link mirrors the Power App landing cards: cyan accent edge, title, description, "go" link */
+.card-link { display: flex; flex-direction: column; border-left: 4px solid var(--primary); transition: border-color 0.12s, box-shadow 0.12s; }
+.card-link:hover { box-shadow: 0 1px 8px rgba(0, 146, 201, 0.16); background: #fafdff; }
+.card-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.3rem; }
+.card-desc { color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+.card-cta { color: var(--primary); font-weight: 700; font-size: 0.85rem; margin-top: 0.8rem; }
 
 /* placeholder */
 .placeholder {

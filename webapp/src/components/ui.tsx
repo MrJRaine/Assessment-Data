@@ -55,11 +55,25 @@ export function Loading({ label = 'Loading…' }: { label?: string }) {
   )
 }
 
-export function CardLink({ href, title, meta }: { href: string; title: string; meta?: string }) {
+export function CardLink({
+  href,
+  title,
+  desc,
+  cta,
+  meta,
+}: {
+  href: string
+  title: string
+  desc?: string
+  cta?: string
+  meta?: string
+}) {
   return (
     <Link href={href} className="card card-link">
       <div className="card-title">{title}</div>
+      {desc ? <div className="card-desc">{desc}</div> : null}
       {meta ? <div className="muted">{meta}</div> : null}
+      {cta ? <div className="card-cta">{cta}&nbsp;&rsaquo;</div> : null}
     </Link>
   )
 }
