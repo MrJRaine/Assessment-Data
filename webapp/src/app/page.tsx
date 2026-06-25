@@ -40,7 +40,7 @@ export default async function Home() {
           href="/enter"
           title="Data Entry"
           desc="Record reading levels for a class during an open assessment window. The roster grid lets you enter a whole class at once."
-          cta="Enter assessments"
+          cta="Enter Data"
         />
         <CardLink
           href="/ipp"

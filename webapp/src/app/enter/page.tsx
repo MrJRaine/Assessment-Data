@@ -32,7 +32,7 @@ export default async function WindowSelect() {
 
   return (
     <>
-      <PageHeader title="Enter Assessments" subtitle="Step 1 — choose an assessment window" />
+      <PageHeader title="Data Entry" subtitle="Step 1 — choose an assessment window" />
       {error ? (
         <ErrorNote message={error} />
       ) : windows.length === 0 ? (
