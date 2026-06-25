@@ -54,11 +54,15 @@ BEGIN
         FROM MonthOffsets
     ),
     Scopes AS (
-        -- SCOPE CATALOG -- one row per (type, program, scale, grade range). Extend for Writing/Math.
+        -- SCOPE CATALOG -- one row per (type, program, scale, grade range). Extend for Math.
+        -- Writing has no reading scale system (ScaleSystem NULL); it is scored on the 4-trait
+        -- 1-4 rubric (Ideas/Organization/Language/Conventions) -- see usp_UpsertWritingAssessment.
         SELECT AssessmentType, ProgramFamily, ScaleSystem, MinGrade, MaxGrade, ScopeLabel
         FROM (VALUES
-            ('Reading', 'English',          'EN_Reading', 'P', '6', 'English Elementary'),
-            ('Reading', 'French Immersion', 'FR_Reading', 'P', '6', 'French Immersion Elementary')
+            ('Reading', 'English',          'EN_Reading',              'P', '6', 'English Elementary'),
+            ('Reading', 'French Immersion', 'FR_Reading',              'P', '6', 'French Immersion Elementary'),
+            ('Writing', 'English',          CAST(NULL AS VARCHAR(20)), 'P', '6', 'English Elementary'),
+            ('Writing', 'French Immersion', CAST(NULL AS VARCHAR(20)), 'P', '6', 'French Immersion Elementary')
         ) AS sc(AssessmentType, ProgramFamily, ScaleSystem, MinGrade, MaxGrade, ScopeLabel)
     )
     INSERT INTO DimAssessmentWindow (
@@ -88,7 +92,7 @@ BEGIN
         SELECT 1 FROM DimAssessmentWindow w
         WHERE w.AssessmentType = sc.AssessmentType
           AND w.ProgramFamily  = sc.ProgramFamily
-          AND w.ScaleSystem    = sc.ScaleSystem
+          AND ISNULL(w.ScaleSystem, '~') = ISNULL(sc.ScaleSystem, '~')   -- NULL-safe (Writing has no scale)
           AND w.MinGrade       = sc.MinGrade
           AND w.MaxGrade       = sc.MaxGrade
           AND w.StartDate      = md.StartDate
