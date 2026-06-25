@@ -11,11 +11,13 @@ const ITEMS = [
   { href: '/ingest', label: 'Ingest' },
 ]
 
-export default function Nav() {
+export default function Nav({ showIngest = false }: { showIngest?: boolean }) {
   const path = usePathname()
+  // Ingest is RegionalAnalyst-only — hide it from everyone else (the page/actions also enforce it).
+  const items = ITEMS.filter((it) => it.href !== '/ingest' || showIngest)
   return (
     <nav className="nav">
-      {ITEMS.map((it) => {
+      {items.map((it) => {
         const active = it.exact ? path === it.href : path === it.href || path.startsWith(it.href + '/')
         return (
           <Link key={it.href} href={it.href} className={active ? 'nav-link active' : 'nav-link'}>
