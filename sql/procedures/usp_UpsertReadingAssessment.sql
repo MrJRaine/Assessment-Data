@@ -19,19 +19,27 @@
  *                       truthful UPN — safe only because EXECUTE is granted to
  *                       the SP alone and the web app passes an Entra-validated
  *                       UPN (same trust boundary as the @UPN bridge reads).
+ * Modified: 2026-06-25 — ONGOING-ASSESSMENT model. Windows are now monthly bins
+ *                       (open 1st, closed last day of month). Grain is now
+ *                       (StudentKey, AssessmentWindowID, AssessmentDate): a
+ *                       teacher may record MULTIPLE dated results per window —
+ *                       each date is its own row (prior entries preserved); a
+ *                       same-date re-save is a correction (UPDATE in place).
+ *                       Closed windows are WRITEABLE (late entry) — the teacher
+ *                       "closed window" block (51031) was removed. The 51017 date
+ *                       gate upper bound is now MIN(today, window EndDate) so a
+ *                       late entry is dated inside that window's month.
  * Region: Canada East (PIIDPA compliant)
  *
- * Behavior:
- *   - INSERT path (no existing row for (StudentKey, AssessmentWindowID)):
- *       Resolves StudentKey via effective-date join on (StudentNumber,
- *       @AssessmentDate), per the per-fact SCD linking policy. Computes
- *       ReadingDelta. Inserts the row.
- *   - UPDATE path (existing row for (StudentKey, AssessmentWindowID)):
- *       Touches ONLY score + audit columns. StudentKey and AssessmentDate are
- *       FROZEN at their initial-insert values — re-runs do not move them
- *       across SCD boundaries (per project_assessment_fact_scd_policy memory).
- *       `@AssessmentDate` is ignored on update; the existing row's date is
- *       preserved.
+ * Behavior (grain = StudentKey x AssessmentWindowID x AssessmentDate):
+ *   - INSERT path (no row yet for that triple — a NEW assessment date in the
+ *       window): resolves StudentKey via effective-date join on (StudentNumber,
+ *       @AssessmentDate), computes ReadingDelta, inserts. Multiple dates in one
+ *       window therefore accumulate as separate rows — prior entries are kept,
+ *       and cohort reads pull the latest by AssessmentDate (then entry order).
+ *   - UPDATE path (a row already exists for that exact date — a correction):
+ *       touches ONLY score + audit columns. StudentKey stays frozen (matched on
+ *       the row's own date), per project_assessment_fact_scd_policy.
  *
  * Power Apps invocation:
  *   'Assessment_Warehouse'.dbo.usp_UpsertReadingAssessment({
@@ -73,11 +81,12 @@
  *   51014  @ReadingScaleID.ScaleSystem does not match window's ScaleSystem
  *   51015  window AssessmentType is not 'Reading'
  *   51016  student grade (at AssessmentDate) outside window's [MinGrade, MaxGrade]
- *   51017  @AssessmentDate outside [window.StartDate, today_atlantic]
+ *   51017  @AssessmentDate outside [window.StartDate, MIN(today_atlantic, window.EndDate)]
  *
  *   --- Layer 2 permission failures (51030-51049) ---
  *   51030  caller not in DimStaff (IsCurrent=1)
- *   51031  teacher (AccessLevel IS NULL) attempting to write to a Closed window
+ *   51031  RETIRED 2026-06-25 — closed windows are now writeable (ongoing-assessment
+ *          model); teachers may enter late. No longer thrown.
  *   51032  window is Upcoming (not yet started) — applies to all callers
  *
  * Note: bad VARCHAR-to-BIGINT cast on @AssessmentWindowID / @ReadingScaleID
@@ -209,10 +218,10 @@ BEGIN
         ;THROW 51032, 'usp_UpsertReadingAssessment: window is Upcoming (not yet started). No entries allowed before the window opens.', 1;
     END;
 
-    IF @WindowStatus = 'Closed' AND @CallerAccessLevel IS NULL
-    BEGIN
-        ;THROW 51031, 'usp_UpsertReadingAssessment: window is Closed. Teachers cannot edit retroactively — contact a School Admin or Regional Analyst.', 1;
-    END;
+    -- Closed windows remain WRITEABLE (ongoing-assessment model, 2026-06-25): a teacher may
+    -- enter a result after the month closes if entry was delayed. The 51017 date gate keeps a
+    -- late entry dated inside that window's own month. The former 51031 "teachers can't edit a
+    -- closed window" block was removed with this change.
 
     -- =========================================================================
     -- Layer 2 — 51013, 51014: scale resolves, is active, ScaleSystem matches window
@@ -270,11 +279,15 @@ BEGIN
     END;
 
     -- =========================================================================
-    -- Layer 2 — 51017: AssessmentDate must be within [WindowStartDate, today]
+    -- Layer 2 — 51017: AssessmentDate within [WindowStartDate, MIN(today, WindowEndDate)].
+    -- Upper bound is the window's own month-end once that month has passed, so a LATE entry
+    -- into a closed window is dated INSIDE that month (correct monthly binning) and can never
+    -- land in a later month. For the current (open) window the cap is today (no future-dating).
     -- =========================================================================
-    IF @AssessmentDate < @WindowStartDate OR @AssessmentDate > @Today
+    IF @AssessmentDate < @WindowStartDate
+       OR @AssessmentDate > CASE WHEN @Today < @WindowEndDate THEN @Today ELSE @WindowEndDate END
     BEGIN
-        ;THROW 51017, 'usp_UpsertReadingAssessment: @AssessmentDate is outside the valid range [window.StartDate, today].', 1;
+        ;THROW 51017, 'usp_UpsertReadingAssessment: @AssessmentDate is outside this window''s range [StartDate, min(today, EndDate)].', 1;
     END;
 
     -- =========================================================================
@@ -340,14 +353,19 @@ BEGIN
     END;
 
     -- =========================================================================
-    -- UPSERT into FactAssessmentReading.
-    -- StudentKey + AssessmentDate are frozen at first INSERT; UPDATE only
-    -- touches score + audit columns (per project_assessment_fact_scd_policy).
+    -- UPSERT into FactAssessmentReading, grain = (StudentKey, AssessmentWindowID,
+    -- AssessmentDate). Ongoing-assessment model (2026-06-25): a teacher may record
+    -- MULTIPLE results across a window (one per assessment DATE) -- each distinct
+    -- date is its own row, so the prior entries are preserved. A re-save on the
+    -- SAME date is a correction (UPDATE in place, no duplicate). Cohort reads pull
+    -- the latest by AssessmentDate (then entry order); the others stay on record.
+    -- StudentKey is frozen per row at its own AssessmentDate (effective-date join).
     -- =========================================================================
     SELECT @ExistingAssessmentID = ReadingAssessmentID
     FROM FactAssessmentReading
     WHERE StudentKey = @StudentKey
-      AND AssessmentWindowID = @AssessmentWindowID_BI;
+      AND AssessmentWindowID = @AssessmentWindowID_BI
+      AND AssessmentDate = @AssessmentDate;
 
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN
