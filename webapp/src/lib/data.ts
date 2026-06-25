@@ -23,8 +23,16 @@ export interface TeacherWindow {
   name: string
   status: string // Upcoming | Open | ClosesToday | Closed
   scaleSystem: string | null
+  startDate: string // 'YYYY-MM-DD' (window opens on the 1st of its month)
+  endDate: string // 'YYYY-MM-DD' (window closes on the last day of its month)
   applicableCount: number
   enteredCount: number
+}
+
+// DATE columns come back from tedious as a JS Date (UTC midnight) or a string; normalize to 'YYYY-MM-DD'.
+function toYMD(v: unknown): string {
+  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  return String(v).slice(0, 10)
 }
 
 export interface TeacherGroup {
@@ -42,17 +50,35 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     WindowName: string
     WindowStatus: string
     ScaleSystem: string | null
+    StartDate: unknown
+    EndDate: unknown
     ApplicableStudentCount: number
     EnteredStudentCount: number
-  }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY WindowName')
+  }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     name: r.WindowName,
     status: r.WindowStatus,
     scaleSystem: r.ScaleSystem,
+    startDate: toYMD(r.StartDate),
+    endDate: toYMD(r.EndDate),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
     enteredCount: Number(r.EnteredStudentCount ?? 0),
   }))
+}
+
+/**
+ * The window's EndDate ('YYYY-MM-DD'), or null if not found. Used by the entry save path to date a
+ * LATE entry into a closed window at the window's own month-end (the proc's 51017 gate caps the
+ * assessment date at MIN(today, EndDate), so a plain "today" would be rejected for a past window).
+ * Window dates are reference metadata (not per-user PII), so a plain query is fine.
+ */
+export async function getWindowEndDate(windowId: string): Promise<string | null> {
+  const rows = await query<{ EndDate: unknown }>(
+    'SELECT EndDate FROM DimAssessmentWindow WHERE AssessmentWindowID = CAST(@WID AS BIGINT)',
+    { WID: windowId },
+  )
+  return rows.length ? toYMD(rows[0].EndDate) : null
 }
 
 /** Groups (homerooms / sections) for one window, scoped to the signed-in teacher. */

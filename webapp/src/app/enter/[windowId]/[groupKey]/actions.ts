@@ -2,7 +2,7 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
-import { getTeacherRoster } from '@/lib/data'
+import { getTeacherRoster, getWindowEndDate } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 import { revalidatePath } from 'next/cache'
 
@@ -27,8 +27,13 @@ export async function saveReadingAssessments(
   entries: SaveEntry[],
 ): Promise<SaveResult> {
   const upn = await getCurrentUpn()
-  // Atlantic "today" (DST-aware) to satisfy the proc's [WindowStart, today] date gate.
-  const assessmentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  // Atlantic "today" (DST-aware). Closed (past) windows are still writeable for late entry, but the
+  // proc's 51017 gate caps the assessment date at the window's own month-end -- so date the entry at
+  // MIN(today, window EndDate). For the current open window that's just today; for a past window it
+  // bins the late entry into that window's month (a plain "today" would be rejected).
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  const windowEnd = await getWindowEndDate(windowId)
+  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
 
   // SCOPE GATE: the write procs trust @CallerUPN but don't enforce per-student RLS, so verify
   // each target is on THIS caller's RLS-scoped roster (via the @UPN TVF) before writing. Blocks a
