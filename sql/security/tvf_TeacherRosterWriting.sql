@@ -1,25 +1,24 @@
 /*******************************************************************************
- * Function: tvf_TeacherRoster  (INLINE table-valued function)
- * Purpose: @UPN-parameterized roster for the web app entry grid (Phase 3b).
- *          Combines vw_TeacherRoster's three role branches (Teacher /
- *          SchoolAdmin+SpecialistTeacher / RegionalAnalyst) with the per-student
- *          entry context the grid shows (existing level + delta, expected
- *          benchmark range for the window's dominant month, reading-IPP status).
- *          Returns one row per student for the given window + group.
- * Created: 2026-06-22
+ * Function: tvf_TeacherRosterWriting  (INLINE table-valued function)
+ * Purpose: Writing counterpart of tvf_TeacherRoster for the web app entry grid.
+ *          IDENTICAL scoping (Teacher / SchoolAdmin+SpecialistTeacher /
+ *          RegionalAnalyst role branches, window-date roster reconciliation,
+ *          group filtering) -- only the per-student entry context differs:
+ *          the MOST RECENT writing entry's four trait scores + their average +
+ *          achievement band, plus Writing-IPP status. No benchmark / delta
+ *          (writing has none). One row per student for the given window + group.
+ * Created: 2026-06-25
  * Region: Canada East (PIIDPA compliant)
  *
- * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
- * (trusts @UPN; SELECT granted to the SP only). Role logic mirrors
- * vw_TeacherRoster; benchmark/IPP enrichment mirrors vw_BridgeTeacherRosterAll.
- * No section columns are projected, so SELECT DISTINCT collapses the PP-9
- * per-section fan-out to one row per student. ORDER BY omitted -- caller sorts.
+ * Band = average mapped to a code (3.50/2.75/1.75) then joined to
+ * DimAchievementLevel by code for name + colour (see tvf_StudentCohortWriting).
+ * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted.
  ******************************************************************************/
 
-DROP FUNCTION IF EXISTS dbo.tvf_TeacherRoster;
+DROP FUNCTION IF EXISTS dbo.tvf_TeacherRosterWriting;
 GO
 
-CREATE FUNCTION dbo.tvf_TeacherRoster(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(60))
+CREATE FUNCTION dbo.tvf_TeacherRosterWriting(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(60))
 RETURNS TABLE
 AS
 RETURN
@@ -35,22 +34,12 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
-    ),
-    WindowDominantMonth AS (
-        SELECT
-            wed.AssessmentWindowID,
-            (SELECT TOP 1 dc.Month
-             FROM DimCalendar dc
-             WHERE dc.Date BETWEEN wed.WindowStartDate AND wed.WindowEndDate
-             GROUP BY dc.Month
-             ORDER BY COUNT(*) DESC, dc.Month) AS DominantMonth
-        FROM WindowEffectiveDates wed
     ),
     TeacherApplicable AS (
         SELECT
@@ -145,17 +134,17 @@ RETURN
             END AS GroupKey
         FROM ApplicableStudents
     ),
-    -- Latest reading entry per (student, window). Multiple dated entries per window are now
-    -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
-    -- rn=1 pick the join would fan a student out to one grid row per entry date.
-    LatestReadingInWindow AS (
+    -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
+    LatestWritingInWindow AS (
         SELECT
-            StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, AssessmentDate,
+            StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
+            CAST((IdeasScore + OrganizationScore + LanguageScore + ConventionsScore) / 4.0 AS DECIMAL(5,2)) AS AvgScore,
+            AssessmentDate,
             ROW_NUMBER() OVER (
                 PARTITION BY StudentKey, AssessmentWindowID
-                ORDER BY AssessmentDate DESC, ReadingAssessmentID DESC
+                ORDER BY AssessmentDate DESC, WritingAssessmentID DESC
             ) AS rn
-        FROM FactAssessmentReading
+        FROM FactAssessmentWriting
         WHERE AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     )
     SELECT DISTINCT
@@ -164,18 +153,15 @@ RETURN
         sg.FirstName,
         sg.LastName,
         sg.Grade,
-        wed.ScaleSystem,
-        drs.LevelCode        AS ExistingScaleValue,
-        far.ReadingDelta     AS ExistingDelta,
-        far.AssessmentDate   AS ExistingAssessmentDate,
-        drb.ExpectedMinLevel AS ExpectedMinLevel,
-        drb.ExpectedMaxLevel AS ExpectedMaxLevel,
-        ipp.IsIPP            AS ReadingIPPStatus,
+        faw.IdeasScore         AS ExistingIdeasScore,
+        faw.OrganizationScore  AS ExistingOrganizationScore,
+        faw.LanguageScore      AS ExistingLanguageScore,
+        faw.ConventionsScore   AS ExistingConventionsScore,
+        faw.AvgScore           AS ExistingAvgScore,
+        faw.AssessmentDate     AS ExistingAssessmentDate,
+        ipp.IsIPP              AS WritingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
-             THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation,
-        -- ProgramFamily of the reading-IPP row, matching the FactStudentIPP join key below
-        -- (COALESCE window-over-student). The web app passes this verbatim to
-        -- usp_UpsertStudentIPP so the proc finds the same current row (else THROW 51014).
+             THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS WritingIPPNeedsConfirmation,
         COALESCE(wed.ProgramFamily, sg.ProgramFamily) AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
@@ -183,41 +169,26 @@ RETURN
         dal.HexColorTint         AS AchievementHexColorTint
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
-    INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
-    LEFT JOIN LatestReadingInWindow far
-           ON far.AssessmentWindowID = sg.AssessmentWindowID
-          AND far.StudentKey         = sg.StudentKey
-          AND far.rn = 1
-    LEFT JOIN DimReadingScale drs
-           ON drs.ReadingScaleID = far.ReadingScaleID
-    LEFT JOIN DimReadingBenchmark drb
-           ON drb.ScaleSystem     = wed.ScaleSystem
-          AND drb.ProgramFamily   = sg.ProgramFamily
-          AND drb.GradeCode       = sg.Grade
-          AND drb.AssessmentMonth = wdm.DominantMonth
+    LEFT JOIN LatestWritingInWindow faw
+           ON faw.AssessmentWindowID = sg.AssessmentWindowID
+          AND faw.StudentKey         = sg.StudentKey
+          AND faw.rn = 1
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
-          AND ipp.Subject       = 'Reading'
+          AND ipp.Subject       = 'Writing'
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
-    -- Achievement level + colour for the existing entry's delta (same bounds-join as the
-    -- cohort/history views). Non-overlapping bounds -> at most one level per delta.
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
-          AND far.ReadingDelta IS NOT NULL
-          AND (dal.LowerBound IS NULL
-               OR (dal.LowerOp = '>=' AND far.ReadingDelta >= dal.LowerBound)
-               OR (dal.LowerOp = '>'  AND far.ReadingDelta >  dal.LowerBound)
-               OR (dal.LowerOp = '='  AND far.ReadingDelta =  dal.LowerBound))
-          AND (dal.UpperBound IS NULL
-               OR (dal.UpperOp = '<=' AND far.ReadingDelta <= dal.UpperBound)
-               OR (dal.UpperOp = '<'  AND far.ReadingDelta <  dal.UpperBound)
-               OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
+          AND faw.AvgScore IS NOT NULL
+          AND dal.AchievementLevelCode =
+              CASE WHEN faw.AvgScore >= 3.50 THEN 4
+                   WHEN faw.AvgScore >= 2.75 THEN 3
+                   WHEN faw.AvgScore >= 1.75 THEN 2
+                   ELSE 1 END
     WHERE sg.GroupKey = @GroupKey
 );
 GO
 
--- DROP+CREATE above drops object-level grants. Re-grant here so a redeploy of this
--- file is self-contained (the web-app SP reads this TVF as SELECT ... FROM dbo.tvf_X(...)).
-GRANT SELECT ON [dbo].[tvf_TeacherRoster] TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_TeacherRosterWriting] TO [StudentDataAssessment];
 GO
