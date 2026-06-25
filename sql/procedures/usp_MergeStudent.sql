@@ -89,6 +89,8 @@ BEGIN
     DECLARE @MissingClosed   INT = 0;   -- Currently-active students in DimStudent absent from this import
     DECLARE @IPPRowsClosed   INT = 0;   -- FactStudentIPP rows closed because no longer applicable
     DECLARE @IPPRowsCreated  INT = 0;   -- FactStudentIPP rows inserted with IsIPP = NULL
+    DECLARE @SameDayUpdated  INT = 0;   -- Current rows updated IN PLACE (same-day correction; no new version)
+    DECLARE @SameDayRevived  INT = 0;   -- Same-day-closed rows re-opened IN PLACE on same-day return (no overlap)
 
     -- ------------------------------------------------------------------------
     -- Step 1: Materialize the typed working set with all translations applied.
@@ -142,8 +144,12 @@ BEGIN
     SELECT @StgRowCount = COUNT(*) FROM Wrk_Student;
 
     -- ------------------------------------------------------------------------
-    -- Step 2: Close out current DimStudent rows whose business attributes
-    -- differ from the incoming Wrk row. EXCEPT is NULL-safe.
+    -- Step 2: Close out current DimStudent rows whose business attributes differ
+    -- from the incoming Wrk row AND that started on an EARLIER day (normal SCD
+    -- versioning). EXCEPT is NULL-safe. Same-day changes are handled in Step 2b:
+    -- a close+insert on the same day the current row was created would set
+    -- EffectiveEndDate = @EffectiveDate-1 < EffectiveStartDate (reversed window)
+    -- AND leave two same-key rows sharing today (self-overlap) — both DQ violations.
     -- ------------------------------------------------------------------------
     UPDATE d
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
@@ -153,6 +159,7 @@ BEGIN
     INNER JOIN Wrk_Student w
             ON w.StudentNumber = d.StudentNumber
     WHERE d.IsCurrent = 1
+      AND d.EffectiveStartDate < @EffectiveDate
       AND EXISTS (
           SELECT w.FirstName, w.MiddleName, w.LastName, w.DateOfBirth,
                  w.Grade, w.SchoolID, w.ProgramCode, w.EnrollStatus,
@@ -166,6 +173,69 @@ BEGIN
       );
 
     SET @ClosedRows = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 2b: SAME-DAY correction. Current row was created TODAY
+    -- (EffectiveStartDate = @EffectiveDate), so update it IN PLACE rather than
+    -- close+insert — no spurious 0-day version, no reversed/overlapping window,
+    -- and StudentKey is preserved so FactEnrollment / FactAssessmentReading /
+    -- FactStudentIPP references stay valid. (A re-run of today's ingest after a
+    -- correction collapses into today's row, which is the right semantics.)
+    -- ------------------------------------------------------------------------
+    UPDATE d
+    SET FirstName = w.FirstName, MiddleName = w.MiddleName, LastName = w.LastName,
+        DateOfBirth = w.DateOfBirth, Grade = w.Grade, SchoolID = w.SchoolID,
+        ProgramCode = w.ProgramCode, EnrollStatus = w.EnrollStatus, Homeroom = w.Homeroom,
+        Gender = w.Gender, SelfIDAfrican = w.SelfIDAfrican, SelfIDIndigenous = w.SelfIDIndigenous,
+        IPP = w.IPP, Adap = w.Adap, LastUpdated = GETDATE()
+    FROM DimStudent d
+    INNER JOIN Wrk_Student w
+            ON w.StudentNumber = d.StudentNumber
+    WHERE d.IsCurrent = 1
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND EXISTS (
+          SELECT w.FirstName, w.MiddleName, w.LastName, w.DateOfBirth,
+                 w.Grade, w.SchoolID, w.ProgramCode, w.EnrollStatus,
+                 w.Homeroom, w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous,
+                 w.IPP, w.Adap
+          EXCEPT
+          SELECT d.FirstName, d.MiddleName, d.LastName, d.DateOfBirth,
+                 d.Grade, d.SchoolID, d.ProgramCode, d.EnrollStatus,
+                 d.Homeroom, d.Gender, d.SelfIDAfrican, d.SelfIDIndigenous,
+                 d.IPP, d.Adap
+      );
+
+    SET @SameDayUpdated = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 2c: SAME-DAY REVIVAL. A student who was closed earlier TODAY (a prior
+    -- same-day run hit Step 5's missing-close, leaving a 0-day [today, today]
+    -- closed row) is back in this import. Re-open that row IN PLACE (refresh
+    -- attributes, EffectiveEndDate = NULL, IsCurrent = 1) so Step 3 does NOT
+    -- insert a second current row — which would overlap the same-day closed row
+    -- (rule D). Targets ONLY same-day 0-day closures with no surviving current
+    -- row; genuine returns (closed on an earlier day) fall through to Step 3.
+    -- ------------------------------------------------------------------------
+    UPDATE d
+    SET FirstName = w.FirstName, MiddleName = w.MiddleName, LastName = w.LastName,
+        DateOfBirth = w.DateOfBirth, Grade = w.Grade, SchoolID = w.SchoolID,
+        ProgramCode = w.ProgramCode, EnrollStatus = w.EnrollStatus, Homeroom = w.Homeroom,
+        Gender = w.Gender, SelfIDAfrican = w.SelfIDAfrican, SelfIDIndigenous = w.SelfIDIndigenous,
+        IPP = w.IPP, Adap = w.Adap,
+        EffectiveEndDate = NULL, IsCurrent = 1, LastUpdated = GETDATE()
+    FROM DimStudent d
+    INNER JOIN Wrk_Student w
+            ON w.StudentNumber = d.StudentNumber
+    WHERE d.IsCurrent = 0
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND d.EffectiveEndDate   = @EffectiveDate
+      AND NOT EXISTS (
+          SELECT 1 FROM DimStudent c
+          WHERE c.StudentNumber = d.StudentNumber
+            AND c.IsCurrent = 1
+      );
+
+    SET @SameDayRevived = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
     -- Step 3: INSERT new versions. Two populations covered in one pass:
@@ -209,10 +279,14 @@ BEGIN
     SET @TouchedRows = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
-    -- Step 5: Close out current DimStudent rows absent from this import.
+    -- Step 5: Close out current DimStudent rows absent from this import. EndDate is
+    -- guarded so a row created TODAY but already missing (same-day add-then-remove)
+    -- closes as a valid 0-day window (End = Start) rather than a reversed one.
     -- ------------------------------------------------------------------------
     UPDATE d
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN d.EffectiveStartDate
+                                ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM DimStudent d
@@ -352,6 +426,8 @@ BEGIN
             CAST(@InsertedNew     AS VARCHAR(20)), ' new | ',
             CAST(@InsertedVersion AS VARCHAR(20)), ' versioned (',
             CAST(@ClosedRows      AS VARCHAR(20)), ' closed) | ',
+            CAST(@SameDayUpdated  AS VARCHAR(20)), ' same-day in-place | ',
+            CAST(@SameDayRevived  AS VARCHAR(20)), ' same-day revived | ',
             CAST(@TouchedRows     AS VARCHAR(20)), ' unchanged | ',
             CAST(@MissingClosed   AS VARCHAR(20)), ' deactivated (missing from import)',
             ' || FactStudentIPP: ',

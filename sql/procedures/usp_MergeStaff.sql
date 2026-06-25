@@ -65,6 +65,9 @@
  * and EffectiveEndDate (= @EffectiveDate - 1 day) of closed-out versions.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_MergeStaff;
+GO
+
 CREATE PROCEDURE usp_MergeStaff
     @EffectiveDate DATE = NULL
 AS
@@ -82,6 +85,8 @@ BEGIN
     DECLARE @SameEmailFieldDiffs      INT = 0;
     -- DimStaff counters
     DECLARE @PersonsClosedChanged     INT = 0;
+    DECLARE @PersonsSameDayUpdated    INT = 0;   -- DimStaff rows updated IN PLACE (same-day correction)
+    DECLARE @PersonsSameDayRevived    INT = 0;   -- DimStaff rows re-opened IN PLACE on same-day return
     DECLARE @PersonsClosedMissing     INT = 0;
     DECLARE @PersonsInsertedActive    INT = 0;   -- NEW + CHANGED + RETURNING combined
     DECLARE @PersonsInsertedInactive  INT = 0;   -- Deactivation inserts (== ClosedMissing)
@@ -145,7 +150,13 @@ BEGIN
             First_Name        AS FirstName,
             Last_Name         AS LastName,
             Title             AS Title,
-            CASE WHEN HomeSchoolID = '' OR HomeSchoolID = '0' THEN NULL
+            -- Sentinel "no home school" => NULL. Catch ALL all-zero / blank forms
+            -- ('', '0', '00', '000', '0000'), not just a single '0' -- otherwise a
+            -- multi-zero value left-pads to '0000', which is no real school and trips
+            -- the DimSchool orphan check.
+            CASE WHEN NULLIF(LTRIM(RTRIM(HomeSchoolID)), '') IS NULL
+                   OR HomeSchoolID NOT LIKE '%[1-9]%'
+                 THEN NULL
                  ELSE RIGHT('0000' + HomeSchoolID, 4) END AS HomeSchoolID,
             NULLIF(CanChangeSchool, '') AS CanChangeSchool,
             CAST(ID AS INT)   AS PSStaffID,
@@ -225,6 +236,9 @@ BEGIN
     --     is currently ActiveFlag=1 and it's still in Wrk, ActiveFlag stays 1
     --     so it never triggers here on its own. AccessLevel is excluded
     --     (Type 1).
+    --     Only rows that started on an EARLIER day are versioned here; a same-day
+    --     change is handled in 4a-prime (close+insert today would reverse/overlap
+    --     the effective window).
     UPDATE d
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
         IsCurrent        = 0,
@@ -234,6 +248,7 @@ BEGIN
             ON w.Email = d.Email
     WHERE d.IsCurrent = 1
       AND d.ActiveFlag = 1
+      AND d.EffectiveStartDate < @EffectiveDate
       AND EXISTS (
           SELECT w.FirstName, w.LastName, w.Title, w.HomeSchoolID,
                  w.CanChangeSchool, w.IsDistrictLevel
@@ -244,10 +259,40 @@ BEGIN
 
     SET @PersonsClosedChanged = @@ROWCOUNT;
 
-    -- 4b. Close missing-active rows: Email currently active in DimStaff but
-    --     absent from this import.
+    -- 4a-prime. SAME-DAY correction: current active row was created TODAY, so
+    --     update the Type 2 business fields IN PLACE (no close+insert -> no reversed
+    --     or self-overlapping window). StaffKey preserved, so FactStaffAssignment /
+    --     StaffSchoolAccess references stay valid. AccessLevel (Type 1) is refreshed in 4f.
     UPDATE d
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET FirstName = w.FirstName, LastName = w.LastName, Title = w.Title,
+        HomeSchoolID = w.HomeSchoolID, CanChangeSchool = w.CanChangeSchool,
+        IsDistrictLevel = w.IsDistrictLevel, LastUpdated = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Wrk_StaffPersons w
+            ON w.Email = d.Email
+    WHERE d.IsCurrent = 1
+      AND d.ActiveFlag = 1
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND EXISTS (
+          SELECT w.FirstName, w.LastName, w.Title, w.HomeSchoolID,
+                 w.CanChangeSchool, w.IsDistrictLevel
+          EXCEPT
+          SELECT d.FirstName, d.LastName, d.Title, d.HomeSchoolID,
+                 d.CanChangeSchool, d.IsDistrictLevel
+      );
+
+    SET @PersonsSameDayUpdated = @@ROWCOUNT;
+
+    -- 4b. Close missing-active rows: Email currently active in DimStaff but
+    --     absent from this import. EndDate guarded so a row created TODAY but
+    --     already missing (same-day add-then-remove) closes as a valid 0-day window
+    --     instead of a reversed one. Such same-day closures get EndDate=today, so 4c
+    --     (which keys on EndDate=yesterday) correctly skips them -- a person added and
+    --     gone within the same day leaves no deactivation row; if they return the same
+    --     day, 4c-prime revives the closed row in place.
+    UPDATE d
+    SET EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN d.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM DimStaff d
@@ -281,6 +326,31 @@ BEGIN
       AND w.Email IS NULL;
 
     SET @PersonsInsertedInactive = @@ROWCOUNT;
+
+    -- 4c-prime. SAME-DAY REVIVAL: a person closed earlier TODAY (same-day removal
+    --     left a 0-day [today, today] closed row; 4b's guard meant 4c created no
+    --     deactivation row for them) who is back in this import. Re-open that row
+    --     IN PLACE so 4d does NOT insert a second current row that overlaps (rule D).
+    --     Refresh Type 2 fields, reactivate, restore AccessLevel. Targets ONLY
+    --     same-day 0-day closures with no surviving current row.
+    UPDATE d
+    SET FirstName = w.FirstName, LastName = w.LastName, Title = w.Title,
+        HomeSchoolID = w.HomeSchoolID, CanChangeSchool = w.CanChangeSchool,
+        IsDistrictLevel = w.IsDistrictLevel, ActiveFlag = CAST(1 AS BIT), AccessLevel = w.AccessLevel,
+        EffectiveEndDate = NULL, IsCurrent = 1, LastUpdated = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Wrk_StaffPersons w
+            ON w.Email = d.Email
+    WHERE d.IsCurrent = 0
+      AND d.EffectiveStartDate = @EffectiveDate
+      AND d.EffectiveEndDate   = @EffectiveDate
+      AND NOT EXISTS (
+          SELECT 1 FROM DimStaff c
+          WHERE c.Email = d.Email
+            AND c.IsCurrent = 1
+      );
+
+    SET @PersonsSameDayRevived = @@ROWCOUNT;
 
     -- 4d. Insert active versions for everything in Wrk that lacks a current
     --     active row. Covers NEW (no rows at all) + CHANGED (just closed in
@@ -344,7 +414,8 @@ BEGIN
     --     is current, but Wrk has a different SourceSystemID for the same
     --     triple. Email-reuse collision signal. Re-insert in 5c.
     UPDATE f
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN f.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN f.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM FactStaffAssignment f
@@ -367,7 +438,8 @@ BEGIN
     --         StaffKey points to historical version; new bridge row will
     --         be inserted under new StaffKey in 5c.
     UPDATE f
-    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+    SET EffectiveEndDate = CASE WHEN f.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN f.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
         IsCurrent        = 0,
         LastUpdated      = GETDATE()
     FROM FactStaffAssignment f
@@ -495,6 +567,8 @@ BEGIN
                 CAST(@PersonsStaged           AS VARCHAR(20)), ' persons | ',
                 CAST(@PersonsInsertedActive   AS VARCHAR(20)), ' active inserts (new+changed+returning) | ',
                 CAST(@PersonsClosedChanged    AS VARCHAR(20)), ' versioned (closed) | ',
+                CAST(@PersonsSameDayUpdated   AS VARCHAR(20)), ' same-day in-place | ',
+                CAST(@PersonsSameDayRevived   AS VARCHAR(20)), ' same-day revived | ',
                 CAST(@PersonsInsertedInactive AS VARCHAR(20)), ' deactivated | ',
                 CAST(@PersonsTouched          AS VARCHAR(20)), ' touched | ',
                 CAST(@AccessLevelUpdated      AS VARCHAR(20)), ' access-level updated || ',

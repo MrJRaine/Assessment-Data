@@ -1040,3 +1040,77 @@ The web app now reads and writes Fabric server-side and renders its first real s
 - Web app: B2/B3/B4/B5 proven; image `assessment-webapp:token` (Alpine, ~583 MB). Temp `/api/dbcheck` still present (remove pre-deploy). `webapp/.env` holds working SP creds (gitignored, never commit).
 - IT: Part 1 done; Part 2 = permission added, admin consent NOT granted (only blocker for OBO, which we are not pursuing).
 - Next session (Monday 2026-06-22): **B6** — port roster grid (`/enter/[windowId]/[groupKey]`), student detail (`/students/[studentKey]`), and IPP screens to live Fabric on the SP+`@UPN` path, same pattern as B5.
+
+---
+
+## Session 2026-06-23 — B6 screens complete + in-app ingest + dev environment + security audit + SCD same-day-reversion fix
+
+Big build session on the Phase 3b web app. Read the Power App YAML/decisions before each screen to stay faithful to prior design calls.
+
+### B6 screens (all built, on the SP + `@UPN` iTVF/bridge pattern)
+- **Roster grid** (`/enter/[windowId]/[groupKey]`, `RosterEntry.tsx`): reading-level select per student + inline IPP confirm. IPP UX decisions: the Yes button reads **"Yes (Literacy IPP)"** (Reading+Writing roll up to Literacy; Math → "Math IPP" later) — the teacher already knows the student is on an IPP, the gate confirms the *type*. For IPP students, **both Expected and Δ render "IPP"** (an individualized plan isn't measured against the standard curriculum). IPP confirm was first fired per-click (froze the screen with no feedback) → reworked to **stage client-side (`ippSel`) and commit on Save** in one `useTransition`, alongside the level saves; re-clicking the chosen value un-stages it.
+- **Dedicated IPP manager** (`/ipp`) — mirrors scrIPP; batched save, scope-gated via `getStudentIPPList(upn)`.
+- **Cohort** (`/students`, `CohortView.tsx`) — collapsible filters (shown only when >1 distinct value), donut + 6-month stacked bar, tinted table; IPP/unresolved students carry no tint/band.
+- **Student detail** (`/students/[studentKey]`) — prev/next was slow (each nav re-ran the full cohort query). Fixed: page fetches a lightweight nav list + initial history; `StudentDetailView` caches per studentKey and **prefetches both neighbours** via a server action; URL via `history.replaceState`. IPP suppression mirrors the roster.
+- **Not logged in → redirect to Entra sign-in** (middleware `authorized`), not an access error.
+
+### In-app ingest (replaces manual lakehouse upload)
+Breaking from Power Apps lets the app own ingest: `/ingest` uploads a PS export → **OneLake ADLS Gen2 REST** (storage.azure.com token) into `Files/imports/{topic}/` → runs `usp_TriggerIngestCycle`. Analyst-only gate resolved server-side; 25 MB cap; `bodySizeLimit: 30mb`. Discussed (future) **SFTP auto-pickup** as viable now that we control the runtime; OneLake→SharePoint shortcuts already pinned as the planned automated path ([[project_onelake_sharepoint_shortcuts]]).
+
+### Dev environment (Claude's synthetic sandbox)
+Stood up a **non-live Dev warehouse + lakehouse in the SAME workspace** (Dev folder, `_Dev`-suffixed items) to avoid new permissions/capacity. `.env.dev`/`.env.live` swap; dev and live containers can run on different ports (3000/3001). Dev uses `AUTH_MODE=dev` (no Entra round-trip) — **`:3001` not yet on the SP's Entra redirect URIs** (deferred IT ask; [[project_entra_appreg_it_gated]]). Generated `sql/deploy/deploy_all_dev.sql` (78 files, grants stripped, dev lakehouse GUID, **TAB** loaders for the 4 direct extracts). Validated the full app-driven ingest end-to-end on dev (upload → COPY INTO → merges → DQ PASS). **PII boundary set** ([[feedback_live_pii_boundary]]): once real PS data is live, Claude must not run row-level-PII queries against live — schema/COUNT/deploys only; dev is the sandbox. [[project_dev_live_environment_split]].
+
+### Security audit (10 items) + remediations
+Full code-base audit before live PII. Built: `lib/authMode.ts` **fail-closed** (`AUTH_MODE=dev` refused unless `ALLOW_DEV_AUTH=true`); `lib/errors.ts` `UserError`/`toUserMessage` (pass intentional 51xxx THROWs + UserError; genericize everything else in prod — no schema/PII leak); baseline security headers in `next.config.ts`; generic `/api/health` + status strip in prod; **deleted** `/api/dbcheck` + `lib/mock.ts`; ingest size caps. `sql/security/grant_webapp_sp.sql` written for least-privilege (explicit SELECT on the 6 TVFs + 2 ref dims, EXECUTE on 4 procs + trigger, **DENY** on the 5 bridge views, plan to remove broad ReadData) — **pending deploy** (test ReadData removal on dev via ownership chaining first). Optional #3 (proc-layer scope enforcement) and #10 (postcss transitive vulns) noted, not done.
+
+### Dev DQ troubleshooting (resolved)
+Several dev-data issues, all process/data not code: (a) repeated manual `jeffrey.raine` analyst INSERTs + the staff merge produced duplicate IsCurrent rows + a `'0000'` HomeSchoolID — fixed by adding jeffrey.raine to the staff **file** (Group 40) + truncate-all reset; (b) wrong students file uploaded (`_SCDTest` vs main — main has 2 in Primary); (c) re-ingesting the main file **without truncate** changed a homeroom **same-day** → reversed effective window. Confirmed by the audit: the 18:09:28 run had exactly the predicted violations (DimStudent + DimStaff `Start=06-23 End=06-22` + the `0000` orphan); the **18:12:50 run after a truncate-all reset is a full PASS** — dev is green with the main students file (P-Sample = 2).
+
+### SCD same-day-reversion fix (the actual proc bug behind (c))
+The DQ gate did its job, but the close+insert-on-same-day pattern is a **latent production bug**: any morning-export + afternoon-fix re-run would be blocked. Fixed in all 4 SCD merge procs — same-day attribute changes **update the current row IN PLACE** (no close+insert → no reversed/overlapping window; surrogate key preserved); missing-closes guarded; bridges guarded. Procs now self-drop + report a `same-day in-place` count. **In source, NOT deployed anywhere yet.** Full detail: [[project_scd_same_day_reversion_fix]].
+
+### End-of-session state
+- **Dev:** green — main students file loaded, DQ PASS (18:12:50), P-Sample/1A = 2 each.
+- **Source ahead of deployed:** the 4 merge-proc fixes + `grant_webapp_sp.sql` + the new `@UPN` iTVFs/`@CallerUPN` procs (to live) + the web-app image (to live) — see the PENDING DEPLOY bullet in [[project_assessment_platform]].
+- **Git:** session work committed locally on `phase-3b-webapp`; **not pushed** (user: "no need to keep pushing after every change").
+- **Next action:** deploy the 4 merge procs to dev → test same-day re-ingest of `_SCDTest` students (expect DQ PASS + in-place update) → restore main → then deploy the fix + the rest of the pending list to live.
+
+---
+
+## Session 2026-06-24 → 06-25 — SCD same-day family to LIVE; ongoing-assessment monthly-window model (live); Writing feature SQL (dev); web UI polish
+
+A very large session. Net: the SCD same-day work and a whole new **ongoing-assessment monthly-window model** are on LIVE; the **Writing** assessment feature is fully built in SQL and dev-proven (web UI is the only piece left).
+
+### Infra / containers
+- **Podman/WSL port-forward** wedged after the VM was off overnight (TCP connected but HTTP replies cut off — gvproxy). `podman machine stop/start` wasn't enough; **`wsl --shutdown` + machine restart** fixed it. Dev app healthy at localhost:3001.
+- **localhost cookie overlap**: signing into the live container (:3000, entra) set an `authjs` session cookie for `localhost`, which the browser also sent to dev (:3001) — cookies aren't port-scoped. Symptom: "dev auth failing". Fix: stop the live container + clear `localhost` *cookies* (cache-clear doesn't touch cookies) / use incognito. Stopped `awlive` to remove the source.
+
+### OBO re-test — admin consent STILL pending
+- Rebuilt the user-token probe (separate branch `entra-obo-probe` + image `assessment-webapp:obo-probe`, /probe page) and ran the live container under it. Sign-in → **"Need admin approval" / AADSTS65001** — same blocker as 2026-06-19. NOT a different permission: the `database.windows.net/user_impersonation` delegated scope needs tenant **admin consent**, which IT hasn't granted. Reverted the probe (live back to normal SP+@UPN login); probe parked on its branch for instant re-test once consent lands.
+
+### SCD same-day family — completed + DEPLOYED TO LIVE
+- Deployed last session's same-day **in-place** fix to dev, then found two more gaps in testing: (a) a recurring **`'0000'` HomeSchoolID** DQ orphan (check 11) — the staff translation only mapped a single `'0'`/`''` to NULL, so a multi-zero (`'00'`/`'000'`/`'0000'`) left-padded to `'0000'` (no real school); fixed to map any all-zero/blank → NULL. (b) **Same-day REVIVAL**: the forward `_SCDTest` pass worked, but going *back* to the main file threw **4 overlap (rule D) errors** — students dropped earlier today then re-added today were getting a second current row overlapping the same-day closed one. Added a revival step (re-open the 0-day closed row in place) to `usp_MergeStudent` + mirrored to Section + Staff (+ guarded staff's missing-close). All proven on dev, then **deployed to LIVE** (all 4 merge procs).
+
+### Web home page + chrome
+- Home page reworded to mirror the Power App `scrLanding` (heading "Reading Assessment" + "Welcome back, <name>" + Student Data / Data Entry / Student IPPs cards with descriptions + cyan accent + CTAs); dropped the stale scaffold note. Brand sub-label **"Assessment Data" → "Data Platform"**. Nav + screen **"Enter Assessments" → "Data Entry"** (card CTA "Enter Data"). **Ingest nav item + home card role-gated** to RegionalAnalyst (resolved server-side in AppShell → `Nav showIngest`; home gates the card) — verified analyst sees it, teacher (wget, no JS) gets 0 `/ingest` refs (server-rendered, no flash).
+
+### Ongoing-assessment monthly-window model — built + DEPLOYED TO LIVE
+- New model ([[project_ongoing_assessment_model]]): windows = **monthly bins** (open 1st, closed last day). `usp_GenerateMonthlyWindows '<SchoolYear>'[, @IncludeSummer]` (Sep–Jun default, idempotent, NULL-safe scale). `usp_UpsertReadingAssessment` reworked: grain **Student×Window×Date** (multiple dated entries, latest-by-date wins, history kept); **closed windows writeable** (51031 removed); date gate caps at **MIN(today, EndDate)**. `/enter` window-select: open windows above the fold + collapsed accordion of past ones; save action dates entries at MIN(today, windowEnd). Decisions locked with the user: latest = max assessment date; date binning = MIN(today, EndDate); generate Sep–Jun (Jul/Aug possible for testing). **Deployed to LIVE**, `EXEC usp_GenerateMonthlyWindows '2026-2027'` → 20 windows (verified: correct month-ends incl. Feb 28). Left the old "EOY 2025-26" windows in place by user choice. (Reading-roster wasn't updated for multiple-entry here — caught + fixed in W4a below.)
+
+### Writing assessment feature — SQL COMPLETE + dev-proven (NOT live); UI pending
+- Confirmed model with user: **4-trait 1-4 rubric** (Ideas/Organization/Language/Conventions, the existing `FactAssessmentWriting` schema — no table change), **no grade benchmark**, cohort roll-up = **average → band by fixed cut scores (A1)**: ≥3.50 Exceeding / ≥2.75 Meeting / ≥1.75 Approaching / else Not Yet Meeting (2.75 from history; 1.75/3.50 proposed + accepted). Implementation refinement vs the plan: instead of a `Domain` column on `DimAchievementLevel` (which would force a filter into 6 reading reads — miss one = double rows), the writing reads map the **average → band code** then join `DimAchievementLevel` **by code** for name+colour — zero change to the reading colour path.
+  - **W1** `usp_GenerateMonthlyWindows` Writing scopes (NULL scale, NULL-safe idempotency); 3 `FactAssessmentWriting` orphan DQ checks (49→52); `usp_RunDataQualityChecks` given a `DROP IF EXISTS`.
+  - **W2** `usp_UpsertWritingAssessment` — mirrors reading (monthly grain, multiple entries, late entry, `@CallerUPN`); takes 4 scores, validates each 1-4 (51018) + program-family match (51019); self-grants. **Proven on dev** (two dated entries kept: 06-24 avg 2.50, 06-25 avg 3.25).
+  - **W3** `tvf_StudentCohortWriting` + `tvf_StudentAssessmentHistoryWriting` — latest-per-student / all-rows, 4 traits + average + band, Writing-IPP gate. **Verified** (cohort 3.25→Meeting; history 2.50 Approaching, 3.25 Meeting).
+  - **W4a** `tvf_TeacherRosterWriting` (latest-per-window writing entry + band + Writing-IPP) **and a BUG FIX to `tvf_TeacherRoster`** (reading): since the multiple-entry change it fanned a student to one grid row per entry date — now latest-per-window via ROW_NUMBER. **Verified** (Mu Demo 3/3/3/4 · 3.25 · Meeting, single row). Reading-roster fix is a **latent live bug** — must deploy to live.
+  - **W4b–d DEFERRED** (user: "leave the UI for later"): the four 1-4 inputs per student on the roster grid (Writing windows) + the Reading|Writing toggle on cohort + detail.
+
+### Process
+- User feedback on **commit cadence** ([[feedback_commit_cadence]]): commit proactively at logical checkpoints (don't go silent, don't micro-commit); push on-request / at wrap. Followed for the rest of the session (one commit per phase).
+
+### End-of-session state
+- **Live:** SCD same-day family (in-place + revival + staff '0000') and the monthly-window/multiple-entry/late-entry model are DEPLOYED. 2026-2027 monthly windows generated (reading + writing both — wait: live got reading via '2026-2027'; writing windows on live come with the Writing-SQL deploy). Writing SQL + the reading-roster dup-fix are **NOT** on live.
+- **Dev:** everything incl. all Writing SQL deployed + proven. Synthetic writing rows exist for student 9100000012.
+- **Containers:** `awdev` :3001 (AUTH_MODE=dev); `awlive` stopped; probe image/branch parked.
+- **Git:** branch `phase-3b-webapp-b6`, many per-phase commits, pushed at this wrap.
+- **Next:** W4b–d (Writing web UI) + deploy Writing SQL to live + the `tvf_TeacherRoster` dup-fix to live + the web-app image to a Canadian host.

@@ -1,27 +1,72 @@
 import { getReadiness } from '@/lib/readiness'
-import { PageHeader, CardLink, ScaffoldNote } from '@/components/ui'
+import { getCurrentUpn } from '@/lib/auth'
+import { getCallerAccessLevel } from '@/lib/data'
+import { PageHeader, CardLink } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
 
-export default function Home() {
-  const r = getReadiness()
+// Derive a friendly display name from a UPN local-part (jeffrey.raine@tcrce.ca -> "Jeffrey Raine").
+// The Power App landing used User().FullName; we only have the UPN server-side, so approximate it.
+function friendlyName(upn: string): string {
+  const local = (upn.split('@')[0] ?? upn).split(/[._-]+/).filter(Boolean)
+  if (local.length === 0) return upn
+  return local.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+}
+
+export default async function Home() {
+  // Config strip is a dev-diagnostic only — don't disclose posture to unauthenticated visitors in prod.
+  const devDiag = process.env.AUTH_MODE === 'dev' && process.env.ALLOW_DEV_AUTH === 'true'
+  const r = devDiag ? getReadiness() : null
+
+  // "/" is public, so there may be no signed-in user (entra mode, not yet signed in) — getCurrentUpn
+  // throws in that case; fall back to no welcome line rather than erroring the landing page.
+  let welcome: string | undefined
+  let isAnalyst = false
+  try {
+    const upn = await getCurrentUpn()
+    welcome = `Welcome back, ${friendlyName(upn)}`
+    isAnalyst = (await getCallerAccessLevel(upn)) === 'RegionalAnalyst'
+  } catch {
+    welcome = undefined
+  }
+
   return (
     <>
-      <PageHeader title="Assessment Data Platform" subtitle="Reading & writing assessment entry and review" />
-      <ScaffoldNote>
-        Layout scaffold &mdash; navigation and page structure are in place; data wiring is pending Fabric
-        access (Phase 3b / B3).
-      </ScaffoldNote>
+      <PageHeader title="Reading Assessment" subtitle={welcome} />
       <div className="card-grid">
-        <CardLink href="/enter" title="Enter Assessments" meta="Window &rarr; group &rarr; roster" />
-        <CardLink href="/students" title="Students" meta="Cohort view + per-student detail" />
-        <CardLink href="/ipp" title="IPPs" meta="Individual Program Plan flags" />
-        <CardLink href="/ingest" title="Ingest" meta="Analyst-triggered ingestion" />
+        <CardLink
+          href="/students"
+          title="Student Data"
+          desc="Browse your students with summary charts, then open any student for their full assessment history and progress trend."
+          cta="View & analyze"
+        />
+        <CardLink
+          href="/enter"
+          title="Data Entry"
+          desc="Record reading levels for a class during an open assessment window. The roster grid lets you enter a whole class at once."
+          cta="Enter Data"
+        />
+        <CardLink
+          href="/ipp"
+          title="Student IPPs"
+          desc="Confirm which students have an Individual Program Plan by subject, so assessment data is interpreted correctly."
+          cta="Confirm plans"
+        />
+        {isAnalyst ? (
+          <CardLink
+            href="/ingest"
+            title="Ingest"
+            desc="Upload the latest PowerSchool exports and run the ingestion cycle. Regional analysts only."
+            cta="Run ingest"
+          />
+        ) : null}
       </div>
-      <div className="status-strip muted">
-        Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
-        Fabric configured: {r.fabricConfigured ? 'yes' : 'no'}
-      </div>
+      {r ? (
+        <div className="status-strip muted">
+          Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
+          Fabric configured: {r.fabricConfigured ? 'yes' : 'no'}
+        </div>
+      ) : null}
     </>
   )
 }

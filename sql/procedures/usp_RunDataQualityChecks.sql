@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Procedure: usp_RunDataQualityChecks
  * Purpose: Comprehensive data quality validation for Assessment_Warehouse.
- *          Runs 49 checks across 5 categories, INSERTs any violations into
+ *          Runs 52 checks across 5 categories, INSERTs any violations into
  *          FactDataQualityAudit, returns the violation set as a result set,
  *          and RETURNs the violation count as a status code (0 = clean).
  * Created: 2026-05-11
@@ -49,6 +49,9 @@
  * years should stay sub-minute. Cheap to run on demand.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_RunDataQualityChecks;
+GO
+
 CREATE PROCEDURE usp_RunDataQualityChecks
 AS
 BEGIN
@@ -58,7 +61,7 @@ BEGIN
     DECLARE @ViolationCount INT;
 
     -- ------------------------------------------------------------------------
-    -- Single set-based INSERT — all 49 checks UNION'd together. The wrapping
+    -- Single set-based INSERT — all 52 checks UNION'd together. The wrapping
     -- INSERT shares one @RunTimestamp value across every violation row.
     -- ------------------------------------------------------------------------
     INSERT INTO FactDataQualityAudit (
@@ -188,6 +191,50 @@ BEGIN
             CAST(f.ReadingAssessmentID AS VARCHAR(150)),
             CONCAT('EnteredByStaffKey=', CAST(f.EnteredByStaffKey AS VARCHAR(20)), ' has no DimStaff row')
         FROM FactAssessmentReading f
+        LEFT JOIN DimStaff d ON d.StaffKey = f.EnteredByStaffKey
+        WHERE f.EnteredByStaffKey IS NOT NULL
+          AND d.StaffKey IS NULL
+
+        UNION ALL
+
+        -- 08w1. FactAssessmentWriting.StudentKey → DimStudent (writing has no scale; 3 orphan checks)
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.StudentKey not found in DimStudent',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('StudentKey=', CAST(f.StudentKey AS VARCHAR(20)), ' has no DimStudent row')
+        FROM FactAssessmentWriting f
+        LEFT JOIN DimStudent s ON s.StudentKey = f.StudentKey
+        WHERE s.StudentKey IS NULL
+
+        UNION ALL
+
+        -- 08w2. FactAssessmentWriting.AssessmentWindowID → DimAssessmentWindow
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.AssessmentWindowID not found in DimAssessmentWindow',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('AssessmentWindowID=', CAST(f.AssessmentWindowID AS VARCHAR(20)), ' missing')
+        FROM FactAssessmentWriting f
+        LEFT JOIN DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+        WHERE f.AssessmentWindowID IS NOT NULL
+          AND w.AssessmentWindowID IS NULL
+
+        UNION ALL
+
+        -- 08w3. FactAssessmentWriting.EnteredByStaffKey → DimStaff.StaffKey (when populated)
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.EnteredByStaffKey not found in DimStaff',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('EnteredByStaffKey=', CAST(f.EnteredByStaffKey AS VARCHAR(20)), ' has no DimStaff row')
+        FROM FactAssessmentWriting f
         LEFT JOIN DimStaff d ON d.StaffKey = f.EnteredByStaffKey
         WHERE f.EnteredByStaffKey IS NOT NULL
           AND d.StaffKey IS NULL
@@ -859,7 +906,7 @@ BEGIN
             NULL,
             NULL,
             NULL,
-            CONCAT('All 49 checks returned zero rows at ', CAST(@RunTimestamp AS VARCHAR(20))),
+            CONCAT('All 52 checks returned zero rows at ', CAST(@RunTimestamp AS VARCHAR(20))),
             @RunTimestamp
         );
     END;

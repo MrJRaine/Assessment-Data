@@ -1,23 +1,38 @@
-import { PageHeader, ScaffoldNote, CardLink, Placeholder } from '@/components/ui'
-import { MOCK_STUDENTS } from '@/lib/mock'
+import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
+import { getCurrentUpn } from '@/lib/auth'
+import {
+  getStudentCohort,
+  getAchievementLevels,
+  type CohortStudent,
+  type AchievementBand,
+} from '@/lib/data'
+import CohortView from './CohortView'
 
 export const dynamic = 'force-dynamic'
 
-export default function Students() {
+export default async function StudentsPage() {
+  const upn = await getCurrentUpn()
+
+  let cohort: CohortStudent[] = []
+  let bands: AchievementBand[] = []
+  let error: string | null = null
+  try {
+    cohort = await getStudentCohort(upn)
+    bands = await getAchievementLevels()
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+
   return (
     <>
-      <PageHeader title="Students" subtitle="Cohort — filter and drill into a student" />
-      <ScaffoldNote>
-        Filters and charts bind to the cohort secured view; cards below are placeholder students.
-      </ScaffoldNote>
-      <div className="toolbar">
-        <Placeholder label="filter bar (homeroom · program · school · achievement)" />
-      </div>
-      <div className="card-grid">
-        {MOCK_STUDENTS.map((s) => (
-          <CardLink key={s.key} href={`/students/${s.key}`} title={s.name} meta={`Grade ${s.grade}`} />
-        ))}
-      </div>
+      <PageHeader title="Student Data" subtitle="Cohort — filter, view distribution, and drill into a student" />
+      {error ? (
+        <ErrorNote message={error} />
+      ) : cohort.length === 0 ? (
+        <EmptyState title="No students in your scope" hint="Reading assessments and demographics appear here for students you can see." />
+      ) : (
+        <CohortView cohort={cohort} bands={bands} />
+      )}
     </>
   )
 }

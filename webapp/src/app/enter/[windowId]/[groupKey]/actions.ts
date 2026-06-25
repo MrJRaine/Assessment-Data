@@ -2,6 +2,8 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
+import { getTeacherRoster, getWindowEndDate } from '@/lib/data'
+import { toUserMessage } from '@/lib/errors'
 import { revalidatePath } from 'next/cache'
 
 export interface SaveEntry {
@@ -25,12 +27,26 @@ export async function saveReadingAssessments(
   entries: SaveEntry[],
 ): Promise<SaveResult> {
   const upn = await getCurrentUpn()
-  // Atlantic "today" (DST-aware) to satisfy the proc's [WindowStart, today] date gate.
-  const assessmentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  // Atlantic "today" (DST-aware). Closed (past) windows are still writeable for late entry, but the
+  // proc's 51017 gate caps the assessment date at the window's own month-end -- so date the entry at
+  // MIN(today, window EndDate). For the current open window that's just today; for a past window it
+  // bins the late entry into that window's month (a plain "today" would be rejected).
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  const windowEnd = await getWindowEndDate(windowId)
+  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+
+  // SCOPE GATE: the write procs trust @CallerUPN but don't enforce per-student RLS, so verify
+  // each target is on THIS caller's RLS-scoped roster (via the @UPN TVF) before writing. Blocks a
+  // crafted request from saving for a student outside the caller's window/group scope.
+  const allowed = new Set((await getTeacherRoster(upn, windowId, groupKey)).map((r) => r.studentNumber))
 
   const errors: SaveResult['errors'] = []
   let saved = 0
   for (const e of entries) {
+    if (!allowed.has(e.studentNumber)) {
+      errors.push({ studentNumber: e.studentNumber, message: 'Not in your roster for this window/group — not saved.' })
+      continue
+    }
     try {
       await execProc('usp_UpsertReadingAssessment', {
         StudentNumber: e.studentNumber,
@@ -42,7 +58,7 @@ export async function saveReadingAssessments(
       saved++
     } catch (err) {
       // Surface the proc's THROW message (e.g. 51017 date gate, 51031 closed window) per row.
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = toUserMessage(err)
       errors.push({ studentNumber: e.studentNumber, message: msg })
     }
   }
@@ -52,38 +68,54 @@ export async function saveReadingAssessments(
   return { saved, errors }
 }
 
-export interface IPPResult {
-  ok: boolean
-  message?: string
+export interface IppEntry {
+  studentKey: string
+  programFamily: string
+  isIPP: boolean
+}
+
+export interface IppSaveResult {
+  saved: number
+  errors: { studentKey: string; message: string }[]
 }
 
 /**
- * Confirm (or flip) a student's Reading-IPP status from the roster's inline prompt. Mirrors the
- * Power App's scrRosterGrid inline Yes/No buttons: fires immediately (not batched), then revalidates
- * so the row leaves the "needs confirmation" gate. UPN is resolved server-side (never from the
- * client) and passed as @CallerUPN; @ProgramFamily must be the value the roster TVF returned
- * (IPPProgramFamily = window-over-student) so the proc finds the matching current FactStudentIPP row.
+ * Commit a BATCH of staged Reading-IPP confirmations from the roster grid (the inline Yes/No is
+ * staged client-side and saved with the Save button, not fired per click). Scope-checks the whole
+ * batch once against the caller's RLS-scoped roster, then calls the proc per entry. UPN is resolved
+ * server-side (never from the client) and passed as @CallerUPN; @ProgramFamily is the value the
+ * roster TVF returned (IPPProgramFamily = window-over-student) so the proc finds the matching row.
  */
-export async function setStudentIPP(
+export async function confirmRosterIPPs(
   windowId: string,
   groupKey: string,
-  studentKey: string,
-  programFamily: string,
-  isIPP: boolean,
-): Promise<IPPResult> {
+  entries: IppEntry[],
+): Promise<IppSaveResult> {
   const upn = await getCurrentUpn()
-  try {
-    await execProc('usp_UpsertStudentIPP', {
-      StudentKey: studentKey,
-      Subject: 'Reading',
-      ProgramFamily: programFamily,
-      IsIPP: isIPP ? 1 : 0,
-      CallerUPN: upn,
-    })
-    revalidatePath(`/enter/${windowId}/${groupKey}`)
-    return { ok: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return { ok: false, message: msg }
+  // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster.
+  const allowed = new Set((await getTeacherRoster(upn, windowId, groupKey)).map((r) => r.studentKey))
+
+  const errors: IppSaveResult['errors'] = []
+  let saved = 0
+  for (const e of entries) {
+    if (!allowed.has(e.studentKey)) {
+      errors.push({ studentKey: e.studentKey, message: 'Not in your roster for this window/group — not saved.' })
+      continue
+    }
+    try {
+      await execProc('usp_UpsertStudentIPP', {
+        StudentKey: e.studentKey,
+        Subject: 'Reading',
+        ProgramFamily: e.programFamily,
+        IsIPP: e.isIPP ? 1 : 0,
+        CallerUPN: upn,
+      })
+      saved++
+    } catch (err) {
+      errors.push({ studentKey: e.studentKey, message: toUserMessage(err) })
+    }
   }
+
+  revalidatePath(`/enter/${windowId}/${groupKey}`)
+  return { saved, errors }
 }

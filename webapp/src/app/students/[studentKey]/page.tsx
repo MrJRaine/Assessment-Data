@@ -1,31 +1,51 @@
 import Link from 'next/link'
-import { PageHeader, ScaffoldNote, Placeholder } from '@/components/ui'
-import { MOCK_STUDENTS } from '@/lib/mock'
+import { PageHeader, ErrorNote } from '@/components/ui'
+import { getCurrentUpn } from '@/lib/auth'
+import { getStudentNavList, getStudentHistory, type HistoryRow, type StudentNavItem } from '@/lib/data'
+import StudentDetailView from './StudentDetailView'
 
 export const dynamic = 'force-dynamic'
 
-export default async function StudentDetail({ params }: { params: Promise<{ studentKey: string }> }) {
+export default async function StudentDetailPage({ params }: { params: Promise<{ studentKey: string }> }) {
   const { studentKey } = await params
-  const student = MOCK_STUDENTS.find((s) => s.key === studentKey)
-  return (
-    <>
-      <PageHeader
-        title={student?.name ?? `Student ${studentKey}`}
-        subtitle={student ? `Grade ${student.grade}` : undefined}
-      />
-      <p>
-        <Link href="/students" className="back-link">
-          &larr; Back to students
-        </Link>
-      </p>
-      <ScaffoldNote>
-        Info strip, assessment timeline, and reading-level line chart bind to the per-student history view.
-      </ScaffoldNote>
-      <div className="detail-grid">
-        <Placeholder label="info strip (IPP status, current level)" />
-        <Placeholder label="reading-level line chart over time" />
-        <Placeholder label="assessment history table (most recent first)" />
-      </div>
-    </>
-  )
+  const upn = await getCurrentUpn()
+
+  let error: string | null = null
+  let navList: StudentNavItem[] = []
+  let initialHistory: HistoryRow[] = []
+  try {
+    // The nav list is fetched once here; subsequent prev/next paging is client-side, so the heavy
+    // cohort query no longer re-runs on every navigation (the cause of the slow paging).
+    ;[navList, initialHistory] = await Promise.all([
+      getStudentNavList(upn),
+      getStudentHistory(upn, studentKey),
+    ])
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+
+  if (error) {
+    return (
+      <>
+        <PageHeader title="Student detail" />
+        <ErrorNote message={error} />
+      </>
+    )
+  }
+
+  if (!navList.some((s) => s.studentKey === studentKey)) {
+    return (
+      <>
+        <PageHeader title="Student detail" />
+        <p>
+          <Link href="/students" className="back-link">&larr; Back to students</Link>
+        </p>
+        <div className="notice notice-empty">
+          <div className="notice-title">Student not in your scope</div>
+        </div>
+      </>
+    )
+  }
+
+  return <StudentDetailView navList={navList} initialKey={studentKey} initialHistory={initialHistory} />
 }

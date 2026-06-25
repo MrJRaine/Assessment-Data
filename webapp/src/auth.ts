@@ -1,5 +1,6 @@
 import NextAuth from 'next-auth'
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id'
+import { authMode } from './lib/authMode'
 
 /**
  * Auth.js (NextAuth v5) config -- Microsoft Entra ID (single tenant).
@@ -28,8 +29,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // Route gate used by the middleware. In dev mode there is no Entra session
     // (getCurrentUpn returns DEV_FAKE_UPN), so never gate; in entra mode require a user.
+    // authMode() throws if dev mode isn't explicitly opted into — so a misconfigured production
+    // container fails closed (500) here rather than silently allowing every request through.
     authorized({ auth }) {
-      if ((process.env.AUTH_MODE ?? 'dev') !== 'entra') return true
+      if (authMode() === 'dev') return true
       return !!auth?.user
     },
     async jwt({ token, profile }) {

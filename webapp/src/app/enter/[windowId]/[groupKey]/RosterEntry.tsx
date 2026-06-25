@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { saveReadingAssessments, setStudentIPP, type SaveResult } from './actions'
+import { saveReadingAssessments, confirmRosterIPPs, type SaveResult, type IppEntry } from './actions'
 import type { RosterStudent, ScaleLevel, AchievementBand } from '@/lib/data'
 
 // ReadingDelta from a level's order vs the expected [min,max] range -- mirrors the server
@@ -38,6 +38,8 @@ function matchBand(delta: number | null, bands: AchievementBand[]): AchievementB
   return null
 }
 
+type SaveSummary = { saved: number; errors: { label: string; message: string }[] }
+
 export default function RosterEntry({
   windowId,
   groupKey,
@@ -55,49 +57,69 @@ export default function RosterEntry({
   const orderById = new Map(levels.map((l) => [l.readingScaleId, l.levelOrder] as const))
   const orderByCode = new Map(levels.map((l) => [l.levelCode, l.levelOrder] as const))
   const numByKey = new Map(roster.map((s) => [s.studentKey, s.studentNumber] as const))
+  const nameByKey = new Map(roster.map((s) => [s.studentKey, `${s.lastName}, ${s.firstName}`] as const))
+  const nameByNum = new Map(roster.map((s) => [s.studentNumber, `${s.lastName}, ${s.firstName}`] as const))
+  const pfByKey = new Map(roster.map((s) => [s.studentKey, s.programFamily] as const))
 
   const baselineFromProps: Record<string, string> = {}
   for (const s of roster) baselineFromProps[s.studentKey] = s.currentLevel ? codeToId.get(s.currentLevel) ?? '' : ''
 
   const [baseline, setBaseline] = useState(baselineFromProps)
   const [sel, setSel] = useState(baselineFromProps)
+  // Staged IPP confirmations: studentKey -> chosen value. Committed on Save (not per click), so
+  // the screen never freezes mid-click; clicking the chosen value again un-stages it.
+  const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
-  const [result, setResult] = useState<SaveResult | null>(null)
+  const [result, setResult] = useState<SaveSummary | null>(null)
 
-  // IPP confirmation: fires per-row immediately (mirrors the Power App's inline Yes/No), separate
-  // transition so it doesn't fight the level-save button. ippBusy tracks the row mid-call.
-  const [ippPending, startIppTransition] = useTransition()
-  const [ippBusy, setIppBusy] = useState<string | null>(null)
-  const [ippError, setIppError] = useState<string | null>(null)
+  const changedLevelKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
+  const ippKeys = Object.keys(ippSel)
+  const dirtyCount = changedLevelKeys.length + ippKeys.length
 
-  const changedKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
-
-  function onSave() {
-    const entries = changedKeys.map((k) => ({ studentNumber: numByKey.get(k)!, readingScaleId: sel[k] }))
-    startTransition(async () => {
-      const r = await saveReadingAssessments(windowId, groupKey, entries)
-      setResult(r)
-      const erroredNums = new Set(r.errors.map((e) => e.studentNumber))
-      setBaseline((prev) => {
-        const next = { ...prev }
-        for (const k of changedKeys) if (!erroredNums.has(numByKey.get(k)!)) next[k] = sel[k]
-        return next
-      })
+  function chooseIPP(studentKey: string, value: boolean) {
+    setIppSel((prev) => {
+      const next = { ...prev }
+      if (next[studentKey] === value) delete next[studentKey] // re-click the same choice -> un-stage
+      else next[studentKey] = value
+      return next
     })
   }
 
-  function onConfirmIPP(s: RosterStudent, isIPP: boolean) {
-    if (!s.programFamily) {
-      setIppError(`Cannot confirm IPP for ${s.lastName}, ${s.firstName}: missing program family.`)
-      return
-    }
-    setIppError(null)
-    setIppBusy(s.studentKey)
-    startIppTransition(async () => {
-      const r = await setStudentIPP(windowId, groupKey, s.studentKey, s.programFamily!, isIPP)
-      if (!r.ok) setIppError(`IPP not saved for ${s.lastName}, ${s.firstName}: ${r.message}`)
-      setIppBusy(null)
-      // revalidatePath in the action refreshes the roster prop, dropping the needs-confirmation gate.
+  function onSave() {
+    const levelEntries = changedLevelKeys.map((k) => ({ studentNumber: numByKey.get(k)!, readingScaleId: sel[k] }))
+    const missingPf = ippKeys.filter((k) => !pfByKey.get(k))
+    const ippEntries: IppEntry[] = ippKeys
+      .map((k) => (pfByKey.get(k) ? { studentKey: k, programFamily: pfByKey.get(k)!, isIPP: ippSel[k] } : null))
+      .filter((e): e is IppEntry => e !== null)
+
+    startTransition(async () => {
+      const levelRes: SaveResult = levelEntries.length
+        ? await saveReadingAssessments(windowId, groupKey, levelEntries)
+        : { saved: 0, errors: [] }
+      const ippRes = ippEntries.length
+        ? await confirmRosterIPPs(windowId, groupKey, ippEntries)
+        : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
+
+      const errs: SaveSummary['errors'] = []
+      for (const e of levelRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
+      for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
+      for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRoster.' })
+      setResult({ saved: levelRes.saved + ippRes.saved, errors: errs })
+
+      // Clear saved level baselines (skip errored).
+      const erroredNums = new Set(levelRes.errors.map((e) => e.studentNumber))
+      setBaseline((prev) => {
+        const next = { ...prev }
+        for (const k of changedLevelKeys) if (!erroredNums.has(numByKey.get(k)!)) next[k] = sel[k]
+        return next
+      })
+      // Clear staged IPPs that saved (keep errored / missing-PF ones staged).
+      const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
+      setIppSel((prev) => {
+        const next = { ...prev }
+        for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
+        return next
+      })
     })
   }
 
@@ -118,9 +140,10 @@ export default function RosterEntry({
         <tbody>
           {roster.map((s) => {
             const selId = sel[s.studentKey] ?? ''
-            const dirty = selId !== (baseline[s.studentKey] ?? '')
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true
+            const ippStaged = s.studentKey in ippSel
+            const dirty = selId !== (baseline[s.studentKey] ?? '') || ippStaged
             // IPP students and unresolved gates carry no achievement colour/delta (mirrors the app).
             const suppress = isIPP || needsConfirm
             const order = selId ? orderById.get(selId) ?? null : null
@@ -128,7 +151,6 @@ export default function RosterEntry({
             const maxOrder = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
             const delta = suppress ? null : computeDelta(order, minOrder, maxOrder)
             const band = matchBand(delta, achievementLevels)
-            const busy = ippBusy === s.studentKey && ippPending
             return (
               <tr
                 key={s.studentKey}
@@ -176,18 +198,19 @@ export default function RosterEntry({
                 </td>
                 <td>
                   {needsConfirm ? (
-                    <span className="ipp-actions">
+                    // Staged segmented choice — saved with the Save button (not on click).
+                    <span className="ipp-seg">
                       <button
-                        className="btn-ipp-yes"
-                        disabled={ippPending}
-                        onClick={() => onConfirmIPP(s, true)}
+                        className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
+                        disabled={pending}
+                        onClick={() => chooseIPP(s.studentKey, true)}
                       >
-                        {busy ? '…' : `Yes (${ippTypeLabel('Reading')})`}
+                        Yes ({ippTypeLabel('Reading')})
                       </button>
                       <button
-                        className="btn-ipp-no"
-                        disabled={ippPending}
-                        onClick={() => onConfirmIPP(s, false)}
+                        className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
+                        disabled={pending}
+                        onClick={() => chooseIPP(s.studentKey, false)}
                       >
                         No
                       </button>
@@ -206,11 +229,9 @@ export default function RosterEntry({
         </tbody>
       </table>
 
-      {ippError ? <div className="save-errors">{ippError}</div> : null}
-
       <div className="actions">
-        <button className="btn" onClick={onSave} disabled={pending || changedKeys.length === 0}>
-          {pending ? 'Saving…' : changedKeys.length ? `Save ${changedKeys.length} change(s)` : 'Save'}
+        <button className="btn" onClick={onSave} disabled={pending || dirtyCount === 0}>
+          {pending ? 'Saving…' : dirtyCount ? `Save ${dirtyCount} change(s)` : 'Save'}
         </button>
         {result ? (
           <span className="save-result">
@@ -224,7 +245,7 @@ export default function RosterEntry({
         <ul className="save-errors">
           {result.errors.map((e, i) => (
             <li key={i}>
-              Student {e.studentNumber}: {e.message}
+              {e.label}: {e.message}
             </li>
           ))}
         </ul>

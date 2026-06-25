@@ -144,6 +144,19 @@ RETURN
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
             END AS GroupKey
         FROM ApplicableStudents
+    ),
+    -- Latest reading entry per (student, window). Multiple dated entries per window are now
+    -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
+    -- rn=1 pick the join would fan a student out to one grid row per entry date.
+    LatestReadingInWindow AS (
+        SELECT
+            StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, AssessmentDate,
+            ROW_NUMBER() OVER (
+                PARTITION BY StudentKey, AssessmentWindowID
+                ORDER BY AssessmentDate DESC, ReadingAssessmentID DESC
+            ) AS rn
+        FROM FactAssessmentReading
+        WHERE AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     )
     SELECT DISTINCT
         CAST(sg.StudentKey AS VARCHAR(20)) AS StudentKey,
@@ -171,9 +184,10 @@ RETURN
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
-    LEFT JOIN FactAssessmentReading far
+    LEFT JOIN LatestReadingInWindow far
            ON far.AssessmentWindowID = sg.AssessmentWindowID
           AND far.StudentKey         = sg.StudentKey
+          AND far.rn = 1
     LEFT JOIN DimReadingScale drs
            ON drs.ReadingScaleID = far.ReadingScaleID
     LEFT JOIN DimReadingBenchmark drb
