@@ -21,6 +21,7 @@ import { queryAsUser, query } from './db'
 export interface TeacherWindow {
   id: string // AssessmentWindowID (kept as string -- BIGINT exceeds JS Number precision)
   name: string
+  assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
   status: string // Upcoming | Open | ClosesToday | Closed
   scaleSystem: string | null
   startDate: string // 'YYYY-MM-DD' (window opens on the 1st of its month)
@@ -48,6 +49,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   const rows = await queryAsUser<{
     AssessmentWindowID: string
     WindowName: string
+    AssessmentType: string
     WindowStatus: string
     ScaleSystem: string | null
     StartDate: unknown
@@ -58,6 +60,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     name: r.WindowName,
+    assessmentType: r.AssessmentType,
     status: r.WindowStatus,
     scaleSystem: r.ScaleSystem,
     startDate: toYMD(r.StartDate),

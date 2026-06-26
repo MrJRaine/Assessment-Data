@@ -115,6 +115,11 @@ a { color: inherit; text-decoration: none; }
 .accordion[open] > summary { margin-bottom: 0.75rem; }
 .upcoming-note { margin-top: 1.5rem; }
 
+/* assessment-type sections on the window-select screen */
+.window-section { margin-top: 1.75rem; }
+.window-section:first-of-type { margin-top: 1rem; }
+.section-heading { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--primary); display: inline-block; padding-right: 1.5rem; }
+
 /* Reading | Writing subject toggle (cohort + detail) */
 .subject-toggle { display: inline-flex; gap: 0.25rem; margin: 0.25rem 0 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }
 .subject-toggle a { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); }
