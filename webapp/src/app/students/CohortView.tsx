@@ -32,9 +32,11 @@ function monthBuckets(now: Date): { label: string; nextMonthStart: Date }[] {
 export default function CohortView({
   cohort,
   bands,
+  subject = 'Reading',
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
+  subject?: 'Reading' | 'Writing'
 }) {
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
@@ -371,7 +373,7 @@ export default function CohortView({
               <th>Grade</th>
               <th>Program</th>
               <th>School</th>
-              <th>Level</th>
+              <th>{subject === 'Writing' ? 'Avg' : 'Level'}</th>
               <th>Achievement</th>
             </tr>
           </thead>

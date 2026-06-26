@@ -381,6 +381,48 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
   }))
 }
 
+/**
+ * Writing cohort in the same CohortStudent shape so CohortView renders it unchanged: the 4-trait
+ * average fills the "Level" slot (shown as a 2-dec score) and the writing band fills the achievement
+ * fields. ippStatusReading carries the WRITING IPP status here (the field is reused for the table's
+ * IPP display); reading-only fields (delta, level order) are null.
+ */
+export async function getStudentCohortWriting(upn: string): Promise<CohortStudent[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN) ORDER BY LastName, FirstName',
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    fullName: String(r.FullName),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    gradeOrder: r.GradeOrder == null ? null : Number(r.GradeOrder),
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    schoolAbbreviation: (r.SchoolAbbreviation as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
+    homeroom: (r.Homeroom as string) ?? null,
+    ippStatusReading: (r.IPPStatus_Writing as string) ?? 'N/A',
+    chartEligible: toBool(r.IsChartEligibleWriting) === true,
+    mostRecentDate: toDateStr(r.MostRecentAssessmentDate as Date | string | null),
+    mostRecentWindowName: (r.MostRecentWindowName as string) ?? null,
+    mostRecentSchoolYear: (r.MostRecentSchoolYear as string) ?? null,
+    mostRecentLevelCode: r.MostRecentAvgScore == null ? null : Number(r.MostRecentAvgScore).toFixed(2),
+    mostRecentLevelOrder: null,
+    mostRecentDelta: null,
+    achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
+    achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
+    achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
+  }))
+}
+
 export interface StudentNavItem {
   studentKey: string
   fullName: string
