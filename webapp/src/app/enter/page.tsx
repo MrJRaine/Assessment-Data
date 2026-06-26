@@ -19,7 +19,6 @@ function WindowCard({ w }: { w: TeacherWindow }) {
 function SubjectSection({ title, windows }: { title: string; windows: TeacherWindow[] }) {
   const current = windows.filter((w) => w.status === 'Open' || w.status === 'ClosesToday')
   const past = windows.filter((w) => w.status === 'Closed')
-  const upcomingCount = windows.filter((w) => w.status === 'Upcoming').length
   const lower = title.toLowerCase()
 
   return (
@@ -46,12 +45,6 @@ function SubjectSection({ title, windows }: { title: string; windows: TeacherWin
             ))}
           </div>
         </details>
-      ) : null}
-
-      {upcomingCount > 0 ? (
-        <p className="muted upcoming-note">
-          {upcomingCount} upcoming {lower} window{upcomingCount === 1 ? '' : 's'} — each opens on the 1st of its month.
-        </p>
       ) : null}
     </section>
   )
