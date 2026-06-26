@@ -182,6 +182,88 @@ export async function getTeacherRoster(
   }))
 }
 
+/** The window's AssessmentType ('Reading' | 'Writing' | 'Math'), used to branch the entry grid. */
+export async function getWindowAssessmentType(windowId: string): Promise<string | null> {
+  const rows = await query<{ AssessmentType: string }>(
+    'SELECT AssessmentType FROM DimAssessmentWindow WHERE AssessmentWindowID = CAST(@WID AS BIGINT)',
+    { WID: windowId },
+  )
+  return rows.length ? rows[0].AssessmentType : null
+}
+
+export interface WritingRosterStudent {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
+  ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
+  organization: number | null
+  language: number | null
+  conventions: number | null
+  avgScore: number | null
+  assessmentDate: string | null
+  ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
+  ippNeedsConfirmation: boolean
+  achievementLevel: string | null // band name for the average
+  achievementHexColor: string | null
+  achievementHexColorTint: string | null
+}
+
+/** One Writing window's roster for the signed-in teacher + group, with each student's latest 4-trait entry. */
+export async function getTeacherRosterWriting(
+  upn: string,
+  windowId: string,
+  groupKey: string,
+): Promise<WritingRosterStudent[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    ExistingIdeasScore: number | null
+    ExistingOrganizationScore: number | null
+    ExistingLanguageScore: number | null
+    ExistingConventionsScore: number | null
+    ExistingAvgScore: number | null
+    ExistingAssessmentDate: Date | string | null
+    WritingIPPStatus: boolean | null
+    WritingIPPNeedsConfirmation: boolean | null
+    IPPProgramFamily: string | null
+    AchievementLevelName: string | null
+    AchievementHexColor: string | null
+    AchievementHexColorTint: string | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    programFamily: r.IPPProgramFamily ?? null,
+    ideas: r.ExistingIdeasScore ?? null,
+    organization: r.ExistingOrganizationScore ?? null,
+    language: r.ExistingLanguageScore ?? null,
+    conventions: r.ExistingConventionsScore ?? null,
+    avgScore: r.ExistingAvgScore != null ? Number(r.ExistingAvgScore) : null,
+    assessmentDate:
+      r.ExistingAssessmentDate instanceof Date
+        ? r.ExistingAssessmentDate.toISOString().slice(0, 10)
+        : (r.ExistingAssessmentDate ?? null),
+    ippStatus: r.WritingIPPStatus ?? null,
+    ippNeedsConfirmation: Boolean(r.WritingIPPNeedsConfirmation),
+    achievementLevel: r.AchievementLevelName ?? null,
+    achievementHexColor: r.AchievementHexColor ?? null,
+    achievementHexColorTint: r.AchievementHexColorTint ?? null,
+  }))
+}
+
 export interface ScaleLevel {
   readingScaleId: string
   levelCode: string
