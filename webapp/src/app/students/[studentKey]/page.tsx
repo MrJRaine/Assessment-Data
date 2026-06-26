@@ -1,24 +1,39 @@
 import Link from 'next/link'
 import { PageHeader, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getStudentNavList, getStudentHistory, type HistoryRow, type StudentNavItem } from '@/lib/data'
+import {
+  getStudentNavList,
+  getStudentHistory,
+  getStudentHistoryWriting,
+  type HistoryRow,
+  type WritingHistoryRow,
+  type StudentNavItem,
+} from '@/lib/data'
 import StudentDetailView from './StudentDetailView'
+import { loadStudentHistory, loadStudentHistoryWriting } from './actions'
 
 export const dynamic = 'force-dynamic'
 
-export default async function StudentDetailPage({ params }: { params: Promise<{ studentKey: string }> }) {
+export default async function StudentDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ studentKey: string }>
+  searchParams: Promise<{ subject?: string }>
+}) {
   const { studentKey } = await params
+  const { subject } = await searchParams
+  const isWriting = subject === 'writing'
+  const subj: 'Reading' | 'Writing' = isWriting ? 'Writing' : 'Reading'
   const upn = await getCurrentUpn()
 
   let error: string | null = null
   let navList: StudentNavItem[] = []
-  let initialHistory: HistoryRow[] = []
+  let initialHistory: HistoryRow[] | WritingHistoryRow[] = []
   try {
-    // The nav list is fetched once here; subsequent prev/next paging is client-side, so the heavy
-    // cohort query no longer re-runs on every navigation (the cause of the slow paging).
     ;[navList, initialHistory] = await Promise.all([
-      getStudentNavList(upn),
-      getStudentHistory(upn, studentKey),
+      getStudentNavList(upn, subj),
+      isWriting ? getStudentHistoryWriting(upn, studentKey) : getStudentHistory(upn, studentKey),
     ])
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
@@ -47,5 +62,13 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
     )
   }
 
-  return <StudentDetailView navList={navList} initialKey={studentKey} initialHistory={initialHistory} />
+  return (
+    <StudentDetailView
+      navList={navList}
+      initialKey={studentKey}
+      initialHistory={initialHistory}
+      subject={subj}
+      loadHistory={isWriting ? loadStudentHistoryWriting : loadStudentHistory}
+    />
+  )
 }

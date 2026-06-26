@@ -433,7 +433,7 @@ export interface StudentNavItem {
   programFamily: string | null
   schoolLabel: string | null
   homeroom: string | null
-  ippStatusReading: string
+  ippStatus: string // IPP status for the SUBJECT the nav was loaded for (Reading or Writing)
 }
 
 /**
@@ -442,31 +442,26 @@ export interface StudentNavItem {
  * (the heavy history is fetched per student + prefetched for neighbours). Same ordering as the
  * cohort table so "Student X of Y" lines up.
  */
-export async function getStudentNavList(upn: string): Promise<StudentNavItem[]> {
-  const rows = await queryAsUser<{
-    StudentKey: string
-    FullName: string
-    Grade: string | null
-    ProgramFamily: string | null
-    SchoolLabel: string | null
-    Homeroom: string | null
-    IPPStatus_Reading: string | null
-  }>(
+export async function getStudentNavList(upn: string, subject: 'Reading' | 'Writing' = 'Reading'): Promise<StudentNavItem[]> {
+  // subject is a fixed enum (never user input), so interpolating the TVF + IPP column is injection-safe.
+  const tvf = subject === 'Writing' ? 'tvf_StudentCohortWriting' : 'tvf_StudentCohort'
+  const ippCol = subject === 'Writing' ? 'IPPStatus_Writing' : 'IPPStatus_Reading'
+  const rows = await queryAsUser<Record<string, unknown>>(
     upn,
     `SELECT StudentKey, FullName, Grade, ProgramFamily,
             COALESCE(SchoolAbbreviation, SchoolName, SchoolID) AS SchoolLabel,
-            Homeroom, IPPStatus_Reading
-     FROM dbo.tvf_StudentCohort(@UPN)
+            Homeroom, ${ippCol} AS IPPStatus
+     FROM dbo.${tvf}(@UPN)
      ORDER BY LastName, FirstName`,
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
     fullName: String(r.FullName),
-    grade: r.Grade ?? null,
-    programFamily: r.ProgramFamily ?? null,
-    schoolLabel: r.SchoolLabel ?? null,
-    homeroom: r.Homeroom ?? null,
-    ippStatusReading: r.IPPStatus_Reading ?? 'N/A',
+    grade: (r.Grade as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    schoolLabel: (r.SchoolLabel as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    ippStatus: (r.IPPStatus as string) ?? 'N/A',
   }))
 }
 
@@ -503,6 +498,45 @@ export async function getStudentHistory(upn: string, studentKey: string): Promis
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
     delta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+  }))
+}
+
+export interface WritingHistoryRow {
+  writingAssessmentId: string
+  windowName: string
+  windowSchoolYear: string | null
+  assessmentDate: string | null
+  ideas: number | null
+  organization: number | null
+  language: number | null
+  conventions: number | null
+  avgScore: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+  achievementHexColorTint: string | null
+}
+
+/** One student's writing-assessment history (per-entry 4 traits + average + band), scoped by @UPN. */
+export async function getStudentHistoryWriting(upn: string, studentKey: string): Promise<WritingHistoryRow[]> {
+  if (!/^\d{1,20}$/.test(studentKey)) return []
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentAssessmentHistoryWriting(@UPN, @StudentKey) ORDER BY AssessmentDate',
+    { StudentKey: studentKey },
+  )
+  return rows.map((r) => ({
+    writingAssessmentId: String(r.WritingAssessmentID),
+    windowName: String(r.WindowName),
+    windowSchoolYear: (r.WindowSchoolYear as string) ?? null,
+    assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    ideas: r.IdeasScore == null ? null : Number(r.IdeasScore),
+    organization: r.OrganizationScore == null ? null : Number(r.OrganizationScore),
+    language: r.LanguageScore == null ? null : Number(r.LanguageScore),
+    conventions: r.ConventionsScore == null ? null : Number(r.ConventionsScore),
+    avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
