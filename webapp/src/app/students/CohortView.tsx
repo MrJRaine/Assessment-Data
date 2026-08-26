@@ -385,7 +385,7 @@ export default function CohortView({
               return (
                 <tr key={s.studentKey} style={measured && s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
                   <td>
-                    <Link href={`/students/${s.studentKey}`} className="back-link">
+                    <Link href={`/students/${s.studentKey}${subject === 'Writing' ? '?subject=writing' : ''}`} className="back-link">
                       {s.lastName}, {s.firstName}
                     </Link>
                   </td>

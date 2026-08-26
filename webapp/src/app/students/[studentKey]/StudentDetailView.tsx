@@ -127,7 +127,7 @@ export default function StudentDetailView({
     <>
       <PageHeader title={current.fullName} />
       <div className="detail-nav">
-        <Link href="/students" className="back-link">&larr; Back to students</Link>
+        <Link href={`/students${isWriting ? '?subject=writing' : ''}`} className="back-link">&larr; Back to students</Link>
         <span className="detail-counter muted">Student {idx + 1} of {navList.length}</span>
         <span className="detail-paging">
           <button className="btn-ghost" disabled={!prev} onClick={() => prev && go(prev.studentKey)}>&larr; Prev</button>
