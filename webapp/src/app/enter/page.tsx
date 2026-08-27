@@ -14,6 +14,42 @@ function WindowCard({ w }: { w: TeacherWindow }) {
   )
 }
 
+// One assessment-type section: open windows above the fold + a collapsed accordion of past ones
+// (still selectable, since late entry is allowed) + a count of upcoming windows.
+function SubjectSection({ title, windows }: { title: string; windows: TeacherWindow[] }) {
+  const current = windows.filter((w) => w.status === 'Open' || w.status === 'ClosesToday')
+  const past = windows.filter((w) => w.status === 'Closed')
+  const lower = title.toLowerCase()
+
+  return (
+    <section className="window-section">
+      <h2 className="section-heading">{title}</h2>
+      {current.length > 0 ? (
+        <div className="card-grid">
+          {current.map((w) => (
+            <WindowCard key={w.id} w={w} />
+          ))}
+        </div>
+      ) : (
+        <p className="muted">No open {lower} window right now.</p>
+      )}
+
+      {past.length > 0 ? (
+        <details className="accordion">
+          <summary>
+            Past {lower} windows ({past.length}) — still open for late entry
+          </summary>
+          <div className="card-grid">
+            {past.map((w) => (
+              <WindowCard key={w.id} w={w} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </section>
+  )
+}
+
 export default async function WindowSelect() {
   const upn = await getCurrentUpn()
   let windows: TeacherWindow[] = []
@@ -24,11 +60,9 @@ export default async function WindowSelect() {
     error = e instanceof Error ? e.message : String(e)
   }
 
-  // Ongoing-assessment model: windows are monthly bins. Show open windows above the fold; tuck
-  // closed (past) ones into a collapsed accordion — still selectable, since late entry is allowed.
-  const current = windows.filter((w) => w.status === 'Open' || w.status === 'ClosesToday')
-  const past = windows.filter((w) => w.status === 'Closed')
-  const upcomingCount = windows.filter((w) => w.status === 'Upcoming').length
+  const reading = windows.filter((w) => w.assessmentType === 'Reading')
+  const writing = windows.filter((w) => w.assessmentType === 'Writing')
+  const other = windows.filter((w) => w.assessmentType !== 'Reading' && w.assessmentType !== 'Writing')
 
   return (
     <>
@@ -42,35 +76,9 @@ export default async function WindowSelect() {
         />
       ) : (
         <>
-          {current.length > 0 ? (
-            <div className="card-grid">
-              {current.map((w) => (
-                <WindowCard key={w.id} w={w} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No open windows right now"
-              hint="A new window opens on the 1st of each month. Past windows are below — you can still enter results late."
-            />
-          )}
-
-          {past.length > 0 ? (
-            <details className="accordion">
-              <summary>Past windows ({past.length}) — still open for late entry</summary>
-              <div className="card-grid">
-                {past.map((w) => (
-                  <WindowCard key={w.id} w={w} />
-                ))}
-              </div>
-            </details>
-          ) : null}
-
-          {upcomingCount > 0 ? (
-            <p className="muted upcoming-note">
-              {upcomingCount} upcoming window{upcomingCount === 1 ? '' : 's'} — each opens on the 1st of its month.
-            </p>
-          ) : null}
+          {reading.length > 0 ? <SubjectSection title="Reading" windows={reading} /> : null}
+          {writing.length > 0 ? <SubjectSection title="Writing" windows={writing} /> : null}
+          {other.length > 0 ? <SubjectSection title="Other" windows={other} /> : null}
         </>
       )}
     </>

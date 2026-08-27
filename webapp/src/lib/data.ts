@@ -21,6 +21,7 @@ import { queryAsUser, query } from './db'
 export interface TeacherWindow {
   id: string // AssessmentWindowID (kept as string -- BIGINT exceeds JS Number precision)
   name: string
+  assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
   status: string // Upcoming | Open | ClosesToday | Closed
   scaleSystem: string | null
   startDate: string // 'YYYY-MM-DD' (window opens on the 1st of its month)
@@ -48,6 +49,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   const rows = await queryAsUser<{
     AssessmentWindowID: string
     WindowName: string
+    AssessmentType: string
     WindowStatus: string
     ScaleSystem: string | null
     StartDate: unknown
@@ -58,6 +60,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     name: r.WindowName,
+    assessmentType: r.AssessmentType,
     status: r.WindowStatus,
     scaleSystem: r.ScaleSystem,
     startDate: toYMD(r.StartDate),
@@ -182,6 +185,88 @@ export async function getTeacherRoster(
   }))
 }
 
+/** The window's AssessmentType ('Reading' | 'Writing' | 'Math'), used to branch the entry grid. */
+export async function getWindowAssessmentType(windowId: string): Promise<string | null> {
+  const rows = await query<{ AssessmentType: string }>(
+    'SELECT AssessmentType FROM DimAssessmentWindow WHERE AssessmentWindowID = CAST(@WID AS BIGINT)',
+    { WID: windowId },
+  )
+  return rows.length ? rows[0].AssessmentType : null
+}
+
+export interface WritingRosterStudent {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
+  ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
+  organization: number | null
+  language: number | null
+  conventions: number | null
+  avgScore: number | null
+  assessmentDate: string | null
+  ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
+  ippNeedsConfirmation: boolean
+  achievementLevel: string | null // band name for the average
+  achievementHexColor: string | null
+  achievementHexColorTint: string | null
+}
+
+/** One Writing window's roster for the signed-in teacher + group, with each student's latest 4-trait entry. */
+export async function getTeacherRosterWriting(
+  upn: string,
+  windowId: string,
+  groupKey: string,
+): Promise<WritingRosterStudent[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    ExistingIdeasScore: number | null
+    ExistingOrganizationScore: number | null
+    ExistingLanguageScore: number | null
+    ExistingConventionsScore: number | null
+    ExistingAvgScore: number | null
+    ExistingAssessmentDate: Date | string | null
+    WritingIPPStatus: boolean | null
+    WritingIPPNeedsConfirmation: boolean | null
+    IPPProgramFamily: string | null
+    AchievementLevelName: string | null
+    AchievementHexColor: string | null
+    AchievementHexColorTint: string | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    programFamily: r.IPPProgramFamily ?? null,
+    ideas: r.ExistingIdeasScore ?? null,
+    organization: r.ExistingOrganizationScore ?? null,
+    language: r.ExistingLanguageScore ?? null,
+    conventions: r.ExistingConventionsScore ?? null,
+    avgScore: r.ExistingAvgScore != null ? Number(r.ExistingAvgScore) : null,
+    assessmentDate:
+      r.ExistingAssessmentDate instanceof Date
+        ? r.ExistingAssessmentDate.toISOString().slice(0, 10)
+        : (r.ExistingAssessmentDate ?? null),
+    ippStatus: r.WritingIPPStatus ?? null,
+    ippNeedsConfirmation: Boolean(r.WritingIPPNeedsConfirmation),
+    achievementLevel: r.AchievementLevelName ?? null,
+    achievementHexColor: r.AchievementHexColor ?? null,
+    achievementHexColorTint: r.AchievementHexColorTint ?? null,
+  }))
+}
+
 export interface ScaleLevel {
   readingScaleId: string
   levelCode: string
@@ -299,6 +384,48 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
   }))
 }
 
+/**
+ * Writing cohort in the same CohortStudent shape so CohortView renders it unchanged: the 4-trait
+ * average fills the "Level" slot (shown as a 2-dec score) and the writing band fills the achievement
+ * fields. ippStatusReading carries the WRITING IPP status here (the field is reused for the table's
+ * IPP display); reading-only fields (delta, level order) are null.
+ */
+export async function getStudentCohortWriting(upn: string): Promise<CohortStudent[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN) ORDER BY LastName, FirstName',
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    fullName: String(r.FullName),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    gradeOrder: r.GradeOrder == null ? null : Number(r.GradeOrder),
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    schoolAbbreviation: (r.SchoolAbbreviation as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
+    homeroom: (r.Homeroom as string) ?? null,
+    ippStatusReading: (r.IPPStatus_Writing as string) ?? 'N/A',
+    chartEligible: toBool(r.IsChartEligibleWriting) === true,
+    mostRecentDate: toDateStr(r.MostRecentAssessmentDate as Date | string | null),
+    mostRecentWindowName: (r.MostRecentWindowName as string) ?? null,
+    mostRecentSchoolYear: (r.MostRecentSchoolYear as string) ?? null,
+    mostRecentLevelCode: r.MostRecentAvgScore == null ? null : Number(r.MostRecentAvgScore).toFixed(2),
+    mostRecentLevelOrder: null,
+    mostRecentDelta: null,
+    achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
+    achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
+    achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
+  }))
+}
+
 export interface StudentNavItem {
   studentKey: string
   fullName: string
@@ -306,7 +433,7 @@ export interface StudentNavItem {
   programFamily: string | null
   schoolLabel: string | null
   homeroom: string | null
-  ippStatusReading: string
+  ippStatus: string // IPP status for the SUBJECT the nav was loaded for (Reading or Writing)
 }
 
 /**
@@ -315,31 +442,26 @@ export interface StudentNavItem {
  * (the heavy history is fetched per student + prefetched for neighbours). Same ordering as the
  * cohort table so "Student X of Y" lines up.
  */
-export async function getStudentNavList(upn: string): Promise<StudentNavItem[]> {
-  const rows = await queryAsUser<{
-    StudentKey: string
-    FullName: string
-    Grade: string | null
-    ProgramFamily: string | null
-    SchoolLabel: string | null
-    Homeroom: string | null
-    IPPStatus_Reading: string | null
-  }>(
+export async function getStudentNavList(upn: string, subject: 'Reading' | 'Writing' = 'Reading'): Promise<StudentNavItem[]> {
+  // subject is a fixed enum (never user input), so interpolating the TVF + IPP column is injection-safe.
+  const tvf = subject === 'Writing' ? 'tvf_StudentCohortWriting' : 'tvf_StudentCohort'
+  const ippCol = subject === 'Writing' ? 'IPPStatus_Writing' : 'IPPStatus_Reading'
+  const rows = await queryAsUser<Record<string, unknown>>(
     upn,
     `SELECT StudentKey, FullName, Grade, ProgramFamily,
             COALESCE(SchoolAbbreviation, SchoolName, SchoolID) AS SchoolLabel,
-            Homeroom, IPPStatus_Reading
-     FROM dbo.tvf_StudentCohort(@UPN)
+            Homeroom, ${ippCol} AS IPPStatus
+     FROM dbo.${tvf}(@UPN)
      ORDER BY LastName, FirstName`,
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
     fullName: String(r.FullName),
-    grade: r.Grade ?? null,
-    programFamily: r.ProgramFamily ?? null,
-    schoolLabel: r.SchoolLabel ?? null,
-    homeroom: r.Homeroom ?? null,
-    ippStatusReading: r.IPPStatus_Reading ?? 'N/A',
+    grade: (r.Grade as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    schoolLabel: (r.SchoolLabel as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    ippStatus: (r.IPPStatus as string) ?? 'N/A',
   }))
 }
 
@@ -376,6 +498,45 @@ export async function getStudentHistory(upn: string, studentKey: string): Promis
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
     delta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+  }))
+}
+
+export interface WritingHistoryRow {
+  writingAssessmentId: string
+  windowName: string
+  windowSchoolYear: string | null
+  assessmentDate: string | null
+  ideas: number | null
+  organization: number | null
+  language: number | null
+  conventions: number | null
+  avgScore: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+  achievementHexColorTint: string | null
+}
+
+/** One student's writing-assessment history (per-entry 4 traits + average + band), scoped by @UPN. */
+export async function getStudentHistoryWriting(upn: string, studentKey: string): Promise<WritingHistoryRow[]> {
+  if (!/^\d{1,20}$/.test(studentKey)) return []
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentAssessmentHistoryWriting(@UPN, @StudentKey) ORDER BY AssessmentDate',
+    { StudentKey: studentKey },
+  )
+  return rows.map((r) => ({
+    writingAssessmentId: String(r.WritingAssessmentID),
+    windowName: String(r.WindowName),
+    windowSchoolYear: (r.WindowSchoolYear as string) ?? null,
+    assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    ideas: r.IdeasScore == null ? null : Number(r.IdeasScore),
+    organization: r.OrganizationScore == null ? null : Number(r.OrganizationScore),
+    language: r.LanguageScore == null ? null : Number(r.LanguageScore),
+    conventions: r.ConventionsScore == null ? null : Number(r.ConventionsScore),
+    avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,

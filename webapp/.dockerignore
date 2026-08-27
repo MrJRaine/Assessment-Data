@@ -8,8 +8,8 @@ Dockerfile
 .dockerignore
 npm-debug.log*
 
-# never bake local env / secrets into an image
-.env
-.env.local
-.env.*.local
+# never bake local env / secrets into an image — exclude ALL env files
+# (incl. .env.dev / .env.live, which are supplied at runtime via --env-file),
+# then re-include the committed, secret-free example.
+.env*
 !.env.example

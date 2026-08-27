@@ -123,12 +123,20 @@ RETURN
         wed.ScaleSystem,
         wed.WindowStatus,
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT CASE WHEN far.ReadingAssessmentID IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount
+        -- "Entered" counts the fact matching the window's TYPE (Reading vs Writing), so a writing
+        -- window reflects writing entries (it used to only count FactAssessmentReading -> always 0).
+        COUNT(DISTINCT CASE
+            WHEN wed.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN a.StudentKey
+            WHEN wed.AssessmentType = 'Writing' AND faw.WritingAssessmentID IS NOT NULL THEN a.StudentKey
+        END) AS EnteredStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
     LEFT JOIN FactAssessmentReading far
            ON far.AssessmentWindowID = wed.AssessmentWindowID
           AND far.StudentKey         = a.StudentKey
+    LEFT JOIN FactAssessmentWriting faw
+           ON faw.AssessmentWindowID = wed.AssessmentWindowID
+          AND faw.StudentKey         = a.StudentKey
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,

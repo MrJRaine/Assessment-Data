@@ -1,7 +1,7 @@
 'use server'
 
 import { getCurrentUpn } from '@/lib/auth'
-import { getStudentHistory, type HistoryRow } from '@/lib/data'
+import { getStudentHistory, getStudentHistoryWriting, type HistoryRow, type WritingHistoryRow } from '@/lib/data'
 
 /**
  * Fetch one student's reading history. Called from the detail view for client-side prev/next
@@ -12,4 +12,10 @@ import { getStudentHistory, type HistoryRow } from '@/lib/data'
 export async function loadStudentHistory(studentKey: string): Promise<HistoryRow[]> {
   const upn = await getCurrentUpn()
   return getStudentHistory(upn, studentKey)
+}
+
+/** Writing counterpart of loadStudentHistory (same prev/next prefetch path, Writing tab). */
+export async function loadStudentHistoryWriting(studentKey: string): Promise<WritingHistoryRow[]> {
+  const upn = await getCurrentUpn()
+  return getStudentHistoryWriting(upn, studentKey)
 }

@@ -68,11 +68,12 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null
 /**
  * Lazily-created shared connection pool (no connection attempt until first query).
  *
- * The pool authenticates with the access token at connect time; the live TDS session then
- * persists, so token expiry (~1h) does not break an open connection. If the connect attempt
- * fails we clear the cached promise so the next call retries with a freshly-minted token.
- * (TODO before full rollout: also reset the pool on a connection-level query error so a long
- * idle period followed by a reconnect always uses a current token.)
+ * The pool authenticates with the access token at connect time. The token lives ~1h; the live TDS
+ * session survives token expiry, BUT once the connection drops (Fabric idle-closes it) the pool
+ * reconnects with the now-EXPIRED token baked into its config and every query fails with
+ * "authentication failed" until the process restarts. So callers run through `runOnPool`, which
+ * resets the pool on a connection/auth error and retries once with a freshly-minted token
+ * (`buildConfig` re-acquires via `@azure/identity`, which refreshes near expiry).
  */
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!poolPromise) {
@@ -84,18 +85,58 @@ export function getPool(): Promise<sql.ConnectionPool> {
   return poolPromise
 }
 
+// Connection/auth-level failures that mean "the pooled connection is dead / its token expired" —
+// as opposed to a SQL error from the query itself (e.g. a proc THROW). On these we rebuild the pool.
+function isStalePoolError(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown }
+  const code = typeof e?.code === 'string' ? e.code : ''
+  const msg = (typeof e?.message === 'string' ? e.message : '').toLowerCase()
+  return (
+    code === 'ELOGIN' ||
+    code === 'ESOCKET' ||
+    code === 'ECONNCLOSED' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEOUT' ||
+    msg.includes('authentication failed') ||
+    msg.includes('login failed') ||
+    msg.includes('socket hang up') ||
+    msg.includes('connection is closed') ||
+    msg.includes('connection lost')
+  )
+}
+
+/**
+ * Run an operation against the pool, self-healing a stale/expired connection: on a connection-level
+ * error, drop the cached pool (so the next getPool re-acquires a fresh token) and retry ONCE. Safe to
+ * retry our writes too — the wrapper procs are idempotent on (Student, Window, Date), so a re-run is
+ * a no-op/correction, not a duplicate. A genuine SQL error (proc THROW, bad param) is NOT a stale-pool
+ * error, so it propagates immediately without a retry.
+ */
+async function runOnPool<T>(fn: (pool: sql.ConnectionPool) => Promise<T>): Promise<T> {
+  try {
+    return await fn(await getPool())
+  } catch (err) {
+    if (!isStalePoolError(err)) throw err
+    const stale = poolPromise
+    poolPromise = null
+    if (stale) stale.then((p) => p.close()).catch(() => {}) // best-effort close of the dead pool
+    return await fn(await getPool())
+  }
+}
+
 /** Run a query that takes no per-user filtering (e.g. reference/lookup reads). */
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  const pool = await getPool()
-  const request = pool.request()
-  for (const [name, value] of Object.entries(params)) {
-    request.input(name, value)
-  }
-  const result = await request.query<T>(text)
-  return result.recordset
+  return runOnPool(async (pool) => {
+    const request = pool.request()
+    for (const [name, value] of Object.entries(params)) {
+      request.input(name, value)
+    }
+    const result = await request.query<T>(text)
+    return result.recordset
+  })
 }
 
 /**
@@ -111,14 +152,15 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  const pool = await getPool()
-  const request = pool.request()
-  request.input('UPN', sql.VarChar(256), upn)
-  for (const [name, value] of Object.entries(params)) {
-    request.input(name, value)
-  }
-  const result = await request.query<T>(text)
-  return result.recordset
+  return runOnPool(async (pool) => {
+    const request = pool.request()
+    request.input('UPN', sql.VarChar(256), upn)
+    for (const [name, value] of Object.entries(params)) {
+      request.input(name, value)
+    }
+    const result = await request.query<T>(text)
+    return result.recordset
+  })
 }
 
 /**
@@ -132,10 +174,11 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
  * Proven against `usp_InsertSubmissionAudit` 2026-06-19 (B4): the audit row lands and reads back.
  */
 export async function execProc(procName: string, inputs: Record<string, unknown> = {}): Promise<void> {
-  const pool = await getPool()
-  const request = pool.request()
-  for (const [name, value] of Object.entries(inputs)) {
-    request.input(name, value)
-  }
-  await request.execute(procName)
+  await runOnPool(async (pool) => {
+    const request = pool.request()
+    for (const [name, value] of Object.entries(inputs)) {
+      request.input(name, value)
+    }
+    await request.execute(procName)
+  })
 }

@@ -2,7 +2,7 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
-import { getTeacherRoster, getWindowEndDate } from '@/lib/data'
+import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 import { revalidatePath } from 'next/cache'
 
@@ -68,6 +68,59 @@ export async function saveReadingAssessments(
   return { saved, errors }
 }
 
+export interface WritingEntry {
+  studentNumber: string
+  ideas: number
+  organization: number
+  language: number
+  conventions: number
+}
+
+/**
+ * Save 4-trait writing entries for a group. Same trust model as saveReadingAssessments: the UPN is
+ * resolved server-side and passed as @CallerUPN; each target is scope-checked against the caller's
+ * writing roster before the proc runs. The proc validates each score 1–4 and the program-family match.
+ */
+export async function saveWritingAssessments(
+  windowId: string,
+  groupKey: string,
+  entries: WritingEntry[],
+): Promise<SaveResult> {
+  const upn = await getCurrentUpn()
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  const windowEnd = await getWindowEndDate(windowId)
+  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+
+  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, groupKey)).map((r) => r.studentNumber))
+
+  const errors: SaveResult['errors'] = []
+  let saved = 0
+  for (const e of entries) {
+    if (!allowed.has(e.studentNumber)) {
+      errors.push({ studentNumber: e.studentNumber, message: 'Not in your roster for this window/group — not saved.' })
+      continue
+    }
+    try {
+      await execProc('usp_UpsertWritingAssessment', {
+        StudentNumber: e.studentNumber,
+        AssessmentWindowID: windowId,
+        IdeasScore: e.ideas,
+        OrganizationScore: e.organization,
+        LanguageScore: e.language,
+        ConventionsScore: e.conventions,
+        AssessmentDate: assessmentDate,
+        CallerUPN: upn,
+      })
+      saved++
+    } catch (err) {
+      errors.push({ studentNumber: e.studentNumber, message: toUserMessage(err) })
+    }
+  }
+
+  revalidatePath(`/enter/${windowId}/${groupKey}`)
+  return { saved, errors }
+}
+
 export interface IppEntry {
   studentKey: string
   programFamily: string
@@ -90,10 +143,15 @@ export async function confirmRosterIPPs(
   windowId: string,
   groupKey: string,
   entries: IppEntry[],
+  subject: 'Reading' | 'Writing' = 'Reading',
 ): Promise<IppSaveResult> {
   const upn = await getCurrentUpn()
-  // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster.
-  const allowed = new Set((await getTeacherRoster(upn, windowId, groupKey)).map((r) => r.studentKey))
+  // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster (the matching
+  // subject's roster, though both scope to the same students for a given window/group).
+  const roster = subject === 'Writing'
+    ? await getTeacherRosterWriting(upn, windowId, groupKey)
+    : await getTeacherRoster(upn, windowId, groupKey)
+  const allowed = new Set(roster.map((r) => r.studentKey))
 
   const errors: IppSaveResult['errors'] = []
   let saved = 0
@@ -105,7 +163,7 @@ export async function confirmRosterIPPs(
     try {
       await execProc('usp_UpsertStudentIPP', {
         StudentKey: e.studentKey,
-        Subject: 'Reading',
+        Subject: subject,
         ProgramFamily: e.programFamily,
         IsIPP: e.isIPP ? 1 : 0,
         CallerUPN: upn,

@@ -53,6 +53,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# secret preloader: maps any *_FILE-mounted secrets to env vars before the server starts
+# (run via --require so it executes in-process ahead of server.js; no-op when no *_FILE set).
+COPY --chown=nextjs:nodejs load-secrets.cjs ./
+
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "--require", "./load-secrets.cjs", "server.js"]

@@ -141,11 +141,21 @@ RETURN
         sg.GroupLabel,
         MAX(sg.Grade) AS Grade,
         COUNT(DISTINCT sg.StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT CASE WHEN far.ReadingAssessmentID IS NOT NULL THEN sg.StudentKey END) AS EnteredStudentCount
+        -- "Entered" = students with >=1 entry in the fact matching the window's TYPE (Reading vs
+        -- Writing). COUNT(DISTINCT) collapses the multiple-dated-entries fan-out. Only one fact has
+        -- rows for a given window (a window is one type), so joining both is safe.
+        COUNT(DISTINCT CASE
+            WHEN aw.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN sg.StudentKey
+            WHEN aw.AssessmentType = 'Writing' AND faw.WritingAssessmentID IS NOT NULL THEN sg.StudentKey
+        END) AS EnteredStudentCount
     FROM StudentGroups sg
+    INNER JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = sg.AssessmentWindowID
     LEFT JOIN FactAssessmentReading far
            ON far.AssessmentWindowID = sg.AssessmentWindowID
           AND far.StudentKey         = sg.StudentKey
+    LEFT JOIN FactAssessmentWriting faw
+           ON faw.AssessmentWindowID = sg.AssessmentWindowID
+          AND faw.StudentKey         = sg.StudentKey
     WHERE sg.GroupKey IS NOT NULL
     GROUP BY sg.AssessmentWindowID, sg.GroupKey, sg.GroupType, sg.GroupLabel
 );
