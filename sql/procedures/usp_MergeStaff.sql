@@ -121,7 +121,8 @@ BEGIN
     INNER JOIN DimRole r
             ON CAST(s.[Group] AS INT) = r.RoleNumber
            AND r.ActiveFlag = 1
-           AND r.RoleCode IS NOT NULL;
+           AND r.RoleCode IS NOT NULL
+    WHERE NULLIF(LTRIM(RTRIM(s.Email_Addr)), '') IS NOT NULL;   -- skip blank-email rows (trailing empty CSV line)
 
     SET @AssignmentsStaged = @@ROWCOUNT;
 
@@ -165,6 +166,7 @@ BEGIN
                 ORDER BY CAST(ID AS INT) ASC
             ) AS rn
         FROM Stg_Staff
+        WHERE NULLIF(LTRIM(RTRIM(Email_Addr)), '') IS NOT NULL   -- drop blank-email rows (a trailing empty CSV line reads as an all-empty row)
     ),
     AccessByEmail AS (
         SELECT

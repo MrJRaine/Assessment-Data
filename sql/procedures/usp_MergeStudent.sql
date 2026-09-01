@@ -139,7 +139,8 @@ BEGIN
              WHEN 'N' THEN CAST(0 AS BIT)
              WHEN ''  THEN NULL
              ELSE NULL END                                          AS Adap
-    FROM Stg_Student s;
+    FROM Stg_Student s
+    WHERE NULLIF(LTRIM(RTRIM(s.Student_Number)), '') IS NOT NULL;   -- drop blank-Student_Number rows (a trailing empty CSV line reads as an all-empty row)
 
     SELECT @StgRowCount = COUNT(*) FROM Wrk_Student;
 
