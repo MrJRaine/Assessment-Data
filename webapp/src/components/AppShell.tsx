@@ -22,7 +22,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
-          <span className="brand-app">Data Platform</span>
+          <span className="brand-app">Short Cycles of Response</span>
         </div>
         <Nav showAnalyst={isAnalyst} />
         <div className="auth">

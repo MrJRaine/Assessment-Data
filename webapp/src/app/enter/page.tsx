@@ -14,8 +14,8 @@ function WindowCard({ w }: { w: TeacherWindow }) {
   )
 }
 
-// One assessment-type section: open windows above the fold + a collapsed accordion of past ones
-// (still selectable, since late entry is allowed) + a count of upcoming windows.
+// One subject section: open cycles above the fold + a collapsed accordion of past ones
+// (still selectable, since late entry is allowed).
 function SubjectSection({ title, windows }: { title: string; windows: TeacherWindow[] }) {
   const current = windows.filter((w) => w.status === 'Open' || w.status === 'ClosesToday')
   const past = windows.filter((w) => w.status === 'Closed')
@@ -31,13 +31,13 @@ function SubjectSection({ title, windows }: { title: string; windows: TeacherWin
           ))}
         </div>
       ) : (
-        <p className="muted">No open {lower} window right now.</p>
+        <p className="muted">No open {lower} cycle right now.</p>
       )}
 
       {past.length > 0 ? (
         <details className="accordion">
           <summary>
-            Past {lower} windows ({past.length}) — still open for late entry
+            Past {lower} cycles ({past.length}) — still open for late entry
           </summary>
           <div className="card-grid">
             {past.map((w) => (
@@ -66,13 +66,13 @@ export default async function WindowSelect() {
 
   return (
     <>
-      <PageHeader title="Data Entry" subtitle="Step 1 — choose an assessment window" />
+      <PageHeader title="Data Entry" subtitle="Step 1 — choose a cycle" />
       {error ? (
         <ErrorNote message={error} />
       ) : windows.length === 0 ? (
         <EmptyState
-          title="No assessment windows for you right now"
-          hint="Windows appear here once you have a roster in an active assessment window."
+          title="No cycles for you right now"
+          hint="Cycles appear here once you have a roster in an active Short Cycle of Response."
         />
       ) : (
         <>
