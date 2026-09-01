@@ -97,6 +97,12 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
         </button>
       </div>
 
+      {/* Covers the whole save->router.refresh() transition, incl. after the form closes but
+          before the refreshed list renders — so a save never looks like it did nothing. */}
+      {pending && (
+        <div className="loading"><span className="spinner" />Saving changes…</div>
+      )}
+
       {error && <div className="notice notice-error">{error}</div>}
 
       {form && (
