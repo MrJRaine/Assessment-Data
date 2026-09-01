@@ -15,20 +15,23 @@
  * intended warehouse before running.
  * ============================================================================
  *
- * WHAT IT CLEARS (23 tables) — all synthetic/pilot data:
+ * WHAT IT CLEARS (24 tables) — all synthetic/pilot data:
  *   - PS roster:      DimStudent, DimStaff, DimSection, FactEnrollment,
  *                     FactSectionTeachers, FactStaffAssignment
  *   - App/assessment: FactAssessmentReading, FactAssessmentWriting,
  *                     FactStudentIPP
  *   - Audit logs:     FactSubmissionAudit, FactDataQualityAudit
  *   - Derived access: StaffSchoolAccess (rebuilt by usp_MergeStaff on ingest)
+ *   - Cycles/windows: DimAssessmentWindow — the OLD auto-generated monthly
+ *                     windows are obsolete under the "Short Cycles of Response"
+ *                     model (2026-08-27). Cleared here; recreate cycles manually
+ *                     via usp_UpsertShortCycle / the admin screen after reset.
  *   - Staging:        Stg_* (5) + Wrk_* (6) transient load tables
  *
- * WHAT IT PRESERVES (reference / seed / config — NOT touched):
+ * WHAT IT PRESERVES (reference / seed — NOT touched):
  *   DimGender, DimGrade, DimRole, DimProgram, DimTerm, DimCalendar,
  *   DimSchool (22 REAL TCRCE schools — NS DoE directory seed),
- *   DimReadingScale, DimReadingBenchmark, DimAchievementLevel,
- *   DimAssessmentWindow (generated 2026-2027 monthly windows).
+ *   DimReadingScale, DimReadingBenchmark, DimAchievementLevel.
  *   All procedures / views / inline TVFs / grants are untouched.
  *
  * NOTE: RLS_UserSchoolAccess / RLS_UserSectionAccess do NOT exist (dropped in
@@ -39,6 +42,9 @@
  *    CSV) format, and the real PS sqlReport exports must be in the Lakehouse
  *    Files/imports/{topic}/ folders. (Source is ahead of live for the CSV
  *    loaders — deploy them at cutover.)
+ * 2b. Short Cycles of Response: this reset clears DimAssessmentWindow. Before
+ *    teachers can enter results, create the cycles (region-wide date ranges per
+ *    subject) via usp_UpsertShortCycle or the Manage-Short-Cycles admin screen.
  * 2. RegionalAnalyst access (IMPORTANT): the jeffrey.raine@tcrce.ca analyst
  *    access is NOT stored anywhere except as the result of ingesting his staff
  *    row. This reset removes it (DimStaff/FactStaffAssignment/StaffSchoolAccess
@@ -83,6 +89,12 @@ TRUNCATE TABLE FactDataQualityAudit;
 TRUNCATE TABLE StaffSchoolAccess;
 
 -- ============================================================================
+-- 4b. CLEAR — assessment cycles/windows. The old auto-generated monthly windows
+--     are obsolete; recreate "Short Cycles of Response" manually after reset.
+-- ============================================================================
+TRUNCATE TABLE DimAssessmentWindow;
+
+-- ============================================================================
 -- 5. CLEAR — transient staging / work tables (reloaded each ingest anyway)
 -- ============================================================================
 TRUNCATE TABLE Stg_Student;
@@ -114,15 +126,15 @@ UNION ALL SELECT 'FactStudentIPP',       COUNT(*), 'expect 0' FROM FactStudentIP
 UNION ALL SELECT 'FactSubmissionAudit',  COUNT(*), 'expect 0' FROM FactSubmissionAudit
 UNION ALL SELECT 'FactDataQualityAudit', COUNT(*), 'expect 0' FROM FactDataQualityAudit
 UNION ALL SELECT 'StaffSchoolAccess',    COUNT(*), 'expect 0' FROM StaffSchoolAccess
+UNION ALL SELECT 'DimAssessmentWindow',  COUNT(*), 'expect 0' FROM DimAssessmentWindow
 ORDER BY TableName;
 
 -- ============================================================================
 -- VERIFY — PRESERVED reference/config tables should be UNCHANGED (non-zero).
--- DimSchool must read 22 (the NS DoE TCRCE seed). DimAssessmentWindow should
--- still hold the generated 2026-2027 monthly windows.
+-- DimSchool must read 22 (the NS DoE TCRCE seed). (DimAssessmentWindow is NOT
+-- here — it is cleared above; Short Cycles are created manually after reset.)
 -- ============================================================================
 SELECT 'DimSchool'            AS TableName, COUNT(*) AS Rows, 'expect 22'        AS Expect FROM DimSchool
-UNION ALL SELECT 'DimAssessmentWindow',  COUNT(*), 'expect >0 (windows)'  FROM DimAssessmentWindow
 UNION ALL SELECT 'DimReadingScale',      COUNT(*), 'expect >0 (seed)'     FROM DimReadingScale
 UNION ALL SELECT 'DimReadingBenchmark',  COUNT(*), 'expect >0 (seed)'     FROM DimReadingBenchmark
 UNION ALL SELECT 'DimAchievementLevel',  COUNT(*), 'expect >0 (seed)'     FROM DimAchievementLevel
