@@ -54,6 +54,14 @@ export default async function Home() {
         />
         {isAnalyst ? (
           <CardLink
+            href="/cycles"
+            title="Short Cycles"
+            desc="Create and manage the Short Cycles of Response — the assessment date ranges teachers enter results into. Regional analysts only."
+            cta="Manage cycles"
+          />
+        ) : null}
+        {isAnalyst ? (
+          <CardLink
             href="/ingest"
             title="Ingest"
             desc="Upload the latest PowerSchool exports and run the ingestion cycle. Regional analysts only."
