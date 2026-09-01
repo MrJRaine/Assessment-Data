@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { ShortCycle } from '@/lib/data'
-import { saveShortCycle, setShortCycleActive, type ShortCycleInput } from './actions'
+import { saveShortCycle, type ShortCycleInput } from './actions'
 
 const SUBJECTS = ['Reading', 'Writing', 'Math'] as const
 const GRADES = ['PP', 'P', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
@@ -14,8 +14,8 @@ const MONTHS = [
 
 function blankForm(): ShortCycleInput {
   return {
-    id: null,
-    assessmentType: 'Reading',
+    groupId: null,
+    subjects: ['Reading'],
     cycleName: '',
     startDate: '',
     endDate: '',
@@ -28,8 +28,8 @@ function blankForm(): ShortCycleInput {
 
 function toForm(c: ShortCycle): ShortCycleInput {
   return {
-    id: c.id,
-    assessmentType: c.assessmentType,
+    groupId: c.groupId,
+    subjects: [...c.subjects],
     cycleName: c.name,
     startDate: c.startDate,
     endDate: c.endDate,
@@ -37,6 +37,7 @@ function toForm(c: ShortCycle): ShortCycleInput {
     maxGrade: c.maxGrade,
     benchmarkMonth: c.benchmarkMonth,
     active: c.active,
+    existingRows: c.rows.map((r) => ({ subject: r.subject, id: r.id })),
   }
 }
 
@@ -56,6 +57,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
   const [pending, startTransition] = useTransition()
 
   function validate(f: ShortCycleInput): string | null {
+    if (f.subjects.length === 0) return 'Select at least one subject.'
     if (!f.cycleName.trim()) return 'Cycle name is required.'
     if (!f.startDate || !f.endDate) return 'Start and end dates are required.'
     if (f.endDate < f.startDate) return 'End date must be on or after the start date.'
@@ -63,34 +65,29 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
     return null
   }
 
+  function run(fn: () => Promise<void>) {
+    setError(null)
+    startTransition(async () => {
+      try { await fn(); router.refresh() } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    })
+  }
+
   function submit(f: ShortCycleInput) {
     const v = validate(f)
     if (v) { setError(v); return }
-    setError(null)
-    startTransition(async () => {
-      try {
-        await saveShortCycle(f)
-        setForm(null)
-        router.refresh()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      }
-    })
+    run(async () => { await saveShortCycle(f); setForm(null) })
   }
 
   function toggleActive(c: ShortCycle) {
-    setError(null)
-    startTransition(async () => {
-      try {
-        await setShortCycleActive(toForm(c), !c.active)
-        router.refresh()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e))
-      }
-    })
+    run(() => saveShortCycle({ ...toForm(c), subjects: c.rows.map((r) => r.subject), active: !c.active }))
   }
 
-  const isReading = form?.assessmentType === 'Reading'
+  function toggleSubject(f: ShortCycleInput, s: string) {
+    const subjects = f.subjects.includes(s) ? f.subjects.filter((x) => x !== s) : [...f.subjects, s]
+    setForm({ ...f, subjects })
+  }
+
+  const showBenchmark = form?.subjects.includes('Reading')
 
   return (
     <>
@@ -104,16 +101,22 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
 
       {form && (
         <div className="cycle-form">
-          <h2 className="section-title">{form.id ? 'Edit cycle' : 'New cycle'}</h2>
+          <h2 className="section-title">{form.groupId ? 'Edit cycle' : 'New cycle'}</h2>
           <div className="cycle-form-grid">
-            <label>Subject
-              <select value={form.assessmentType}
-                      onChange={(e) => setForm({ ...form, assessmentType: e.target.value })}>
-                {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </label>
+            <div className="cycle-form-subjects">
+              <span className="cycle-form-label">Subjects</span>
+              <div className="cycle-subject-checks">
+                {SUBJECTS.map((s) => (
+                  <label key={s}>
+                    <input type="checkbox" checked={form.subjects.includes(s)}
+                           onChange={() => toggleSubject(form, s)} />
+                    {s}
+                  </label>
+                ))}
+              </div>
+            </div>
             <label>Cycle name
-              <input type="text" value={form.cycleName} placeholder="e.g. Cycle 1 – Fall Reading"
+              <input type="text" value={form.cycleName} placeholder="e.g. Cycle 1 – Fall"
                      onChange={(e) => setForm({ ...form, cycleName: e.target.value })} />
             </label>
             <label>Start date
@@ -134,8 +137,8 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
               </select>
             </label>
-            {isReading && (
-              <label>Benchmark month
+            {showBenchmark && (
+              <label>Benchmark month <span className="muted">(reading)</span>
                 <select value={form.benchmarkMonth ?? ''}
                         onChange={(e) => setForm({ ...form, benchmarkMonth: e.target.value ? Number(e.target.value) : null })}>
                   <option value="">Auto (dominant month)</option>
@@ -149,7 +152,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
               Active
             </label>
           </div>
-          {isReading && (
+          {showBenchmark && (
             <p className="cycle-form-hint">
               Reading levels are scored on each student’s program scale (English → EN, French Immersion → FR).
               Benchmark month sets which grade-month expectation applies; leave on Auto to use the cycle’s
@@ -177,7 +180,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
           <thead>
             <tr>
               <th>Cycle</th>
-              <th>Subject</th>
+              <th>Subjects</th>
               <th>Dates</th>
               <th>Grades</th>
               <th>Benchmark</th>
@@ -187,13 +190,13 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
           </thead>
           <tbody>
             {initialCycles.map((c) => (
-              <tr key={c.id} style={c.active ? undefined : { opacity: 0.5 }}>
+              <tr key={c.key} style={c.active ? undefined : { opacity: 0.5 }}>
                 <td>{c.name}{!c.active && <span className="muted"> (inactive)</span>}</td>
-                <td>{c.assessmentType}</td>
+                <td>{c.subjects.join(', ')}</td>
                 <td className="muted">{c.startDate} → {c.endDate}</td>
                 <td className="muted">{c.minGrade}–{c.maxGrade}</td>
                 <td className="muted">
-                  {c.assessmentType === 'Reading'
+                  {c.subjects.includes('Reading')
                     ? (c.benchmarkMonth ? MONTHS[c.benchmarkMonth - 1] : 'Auto')
                     : '—'}
                 </td>

@@ -40,6 +40,7 @@ CREATE TABLE DimAssessmentWindow (
     ProgramFamily       VARCHAR(50)     NULL,       -- joins DimProgram.ProgramFamily; NULL = all programs (region-wide Short Cycle)
     ScaleSystem         VARCHAR(20)     NULL,       -- joins DimReadingScale.ScaleSystem; NULL for Writing/Math and region-wide cycles (scale resolved per student)
     BenchmarkMonth      INT             NULL,       -- 1-12: explicit grade-month benchmark for a READING cycle; NULL = fall back to the dominant month of [StartDate, EndDate]
+    CycleGroupID        VARCHAR(36)     NULL,       -- groups the per-subject rows of one multi-subject Short Cycle of Response (shared name/dates); NULL for legacy single windows
     ActiveFlag          BIT             NOT NULL,
     CreatedDate         DATETIME2(0)    NOT NULL,
     CreatedBy           VARCHAR(100)    NULL,

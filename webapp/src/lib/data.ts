@@ -70,24 +70,33 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }))
 }
 
+export interface ShortCycleRow {
+  subject: string // 'Reading' | 'Writing' | 'Math'
+  id: string // that subject's AssessmentWindowID (string -- BIGINT precision)
+  active: boolean
+}
+
 export interface ShortCycle {
-  id: string // AssessmentWindowID (string -- BIGINT exceeds JS Number precision)
+  groupId: string | null // CycleGroupID; null for legacy single windows (each its own cycle)
+  key: string // stable grouping key for React (groupId ?? 'win:<id>')
   name: string
-  assessmentType: string // 'Reading' | 'Writing' | 'Math'
+  subjects: string[] // subjects the cycle currently covers (active rows)
   schoolYear: string
-  status: string // Upcoming | Open | ClosesToday | Closed
+  status: string // Upcoming | Open | ClosesToday | Closed (rows share dates -> same status)
   startDate: string // 'YYYY-MM-DD'
   endDate: string
   minGrade: string
   maxGrade: string
-  benchmarkMonth: number | null // 1-12, reading only; null = dominant-month fallback
-  active: boolean
+  benchmarkMonth: number | null // 1-12, from the reading row; null = dominant-month fallback
+  active: boolean // any row active
+  rows: ShortCycleRow[] // every per-subject row (for edit reconciliation)
 }
 
 /**
- * All Short Cycles of Response, for the admin management screen. Cycles are region-wide config
- * (date ranges), not per-user PII, so a plain SP query is fine (mirrors getWindowEndDate). Status
- * is date-derived in Atlantic time to match the entry gate.
+ * All Short Cycles of Response, grouped for the admin screen. A cycle is one or more per-subject
+ * DimAssessmentWindow rows sharing a CycleGroupID (multi-subject); legacy rows with no group id are
+ * treated as their own single-subject cycle. Config, not per-user PII, so a plain SP query is fine
+ * (mirrors getWindowEndDate). Status is date-derived in Atlantic time to match the entry gate.
  */
 export async function getShortCycles(): Promise<ShortCycle[]> {
   const rows = await query<{
@@ -100,13 +109,14 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     MinGrade: string
     MaxGrade: string
     BenchmarkMonth: number | null
+    CycleGroupID: string | null
     ActiveFlag: boolean
     Status: string
   }>(`
     SELECT
       CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
       WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-      MinGrade, MaxGrade, BenchmarkMonth, ActiveFlag,
+      MinGrade, MaxGrade, BenchmarkMonth, CycleGroupID, ActiveFlag,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
@@ -114,20 +124,42 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
         ELSE 'Open'
       END AS Status
     FROM DimAssessmentWindow
-    ORDER BY AssessmentType, StartDate DESC, WindowName`)
-  return rows.map((r) => ({
-    id: String(r.AssessmentWindowID),
-    name: r.WindowName,
-    assessmentType: r.AssessmentType,
-    schoolYear: r.SchoolYear,
-    status: r.Status,
-    startDate: toYMD(r.StartDate),
-    endDate: toYMD(r.EndDate),
-    minGrade: r.MinGrade,
-    maxGrade: r.MaxGrade,
-    benchmarkMonth: r.BenchmarkMonth == null ? null : Number(r.BenchmarkMonth),
-    active: Boolean(r.ActiveFlag),
-  }))
+    ORDER BY StartDate DESC, WindowName, AssessmentType`)
+
+  // Group per-subject rows into cycles by CycleGroupID (ungrouped rows stand alone).
+  const groups = new Map<string, typeof rows>()
+  for (const r of rows) {
+    const key = r.CycleGroupID ?? `win:${r.AssessmentWindowID}`
+    const g = groups.get(key)
+    if (g) g.push(r)
+    else groups.set(key, [r] as typeof rows)
+  }
+
+  const cycles: ShortCycle[] = []
+  for (const [key, grp] of groups) {
+    const first = grp[0]
+    const activeRows = grp.filter((r) => r.ActiveFlag)
+    const subjectRows = activeRows.length ? activeRows : grp
+    const subjects = [...new Set(subjectRows.map((r) => r.AssessmentType))]
+    const readingRow = grp.find((r) => r.AssessmentType === 'Reading' && r.ActiveFlag)
+      ?? grp.find((r) => r.AssessmentType === 'Reading')
+    cycles.push({
+      groupId: first.CycleGroupID ?? null,
+      key,
+      name: first.WindowName,
+      subjects,
+      schoolYear: first.SchoolYear,
+      status: first.Status,
+      startDate: toYMD(first.StartDate),
+      endDate: toYMD(first.EndDate),
+      minGrade: first.MinGrade,
+      maxGrade: first.MaxGrade,
+      benchmarkMonth: readingRow?.BenchmarkMonth == null ? null : Number(readingRow.BenchmarkMonth),
+      active: grp.some((r) => r.ActiveFlag),
+      rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag) })),
+    })
+  }
+  return cycles.sort((a, b) => b.startDate.localeCompare(a.startDate) || a.name.localeCompare(b.name))
 }
 
 /**

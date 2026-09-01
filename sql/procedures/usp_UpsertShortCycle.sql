@@ -44,6 +44,7 @@ CREATE PROCEDURE dbo.usp_UpsertShortCycle
     @MinGrade           VARCHAR(10)  = 'PP',         -- whole-population default
     @MaxGrade           VARCHAR(10)  = '12',
     @BenchmarkMonth     INT          = NULL,         -- 1-12: explicit reading benchmark month (NULL = dominant-month fallback); reading only
+    @CycleGroupID       VARCHAR(36)  = NULL,         -- groups the per-subject rows of one multi-subject cycle (app-generated GUID)
     @ActiveFlag         BIT          = 1,            -- 0 to deactivate/hide a cycle
     @AssessmentWindowID BIGINT       = NULL,         -- NULL = create; else edit this cycle
     @CallerUPN          VARCHAR(255) = NULL          -- recorded as CreatedBy (audit)
@@ -88,12 +89,12 @@ BEGIN
         -- ---- CREATE -------------------------------------------------------
         INSERT INTO DimAssessmentWindow (
             WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-            MinGrade, MaxGrade, ProgramFamily, ScaleSystem, BenchmarkMonth, ActiveFlag,
+            MinGrade, MaxGrade, ProgramFamily, ScaleSystem, BenchmarkMonth, CycleGroupID, ActiveFlag,
             CreatedDate, CreatedBy, LastUpdated
         )
         VALUES (
             @CycleName, @AssessmentType, @SchoolYear, @StartDate, @EndDate,
-            @MinGrade, @MaxGrade, NULL, NULL, @BenchmarkMonth, @ActiveFlag,
+            @MinGrade, @MaxGrade, NULL, NULL, @BenchmarkMonth, @CycleGroupID, @ActiveFlag,
             @Now, @CallerUPN, @Now
         );
 
@@ -124,6 +125,7 @@ BEGIN
             ProgramFamily  = NULL,      -- region-wide: never scope by program
             ScaleSystem    = NULL,      -- scale resolved per student, not on the cycle
             BenchmarkMonth = @BenchmarkMonth,
+            CycleGroupID   = @CycleGroupID,
             ActiveFlag     = @ActiveFlag,
             LastUpdated    = @Now
         WHERE AssessmentWindowID = @AssessmentWindowID;
