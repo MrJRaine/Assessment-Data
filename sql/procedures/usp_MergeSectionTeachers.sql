@@ -134,7 +134,19 @@ BEGIN
             NULL                                AS SourceSystemID
         FROM Stg_CoTeacher c
         WHERE NULLIF(LTRIM(RTRIM(c.Email)), '') IS NOT NULL
-    ) u;
+    ) u
+    -- Only keep assignments where BOTH sides resolve in our system: the section is a
+    -- current DimSection row AND the teacher is a current, active DimStaff row. Drops
+    -- rows for placeholder/closed/dropped sections and for people not in the staff
+    -- export (often non-teaching/inactive staff) -- both orphaned the DQ business-key
+    -- checks (SectionID / TeacherEmail not found) and can't be joined to anything
+    -- downstream anyway. Also keeps this consistent with usp_MergeSection dropping
+    -- sections whose teacher is unresolved or whose enrolled count is 0.
+    WHERE EXISTS (SELECT 1 FROM DimSection ds
+                  WHERE ds.SectionID = u.SectionID AND ds.IsCurrent = 1)
+      AND EXISTS (SELECT 1 FROM DimStaff st
+                  WHERE LOWER(st.Email) = u.TeacherEmail
+                    AND st.IsCurrent = 1 AND st.ActiveFlag = 1);
 
     SET @WrkRowCount = @@ROWCOUNT;
 
