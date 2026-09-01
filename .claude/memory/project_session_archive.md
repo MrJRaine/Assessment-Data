@@ -1114,3 +1114,23 @@ A very large session. Net: the SCD same-day work and a whole new **ongoing-asses
 - **Containers:** `awdev` :3001 (AUTH_MODE=dev); `awlive` stopped; probe image/branch parked.
 - **Git:** branch `phase-3b-webapp-b6`, many per-phase commits, pushed at this wrap.
 - **Next:** W4b–d (Writing web UI) + deploy Writing SQL to live + the `tvf_TeacherRoster` dup-fix to live + the web-app image to a Canadian host.
+
+## Session 2026-08-26 → 08-27 — resumed after summer; Writing UI finished, auth hardening, PRODUCTION CUTOVER + real-data ingest debugged to clean; Short Cycles pivot; capability model
+
+Long multi-part session (branch `phase-3b-webapp-b6`). Arcs, in order:
+
+**Writing web UI finished + polish (08-26).** Completed the student-detail Reading|Writing toggle (last piece), so the whole Writing feature (entry grid, cohort toggle, detail toggle) is done. Fixed subject persistence (cohort→detail→back keeps Reading/Writing). Restarted the Podman machine + `awdev` after the break. Built reading-benchmark reference spreadsheets (docs/reference/*.csv, P–6 × Sept–Jun, min/max cells).
+
+**Auth hardening (08-27).** Split the single Entra app into a dedicated LOGIN app (`AUTH_ENTRA_*` in auth.ts) vs the WAREHOUSE service principal (`ENTRA_*` in db.ts), no fallback. Added file-mounted secret support (`load-secrets.cjs` preloaded via `node --require`, podman `*_FILE` convention, fail-closed). Hardened `.dockerignore` (all `.env*` out of build context). Documented AUTH_URL + prod redirect URI for data.tcrce.ca. Verified the split via the sign-in redirect's client_id (sentinel test on dev).
+
+**PRODUCTION (08-27).** The web app was deployed by IT to on-prem bare metal at **data.tcrce.ca** — Canadian, internal-network-only, running the login/data split + file-mounted secrets; end-to-end Entra sign-in confirmed. (Web-app image redeploy is now deferred; the app is run LOCALLY via `awlive` on `webapp/.env` against the live warehouse.)
+
+**Short Cycles of Response pivot (08-27).** Mgmt dropped auto-generated monthly windows for manually-defined, region-wide "Short Cycles" (arbitrary date ranges, all subjects, MULTI-SUBJECT via a shared `CycleGroupID`, per-student reading scale by program, explicit BenchmarkMonth override). Built `usp_UpsertShortCycle`, reworked `usp_UpsertReadingAssessment` + `tvf_TeacherRoster` to resolve scale from student program (not the cycle), migrations for BenchmarkMonth + CycleGroupID, a `/cycles` admin screen (multi-select subjects, loading indicator), and a full terminology/brand/tab-title rename to "Short Cycles of Response".
+
+**Capability model + sysAdmin (08-27).** Replaced the "any RegionalAnalyst" gate on /cycles and /ingest with a curated `StaffAppAccess` table (per-staff `IsSysAdmin`/`CanManageCycles`/`CanRunIngest`, separate lists). `usp_TriggerIngestCycle` now gates on StaffAppAccess (not DimStaff) so a sysAdmin can bootstrap the FIRST ingest on an empty roster — this survives the reset. Fixed `/cycles` missing from the auth middleware matcher (was 500 unauthenticated).
+
+**CUTOVER + INGEST DEBUG (08-27).** Ran `reset_for_production.sql` on live, then debugged the first real ingest from silent-0-rows to a clean DQ-passing run. Gotchas (all fixed + committed; captured in decision record + fabric skill): loader base-name globs (`Students*` not `AssessmentData*`); trailing empty-quoted CSV line → blank-key junk rows (guard each merge's business key); StaffSchoolAccess/FactStaffAssignment referencing `0000` + closed schools → filter to active DimSchool; staff-assignment duplicate current rows → GROUP BY (email,school,role); FactSectionTeachers orphans → emit only where section+teacher resolve; 0-enrollment placeholder sections dropped; 2 alt high schools (1254/1255) added. Ingest reported "completed successfully" via the /ingest button.
+
+**Feedback captured this session:** commit cadence; loading states (recurring); troubleshooting method (gather facts before eliminating causes — user called out repeated premature conclusions); gh-token-via-git-credential.
+
+**Left off:** ingest CLEAN, real rosters on live. NEW ISSUE for next session: **student data shows in the warehouse tables but NOT in the app's Student Data screen** — likely an `@UPN`/AccessLevel scoping thing (jeffrey.raine's DimStaff RegionalAnalyst resolution, or the UPN the app passes). Also pending: create the first Short Cycles; web-app image → data.tcrce.ca; optional hardenings (CSP, SP ReadData).

@@ -300,3 +300,13 @@ BEGIN
 END;
 ```
 This bit `usp_UpsertShortCycle` — every validation THROW errored Msg 102, the `CREATE PROCEDURE` silently failed, and the proc "did not exist" at call time. When Fabric reports `Msg 102 Incorrect syntax near ';'` on THROW lines, wrap them in BEGIN...END.
+
+## Real-data PowerSchool ingest gotchas (2026-08-27, first live cutover)
+
+**`COPY INTO` file globs must match the actual export filenames.** Loaders globbed `imports/{topic}/AssessmentData*` but PS sqlReport downloads are `Students.csv` / `Staff.csv` / `Sections.csv` / `Enrollments.csv` / `Co-Teachers.csv`. A non-matching glob loads **0 rows with only a WARNING** ("No datasets were found that match the expression ...") — and the orchestrator then "completes successfully" because merging empty staging is a valid no-op. Fixed to `<BaseName>*` globs. **Lesson: a clean ingest with an empty warehouse → check `SELECT COUNT(*) FROM Stg_<Topic>` FIRST.**
+
+**PS exports end with a trailing empty-quoted line** (`"","","",…`) that `COPY INTO` reads as a valid all-empty data row → one JUNK row per file (blank business key; blanks pad/cast to `SchoolID '0000'` / `TermID 0`). **Guard every merge's business key** — drop rows with a blank `Student_Number` / `Email_Addr` / `SectionID`. This alone cleared several `SchoolID`/`TermID` orphans.
+
+**DQ orphan / IsCurrent checks examine ALL SCD versions, not just `IsCurrent=1`.** A merge fix that only *closes* a bad row (IsCurrent=0) does NOT clear the orphan — the closed row still trips the check. To clear existing bad rows after a merge fix, TRUNCATE the affected table (or reset) before re-ingesting.
+
+**Staff data reality:** staff carry stale `CanChangeSchool` / `HomeSchoolID` to CLOSED schools plus the `0000` district marker → filter `StaffSchoolAccess` + `FactStaffAssignment` to `DimSchool.ActiveFlag = 1`. Two PS Group numbers can map to the same RoleCode at one school → `GROUP BY (Email, School, Role)` to avoid duplicate current `FactStaffAssignment` rows (the "2 current rows" IsCurrent violation).
