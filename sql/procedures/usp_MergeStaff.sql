@@ -505,41 +505,51 @@ BEGIN
     TRUNCATE TABLE StaffSchoolAccess;
 
     INSERT INTO StaffSchoolAccess (StaffKey, Email, SchoolID, AccessLevel, LastRebuilt)
-    -- HomeSchoolID contribution (one row per active school-tier staff with a home school)
-    SELECT
-        StaffKey,
-        Email,
-        HomeSchoolID,
-        AccessLevel,
-        GETDATE()
-    FROM DimStaff
-    WHERE IsCurrent     = 1
-      AND ActiveFlag    = 1
-      AND AccessLevel  IS NOT NULL
-      AND HomeSchoolID IS NOT NULL
+    SELECT x.StaffKey, x.Email, x.SchoolID, x.AccessLevel, GETDATE()
+    FROM (
+        -- HomeSchoolID contribution (one row per active school-tier staff with a home school)
+        SELECT
+            StaffKey,
+            Email,
+            RIGHT('0000' + HomeSchoolID, 4) AS SchoolID,
+            AccessLevel
+        FROM DimStaff
+        WHERE IsCurrent     = 1
+          AND ActiveFlag    = 1
+          AND AccessLevel  IS NOT NULL
+          AND HomeSchoolID IS NOT NULL
 
-    UNION   -- de-dupes overlap with CanChangeSchool
+        UNION   -- de-dupes overlap with CanChangeSchool
 
-    -- CanChangeSchool contribution (one row per parsed entry)
-    SELECT
-        ds.StaffKey,
-        ds.Email,
-        CASE
-            WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
-            ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
-        END,
-        ds.AccessLevel,
-        GETDATE()
-    FROM DimStaff ds
-    CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
-    WHERE ds.IsCurrent       = 1
-      AND ds.ActiveFlag      = 1
-      AND ds.AccessLevel    IS NOT NULL
-      AND ds.CanChangeSchool IS NOT NULL
-      AND s.value           IS NOT NULL
-      AND LTRIM(RTRIM(s.value)) <> ''
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999;
+        -- CanChangeSchool contribution (one row per parsed entry)
+        SELECT
+            ds.StaffKey,
+            ds.Email,
+            CASE
+                WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
+                ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
+            END,
+            ds.AccessLevel
+        FROM DimStaff ds
+        CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
+        WHERE ds.IsCurrent       = 1
+          AND ds.ActiveFlag      = 1
+          AND ds.AccessLevel    IS NOT NULL
+          AND ds.CanChangeSchool IS NOT NULL
+          AND s.value           IS NOT NULL
+          AND LTRIM(RTRIM(s.value)) <> ''
+          AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
+          AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999
+    ) x
+    -- Only grant access to schools that actually exist and are active in DimSchool.
+    -- Drops the '0000' district marker and stale CanChangeSchool/HomeSchoolID entries
+    -- for CLOSED schools that PowerSchool still lists — both would orphan the DQ check
+    -- and neither is actionable (closed schools have no students; district/region access
+    -- comes from the RegionalAnalyst role, not per-school rows).
+    WHERE EXISTS (
+        SELECT 1 FROM DimSchool sch
+        WHERE sch.SchoolID = x.SchoolID AND sch.ActiveFlag = 1
+    );
 
     SET @SsaRowCount = @@ROWCOUNT;
 
