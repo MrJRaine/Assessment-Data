@@ -1,11 +1,12 @@
 /*******************************************************************************
  * Procedure: usp_TriggerIngestCycle
- * Purpose: Power Apps wrapper for the Regional Analyst Ingest screen
- *          (scrIngest). Validates that the caller has
- *          AccessLevel = 'RegionalAnalyst' on DimStaff, then invokes the
- *          orchestrator usp_RunFullIngestCycle. Lets regional analysts
- *          self-serve PS data refreshes through the app instead of needing
- *          warehouse SQL access.
+ * Purpose: Web-app/Power Apps wrapper for the Ingest screen. Validates that the
+ *          caller has ingest permission in StaffAppAccess (CanRunIngest or
+ *          IsSysAdmin), then invokes the orchestrator usp_RunFullIngestCycle.
+ *          Gating on StaffAppAccess rather than a DimStaff role is deliberate: it
+ *          survives a production reset, so a sysAdmin can run the FIRST ingest
+ *          when DimStaff is still empty (post-reset bootstrap). Lets authorized
+ *          staff self-serve PS refreshes without warehouse SQL access.
  * Created: 2026-05-22
  * Region: Canada East (PIIDPA compliant)
  *
@@ -30,9 +31,8 @@
  *
  * THROW codes (per project_submission_validation_strategy memory):
  *   --- Layer 2 permission failures (51030-51049) ---
- *   51030  caller not in DimStaff (IsCurrent=1)
- *   51033  caller AccessLevel is not 'RegionalAnalyst' (NEW code reserved
- *          for this proc; admins/teachers/specialists denied)
+ *   51033  caller lacks ingest permission in StaffAppAccess (no row, or both
+ *          CanRunIngest and IsSysAdmin are 0)
  *
  * Error handling:
  *   No TRY/CATCH. Errors from the orchestrator (data quality fail, missing
@@ -54,31 +54,23 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @CallerEmail       VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
-    DECLARE @CallerStaffKey    BIGINT;
-    DECLARE @CallerAccessLevel VARCHAR(50);
+    DECLARE @CallerEmail VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
+    DECLARE @CanIngest   BIT;
 
     -- =========================================================================
-    -- Layer 2 — 51030: caller resolves to a current DimStaff row
+    -- Layer 2 — 51033: ingest permission from the StaffAppAccess allowlist
+    -- (CanRunIngest or IsSysAdmin). Gating on THIS table rather than DimStaff is
+    -- deliberate: StaffAppAccess survives a production reset, so a sysAdmin can run
+    -- the FIRST ingest when DimStaff is still empty (no RegionalAnalyst exists yet).
+    -- That breaks the post-reset bootstrap deadlock without hand-INSERTing a staff row.
     -- =========================================================================
-    SELECT TOP 1
-        @CallerStaffKey    = StaffKey,
-        @CallerAccessLevel = AccessLevel
-    FROM DimStaff
-    WHERE LOWER(Email) = @CallerEmail
-      AND IsCurrent = 1;
+    SELECT TOP 1 @CanIngest = CASE WHEN IsSysAdmin = 1 OR CanRunIngest = 1 THEN 1 ELSE 0 END
+    FROM StaffAppAccess
+    WHERE LOWER(Email) = @CallerEmail;
 
-    IF @CallerStaffKey IS NULL
+    IF @CanIngest IS NULL OR @CanIngest = 0
     BEGIN
-        ;THROW 51030, 'usp_TriggerIngestCycle: caller does not resolve to a current DimStaff row.', 1;
-    END;
-
-    -- =========================================================================
-    -- Layer 2 — 51033: role gate — only Regional Analysts can trigger ingests
-    -- =========================================================================
-    IF @CallerAccessLevel IS NULL OR @CallerAccessLevel <> 'RegionalAnalyst'
-    BEGIN
-        ;THROW 51033, 'usp_TriggerIngestCycle: only Regional Analysts can trigger an ingest cycle. Contact a Regional Analyst if a PS data refresh is needed.', 1;
+        ;THROW 51033, 'usp_TriggerIngestCycle: you do not have permission to run an ingest cycle (StaffAppAccess CanRunIngest or IsSysAdmin required).', 1;
     END;
 
     -- =========================================================================

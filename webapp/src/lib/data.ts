@@ -398,6 +398,7 @@ export async function getCallerAccessLevel(upn: string): Promise<string | null> 
 }
 
 export interface CallerCapabilities {
+  isSysAdmin: boolean // super-user: implies all capabilities
   canManageCycles: boolean // /cycles admin
   canRunIngest: boolean // /ingest admin
 }
@@ -405,16 +406,21 @@ export interface CallerCapabilities {
 /**
  * App-level admin capabilities for the signed-in user, from the curated StaffAppAccess allowlist
  * (one column per capability, matched case-insensitively by email). Narrower than the analyst role:
- * a staff email with no row here has NO admin capabilities. Gates /cycles and /ingest (their pages,
- * server actions, nav items, and home cards).
+ * a staff email with no row here has NO admin capabilities. IsSysAdmin implies every capability.
+ * Gates /cycles and /ingest (their pages, server actions, nav items, and home cards).
  */
 export async function getCallerCapabilities(upn: string): Promise<CallerCapabilities> {
-  const rows = await query<{ CanManageCycles: boolean; CanRunIngest: boolean }>(
-    `SELECT TOP 1 CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
+  const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
+    `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
     { UPN: upn },
   )
   const r = rows[0]
-  return { canManageCycles: Boolean(r?.CanManageCycles), canRunIngest: Boolean(r?.CanRunIngest) }
+  const sysAdmin = Boolean(r?.IsSysAdmin)
+  return {
+    isSysAdmin: sysAdmin,
+    canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
+    canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+  }
 }
 
 export interface CohortStudent {

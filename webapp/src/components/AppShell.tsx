@@ -9,11 +9,11 @@ export default async function AppShell({ children }: { children: React.ReactNode
   // StaffAppAccess allowlist (their pages and actions enforce it server-side); hide those nav items
   // for anyone without the capability so they aren't dead ends. "/" is public, so an unauthenticated
   // visitor (entra mode) has no UPN -> default to no capabilities.
-  let caps = { canManageCycles: false, canRunIngest: false }
+  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   try {
     caps = await getCallerCapabilities(await getCurrentUpn())
   } catch {
-    caps = { canManageCycles: false, canRunIngest: false }
+    caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   }
 
   return (

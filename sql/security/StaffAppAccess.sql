@@ -15,12 +15,19 @@
  * which students a user can see, so a curated allowlist is the right fit.
  *
  * Capabilities (add more columns as new restricted features appear):
+ *   IsSysAdmin      - super-user: implies EVERY capability below (and future ones).
+ *                     A sysAdmin here can run the FIRST ingest after a production
+ *                     reset, when DimStaff is still empty and no one holds the
+ *                     RegionalAnalyst role yet — breaking the bootstrap deadlock
+ *                     without hand-INSERTing a staff row. usp_TriggerIngestCycle
+ *                     gates on this table (not DimStaff) for exactly that reason.
  *   CanManageCycles - create/edit Short Cycles of Response (/cycles)
  *   CanRunIngest    - upload PowerSchool exports + run the ingest cycle (/ingest)
  *
  * The web app (as the service principal) reads this to gate those screens, their
  * nav items, and their home cards. NOT cleared by the production reset (manual
- * admin config, not synthetic data — it survives a data cutover).
+ * admin config, not synthetic data — it survives a data cutover), which is what
+ * lets a sysAdmin bootstrap a freshly-reset warehouse.
  *
  * Email is stored lowercased and matched case-insensitively against the signed-in
  * UPN. A staff email with no row here has NO admin capabilities.
@@ -28,6 +35,7 @@
 
 CREATE TABLE StaffAppAccess (
     Email             VARCHAR(255)  NOT NULL,   -- staff UPN / email (lowercased)
+    IsSysAdmin        BIT           NOT NULL,   -- super-user: implies all capabilities
     CanManageCycles   BIT           NOT NULL,   -- /cycles admin
     CanRunIngest      BIT           NOT NULL,   -- /ingest admin
     LastUpdated       DATETIME2(0)  NOT NULL

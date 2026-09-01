@@ -21,7 +21,7 @@ export default async function Home() {
   // "/" is public, so there may be no signed-in user (entra mode, not yet signed in) — getCurrentUpn
   // throws in that case; fall back to no welcome line rather than erroring the landing page.
   let welcome: string | undefined
-  let caps = { canManageCycles: false, canRunIngest: false }
+  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   try {
     const upn = await getCurrentUpn()
     welcome = `Welcome back, ${friendlyName(upn)}`
