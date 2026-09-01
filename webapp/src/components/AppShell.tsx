@@ -5,8 +5,8 @@ import { getCallerAccessLevel } from '@/lib/data'
 
 // App chrome: brand + primary nav + identity widget, wrapping each page's content.
 export default async function AppShell({ children }: { children: React.ReactNode }) {
-  // Resolve the caller's role once for the chrome. Ingest is RegionalAnalyst-only (the /ingest page
-  // and actions enforce it server-side); hide the nav item for everyone else so it isn't a dead end.
+  // Resolve the caller's role once for the chrome. Cycles + Ingest are RegionalAnalyst-only (their
+  // pages and actions enforce it server-side); hide those nav items for everyone else so they aren't dead ends.
   // "/" is public, so an unauthenticated visitor (entra mode) has no UPN -> default to not-analyst.
   let isAnalyst = false
   try {
@@ -24,7 +24,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">Data Platform</span>
         </div>
-        <Nav showIngest={isAnalyst} />
+        <Nav showAnalyst={isAnalyst} />
         <div className="auth">
           <AuthArea />
         </div>

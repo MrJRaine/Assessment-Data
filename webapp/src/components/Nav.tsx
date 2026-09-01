@@ -8,13 +8,14 @@ const ITEMS = [
   { href: '/enter', label: 'Data Entry' },
   { href: '/students', label: 'Students' },
   { href: '/ipp', label: 'IPPs' },
-  { href: '/ingest', label: 'Ingest' },
+  { href: '/cycles', label: 'Cycles', analyst: true },
+  { href: '/ingest', label: 'Ingest', analyst: true },
 ]
 
-export default function Nav({ showIngest = false }: { showIngest?: boolean }) {
+export default function Nav({ showAnalyst = false }: { showAnalyst?: boolean }) {
   const path = usePathname()
-  // Ingest is RegionalAnalyst-only — hide it from everyone else (the page/actions also enforce it).
-  const items = ITEMS.filter((it) => it.href !== '/ingest' || showIngest)
+  // Cycles + Ingest are RegionalAnalyst-only — hide them from everyone else (the pages/actions also enforce it).
+  const items = ITEMS.filter((it) => !it.analyst || showAnalyst)
   return (
     <nav className="nav">
       {items.map((it) => {

@@ -70,6 +70,66 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }))
 }
 
+export interface ShortCycle {
+  id: string // AssessmentWindowID (string -- BIGINT exceeds JS Number precision)
+  name: string
+  assessmentType: string // 'Reading' | 'Writing' | 'Math'
+  schoolYear: string
+  status: string // Upcoming | Open | ClosesToday | Closed
+  startDate: string // 'YYYY-MM-DD'
+  endDate: string
+  minGrade: string
+  maxGrade: string
+  benchmarkMonth: number | null // 1-12, reading only; null = dominant-month fallback
+  active: boolean
+}
+
+/**
+ * All Short Cycles of Response, for the admin management screen. Cycles are region-wide config
+ * (date ranges), not per-user PII, so a plain SP query is fine (mirrors getWindowEndDate). Status
+ * is date-derived in Atlantic time to match the entry gate.
+ */
+export async function getShortCycles(): Promise<ShortCycle[]> {
+  const rows = await query<{
+    AssessmentWindowID: string
+    WindowName: string
+    AssessmentType: string
+    SchoolYear: string
+    StartDate: unknown
+    EndDate: unknown
+    MinGrade: string
+    MaxGrade: string
+    BenchmarkMonth: number | null
+    ActiveFlag: boolean
+    Status: string
+  }>(`
+    SELECT
+      CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
+      WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
+      MinGrade, MaxGrade, BenchmarkMonth, ActiveFlag,
+      CASE
+        WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
+        WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
+        WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) = EndDate   THEN 'ClosesToday'
+        ELSE 'Open'
+      END AS Status
+    FROM DimAssessmentWindow
+    ORDER BY AssessmentType, StartDate DESC, WindowName`)
+  return rows.map((r) => ({
+    id: String(r.AssessmentWindowID),
+    name: r.WindowName,
+    assessmentType: r.AssessmentType,
+    schoolYear: r.SchoolYear,
+    status: r.Status,
+    startDate: toYMD(r.StartDate),
+    endDate: toYMD(r.EndDate),
+    minGrade: r.MinGrade,
+    maxGrade: r.MaxGrade,
+    benchmarkMonth: r.BenchmarkMonth == null ? null : Number(r.BenchmarkMonth),
+    active: Boolean(r.ActiveFlag),
+  }))
+}
+
 /**
  * The window's EndDate ('YYYY-MM-DD'), or null if not found. Used by the entry save path to date a
  * LATE entry into a closed window at the window's own month-end (the proc's 51017 gate caps the
