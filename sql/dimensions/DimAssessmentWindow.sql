@@ -37,8 +37,9 @@ CREATE TABLE DimAssessmentWindow (
     EndDate             DATE            NOT NULL,
     MinGrade            VARCHAR(10)     NOT NULL,   -- joins DimGrade.GradeCode; 'PP' for whole-population
     MaxGrade            VARCHAR(10)     NOT NULL,   -- joins DimGrade.GradeCode; '12' for whole-population
-    ProgramFamily       VARCHAR(50)     NULL,       -- joins DimProgram.ProgramFamily; NULL = all programs
-    ScaleSystem         VARCHAR(20)     NULL,       -- joins DimReadingScale.ScaleSystem; NULL for Writing/Math
+    ProgramFamily       VARCHAR(50)     NULL,       -- joins DimProgram.ProgramFamily; NULL = all programs (region-wide Short Cycle)
+    ScaleSystem         VARCHAR(20)     NULL,       -- joins DimReadingScale.ScaleSystem; NULL for Writing/Math and region-wide cycles (scale resolved per student)
+    BenchmarkMonth      INT             NULL,       -- 1-12: explicit grade-month benchmark for a READING cycle; NULL = fall back to the dominant month of [StartDate, EndDate]
     ActiveFlag          BIT             NOT NULL,
     CreatedDate         DATETIME2(0)    NOT NULL,
     CreatedBy           VARCHAR(100)    NULL,

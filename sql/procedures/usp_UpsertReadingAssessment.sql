@@ -127,6 +127,7 @@ BEGIN
     DECLARE @WindowMaxGrade         VARCHAR(10);
     DECLARE @WindowProgramFamily    VARCHAR(50);
     DECLARE @WindowScaleSystem      VARCHAR(20);
+    DECLARE @WindowBenchmarkMonth   INT;
     DECLARE @WindowAssessmentType   VARCHAR(20);
     DECLARE @WindowStatus           VARCHAR(20);
     DECLARE @StudentKey             BIGINT;
@@ -186,6 +187,7 @@ BEGIN
         @WindowMaxGrade       = MaxGrade,
         @WindowProgramFamily  = ProgramFamily,
         @WindowScaleSystem    = ScaleSystem,
+        @WindowBenchmarkMonth = BenchmarkMonth,
         @WindowAssessmentType = AssessmentType
     FROM DimAssessmentWindow
     WHERE AssessmentWindowID = @AssessmentWindowID_BI
@@ -309,16 +311,22 @@ BEGIN
     END;
 
     -- =========================================================================
-    -- Compute dominant month for benchmark lookup (property of the WINDOW,
-    -- not the AssessmentDate — per project_reading_scale_design memory).
-    -- Picks the calendar month with the most days in the window range; ties
-    -- broken by earlier month.
+    -- Benchmark month for the DimReadingBenchmark lookup. Use the EXPLICIT month
+    -- set on the Short Cycle if provided; otherwise fall back to the dominant
+    -- month of the range (the calendar month with the most days; a tie is broken
+    -- by month number). Explicit lets a multi-month cycle target the intended
+    -- grade-month expectation rather than the auto-computed one — the reason it
+    -- exists is that "most days" can pick a less representative month when a cycle
+    -- spans several. Property of the WINDOW, not the AssessmentDate.
     -- =========================================================================
-    SELECT TOP 1 @DominantMonth = Month
-    FROM DimCalendar
-    WHERE Date BETWEEN @WindowStartDate AND @WindowEndDate
-    GROUP BY Month
-    ORDER BY COUNT(*) DESC, Month;
+    IF @WindowBenchmarkMonth IS NOT NULL
+        SET @DominantMonth = @WindowBenchmarkMonth;
+    ELSE
+        SELECT TOP 1 @DominantMonth = Month
+        FROM DimCalendar
+        WHERE Date BETWEEN @WindowStartDate AND @WindowEndDate
+        GROUP BY Month
+        ORDER BY COUNT(*) DESC, Month;
 
     -- =========================================================================
     -- Resolve benchmark + ReadingDelta. Missing benchmark for the

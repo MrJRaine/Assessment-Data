@@ -35,7 +35,7 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem, w.BenchmarkMonth,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
@@ -43,13 +43,18 @@ RETURN
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     ),
     WindowDominantMonth AS (
+        -- Explicit benchmark month on the Short Cycle wins; else the dominant
+        -- month of the range (most days; tie broken by month number).
         SELECT
             wed.AssessmentWindowID,
-            (SELECT TOP 1 dc.Month
-             FROM DimCalendar dc
-             WHERE dc.Date BETWEEN wed.WindowStartDate AND wed.WindowEndDate
-             GROUP BY dc.Month
-             ORDER BY COUNT(*) DESC, dc.Month) AS DominantMonth
+            COALESCE(
+                wed.BenchmarkMonth,
+                (SELECT TOP 1 dc.Month
+                 FROM DimCalendar dc
+                 WHERE dc.Date BETWEEN wed.WindowStartDate AND wed.WindowEndDate
+                 GROUP BY dc.Month
+                 ORDER BY COUNT(*) DESC, dc.Month)
+            ) AS DominantMonth
         FROM WindowEffectiveDates wed
     ),
     TeacherApplicable AS (

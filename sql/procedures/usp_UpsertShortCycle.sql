@@ -30,7 +30,7 @@
  *   51032  @EndDate < @StartDate (or a date is NULL)
  *   51033  @MinGrade / @MaxGrade not a valid DimGrade.GradeCode
  *   51034  @MinGrade above @MaxGrade
- *   51035  (reserved)
+ *   51035  @BenchmarkMonth not in 1–12
  *   51036  @AssessmentWindowID supplied for edit but not found
  ******************************************************************************/
 
@@ -43,6 +43,7 @@ CREATE PROCEDURE dbo.usp_UpsertShortCycle
     @EndDate            DATE,
     @MinGrade           VARCHAR(10)  = 'PP',         -- whole-population default
     @MaxGrade           VARCHAR(10)  = '12',
+    @BenchmarkMonth     INT          = NULL,         -- 1-12: explicit reading benchmark month (NULL = dominant-month fallback); reading only
     @ActiveFlag         BIT          = 1,            -- 0 to deactivate/hide a cycle
     @AssessmentWindowID BIGINT       = NULL,         -- NULL = create; else edit this cycle
     @CallerUPN          VARCHAR(255) = NULL          -- recorded as CreatedBy (audit)
@@ -68,6 +69,12 @@ BEGIN
      > (SELECT GradeOrder FROM DimGrade WHERE GradeCode = @MaxGrade)
         ;THROW 51034, 'usp_UpsertShortCycle: @MinGrade must be at or below @MaxGrade.', 1;
 
+    IF @BenchmarkMonth IS NOT NULL AND @BenchmarkMonth NOT BETWEEN 1 AND 12
+        ;THROW 51035, 'usp_UpsertShortCycle: @BenchmarkMonth must be 1-12 (or NULL for dominant-month fallback).', 1;
+
+    -- Benchmark month is reading-specific; ignore it for Writing/Math cycles.
+    IF @AssessmentType <> 'Reading' SET @BenchmarkMonth = NULL;
+
     -- ---- Derive academic school year from the start date (Sep–Aug) ---------
     DECLARE @Y INT = YEAR(@StartDate), @M INT = MONTH(@StartDate);
     DECLARE @SchoolYear VARCHAR(9) =
@@ -81,12 +88,12 @@ BEGIN
         -- ---- CREATE -------------------------------------------------------
         INSERT INTO DimAssessmentWindow (
             WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-            MinGrade, MaxGrade, ProgramFamily, ScaleSystem, ActiveFlag,
+            MinGrade, MaxGrade, ProgramFamily, ScaleSystem, BenchmarkMonth, ActiveFlag,
             CreatedDate, CreatedBy, LastUpdated
         )
         VALUES (
             @CycleName, @AssessmentType, @SchoolYear, @StartDate, @EndDate,
-            @MinGrade, @MaxGrade, NULL, NULL, @ActiveFlag,
+            @MinGrade, @MaxGrade, NULL, NULL, @BenchmarkMonth, @ActiveFlag,
             @Now, @CallerUPN, @Now
         );
 
@@ -116,6 +123,7 @@ BEGIN
             MaxGrade       = @MaxGrade,
             ProgramFamily  = NULL,      -- region-wide: never scope by program
             ScaleSystem    = NULL,      -- scale resolved per student, not on the cycle
+            BenchmarkMonth = @BenchmarkMonth,
             ActiveFlag     = @ActiveFlag,
             LastUpdated    = @Now
         WHERE AssessmentWindowID = @AssessmentWindowID;
