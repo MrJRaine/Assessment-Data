@@ -224,7 +224,11 @@ BEGIN
     -- closed window" block was removed with this change.
 
     -- =========================================================================
-    -- Layer 2 — 51013, 51014: scale resolves, is active, ScaleSystem matches window
+    -- Layer 2 — 51013: scale resolves and is active. @ScaleSystem is the scale of
+    -- the ENTERED level (EN_Reading / FR_Reading), which under the region-wide
+    -- "Short Cycle of Response" model is the student's scale — the cycle no longer
+    -- carries a ScaleSystem. The 51014 "right language for this student" check now
+    -- runs AFTER the student's program is resolved (below), not against the cycle.
     -- =========================================================================
     SELECT
         @StudentLevelOrder = LevelOrder,
@@ -236,11 +240,6 @@ BEGIN
     IF @StudentLevelOrder IS NULL
     BEGIN
         ;THROW 51013, 'usp_UpsertReadingAssessment: @ReadingScaleID does not resolve to an active DimReadingScale row.', 1;
-    END;
-
-    IF @ScaleSystem <> @WindowScaleSystem
-    BEGIN
-        ;THROW 51014, 'usp_UpsertReadingAssessment: scale ScaleSystem does not match window ScaleSystem (e.g. submitting EN_Reading levels to an FR_Reading window).', 1;
     END;
 
     -- =========================================================================
@@ -264,6 +263,25 @@ BEGIN
     SELECT @StudentProgramFamily = ProgramFamily
     FROM DimProgram
     WHERE ProgramCode = @StudentProgramCode;
+
+    -- =========================================================================
+    -- Layer 2 — 51014: the entered scale must be the reading scale for the
+    -- student's PROGRAM family (English -> EN_Reading, French Immersion ->
+    -- FR_Reading). Region-wide "Short Cycles of Response" carry no ScaleSystem,
+    -- so this "right language for this student" guard is program-based, not
+    -- cycle-based. Programs with no reading scale (e.g. French Second Language)
+    -- map to NULL and skip the check (they have no benchmark either — tolerated).
+    -- =========================================================================
+    DECLARE @ExpectedScaleSystem VARCHAR(20) =
+        CASE @StudentProgramFamily
+             WHEN 'English'          THEN 'EN_Reading'
+             WHEN 'French Immersion' THEN 'FR_Reading'
+             ELSE NULL END;
+
+    IF @ExpectedScaleSystem IS NOT NULL AND @ScaleSystem <> @ExpectedScaleSystem
+    BEGIN
+        ;THROW 51014, 'usp_UpsertReadingAssessment: entered scale does not match the student''s program reading scale (e.g. EN_Reading levels for a French Immersion student).', 1;
+    END;
 
     -- =========================================================================
     -- Layer 2 — 51016: student grade within window's [MinGrade, MaxGrade]
@@ -311,7 +329,7 @@ BEGIN
         @ExpectedMinLevel = ExpectedMinLevel,
         @ExpectedMaxLevel = ExpectedMaxLevel
     FROM DimReadingBenchmark
-    WHERE ScaleSystem     = @WindowScaleSystem
+    WHERE ScaleSystem     = @ScaleSystem
       AND ProgramFamily   = @StudentProgramFamily
       AND GradeCode       = @StudentGrade
       AND AssessmentMonth = @DominantMonth;
@@ -319,19 +337,19 @@ BEGIN
     IF @ExpectedMinLevel IS NOT NULL
         SELECT @ExpectedMinOrder = LevelOrder
         FROM DimReadingScale
-        WHERE LevelCode = @ExpectedMinLevel AND ScaleSystem = @WindowScaleSystem;
+        WHERE LevelCode = @ExpectedMinLevel AND ScaleSystem = @ScaleSystem;
 
     IF @ExpectedMaxLevel IS NOT NULL
         SELECT @ExpectedMaxOrder = LevelOrder
         FROM DimReadingScale
-        WHERE LevelCode = @ExpectedMaxLevel AND ScaleSystem = @WindowScaleSystem;
+        WHERE LevelCode = @ExpectedMaxLevel AND ScaleSystem = @ScaleSystem;
 
     IF @ExpectedMinOrder IS NULL OR @ExpectedMaxOrder IS NULL
     BEGIN
         -- Tolerated edge case: no benchmark for this (system, program, grade, month).
         -- Leave @ReadingDelta = NULL; surface a warning in the audit row so admin can decide.
         SET @AuditWarning = CONCAT(
-            '[WARN: no benchmark for ScaleSystem=', @WindowScaleSystem,
+            '[WARN: no benchmark for ScaleSystem=', @ScaleSystem,
             ', ProgramFamily=', COALESCE(@StudentProgramFamily, '(null)'),
             ', Grade=', @StudentGrade,
             ', Month=', CAST(@DominantMonth AS VARCHAR(2)), ']'

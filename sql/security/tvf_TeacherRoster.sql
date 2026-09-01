@@ -164,7 +164,11 @@ RETURN
         sg.FirstName,
         sg.LastName,
         sg.Grade,
-        wed.ScaleSystem,
+        -- Region-wide "Short Cycle of Response" carries no ScaleSystem, so the
+        -- scale to display/enter for each student is derived from their PROGRAM
+        -- (English -> EN_Reading, French Immersion -> FR_Reading).
+        CASE sg.ProgramFamily WHEN 'English'          THEN 'EN_Reading'
+                              WHEN 'French Immersion' THEN 'FR_Reading' END AS ScaleSystem,
         drs.LevelCode        AS ExistingScaleValue,
         far.ReadingDelta     AS ExistingDelta,
         far.AssessmentDate   AS ExistingAssessmentDate,
@@ -190,9 +194,11 @@ RETURN
           AND far.rn = 1
     LEFT JOIN DimReadingScale drs
            ON drs.ReadingScaleID = far.ReadingScaleID
+    -- Benchmark keyed on (ProgramFamily, Grade, dominant month): ProgramFamily
+    -- uniquely determines the scale, so no ScaleSystem condition is needed (the
+    -- cycle carries none under the region-wide model).
     LEFT JOIN DimReadingBenchmark drb
-           ON drb.ScaleSystem     = wed.ScaleSystem
-          AND drb.ProgramFamily   = sg.ProgramFamily
+           ON drb.ProgramFamily   = sg.ProgramFamily
           AND drb.GradeCode       = sg.Grade
           AND drb.AssessmentMonth = wdm.DominantMonth
     LEFT JOIN FactStudentIPP ipp
