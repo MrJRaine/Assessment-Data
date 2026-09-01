@@ -166,7 +166,7 @@ export default function StudentDetailView({
           <table className="grid">
             <thead>
               <tr>
-                <th>Assessment window</th>
+                <th>Cycle</th>
                 <th>Date</th>
                 <th>Ideas</th>
                 <th>Org.</th>
@@ -212,7 +212,7 @@ export default function StudentDetailView({
           <table className="grid">
             <thead>
               <tr>
-                <th>Assessment window</th>
+                <th>Cycle</th>
                 <th>Date</th>
                 <th>Level</th>
                 <th>Δ</th>

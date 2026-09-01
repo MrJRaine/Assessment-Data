@@ -8,5 +8,5 @@ export const config = {
   // Protect the functional routes that read live Fabric data (all call getCurrentUpn()).
   // The landing page (/) stays public so the header's Sign in entry point is reachable;
   // NextAuth's own /api/auth/* endpoints, /login, and static assets are intentionally excluded.
-  matcher: ['/enter/:path*', '/students/:path*', '/ipp/:path*', '/ingest/:path*'],
+  matcher: ['/enter/:path*', '/students/:path*', '/ipp/:path*', '/ingest/:path*', '/cycles/:path*'],
 }

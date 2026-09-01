@@ -38,7 +38,7 @@ BEGIN
     TRUNCATE TABLE Stg_Section;
 
     COPY INTO Stg_Section
-    FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/sections/*'
+    FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/sections/Sections*'
     WITH (
         FILE_TYPE       = 'CSV',
         FIELDTERMINATOR = ',',

@@ -1,6 +1,6 @@
 import { getReadiness } from '@/lib/readiness'
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel } from '@/lib/data'
+import { getCallerCapabilities } from '@/lib/data'
 import { PageHeader, CardLink } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -21,18 +21,18 @@ export default async function Home() {
   // "/" is public, so there may be no signed-in user (entra mode, not yet signed in) — getCurrentUpn
   // throws in that case; fall back to no welcome line rather than erroring the landing page.
   let welcome: string | undefined
-  let isAnalyst = false
+  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   try {
     const upn = await getCurrentUpn()
     welcome = `Welcome back, ${friendlyName(upn)}`
-    isAnalyst = (await getCallerAccessLevel(upn)) === 'RegionalAnalyst'
+    caps = await getCallerCapabilities(upn)
   } catch {
     welcome = undefined
   }
 
   return (
     <>
-      <PageHeader title="Reading Assessment" subtitle={welcome} />
+      <PageHeader title="Short Cycles of Response" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
           href="/students"
@@ -43,7 +43,7 @@ export default async function Home() {
         <CardLink
           href="/enter"
           title="Data Entry"
-          desc="Record reading levels for a class during an open assessment window. The roster grid lets you enter a whole class at once."
+          desc="Record assessment results for a class during an open cycle. The roster grid lets you enter a whole class at once."
           cta="Enter Data"
         />
         <CardLink
@@ -52,7 +52,15 @@ export default async function Home() {
           desc="Confirm which students have an Individual Program Plan by subject, so assessment data is interpreted correctly."
           cta="Confirm plans"
         />
-        {isAnalyst ? (
+        {caps.canManageCycles ? (
+          <CardLink
+            href="/cycles"
+            title="Short Cycles"
+            desc="Create and manage the Short Cycles of Response — the assessment date ranges teachers enter results into. Regional analysts only."
+            cta="Manage cycles"
+          />
+        ) : null}
+        {caps.canRunIngest ? (
           <CardLink
             href="/ingest"
             title="Ingest"

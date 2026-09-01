@@ -8,13 +8,17 @@ const ITEMS = [
   { href: '/enter', label: 'Data Entry' },
   { href: '/students', label: 'Students' },
   { href: '/ipp', label: 'IPPs' },
-  { href: '/ingest', label: 'Ingest' },
+  { href: '/cycles', label: 'Cycles', cap: 'cycles' as const },
+  { href: '/ingest', label: 'Ingest', cap: 'ingest' as const },
 ]
 
-export default function Nav({ showIngest = false }: { showIngest?: boolean }) {
+export default function Nav({ showCycles = false, showIngest = false }: { showCycles?: boolean; showIngest?: boolean }) {
   const path = usePathname()
-  // Ingest is RegionalAnalyst-only — hide it from everyone else (the page/actions also enforce it).
-  const items = ITEMS.filter((it) => it.href !== '/ingest' || showIngest)
+  // Cycles + Ingest are capability-gated (StaffAppAccess) — hide them from anyone without the
+  // capability (the pages/actions also enforce it server-side).
+  const items = ITEMS.filter((it) =>
+    it.cap === 'cycles' ? showCycles : it.cap === 'ingest' ? showIngest : true,
+  )
   return (
     <nav className="nav">
       {items.map((it) => {

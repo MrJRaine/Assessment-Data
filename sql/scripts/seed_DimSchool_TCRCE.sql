@@ -31,8 +31,10 @@ VALUES
     ('0977', 'St. Mary''s Bay Academy',                        'SMBA',  'St. Bernard',     1, GETDATE()),
     ('0981', 'Drumlin Heights Consolidated School',            'DHCS',  'Glenwood',        1, GETDATE()),
     ('1178', 'Yarmouth Consolidated Memorial High School',     'YCMHS', 'Yarmouth',        1, GETDATE()),
-    ('1199', 'Yarmouth Elementary School',                     'YES',   'Yarmouth',        1, GETDATE());
+    ('1199', 'Yarmouth Elementary School',                     'YES',   'Yarmouth',        1, GETDATE()),
+    ('1254', 'Yarmouth Alternative High School',               'YAHS',  'Yarmouth',        1, GETDATE()),
+    ('1255', 'Digby Alternative High School',                  'DAHS',  'Digby',           1, GETDATE());
 
 -- Verify
-SELECT COUNT(*) AS SchoolCount FROM DimSchool;   -- Expected: 22
+SELECT COUNT(*) AS SchoolCount FROM DimSchool;   -- Expected: 24
 SELECT * FROM DimSchool ORDER BY SchoolID;

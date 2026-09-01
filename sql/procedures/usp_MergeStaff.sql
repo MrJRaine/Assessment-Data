@@ -111,17 +111,29 @@ BEGIN
     TRUNCATE TABLE Wrk_StaffAssignment;
 
     INSERT INTO Wrk_StaffAssignment (Email, SchoolID, RoleCode, SourceSystemID)
-    SELECT
-        LOWER(s.Email_Addr)                                  AS Email,
-        CASE WHEN s.SchoolID = '0' THEN '0000'
-             ELSE RIGHT('0000' + s.SchoolID, 4) END          AS SchoolID,
-        r.RoleCode                                           AS RoleCode,
-        s.ID                                                 AS SourceSystemID
-    FROM Stg_Staff s
-    INNER JOIN DimRole r
-            ON CAST(s.[Group] AS INT) = r.RoleNumber
-           AND r.ActiveFlag = 1
-           AND r.RoleCode IS NOT NULL;
+    SELECT a.Email, a.SchoolID, a.RoleCode, MIN(a.SourceSystemID)
+    FROM (
+        SELECT
+            LOWER(s.Email_Addr)                                  AS Email,
+            CASE WHEN s.SchoolID = '0' THEN '0000'
+                 ELSE RIGHT('0000' + s.SchoolID, 4) END          AS SchoolID,
+            r.RoleCode                                           AS RoleCode,
+            s.ID                                                 AS SourceSystemID
+        FROM Stg_Staff s
+        INNER JOIN DimRole r
+                ON CAST(s.[Group] AS INT) = r.RoleNumber
+               AND r.ActiveFlag = 1
+               AND r.RoleCode IS NOT NULL
+        WHERE NULLIF(LTRIM(RTRIM(s.Email_Addr)), '') IS NOT NULL   -- skip blank-email rows (trailing empty CSV line)
+    ) a
+    -- Only assignments at real, ACTIVE schools -- drops assignments PS still lists at
+    -- CLOSED schools (e.g. 0255), which orphaned the DimSchool check.
+    WHERE EXISTS (SELECT 1 FROM DimSchool sch WHERE sch.SchoolID = a.SchoolID AND sch.ActiveFlag = 1)
+    -- Collapse to the FactStaffAssignment grain: one row per (Email, School, Role).
+    -- Two different PS Group numbers can map to the SAME RoleCode at the same school
+    -- (e.g. Group 40 + Group 41 both -> RegionalAnalyst), which otherwise produces two
+    -- current assignment rows for that triple (the "2 current rows" IsCurrent violation).
+    GROUP BY a.Email, a.SchoolID, a.RoleCode;
 
     SET @AssignmentsStaged = @@ROWCOUNT;
 
@@ -165,6 +177,7 @@ BEGIN
                 ORDER BY CAST(ID AS INT) ASC
             ) AS rn
         FROM Stg_Staff
+        WHERE NULLIF(LTRIM(RTRIM(Email_Addr)), '') IS NOT NULL   -- drop blank-email rows (a trailing empty CSV line reads as an all-empty row)
     ),
     AccessByEmail AS (
         SELECT
@@ -505,41 +518,51 @@ BEGIN
     TRUNCATE TABLE StaffSchoolAccess;
 
     INSERT INTO StaffSchoolAccess (StaffKey, Email, SchoolID, AccessLevel, LastRebuilt)
-    -- HomeSchoolID contribution (one row per active school-tier staff with a home school)
-    SELECT
-        StaffKey,
-        Email,
-        HomeSchoolID,
-        AccessLevel,
-        GETDATE()
-    FROM DimStaff
-    WHERE IsCurrent     = 1
-      AND ActiveFlag    = 1
-      AND AccessLevel  IS NOT NULL
-      AND HomeSchoolID IS NOT NULL
+    SELECT x.StaffKey, x.Email, x.SchoolID, x.AccessLevel, GETDATE()
+    FROM (
+        -- HomeSchoolID contribution (one row per active school-tier staff with a home school)
+        SELECT
+            StaffKey,
+            Email,
+            RIGHT('0000' + HomeSchoolID, 4) AS SchoolID,
+            AccessLevel
+        FROM DimStaff
+        WHERE IsCurrent     = 1
+          AND ActiveFlag    = 1
+          AND AccessLevel  IS NOT NULL
+          AND HomeSchoolID IS NOT NULL
 
-    UNION   -- de-dupes overlap with CanChangeSchool
+        UNION   -- de-dupes overlap with CanChangeSchool
 
-    -- CanChangeSchool contribution (one row per parsed entry)
-    SELECT
-        ds.StaffKey,
-        ds.Email,
-        CASE
-            WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
-            ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
-        END,
-        ds.AccessLevel,
-        GETDATE()
-    FROM DimStaff ds
-    CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
-    WHERE ds.IsCurrent       = 1
-      AND ds.ActiveFlag      = 1
-      AND ds.AccessLevel    IS NOT NULL
-      AND ds.CanChangeSchool IS NOT NULL
-      AND s.value           IS NOT NULL
-      AND LTRIM(RTRIM(s.value)) <> ''
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
-      AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999;
+        -- CanChangeSchool contribution (one row per parsed entry)
+        SELECT
+            ds.StaffKey,
+            ds.Email,
+            CASE
+                WHEN TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) = 0 THEN '0000'
+                ELSE RIGHT('0000' + LTRIM(RTRIM(s.value)), 4)
+            END,
+            ds.AccessLevel
+        FROM DimStaff ds
+        CROSS APPLY STRING_SPLIT(ds.CanChangeSchool, ';') AS s
+        WHERE ds.IsCurrent       = 1
+          AND ds.ActiveFlag      = 1
+          AND ds.AccessLevel    IS NOT NULL
+          AND ds.CanChangeSchool IS NOT NULL
+          AND s.value           IS NOT NULL
+          AND LTRIM(RTRIM(s.value)) <> ''
+          AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) IS NOT NULL
+          AND TRY_CAST(LTRIM(RTRIM(s.value)) AS INT) <> 999999
+    ) x
+    -- Only grant access to schools that actually exist and are active in DimSchool.
+    -- Drops the '0000' district marker and stale CanChangeSchool/HomeSchoolID entries
+    -- for CLOSED schools that PowerSchool still lists — both would orphan the DQ check
+    -- and neither is actionable (closed schools have no students; district/region access
+    -- comes from the RegionalAnalyst role, not per-school rows).
+    WHERE EXISTS (
+        SELECT 1 FROM DimSchool sch
+        WHERE sch.SchoolID = x.SchoolID AND sch.ActiveFlag = 1
+    );
 
     SET @SsaRowCount = @@ROWCOUNT;
 

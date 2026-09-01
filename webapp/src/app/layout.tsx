@@ -3,8 +3,8 @@ import type { Metadata } from 'next'
 import AppShell from '@/components/AppShell'
 
 export const metadata: Metadata = {
-  title: 'Assessment Data Platform',
-  description: 'Regional Student Assessment Data Platform',
+  title: 'Short Cycles of Response',
+  description: 'Regional Student Assessment — Short Cycles of Response',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },
