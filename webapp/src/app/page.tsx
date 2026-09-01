@@ -32,7 +32,7 @@ export default async function Home() {
 
   return (
     <>
-      <PageHeader title="Reading Assessment" subtitle={welcome} />
+      <PageHeader title="Short Cycles of Response" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
           href="/students"
