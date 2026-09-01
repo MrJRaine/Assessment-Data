@@ -134,11 +134,15 @@ BEGIN
             ON t.Email = LOWER(s.Email_Addr)
            AND t.IsCurrent = 1
            AND t.ActiveFlag = 1
-    -- Skip placeholder sections with no enrolled students (No_of_students 0 or
-    -- blank). These are often stale/system sections attached to inactive staff and
-    -- add nothing but churn; a real class section has a positive enrolled count.
-    WHERE NULLIF(s.No_of_students, '')  IS NOT NULL   -- has a count
-      AND NULLIF(s.No_of_students, '0') IS NOT NULL;  -- and it isn't zero
+    -- Skip placeholder sections: no enrolled students (No_of_students 0 or blank),
+    -- or an invalid term (TermID 0 / blank / non-numeric — real PS terms are 4-digit).
+    -- These are stale/system sections that add nothing but churn and trip the DQ gate;
+    -- a real class section has a positive enrolled count and a real term. Keeping the
+    -- TermID guard as "not 0" (rather than "in DimTerm") preserves the DQ check's ability
+    -- to still flag a genuinely-missing-but-valid term so we know to seed it.
+    WHERE NULLIF(s.No_of_students, '')  IS NOT NULL        -- has a count
+      AND NULLIF(s.No_of_students, '0') IS NOT NULL        -- and it isn't zero
+      AND ISNULL(TRY_CAST(s.TermID AS INT), 0) <> 0;       -- and a real (non-zero) term
 
     SET @WrkRowCount = @@ROWCOUNT;
 
