@@ -1,19 +1,19 @@
 'use server'
 
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel } from '@/lib/data'
+import { getCallerCapabilities } from '@/lib/data'
 import { execProc } from '@/lib/db'
 import { toUserMessage, UserError } from '@/lib/errors'
 import { uploadImportFile, IMPORT_TOPICS, type ImportTopic } from '@/lib/onelake'
 import { revalidatePath } from 'next/cache'
 
-// Ingest is Regional-Analyst-only (same gate as usp_TriggerIngestCycle). Resolved server-side so a
+// Ingest requires the CanRunIngest capability (StaffAppAccess allowlist). Resolved server-side so a
 // crafted request can't bypass it; the upload writes PS PII to OneLake, so this gate matters.
-async function assertAnalyst(): Promise<string> {
+async function assertIngestAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
-  const role = await getCallerAccessLevel(upn)
-  if (role !== 'RegionalAnalyst') {
-    throw new UserError('Only Regional Analysts can run ingest. Contact a regional analyst if a PowerSchool refresh is needed.')
+  const caps = await getCallerCapabilities(upn)
+  if (!caps.canRunIngest) {
+    throw new UserError('You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed.')
   }
   return upn
 }
@@ -28,7 +28,7 @@ export interface UploadResult {
 /** Upload one PowerSchool export into Files/imports/{topic}/ (replaces the folder's contents). */
 export async function uploadIngestFile(topic: string, formData: FormData): Promise<UploadResult> {
   try {
-    await assertAnalyst()
+    await assertIngestAdmin()
     if (!IMPORT_TOPICS.includes(topic as ImportTopic)) throw new UserError(`Unknown ingest topic: ${topic}`)
     const file = formData.get('file')
     if (!(file instanceof File) || file.size === 0) throw new UserError('No file provided.')
@@ -58,7 +58,7 @@ export interface RunResult {
  */
 export async function runIngestCycle(skipCoTeachers: boolean): Promise<RunResult> {
   try {
-    const upn = await assertAnalyst()
+    const upn = await assertIngestAdmin()
     await execProc('usp_TriggerIngestCycle', { SkipCoTeachers: skipCoTeachers ? 1 : 0, CallerUPN: upn })
     revalidatePath('/ingest')
     return { ok: true, message: 'Ingest cycle completed successfully.' }

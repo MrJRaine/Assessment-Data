@@ -1,18 +1,19 @@
 import Nav from './Nav'
 import AuthArea from './AuthArea'
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel } from '@/lib/data'
+import { getCallerCapabilities } from '@/lib/data'
 
 // App chrome: brand + primary nav + identity widget, wrapping each page's content.
 export default async function AppShell({ children }: { children: React.ReactNode }) {
-  // Resolve the caller's role once for the chrome. Cycles + Ingest are RegionalAnalyst-only (their
-  // pages and actions enforce it server-side); hide those nav items for everyone else so they aren't dead ends.
-  // "/" is public, so an unauthenticated visitor (entra mode) has no UPN -> default to not-analyst.
-  let isAnalyst = false
+  // Resolve the caller's app capabilities once for the chrome. Cycles + Ingest are gated by the
+  // StaffAppAccess allowlist (their pages and actions enforce it server-side); hide those nav items
+  // for anyone without the capability so they aren't dead ends. "/" is public, so an unauthenticated
+  // visitor (entra mode) has no UPN -> default to no capabilities.
+  let caps = { canManageCycles: false, canRunIngest: false }
   try {
-    isAnalyst = (await getCallerAccessLevel(await getCurrentUpn())) === 'RegionalAnalyst'
+    caps = await getCallerCapabilities(await getCurrentUpn())
   } catch {
-    isAnalyst = false
+    caps = { canManageCycles: false, canRunIngest: false }
   }
 
   return (
@@ -24,7 +25,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">Short Cycles of Response</span>
         </div>
-        <Nav showAnalyst={isAnalyst} />
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} />
         <div className="auth">
           <AuthArea />
         </div>

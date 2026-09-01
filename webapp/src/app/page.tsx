@@ -1,6 +1,6 @@
 import { getReadiness } from '@/lib/readiness'
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel } from '@/lib/data'
+import { getCallerCapabilities } from '@/lib/data'
 import { PageHeader, CardLink } from '@/components/ui'
 
 export const dynamic = 'force-dynamic'
@@ -21,11 +21,11 @@ export default async function Home() {
   // "/" is public, so there may be no signed-in user (entra mode, not yet signed in) — getCurrentUpn
   // throws in that case; fall back to no welcome line rather than erroring the landing page.
   let welcome: string | undefined
-  let isAnalyst = false
+  let caps = { canManageCycles: false, canRunIngest: false }
   try {
     const upn = await getCurrentUpn()
     welcome = `Welcome back, ${friendlyName(upn)}`
-    isAnalyst = (await getCallerAccessLevel(upn)) === 'RegionalAnalyst'
+    caps = await getCallerCapabilities(upn)
   } catch {
     welcome = undefined
   }
@@ -52,7 +52,7 @@ export default async function Home() {
           desc="Confirm which students have an Individual Program Plan by subject, so assessment data is interpreted correctly."
           cta="Confirm plans"
         />
-        {isAnalyst ? (
+        {caps.canManageCycles ? (
           <CardLink
             href="/cycles"
             title="Short Cycles"
@@ -60,7 +60,7 @@ export default async function Home() {
             cta="Manage cycles"
           />
         ) : null}
-        {isAnalyst ? (
+        {caps.canRunIngest ? (
           <CardLink
             href="/ingest"
             title="Ingest"

@@ -28,10 +28,11 @@
  *                     via usp_UpsertShortCycle / the admin screen after reset.
  *   - Staging:        Stg_* (5) + Wrk_* (6) transient load tables
  *
- * WHAT IT PRESERVES (reference / seed — NOT touched):
+ * WHAT IT PRESERVES (reference / seed / admin config — NOT touched):
  *   DimGender, DimGrade, DimRole, DimProgram, DimTerm, DimCalendar,
  *   DimSchool (22 REAL TCRCE schools — NS DoE directory seed),
- *   DimReadingScale, DimReadingBenchmark, DimAchievementLevel.
+ *   DimReadingScale, DimReadingBenchmark, DimAchievementLevel,
+ *   StaffAppAccess (manual admin-capability allowlist — must survive a data reset).
  *   All procedures / views / inline TVFs / grants are untouched.
  *
  * NOTE: RLS_UserSchoolAccess / RLS_UserSectionAccess do NOT exist (dropped in

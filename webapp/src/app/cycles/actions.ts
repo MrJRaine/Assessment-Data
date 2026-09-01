@@ -2,19 +2,19 @@
 
 import { randomUUID } from 'node:crypto'
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel } from '@/lib/data'
+import { getCallerCapabilities } from '@/lib/data'
 import { execProc } from '@/lib/db'
 
 /**
- * Managing Short Cycles of Response is a RegionalAnalyst-only action. The /cycles page hides the
- * UI for everyone else, but authorization is enforced HERE too (server-side) so the action can't
- * be reached directly by a non-analyst. Mirrors the ingest gating.
+ * Managing Short Cycles of Response requires the CanManageCycles capability (StaffAppAccess
+ * allowlist). The /cycles page hides the UI for everyone else, but authorization is enforced HERE
+ * too (server-side) so the action can't be reached directly by a non-admin. Mirrors ingest gating.
  */
-async function requireAnalyst(): Promise<string> {
+async function requireCycleAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
-  const role = await getCallerAccessLevel(upn)
-  if (role !== 'RegionalAnalyst') {
-    throw new Error('Regional Analyst access is required to manage assessment cycles.')
+  const caps = await getCallerCapabilities(upn)
+  if (!caps.canManageCycles) {
+    throw new Error('You do not have permission to manage assessment cycles.')
   }
   return upn
 }
@@ -42,7 +42,7 @@ export interface ShortCycleInput {
  * own NULL defaults apply — mssql can't infer a SQL type from a bare JS null.
  */
 export async function saveShortCycle(input: ShortCycleInput): Promise<void> {
-  const upn = await requireAnalyst()
+  const upn = await requireCycleAdmin()
   const subjects = input.subjects.filter((s) => ['Reading', 'Writing', 'Math'].includes(s))
   if (subjects.length === 0) throw new Error('Select at least one subject for the cycle.')
 

@@ -1,6 +1,6 @@
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerAccessLevel, getShortCycles, type ShortCycle } from '@/lib/data'
+import { getCallerCapabilities, getShortCycles, type ShortCycle } from '@/lib/data'
 import ShortCyclesManager from './ShortCyclesManager'
 
 export const dynamic = 'force-dynamic'
@@ -8,12 +8,12 @@ export const dynamic = 'force-dynamic'
 export default async function CyclesPage() {
   const upn = await getCurrentUpn()
 
-  let role: string | null = null
+  let allowed = false
   let cycles: ShortCycle[] = []
   let error: string | null = null
   try {
-    role = await getCallerAccessLevel(upn)
-    if (role === 'RegionalAnalyst') cycles = await getShortCycles()
+    allowed = (await getCallerCapabilities(upn)).canManageCycles
+    if (allowed) cycles = await getShortCycles()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -26,10 +26,10 @@ export default async function CyclesPage() {
       />
       {error ? (
         <ErrorNote message={error} />
-      ) : role !== 'RegionalAnalyst' ? (
+      ) : !allowed ? (
         <EmptyState
-          title="Regional Analyst access required"
-          hint="Managing assessment cycles is restricted to regional analysts."
+          title="Access restricted"
+          hint="Managing assessment cycles is restricted to designated staff."
         />
       ) : (
         <ShortCyclesManager initialCycles={cycles} />
