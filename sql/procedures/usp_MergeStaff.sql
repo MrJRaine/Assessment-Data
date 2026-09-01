@@ -111,18 +111,29 @@ BEGIN
     TRUNCATE TABLE Wrk_StaffAssignment;
 
     INSERT INTO Wrk_StaffAssignment (Email, SchoolID, RoleCode, SourceSystemID)
-    SELECT
-        LOWER(s.Email_Addr)                                  AS Email,
-        CASE WHEN s.SchoolID = '0' THEN '0000'
-             ELSE RIGHT('0000' + s.SchoolID, 4) END          AS SchoolID,
-        r.RoleCode                                           AS RoleCode,
-        s.ID                                                 AS SourceSystemID
-    FROM Stg_Staff s
-    INNER JOIN DimRole r
-            ON CAST(s.[Group] AS INT) = r.RoleNumber
-           AND r.ActiveFlag = 1
-           AND r.RoleCode IS NOT NULL
-    WHERE NULLIF(LTRIM(RTRIM(s.Email_Addr)), '') IS NOT NULL;   -- skip blank-email rows (trailing empty CSV line)
+    SELECT a.Email, a.SchoolID, a.RoleCode, MIN(a.SourceSystemID)
+    FROM (
+        SELECT
+            LOWER(s.Email_Addr)                                  AS Email,
+            CASE WHEN s.SchoolID = '0' THEN '0000'
+                 ELSE RIGHT('0000' + s.SchoolID, 4) END          AS SchoolID,
+            r.RoleCode                                           AS RoleCode,
+            s.ID                                                 AS SourceSystemID
+        FROM Stg_Staff s
+        INNER JOIN DimRole r
+                ON CAST(s.[Group] AS INT) = r.RoleNumber
+               AND r.ActiveFlag = 1
+               AND r.RoleCode IS NOT NULL
+        WHERE NULLIF(LTRIM(RTRIM(s.Email_Addr)), '') IS NOT NULL   -- skip blank-email rows (trailing empty CSV line)
+    ) a
+    -- Only assignments at real, ACTIVE schools -- drops assignments PS still lists at
+    -- CLOSED schools (e.g. 0255), which orphaned the DimSchool check.
+    WHERE EXISTS (SELECT 1 FROM DimSchool sch WHERE sch.SchoolID = a.SchoolID AND sch.ActiveFlag = 1)
+    -- Collapse to the FactStaffAssignment grain: one row per (Email, School, Role).
+    -- Two different PS Group numbers can map to the SAME RoleCode at the same school
+    -- (e.g. Group 40 + Group 41 both -> RegionalAnalyst), which otherwise produces two
+    -- current assignment rows for that triple (the "2 current rows" IsCurrent violation).
+    GROUP BY a.Email, a.SchoolID, a.RoleCode;
 
     SET @AssignmentsStaged = @@ROWCOUNT;
 
