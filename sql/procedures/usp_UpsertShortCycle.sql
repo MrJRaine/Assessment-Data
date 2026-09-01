@@ -14,7 +14,8 @@
  *     ScaleSystem = NULL. The reading scale/benchmark for each student is
  *     resolved from the student's PROGRAM + GRADE at scoring/read time (not
  *     from the cycle), so one cycle serves English and French Immersion alike.
- *   - One subject per cycle (Reading | Writing | Math), same as before.
+ *   - This proc writes ONE subject-row per call. A multi-subject cycle is several
+ *     rows sharing a @CycleGroupID (the app calls this once per selected subject).
  *   - MinGrade/MaxGrade optionally narrow the cycle to a grade band; default is
  *     whole-population ('PP'..'12').
  *   - SchoolYear is derived from StartDate (Sep–Aug academic year).
@@ -53,25 +54,38 @@ BEGIN
     SET NOCOUNT ON;
 
     -- ---- Input validation -------------------------------------------------
+    -- (Each THROW is wrapped in BEGIN...END: Fabric rejects a bare ";THROW" as an IF body.)
     IF @AssessmentType NOT IN ('Reading', 'Writing', 'Math')
+    BEGIN
         ;THROW 51030, 'usp_UpsertShortCycle: @AssessmentType must be Reading, Writing, or Math.', 1;
+    END;
 
     IF @CycleName IS NULL OR LTRIM(RTRIM(@CycleName)) = ''
+    BEGIN
         ;THROW 51031, 'usp_UpsertShortCycle: @CycleName is required.', 1;
+    END;
 
     IF @StartDate IS NULL OR @EndDate IS NULL OR @EndDate < @StartDate
+    BEGIN
         ;THROW 51032, 'usp_UpsertShortCycle: @EndDate must be on or after @StartDate.', 1;
+    END;
 
     IF NOT EXISTS (SELECT 1 FROM DimGrade WHERE GradeCode = @MinGrade)
        OR NOT EXISTS (SELECT 1 FROM DimGrade WHERE GradeCode = @MaxGrade)
+    BEGIN
         ;THROW 51033, 'usp_UpsertShortCycle: @MinGrade/@MaxGrade must be valid DimGrade.GradeCode values.', 1;
+    END;
 
     IF (SELECT GradeOrder FROM DimGrade WHERE GradeCode = @MinGrade)
      > (SELECT GradeOrder FROM DimGrade WHERE GradeCode = @MaxGrade)
+    BEGIN
         ;THROW 51034, 'usp_UpsertShortCycle: @MinGrade must be at or below @MaxGrade.', 1;
+    END;
 
     IF @BenchmarkMonth IS NOT NULL AND @BenchmarkMonth NOT BETWEEN 1 AND 12
+    BEGIN
         ;THROW 51035, 'usp_UpsertShortCycle: @BenchmarkMonth must be 1-12 (or NULL for dominant-month fallback).', 1;
+    END;
 
     -- Benchmark month is reading-specific; ignore it for Writing/Math cycles.
     IF @AssessmentType <> 'Reading' SET @BenchmarkMonth = NULL;
@@ -112,7 +126,9 @@ BEGIN
     BEGIN
         -- ---- EDIT ---------------------------------------------------------
         IF NOT EXISTS (SELECT 1 FROM DimAssessmentWindow WHERE AssessmentWindowID = @AssessmentWindowID)
+        BEGIN
             ;THROW 51036, 'usp_UpsertShortCycle: @AssessmentWindowID not found.', 1;
+        END;
 
         UPDATE DimAssessmentWindow
         SET WindowName     = @CycleName,
