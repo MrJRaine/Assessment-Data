@@ -134,15 +134,15 @@ BEGIN
             ON t.Email = LOWER(s.Email_Addr)
            AND t.IsCurrent = 1
            AND t.ActiveFlag = 1
-    -- Skip placeholder sections: no enrolled students (No_of_students 0 or blank),
-    -- or an invalid term (TermID 0 / blank / non-numeric — real PS terms are 4-digit).
-    -- These are stale/system sections that add nothing but churn and trip the DQ gate;
-    -- a real class section has a positive enrolled count and a real term. Keeping the
-    -- TermID guard as "not 0" (rather than "in DimTerm") preserves the DQ check's ability
-    -- to still flag a genuinely-missing-but-valid term so we know to seed it.
-    WHERE NULLIF(s.No_of_students, '')  IS NOT NULL        -- has a count
-      AND NULLIF(s.No_of_students, '0') IS NOT NULL        -- and it isn't zero
-      AND ISNULL(TRY_CAST(s.TermID AS INT), 0) <> 0;       -- and a real (non-zero) term
+    -- Skip garbage / placeholder rows:
+    --   * a BLANK SectionID — an empty or trailing line read as a data row comes through
+    --     all-empty (SectionID '', SchoolID -> '0000', TermID -> 0). A real section always
+    --     has an ID. This is the actual cause of the '0000/TermID=0' junk section.
+    --   * a placeholder section with no enrolled students (No_of_students 0 or blank) —
+    --     often stale/system sections that add nothing but churn.
+    WHERE NULLIF(LTRIM(RTRIM(s.ID)), '') IS NOT NULL      -- has a SectionID (drops empty-line rows)
+      AND NULLIF(s.No_of_students, '')  IS NOT NULL       -- has an enrolled count
+      AND NULLIF(s.No_of_students, '0') IS NOT NULL;      -- and it isn't zero
 
     SET @WrkRowCount = @@ROWCOUNT;
 
