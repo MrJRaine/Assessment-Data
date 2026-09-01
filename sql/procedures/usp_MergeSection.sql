@@ -133,7 +133,12 @@ BEGIN
     INNER JOIN DimStaff t
             ON t.Email = LOWER(s.Email_Addr)
            AND t.IsCurrent = 1
-           AND t.ActiveFlag = 1;
+           AND t.ActiveFlag = 1
+    -- Skip placeholder sections with no enrolled students (No_of_students 0 or
+    -- blank). These are often stale/system sections attached to inactive staff and
+    -- add nothing but churn; a real class section has a positive enrolled count.
+    WHERE NULLIF(s.No_of_students, '')  IS NOT NULL   -- has a count
+      AND NULLIF(s.No_of_students, '0') IS NOT NULL;  -- and it isn't zero
 
     SET @WrkRowCount = @@ROWCOUNT;
 

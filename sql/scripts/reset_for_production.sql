@@ -30,7 +30,7 @@
  *
  * WHAT IT PRESERVES (reference / seed / admin config — NOT touched):
  *   DimGender, DimGrade, DimRole, DimProgram, DimTerm, DimCalendar,
- *   DimSchool (22 REAL TCRCE schools — NS DoE directory seed),
+ *   DimSchool (24 REAL TCRCE schools — NS DoE directory seed, incl. 2 alt high schools),
  *   DimReadingScale, DimReadingBenchmark, DimAchievementLevel,
  *   StaffAppAccess (manual admin-capability allowlist — must survive a data reset).
  *   All procedures / views / inline TVFs / grants are untouched.
@@ -132,10 +132,10 @@ ORDER BY TableName;
 
 -- ============================================================================
 -- VERIFY — PRESERVED reference/config tables should be UNCHANGED (non-zero).
--- DimSchool must read 22 (the NS DoE TCRCE seed). (DimAssessmentWindow is NOT
+-- DimSchool must read 24 (the NS DoE TCRCE seed). (DimAssessmentWindow is NOT
 -- here — it is cleared above; Short Cycles are created manually after reset.)
 -- ============================================================================
-SELECT 'DimSchool'            AS TableName, COUNT(*) AS Rows, 'expect 22'        AS Expect FROM DimSchool
+SELECT 'DimSchool'            AS TableName, COUNT(*) AS Rows, 'expect 24'        AS Expect FROM DimSchool
 UNION ALL SELECT 'DimReadingScale',      COUNT(*), 'expect >0 (seed)'     FROM DimReadingScale
 UNION ALL SELECT 'DimReadingBenchmark',  COUNT(*), 'expect >0 (seed)'     FROM DimReadingBenchmark
 UNION ALL SELECT 'DimAchievementLevel',  COUNT(*), 'expect >0 (seed)'     FROM DimAchievementLevel
