@@ -286,3 +286,17 @@ Zero change to the proven reading reads; the dim's reading-delta bounds simply a
 - **NULL-safe idempotency**: when a key column can be NULL (writing's `ScaleSystem`), `w.Col = sc.Col` is UNKNOWN for NULLs and the `NOT EXISTS` re-inserts every run — use `ISNULL(w.Col,'~') = ISNULL(sc.Col,'~')`.
 
 **`DROP PROCEDURE IF EXISTS` hygiene**: a bare `CREATE PROCEDURE` errors `Msg 2714 (object already exists)` on redeploy. Every proc/function file should start with `DROP ... IF EXISTS; GO` so a re-run is self-contained (bit us on `usp_RunDataQualityChecks`).
+
+**A bare `;THROW` as an `IF` body fails to parse (2026-08-27).** Fabric rejects
+```sql
+IF <cond>
+    ;THROW 51030, '...', 1;   -- Msg 102, Level 15 'Incorrect syntax near ;'
+```
+even though `IF <cond> SET ...` (no THROW) parses fine. The leading semicolon that THROW conventionally wants is what breaks it here. **Always wrap THROW in a BEGIN...END block** (the pattern the other procs already use):
+```sql
+IF <cond>
+BEGIN
+    ;THROW 51030, '...', 1;
+END;
+```
+This bit `usp_UpsertShortCycle` — every validation THROW errored Msg 102, the `CREATE PROCEDURE` silently failed, and the proc "did not exist" at call time. When Fabric reports `Msg 102 Incorrect syntax near ';'` on THROW lines, wrap them in BEGIN...END.
