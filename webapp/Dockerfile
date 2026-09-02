@@ -32,6 +32,18 @@ FROM node:20-alpine AS proddeps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev || npm install --omit=dev
+# Prune build-only / unused weight HERE, in the stage that OWNS the node_modules layer -- an `rm`
+# in the runner stage can't reclaim it (OCI layers are additive; a later delete just masks the
+# files, the earlier COPY layer still carries their bytes). NONE of these run the standalone server:
+#   - @next/swc-*          : the build-time SWC compiler (~136 MB); `next start` never invokes it,
+#                            and Next's own standalone trace excludes it -- it only rode in because
+#                            we ship the FULL prod node_modules so mssql/tedious's dynamic require
+#                            resolves (see the node_modules note at the top).
+#   - sharp / @img         : Next's image optimizer; this app uses plain <img>, not next/image.
+#   - typescript, @types/* : type tooling, not a runtime dependency.
+RUN rm -rf node_modules/@next/swc-* \
+           node_modules/sharp node_modules/@img \
+           node_modules/typescript node_modules/@types
 
 # ---- runner: minimal non-root runtime image ----
 FROM node:20-alpine AS runner
