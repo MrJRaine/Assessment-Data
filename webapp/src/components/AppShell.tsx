@@ -1,5 +1,6 @@
 import Nav from './Nav'
 import AuthArea from './AuthArea'
+import PostLoginRefresh from './PostLoginRefresh'
 import { getCurrentUpn } from '@/lib/auth'
 import { getCallerCapabilities } from '@/lib/data'
 
@@ -10,11 +11,18 @@ export default async function AppShell({ children }: { children: React.ReactNode
   // for anyone without the capability so they aren't dead ends. "/" is public, so an unauthenticated
   // visitor (entra mode) has no UPN -> default to no capabilities.
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
+  let authed = false
   try {
-    caps = await getCallerCapabilities(await getCurrentUpn())
+    const upn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
+    authed = true
+    caps = await getCallerCapabilities(upn)
   } catch {
     caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
+    authed = false
   }
+
+  // Only meaningful in entra mode (dev has a fixed DEV_FAKE_UPN — nothing to refresh for).
+  const entraMode = (process.env.AUTH_MODE ?? 'dev') === 'entra'
 
   return (
     <>
@@ -31,6 +39,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
         </div>
       </header>
       <main className="container">{children}</main>
+      {entraMode && <PostLoginRefresh authed={authed} />}
     </>
   )
 }
