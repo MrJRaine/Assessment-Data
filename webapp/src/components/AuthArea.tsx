@@ -1,13 +1,21 @@
 import { auth, signIn, signOut } from '@/auth'
+import { getCurrentUpn } from '@/lib/auth'
 
 // Header identity widget. Reflects AUTH_MODE so it works before Entra is wired:
-//  - dev:   shows the configured DEV_FAKE_UPN
+//  - dev:   shows the EFFECTIVE UPN (the dev-impersonation override if set, else DEV_FAKE_UPN),
+//           so the identity widget matches who you're impersonating in screenshots/how-to docs
 //  - entra: shows the signed-in user (or a sign-in button)
 export default async function AuthArea() {
   const mode = process.env.AUTH_MODE ?? 'dev'
 
   if (mode === 'dev') {
-    return <span className="muted">{process.env.DEV_FAKE_UPN ?? 'dev user'} (dev)</span>
+    let upn = process.env.DEV_FAKE_UPN ?? 'dev user'
+    try {
+      upn = await getCurrentUpn() // honours the dev-impersonation cookie
+    } catch {
+      /* misconfigured dev mode — fall back to the env value */
+    }
+    return <span className="muted">{upn} (dev)</span>
   }
 
   const session = await auth()

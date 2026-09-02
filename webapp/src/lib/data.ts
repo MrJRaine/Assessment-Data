@@ -423,6 +423,50 @@ export async function getCallerCapabilities(upn: string): Promise<CallerCapabili
   }
 }
 
+export interface ImpersonationTarget {
+  upn: string
+  fullName: string
+  accessLevel: string | null // 'RegionalAnalyst' | 'Administrator' | 'SpecialistTeacher' | null
+  sections: number // count of current sections they teach (0 = privileged staff with no roster)
+}
+
+/**
+ * DEV-ONLY: list synthetic staff a developer can impersonate for making how-to docs.
+ * Returns teachers who have a current roster (>=1 current section) PLUS any privileged staff
+ * (non-null AccessLevel), teachers first, then alphabetical. Reads synthetic dev data via the
+ * unscoped SP `query` (no PII concern -- dev warehouse only). The CALLER must gate this to dev
+ * mode; it is only ever rendered by the dev impersonation bar.
+ */
+export async function getImpersonationTargets(): Promise<ImpersonationTarget[]> {
+  const rows = await query<{
+    Email: string
+    FirstName: string | null
+    LastName: string | null
+    AccessLevel: string | null
+    Sections: number
+  }>(
+    `SELECT s.Email, s.FirstName, s.LastName, s.AccessLevel,
+            COUNT(DISTINCT sec.SectionKey) AS Sections
+     FROM dbo.DimStaff s
+     LEFT JOIN dbo.DimSection sec
+            ON sec.TeacherStaffKey = s.StaffKey
+           AND sec.IsCurrent = 1
+     WHERE s.IsCurrent = 1
+       AND s.ActiveFlag = 1
+       AND NULLIF(LTRIM(RTRIM(s.Email)), '') IS NOT NULL
+     GROUP BY s.Email, s.FirstName, s.LastName, s.AccessLevel
+     HAVING COUNT(DISTINCT sec.SectionKey) > 0 OR s.AccessLevel IS NOT NULL
+     ORDER BY CASE WHEN COUNT(DISTINCT sec.SectionKey) > 0 THEN 0 ELSE 1 END,
+              s.LastName, s.FirstName`,
+  )
+  return rows.map((r) => ({
+    upn: r.Email,
+    fullName: [r.FirstName, r.LastName].filter(Boolean).join(' ').trim() || r.Email,
+    accessLevel: r.AccessLevel ?? null,
+    sections: Number(r.Sections ?? 0),
+  }))
+}
+
 export interface CohortStudent {
   studentKey: string
   studentNumber: string

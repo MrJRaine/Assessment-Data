@@ -254,3 +254,26 @@ a { color: inherit; text-decoration: none; }
 .toolbar { margin: 1rem 0; }
 .detail-grid { display: grid; gap: 1rem; margin-top: 1rem; }
 .status-strip { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+
+/* dev-only impersonation bar (amber so it is unmistakably a dev tool; never shown in entra/live) */
+.dev-impersonate {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem;
+  padding: 0.4rem 1rem; font-size: 0.85rem;
+  background: #fff7e6; color: #7a5900; border-bottom: 1px solid #f0d68a;
+}
+.dev-impersonate-tag {
+  font-weight: 800; letter-spacing: 0.05em; font-size: 0.7rem;
+  background: #c8860a; color: #fff; padding: 0.1rem 0.4rem; border-radius: 3px;
+}
+.dev-impersonate-label strong { color: #5a4300; }
+.dev-impersonate-badge {
+  margin-left: 0.4rem; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  background: #c8860a; color: #fff; padding: 0.05rem 0.35rem; border-radius: 3px;
+}
+.dev-impersonate-select, .dev-impersonate-input {
+  border: 1px solid #e0c169; border-radius: 4px; padding: 0.25rem 0.4rem;
+  background: #fff; color: var(--ink); font-size: 0.85rem; max-width: 22rem;
+}
+.dev-impersonate-custom { display: flex; align-items: center; gap: 0.35rem; }
+.dev-impersonate-pending { display: flex; align-items: center; gap: 0.4rem; color: #7a5900; }
+.dev-impersonate .spinner { border-top-color: #c8860a; }

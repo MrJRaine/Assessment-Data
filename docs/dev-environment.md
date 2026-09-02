@@ -174,6 +174,15 @@ podman run -d --name awtest --env-file webapp/.env.live -p 3000:3000 assessment-
 is still the real service principal, so dev validates the full identity → `@UPN` scope → read/write/ingest
 flow against live Fabric — everything except the literal Entra sign-in screen.
 
+**Impersonation bar (dev only).** In dev mode an amber bar sits under the header letting you run the app
+as any synthetic staff member without editing `DEV_FAKE_UPN` or restarting the container — handy for
+making how-to docs from a teacher's / admin's point of view. Pick from the dropdown (teachers with a
+roster, plus privileged staff) or type any UPN; **Reset to default** clears it back to `DEV_FAKE_UPN`.
+It writes an httpOnly `dev_impersonate_upn` cookie that `getCurrentUpn()` honours **only** in dev mode
+(the server actions and `getCurrentUpn` both hard-gate on dev), so it is completely inert on the
+entra/live path — the bar never renders and the cookie is never read there. The identity widget and the
+capability-gated nav (Cycles/Ingest) both re-resolve to the impersonated UPN so screenshots are accurate.
+
 > **TODO (IT, deferred):** to run dev under real Entra login (`AUTH_MODE=entra` in `.env.dev`), the dev
 > callback `http://localhost:3001/api/auth/callback/microsoft-entra-id` must be added to the
 > `StudentDataAssessment` app registration's redirect URIs. IT-gated ([[project_entra_appreg_it_gated]]).
