@@ -126,9 +126,12 @@ BEGIN
                AND r.RoleCode IS NOT NULL
         WHERE NULLIF(LTRIM(RTRIM(s.Email_Addr)), '') IS NOT NULL   -- skip blank-email rows (trailing empty CSV line)
     ) a
-    -- Only assignments at real, ACTIVE schools -- drops assignments PS still lists at
-    -- CLOSED schools (e.g. 0255), which orphaned the DimSchool check.
-    WHERE EXISTS (SELECT 1 FROM DimSchool sch WHERE sch.SchoolID = a.SchoolID AND sch.ActiveFlag = 1)
+    -- NOTE: do NOT filter to active schools here. Wrk_StaffAssignment feeds BOTH the
+    -- FactStaffAssignment insert AND the AccessByEmail CTE that computes AccessLevel
+    -- (a district RegionalAnalyst's role lives at SchoolID '0000', which is not an
+    -- "active school"). Filtering here strips district/closed-school assignments from
+    -- the AccessLevel computation too, nulling AccessLevel for district-level staff.
+    -- The active-school filter belongs on the FactStaffAssignment insert only (Step 5c).
     -- Collapse to the FactStaffAssignment grain: one row per (Email, School, Role).
     -- Two different PS Group numbers can map to the SAME RoleCode at the same school
     -- (e.g. Group 40 + Group 41 both -> RegionalAnalyst), which otherwise produces two
@@ -463,7 +466,13 @@ BEGIN
           AND w.SchoolID = f.SchoolID
           AND w.RoleCode = f.RoleCode
     WHERE f.IsCurrent = 1
-      AND w.Email IS NULL;
+      AND (
+              w.Email IS NULL                                   -- assignment gone from the import
+           OR NOT EXISTS (                                       -- ...or its school has since closed
+                  SELECT 1 FROM DimSchool sch
+                  WHERE sch.SchoolID = f.SchoolID AND sch.ActiveFlag = 1
+              )
+          );
 
     SET @AssignmentsClosedMissing = @@ROWCOUNT;
 
@@ -480,7 +489,12 @@ BEGIN
     INNER JOIN DimStaff d
             ON d.Email = w.Email
            AND d.IsCurrent = 1
-    WHERE NOT EXISTS (
+    -- Only assignments at real, ACTIVE schools land in the fact -- drops district ('0000')
+    -- and assignments PS still lists at CLOSED schools (e.g. 0255), which otherwise orphan
+    -- the DimSchool FK check in the DQ gate. AccessLevel is already computed upstream from
+    -- the UNfiltered Wrk_StaffAssignment, so district-level roles still resolve their access.
+    WHERE EXISTS (SELECT 1 FROM DimSchool sch WHERE sch.SchoolID = w.SchoolID AND sch.ActiveFlag = 1)
+      AND NOT EXISTS (
         SELECT 1
         FROM FactStaffAssignment f
         WHERE f.StaffKey  = d.StaffKey
