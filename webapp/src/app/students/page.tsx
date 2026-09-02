@@ -33,7 +33,7 @@ export default async function StudentsPage({
 
   return (
     <>
-      <PageHeader title="Student Data" subtitle="Cohort — filter, view distribution, and drill into a student" />
+      <PageHeader title="Student Data" subtitle="Cohort — filter, view distribution, and drill down to the student level" />
       <div className="subject-toggle">
         <Link href="/students" className={!isWriting ? 'toggle-on' : 'toggle'}>
           Reading
