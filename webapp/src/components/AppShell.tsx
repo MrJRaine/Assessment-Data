@@ -49,6 +49,16 @@ export default async function AppShell({ children }: { children: React.ReactNode
 
   return (
     <>
+      {/* Above the header so it sits outside the app chrome -- keeps the header-and-below area
+          clean for how-to-doc screenshots (crop this bar out and the shot looks like production). */}
+      {devMode && (
+        <DevImpersonationBar
+          current={currentUpn}
+          defaultUpn={process.env.DEV_FAKE_UPN ?? null}
+          impersonating={impersonating}
+          targets={impersonationTargets}
+        />
+      )}
       <header className="header">
         <div className="brand">
           {/* TCRCE logo at webapp/public/logo.png */}
@@ -61,14 +71,6 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <AuthArea />
         </div>
       </header>
-      {devMode && (
-        <DevImpersonationBar
-          current={currentUpn}
-          defaultUpn={process.env.DEV_FAKE_UPN ?? null}
-          impersonating={impersonating}
-          targets={impersonationTargets}
-        />
-      )}
       <main className="container">{children}</main>
       {entraMode && <PostLoginRefresh authed={authed} />}
     </>
