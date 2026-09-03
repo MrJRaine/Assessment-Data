@@ -9,19 +9,24 @@
  * Created: 2026-09-02
  * Region: Canada East (PIIDPA compliant)
  *
- * Grain: one CURRENT row per (StudentKey, AssessmentWindowID, MathTaskKey).
- *   Unlike Reading/Writing's dated multiple-entry model, a math result is a
- *   binary can/cannot, so usp_UpsertMathAssessment OVERWRITES Result in place
- *   (a correction just flips the bit) rather than keeping a dated history.
- *   [DESIGN CHOICE TO CONFIRM — if a per-attempt history is wanted, add
- *   AssessmentDate to the grain and pick latest-by-date like the reading reads.]
+ * Grain: Student x Window x Task x DATE — one row per (StudentKey,
+ *   AssessmentWindowID, MathTaskKey, AssessmentDate). KEEPS CHANGE HISTORY like
+ *   FactAssessmentReading/Writing's ongoing-assessment model: usp_UpsertMathAssessment
+ *   INSERTS a new dated row (AssessmentDate capped at MIN(today, window EndDate) so
+ *   late entry bins into the window's month); a same-date re-entry for the same task
+ *   UPDATES that day's row. Every read that resolves a per-(student, task) result
+ *   MUST pick the LATEST — ROW_NUMBER() OVER (PARTITION BY StudentKey,
+ *   AssessmentWindowID, MathTaskKey ORDER BY AssessmentDate DESC, MathAssessmentID DESC)
+ *   = 1 — or a student/task fans out to one row per entry (see the fabric-warehouse-sql
+ *   skill's "ongoing-assessment / multiple-entry fact patterns" note).
  *
  * Key resolution: StudentKey / EnteredByStaffKey are the surrogate values
  *   current at entry time (assessment-fact insert-time resolution — see
  *   project_assessment_fact_scd_policy). Reads join back to DimStudent /
  *   DimStaff / DimMathTask; no business keys are stored on the fact.
  *
- * Derived layers (computed in the read views, NOT stored here):
+ * Derived layers (computed in the read views over each student's LATEST result per
+ * task, NOT stored here):
  *   - by task:            SUM(Result) / #students assessed -> proportion -> colour band
  *   - by student, unit:   AVG(Result) over the unit's tasks -> comprehension band
  *                         ('Incomplete' when < 80% of the unit's tasks are scored)

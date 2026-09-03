@@ -27,7 +27,7 @@ stay unified. (Not split scales.)
 
 **Schema (built on branch `feat/math-p6-entry`, DEV only):**
 - `DimMathTask` — bilingual task bank. Natural key `(GradeCode, AssessmentMonth, UnitName, QuestionNumber)` (UnitName is in the key — `2a` recurs across units). `QuestionNumber` ('2a'/'2b') is separate from `DisplayOrder` (multi-part sort). `OutcomeCode` (e.g. `N02.01`) split out of the description. `AnswerKey` kept as a teacher marking reference. Type-1 (ActiveFlag soft-retire).
-- `FactAssessmentMath` — grain `(StudentKey, AssessmentWindowID, MathTaskKey) → Result BIT`. **Binary overwrite, no dated history** (a correction flips the bit) — *flagged to confirm.*
+- `FactAssessmentMath` — **KEEPS CHANGE HISTORY like Reading/Writing (decided 2026-09-03)**: grain `(StudentKey, AssessmentWindowID, MathTaskKey, AssessmentDate) → Result BIT`; the write inserts a new dated row (date capped at MIN(today, window EndDate)), same-date re-entry updates that day's row, and every read picks the **latest-by-date** per (student, window, task). Columns were already present, so the deployed dev table needs no rebuild.
 - `DimMathComprehensionBand` — the 4 tiers, code→(label, colour); thresholds live in the read view (mirrors Writing's avg→`DimAchievementLevel`-by-code pattern).
 
 **Seed pipeline (proven on dev):** grade-level CSVs authored to **mirror `DimMathTask`'s
@@ -47,4 +47,5 @@ UI for teachers**. Also open: **IPP handling now that Math is a distinct type** 
 student may carry a Math IPP and/or a Literacy IPP; `FactStudentIPP` is already
 per-`Subject` and [[project_ipp_type_labelling]] already labels "Math IPP", so this is
 mainly clarifying the confirm-gate UX across both. Plus: FR descriptions, full P-6 seed,
-and the two confirmations (binary-overwrite grain; show AnswerKey on the grid).
+and one remaining confirmation — show AnswerKey on the entry grid. (History grain
+decided 2026-09-03: keep it, like reading/writing.)
