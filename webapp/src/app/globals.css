@@ -47,8 +47,11 @@ a { color: inherit; text-decoration: none; }
 .authform { display: flex; align-items: center; gap: 0.5rem; }
 
 /* layout */
-.container { max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; }
+.container { max-width: 960px; margin: 1rem auto 2rem; padding: 0 1.5rem; }
+.page-header { margin-bottom: 0.6rem; }
 .page-header h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+.page-header p { margin: 0; }
+.back-row { margin: 0.3rem 0 0.8rem; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 
 /* scaffold note */
@@ -279,14 +282,14 @@ a { color: inherit; text-decoration: none; }
 .dev-impersonate .spinner { border-top-color: #c8860a; }
 
 /* ---- Math roster entry (student x task mastery matrix) ---- */
-.math-entry { margin-top: .5rem; }
+.math-entry { margin-top: 0; }
 .filter-label { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 0 0 .4rem; }
 .grade-chips { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .grade-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .35rem .8rem; border-radius: 8px; border: 1px solid var(--border); background: var(--card); font-size: .86rem; font-weight: 600; cursor: pointer; color: var(--ink); font-family: inherit; }
 .grade-chip .c { color: var(--muted); font-weight: 500; }
 .grade-chip.on { background: var(--primary); color: #fff; border-color: var(--primary); }
 .grade-chip.on .c { color: rgba(255,255,255,.8); }
-.mfilter { border: 1px solid var(--border); border-radius: 9px; background: var(--card); margin-bottom: 1rem; }
+.mfilter { border: 1px solid var(--border); border-radius: 9px; background: var(--card); margin-bottom: 0.7rem; }
 .mfilter-summary { width: 100%; text-align: left; border: none; background: none; cursor: pointer; padding: .6rem .85rem; font-size: .9rem; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: .5rem; font-family: inherit; }
 .mfilter-summary .chev { color: var(--muted); font-size: .8rem; }
 .mfilter-body { padding: .2rem .85rem .8rem; border-top: 1px solid var(--border); }
@@ -296,11 +299,11 @@ a { color: inherit; text-decoration: none; }
 .math-entry .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .schip { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .6rem; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); font-size: .82rem; cursor: pointer; }
 .schip input { accent-color: var(--primary); margin: 0; }
-.mtoolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.mtoolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
 .mtoolbar .spacer { flex: 1; }
 .linkbtn { border: none; background: none; color: var(--primary-hover); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .btn-ghost.editing { border-color: var(--primary); color: var(--primary-hover); background: #e3f2f9; }
-.mlegend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 1rem; font-size: .8rem; color: var(--muted); align-items: center; }
+.mlegend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 0.7rem; font-size: .8rem; color: var(--muted); align-items: center; }
 .mlegend .grp { display: flex; align-items: center; gap: .45rem; }
 .mlegend .mleft { margin-left: .3rem; }
 .mlegend .sw { width: .85rem; height: .85rem; border-radius: 3px; display: inline-block; }

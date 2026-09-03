@@ -70,7 +70,7 @@ export default async function RosterGrid({
   return (
     <>
       <PageHeader title="Roster entry" subtitle={`${groupLabel(groupKey)} · ${subject}`} />
-      <p>
+      <p className="back-row">
         <Link href={`/enter/${windowId}`} className="back-link">
           &larr; Back to groups
         </Link>
