@@ -14,7 +14,7 @@ outcome-based **tasks**; a student is scored **1 = can do / 0 = cannot** per tas
 Two derived layers (from the curriculum exemplar's Term-1 format — the authoritative
 one; the sheet's Term 2/3 were half-revised, ignore them):
 - **By task:** proportion correct (`SUM/#students`) → colour heatmap `>80 / 65-80 / 50-64 / <50` (class-weakness spotlight).
-- **By student, per unit:** average of their 0/1 over the unit → **4-tier Achievement Level** (UI label; table stays `DimMathComprehensionBand`): Emerging `<0.50` · Developing `0.50–<0.75` · Meeting `0.75–<0.90` · In-depth `≥0.90`; **"Incomplete"** when `<80%` of the unit's tasks are scored.
+- **By student, per unit:** average of their 0/1 over the unit → **4-tier Achievement Level** (UI label; table stays `DimMathComprehensionBand`): Emerging `<0.50` · Developing `0.50–<0.75` · Meeting `0.75–<0.90` · In-depth `≥0.90`; **"Incomplete"** when `<80%` of the unit's tasks are scored. IPP handling per unit: **all-IPP** → plain IPP flag; **no IPP** → normal level; **mix of IPP-omitted + assessed** → the calculated level gets a **purple ring** (the IPP colour) to flag it as partly assessed.
 
 **Cadence:** Math rides the SAME region-wide **Short Cycles** as Reading/Writing —
 NO separate term cadence (the exemplar's Term 1/2/3 split was just spreadsheet

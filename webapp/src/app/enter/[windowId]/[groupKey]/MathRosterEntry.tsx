@@ -140,23 +140,26 @@ export default function MathRosterEntry({
   function heatClass(p: number | null) {
     return p == null ? 'none' : p > 0.8 ? 'h4' : p >= 0.65 ? 'h3' : p >= 0.5 ? 'h2' : 'h1'
   }
-  function unitBand(s: Student, u: Unit): { cls: string; label: string } {
+  function unitBand(s: Student, u: Unit): { cls: string; label: string; partial: boolean } {
     const tasks = activeTasks(u)
-    let inScope = 0, filled = 0, ones = 0
+    let inScope = 0, filled = 0, ones = 0, ippCount = 0
     for (const t of tasks) {
       const v = cellMark(s.studentKey, t.mathTaskKey)
-      if (v === 'ipp') continue // IPP excluded from tally AND the 80% denominator
+      if (v === 'ipp') { ippCount++; continue } // IPP excluded from tally AND the 80% denominator
       inScope++
       if (v === '1' || v === '0') { filled++; if (v === '1') ones++ }
     }
-    if (inScope === 0) return { cls: 'bipp', label: 'IPP' }
-    if (filled === 0) return { cls: 'inc', label: '—' }
-    if (filled / inScope < 0.8) return { cls: 'inc', label: 'Incomplete' }
+    // All IPP -> plain IPP flag; no in-scope task scored -> —; too few scored -> Incomplete.
+    if (inScope === 0) return { cls: 'bipp', label: 'IPP', partial: false }
+    if (filled === 0) return { cls: 'inc', label: '—', partial: false }
+    if (filled / inScope < 0.8) return { cls: 'inc', label: 'Incomplete', partial: false }
+    // A calculated level that omitted some tasks as IPP -> flag it partial (purple ring).
+    const partial = ippCount > 0
     const avg = ones / filled
-    if (avg < 0.5) return { cls: 'b1', label: 'Emerging' } // <50%
-    if (avg < 0.75) return { cls: 'b2', label: 'Developing' } // 50 to <75%
-    if (avg < 0.9) return { cls: 'b3', label: 'Meeting' } // 75 to <90%
-    return { cls: 'b4', label: 'In-depth' } // >=90%
+    if (avg < 0.5) return { cls: 'b1', label: 'Emerging', partial } // <50%
+    if (avg < 0.75) return { cls: 'b2', label: 'Developing', partial } // 50 to <75%
+    if (avg < 0.9) return { cls: 'b3', label: 'Meeting', partial } // 75 to <90%
+    return { cls: 'b4', label: 'In-depth', partial } // >=90%
   }
 
   // --- dirty + save ---
@@ -311,6 +314,7 @@ export default function MathRosterEntry({
           <span className="grp"><span className="mband b2">Developing</span>50–&lt;75%</span>
           <span className="grp"><span className="mband b3">Meeting</span>75–&lt;90%</span>
           <span className="grp"><span className="mband b4">In-depth</span>≥90%</span>
+          <span className="grp"><span className="mband b3 partial-ipp">Level</span>partly assessed (IPP omitted)</span>
           <span className="grp mleft"><strong>Class %</strong>
             <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80
           </span>
@@ -390,7 +394,7 @@ export default function MathRosterEntry({
                             <td className="col-pct" />
                             {cols.map((s) => {
                               const b = unitBand(s, u)
-                              return <td className="stu" key={s.studentKey}><span className={`mband ${b.cls}`}>{b.label}</span></td>
+                              return <td className="stu" key={s.studentKey}><span className={`mband ${b.cls}${b.partial ? ' partial-ipp' : ''}`}>{b.label}</span></td>
                             })}
                           </tr>
                           {!uColl && tasks.map((t) => {

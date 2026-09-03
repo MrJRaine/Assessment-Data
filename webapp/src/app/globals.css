@@ -312,6 +312,7 @@ a { color: inherit; text-decoration: none; }
 .mband.b1 { background: #b23347; } .mband.b2 { background: #c07d16; } .mband.b3 { background: #2f8f4e; } .mband.b4 { background: #0092c9; }
 .mband.bipp { background: #6b4fbb; }
 .mband.inc { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-weight: 600; }
+.mband.partial-ipp { box-shadow: 0 0 0 2px #6b4fbb; }
 .mgrade { margin-bottom: 1.6rem; }
 .mghead { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 .5rem; }
 .mghead.clickable { cursor: pointer; }
