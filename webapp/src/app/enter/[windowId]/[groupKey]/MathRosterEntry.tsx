@@ -321,7 +321,7 @@ export default function MathRosterEntry({
           <span className="grp"><span className="mband b3">Meeting</span>75–&lt;90%</span>
           <span className="grp"><span className="mband b4">In-depth</span>≥90%</span>
           <span className="grp"><span className="partial-swatch" /> Some tasks omitted</span>
-          <span className="grp mleft"><strong>Class %</strong>
+          <span className="grp"><strong>Class %</strong>
             <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80
           </span>
         </div>
