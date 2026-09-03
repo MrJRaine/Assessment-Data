@@ -153,10 +153,10 @@ export default function MathRosterEntry({
     if (filled === 0) return { cls: 'inc', label: '—' }
     if (filled / inScope < 0.8) return { cls: 'inc', label: 'Incomplete' }
     const avg = ones / filled
-    if (avg < 0.5) return { cls: 'b1', label: 'Emerging' }
-    if (avg <= 0.75) return { cls: 'b2', label: 'Developing' }
-    if (avg < 0.9) return { cls: 'b3', label: 'Meeting' }
-    return { cls: 'b4', label: 'In-depth' }
+    if (avg < 0.5) return { cls: 'b1', label: 'Emerging' } // <50%
+    if (avg < 0.75) return { cls: 'b2', label: 'Developing' } // 50 to <75%
+    if (avg < 0.9) return { cls: 'b3', label: 'Meeting' } // 75 to <90%
+    return { cls: 'b4', label: 'In-depth' } // >=90%
   }
 
   // --- dirty + save ---
@@ -306,10 +306,10 @@ export default function MathRosterEntry({
       {/* legend */}
       {!editMode && (
         <div className="mlegend">
-          <span className="grp"><strong>Comprehension</strong></span>
+          <span className="grp"><strong>Achievement Level</strong></span>
           <span className="grp"><span className="mband b1">Emerging</span>&lt;50%</span>
-          <span className="grp"><span className="mband b2">Developing</span>50–75%</span>
-          <span className="grp"><span className="mband b3">Meeting</span>76–89%</span>
+          <span className="grp"><span className="mband b2">Developing</span>50–&lt;75%</span>
+          <span className="grp"><span className="mband b3">Meeting</span>75–&lt;90%</span>
           <span className="grp"><span className="mband b4">In-depth</span>≥90%</span>
           <span className="grp mleft"><strong>Class %</strong>
             <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80

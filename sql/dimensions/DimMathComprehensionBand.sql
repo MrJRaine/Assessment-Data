@@ -1,8 +1,10 @@
 /*******************************************************************************
  * Table: DimMathComprehensionBand
- * Purpose: The 4-tier math comprehension scale — the code -> (label, colour)
- *          lookup for a student's per-unit level, derived from the average of
- *          their 0/1 across the unit's tasks. Four rows, one per tier.
+ * Purpose: The 4-tier math achievement-level scale (shown in the UI as
+ *          "Achievement Level") — the code -> (label, colour) lookup for a
+ *          student's per-unit level, derived from the average of their 0/1
+ *          across the unit's tasks. Four rows, one per tier. (Table name kept as
+ *          DimMathComprehensionBand; the UI label is "Achievement Level".)
  * SCD Type: Type 1 (overwrite reference data; ActiveFlag soft-retires a tier).
  * Created: 2026-09-02
  * Region: Canada East (PIIDPA compliant)
@@ -12,8 +14,8 @@
  * view computes BandCode from the average and joins here for Label + HexColor:
  *
  *       avg <  0.50            -> 1  Emerging
- *       0.50 <= avg <= 0.75    -> 2  Developing
- *       0.75 <  avg <  0.90    -> 3  Meeting
+ *       0.50 <= avg <  0.75    -> 2  Developing
+ *       0.75 <= avg <  0.90    -> 3  Meeting
  *       avg >= 0.90            -> 4  In-depth
  *   ( < 80% of the unit's tasks scored -> 'Incomplete', handled in the view — not
  *     a stored tier )

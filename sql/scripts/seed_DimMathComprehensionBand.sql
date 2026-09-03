@@ -15,6 +15,6 @@ TRUNCATE TABLE DimMathComprehensionBand;
 INSERT INTO DimMathComprehensionBand (BandCode, Label, HexColor, SortOrder, ActiveFlag, LastUpdated)
 VALUES
     (1, 'Emerging',   '#b23347', 1, CAST(1 AS BIT), GETDATE()),   -- avg < 0.50
-    (2, 'Developing', '#d98a2b', 2, CAST(1 AS BIT), GETDATE()),   -- 0.50 <= avg <= 0.75
-    (3, 'Meeting',    '#3a9b57', 3, CAST(1 AS BIT), GETDATE()),   -- 0.75 <  avg <  0.90
+    (2, 'Developing', '#d98a2b', 2, CAST(1 AS BIT), GETDATE()),   -- 0.50 <= avg <  0.75
+    (3, 'Meeting',    '#3a9b57', 3, CAST(1 AS BIT), GETDATE()),   -- 0.75 <= avg <  0.90
     (4, 'In-depth',   '#0092c9', 4, CAST(1 AS BIT), GETDATE());   -- avg >= 0.90
