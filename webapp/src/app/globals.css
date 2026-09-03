@@ -51,7 +51,8 @@ a { color: inherit; text-decoration: none; }
 .page-header { margin-bottom: 0.6rem; }
 .page-header h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
 .page-header p { margin: 0; }
-.back-row { margin: 0.3rem 0 0.8rem; }
+.back-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 0.3rem 0 0.8rem; }
+.group-label { color: var(--muted); font-size: 0.95rem; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 
 /* scaffold note */
@@ -300,7 +301,7 @@ a { color: inherit; text-decoration: none; }
 .schip { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .6rem; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); font-size: .82rem; cursor: pointer; }
 .schip input { accent-color: var(--primary); margin: 0; }
 .mtoolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
-.mtoolbar .spacer { flex: 1; }
+.math-entry .spacer { flex: 1; }
 .linkbtn { border: none; background: none; color: var(--primary-hover); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .btn-ghost.editing { border-color: var(--primary); color: var(--primary-hover); background: #e3f2f9; }
 .mlegend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 0.7rem; font-size: .8rem; color: var(--muted); align-items: center; }
@@ -316,8 +317,10 @@ a { color: inherit; text-decoration: none; }
 .mband.bipp { background: #6b4fbb; }
 .mband.inc { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-weight: 600; }
 .mband.partial-ipp { box-shadow: 0 0 0 4px #6b4fbb; }
+.partial-swatch { display: inline-block; width: 1.1rem; height: 0.85rem; border-radius: 4px; background: var(--card); box-shadow: 0 0 0 3px #6b4fbb; }
 .mgrade { margin-bottom: 1.6rem; }
-.mghead { display: flex; align-items: baseline; gap: .6rem; margin: 0 0 .5rem; }
+.mghead { display: flex; align-items: center; gap: .6rem; margin: 0 0 .5rem; flex-wrap: wrap; }
+.mghead-controls { display: flex; align-items: center; gap: .8rem; flex: 1; min-width: 16rem; }
 .mghead.clickable { cursor: pointer; }
 .mghead .gchev { color: var(--muted); font-size: .8rem; align-self: center; }
 .mghead h3 { font-size: 1.05rem; margin: 0; }

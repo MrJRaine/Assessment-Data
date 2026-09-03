@@ -213,6 +213,28 @@ export default function MathRosterEntry({
     })
   }
 
+  const singleGrade = grades.length === 1
+  const pageControls = (
+    <>
+      <span className="muted">
+        {editMode ? (
+          <><strong>Editing checklist</strong> — untick tasks to hide them (resets next session)</>
+        ) : selTasks < totalTasks ? (
+          <>showing <strong>{selTasks}</strong> of {totalTasks} tasks · <button className="linkbtn" onClick={() => setDeselected(new Set())}>Show all tasks</button></>
+        ) : (
+          <>all <strong>{totalTasks}</strong> tasks shown</>
+        )}
+      </span>
+      <span className="spacer" />
+      <button className={`btn-ghost${editMode ? ' editing' : ''}`} onClick={() => setEditMode((e) => !e)}>
+        {editMode ? 'Done editing' : 'Edit checklist'}
+      </button>
+      <button className="btn" disabled={saving || dirtyKeys.length === 0} onClick={save}>
+        {saving ? 'Saving…' : dirtyKeys.length > 0 ? `Save ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}` : 'Save'}
+      </button>
+    </>
+  )
+
   return (
     <div className="math-entry">
       {/* grade filter */}
@@ -269,25 +291,9 @@ export default function MathRosterEntry({
         )}
       </div>
 
-      {/* toolbar */}
-      <div className="mtoolbar">
-        <span className="muted">
-          {editMode ? (
-            <><strong>Editing checklist</strong> — untick tasks to hide them (resets next session)</>
-          ) : selTasks < totalTasks ? (
-            <>showing <strong>{selTasks}</strong> of {totalTasks} tasks · <button className="linkbtn" onClick={() => setDeselected(new Set())}>Show all tasks</button></>
-          ) : (
-            <>all <strong>{totalTasks}</strong> tasks shown</>
-          )}
-        </span>
-        <span className="spacer" />
-        <button className={`btn-ghost${editMode ? ' editing' : ''}`} onClick={() => setEditMode((e) => !e)}>
-          {editMode ? 'Done editing' : 'Edit checklist'}
-        </button>
-        <button className="btn" disabled={saving || dirtyKeys.length === 0} onClick={save}>
-          {saving ? 'Saving…' : dirtyKeys.length > 0 ? `Save ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}` : 'Save'}
-        </button>
-      </div>
+      {/* page controls: their own toolbar only when there are multiple grades;
+          for a single-grade homeroom they sit on the grade heading line below. */}
+      {!singleGrade && <div className="mtoolbar">{pageControls}</div>}
 
       {saving && (
         <div className="loading"><span className="spinner" /> Saving changes…</div>
@@ -314,7 +320,7 @@ export default function MathRosterEntry({
           <span className="grp"><span className="mband b2">Developing</span>50–&lt;75%</span>
           <span className="grp"><span className="mband b3">Meeting</span>75–&lt;90%</span>
           <span className="grp"><span className="mband b4">In-depth</span>≥90%</span>
-          <span className="grp"><span className="mband b3 partial-ipp">Level</span>partly assessed (IPP omitted)</span>
+          <span className="grp"><span className="partial-swatch" /> Some tasks omitted</span>
           <span className="grp mleft"><strong>Class %</strong>
             <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80
           </span>
@@ -334,6 +340,7 @@ export default function MathRosterEntry({
               {multi && <span className="gchev">{gColl ? '▸' : '▾'}</span>}
               <h3>{g.label}</h3>
               <span className="gc">· {cols.length} of {g.students.length} students shown{editMode ? ' · choose tasks' : ''}</span>
+              {singleGrade && <div className="mghead-controls">{pageControls}</div>}
             </div>
 
             {gColl ? null : editMode ? (

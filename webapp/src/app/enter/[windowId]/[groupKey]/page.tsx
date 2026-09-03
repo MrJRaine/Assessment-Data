@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { PageHeader, EmptyState, ErrorNote } from '@/components/ui'
+import { EmptyState, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import {
   getWindowAssessmentType,
@@ -69,12 +69,12 @@ export default async function RosterGrid({
 
   return (
     <>
-      <PageHeader title="Roster entry" subtitle={`${groupLabel(groupKey)} · ${subject}`} />
-      <p className="back-row">
+      <div className="back-row">
         <Link href={`/enter/${windowId}`} className="back-link">
           &larr; Back to groups
         </Link>
-      </p>
+        <span className="group-label">{groupLabel(groupKey)} · {subject}</span>
+      </div>
 
       {error ? (
         <ErrorNote message={error} />
