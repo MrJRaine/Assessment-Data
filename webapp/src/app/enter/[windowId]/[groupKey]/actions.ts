@@ -2,7 +2,7 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
-import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate } from '@/lib/data'
+import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate, getMathRoster } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 import { revalidatePath } from 'next/cache'
 
@@ -114,6 +114,60 @@ export async function saveWritingAssessments(
       saved++
     } catch (err) {
       errors.push({ studentNumber: e.studentNumber, message: toUserMessage(err) })
+    }
+  }
+
+  revalidatePath(`/enter/${windowId}/${groupKey}`)
+  return { saved, errors }
+}
+
+export interface MathEntry {
+  studentNumber: string
+  mathTaskKey: string
+  result: '0' | '1' | null // '1' can-do / '0' cannot / null = clear the same-day mark
+}
+
+export interface MathSaveResult {
+  saved: number
+  errors: { studentNumber: string; mathTaskKey: string; message: string }[]
+}
+
+/**
+ * Save a batch of dirty math cells for a group. Same trust model as the reading/writing saves:
+ * UPN resolved server-side and passed as @CallerUPN; each target scope-checked against the caller's
+ * math roster before the proc runs. Grain is per (student, task); result '0'/'1' upserts, null clears.
+ */
+export async function saveMathAssessments(
+  windowId: string,
+  groupKey: string,
+  entries: MathEntry[],
+): Promise<MathSaveResult> {
+  const upn = await getCurrentUpn()
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+  const windowEnd = await getWindowEndDate(windowId)
+  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+
+  const allowed = new Set((await getMathRoster(upn, windowId, groupKey)).map((r) => r.studentNumber))
+
+  const errors: MathSaveResult['errors'] = []
+  let saved = 0
+  for (const e of entries) {
+    if (!allowed.has(e.studentNumber)) {
+      errors.push({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: 'Not in your roster for this window/group — not saved.' })
+      continue
+    }
+    try {
+      await execProc('usp_UpsertMathAssessment', {
+        StudentNumber: e.studentNumber,
+        AssessmentWindowID: windowId,
+        MathTaskKey: e.mathTaskKey,
+        Result: e.result, // '0' | '1' | null (clear)
+        AssessmentDate: assessmentDate,
+        CallerUPN: upn,
+      })
+      saved++
+    } catch (err) {
+      errors.push({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: toUserMessage(err) })
     }
   }
 

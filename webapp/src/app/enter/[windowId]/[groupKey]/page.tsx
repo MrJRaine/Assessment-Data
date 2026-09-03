@@ -5,15 +5,18 @@ import {
   getWindowAssessmentType,
   getTeacherRoster,
   getTeacherRosterWriting,
+  getMathRoster,
   getScaleLevels,
   getAchievementLevels,
   type RosterStudent,
   type WritingRosterStudent,
+  type MathRosterRow,
   type ScaleLevel,
   type AchievementBand,
 } from '@/lib/data'
 import RosterEntry from './RosterEntry'
 import WritingRosterEntry from './WritingRosterEntry'
+import MathRosterEntry from './MathRosterEntry'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,10 +33,12 @@ export default async function RosterGrid({
   const groupKey = decodeURIComponent(rawGroupKey)
   const upn = await getCurrentUpn()
 
-  // The window's type drives which grid renders: Writing → four 1-4 trait inputs; Reading → level dropdown.
+  // The window's type drives which grid renders: Writing → four 1-4 trait inputs;
+  // Math → the student × task mastery matrix; Reading → level dropdown.
   let assessmentType: string | null = null
   let roster: RosterStudent[] = []
   let writingRoster: WritingRosterStudent[] = []
+  let mathRoster: MathRosterRow[] = []
   let levels: ScaleLevel[] = []
   let achievementLevels: AchievementBand[] = []
   let error: string | null = null
@@ -41,6 +46,8 @@ export default async function RosterGrid({
     assessmentType = await getWindowAssessmentType(windowId)
     if (assessmentType === 'Writing') {
       writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey)
+    } else if (assessmentType === 'Math') {
+      mathRoster = await getMathRoster(upn, windowId, groupKey)
     } else {
       roster = await getTeacherRoster(upn, windowId, groupKey)
       const scaleSystem = roster[0]?.scaleSystem ?? null
@@ -52,11 +59,17 @@ export default async function RosterGrid({
   }
 
   const isWriting = assessmentType === 'Writing'
-  const count = isWriting ? writingRoster.length : roster.length
+  const isMath = assessmentType === 'Math'
+  const subject = isWriting ? 'Writing' : isMath ? 'Math' : 'Reading'
+  const count = isMath
+    ? new Set(mathRoster.map((r) => r.studentKey)).size
+    : isWriting
+      ? writingRoster.length
+      : roster.length
 
   return (
     <>
-      <PageHeader title="Roster entry" subtitle={`${groupLabel(groupKey)} · ${isWriting ? 'Writing' : 'Reading'}`} />
+      <PageHeader title="Roster entry" subtitle={`${groupLabel(groupKey)} · ${subject}`} />
       <p>
         <Link href={`/enter/${windowId}`} className="back-link">
           &larr; Back to groups
@@ -69,6 +82,8 @@ export default async function RosterGrid({
         <EmptyState title="No students in this group for this window" />
       ) : isWriting ? (
         <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} />
+      ) : isMath ? (
+        <MathRosterEntry windowId={windowId} groupKey={groupKey} rows={mathRoster} />
       ) : (
         <RosterEntry
           windowId={windowId}

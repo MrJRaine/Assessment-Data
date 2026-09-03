@@ -793,3 +793,80 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
     hexColorTint: r.HexColorTint,
   }))
 }
+
+// ---------------------------------------------------------------------------
+// Math roster (P-6 Math). One row per (student x applicable task) from
+// tvf_TeacherRosterMath; the client grid structures these into the student x
+// task matrix (grouped by grade + unit). See project_math_assessment_model.
+// ---------------------------------------------------------------------------
+export interface MathRosterRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  programFamily: string | null
+  mathTaskKey: string
+  unitName: string | null
+  unitOrder: number | null
+  questionNumber: string
+  displayOrder: number | null
+  outcomeCode: string | null
+  description: string
+  answerKey: string | null
+  existingResult: boolean | null // latest 0/1 (BIT), or null if never marked
+  mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved gate
+  mathIPPNeedsConfirmation: boolean
+  ippProgramFamily: string | null
+}
+
+export async function getMathRoster(
+  upn: string,
+  windowId: string,
+  groupKey: string,
+): Promise<MathRosterRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    ProgramFamily: string | null
+    MathTaskKey: string
+    UnitName: string | null
+    UnitOrder: number | null
+    QuestionNumber: string
+    DisplayOrder: number | null
+    OutcomeCode: string | null
+    TaskDescription: string
+    AnswerKey: string | null
+    ExistingResult: boolean | null
+    MathIPPStatus: boolean | null
+    MathIPPNeedsConfirmation: boolean | null
+    IPPProgramFamily: string | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_TeacherRosterMath(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { WindowID: windowId, GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    programFamily: r.ProgramFamily ?? null,
+    mathTaskKey: String(r.MathTaskKey),
+    unitName: r.UnitName ?? null,
+    unitOrder: r.UnitOrder ?? null,
+    questionNumber: r.QuestionNumber,
+    displayOrder: r.DisplayOrder ?? null,
+    outcomeCode: r.OutcomeCode ?? null,
+    description: r.TaskDescription,
+    answerKey: r.AnswerKey ?? null,
+    existingResult: r.ExistingResult ?? null,
+    mathIPPStatus: r.MathIPPStatus ?? null,
+    mathIPPNeedsConfirmation: Boolean(r.MathIPPNeedsConfirmation),
+    ippProgramFamily: r.IPPProgramFamily ?? null,
+  }))
+}
