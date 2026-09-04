@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { saveReadingAssessments, confirmRosterIPPs, type SaveResult, type IppEntry } from './actions'
 import type { RosterStudent, ScaleLevel, AchievementBand } from '@/lib/data'
+import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 
 // ReadingDelta from a level's order vs the expected [min,max] range -- mirrors the server
 // formula in usp_UpsertReadingAssessment so the live (pre-save) value matches what Save stores.
@@ -71,6 +72,7 @@ export default function RosterEntry({
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
+  const sg = useSmallGroup(roster)
 
   const changedLevelKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
   const ippKeys = Object.keys(ippSel)
@@ -125,6 +127,7 @@ export default function RosterEntry({
 
   return (
     <>
+      <SmallGroupFilter sg={sg} />
       <table className="grid">
         <thead>
           <tr>
@@ -138,7 +141,7 @@ export default function RosterEntry({
           </tr>
         </thead>
         <tbody>
-          {roster.map((s) => {
+          {roster.filter(sg.isShown).map((s) => {
             const selId = sel[s.studentKey] ?? ''
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true

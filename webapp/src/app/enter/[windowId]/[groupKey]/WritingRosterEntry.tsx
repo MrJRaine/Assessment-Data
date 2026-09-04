@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { saveWritingAssessments, confirmRosterIPPs, type WritingEntry, type IppEntry } from './actions'
 import type { WritingRosterStudent } from '@/lib/data'
+import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 
 const TRAITS = [
   { key: 'ideas', label: 'Ideas' },
@@ -57,6 +58,7 @@ export default function WritingRosterEntry({
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
+  const sg = useSmallGroup(roster)
 
   const changedKeys = roster.map((s) => s.studentKey).filter((k) => !eqSet(sel[k], base[k]))
   const ippKeys = Object.keys(ippSel)
@@ -122,6 +124,7 @@ export default function WritingRosterEntry({
 
   return (
     <>
+      <SmallGroupFilter sg={sg} />
       <table className="grid">
         <thead>
           <tr>
@@ -136,7 +139,7 @@ export default function WritingRosterEntry({
           </tr>
         </thead>
         <tbody>
-          {roster.map((s) => {
+          {roster.filter(sg.isShown).map((s) => {
             const cur = sel[s.studentKey]
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true
