@@ -56,13 +56,15 @@ function toForm(c: ShortCycle): ShortCycleInput {
   }
 }
 
-// How the Grades column renders in the list: a single range if every subject shares it, else one
-// compact line per subject (so a mixed cycle shows Reading P-8 / Math P-6 at a glance).
+// How the Grades column renders in the list: one line per subject (subject + its band). This also
+// carries the subject list, so the standalone Subjects column is no longer needed.
+const SUBJECT_ORDER: Record<string, number> = { Reading: 0, Writing: 1, Math: 2 }
+
 function gradeSummary(c: ShortCycle) {
   const rows = c.rows.filter((r) => r.active)
-  const src = rows.length ? rows : c.rows
-  const uniq = [...new Set(src.map((r) => `${r.minGrade}–${r.maxGrade}`))]
-  if (uniq.length <= 1) return <>{uniq[0] ?? `${c.minGrade}–${c.maxGrade}`}</>
+  const src = (rows.length ? rows : c.rows)
+    .slice()
+    .sort((a, b) => (SUBJECT_ORDER[a.subject] ?? 9) - (SUBJECT_ORDER[b.subject] ?? 9))
   return (
     <div className="cycle-grade-cell">
       {src.map((r) => <div key={r.subject}>{r.subject}: {r.minGrade}–{r.maxGrade}</div>)}
@@ -235,11 +237,10 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
           <div>Create the first Short Cycle of Response above so teachers have somewhere to enter results.</div>
         </div>
       ) : (
-        <table className="grid">
+        <table className="grid cycles-grid">
           <thead>
             <tr>
               <th>Cycle</th>
-              <th>Subjects</th>
               <th>Dates</th>
               <th>Grades</th>
               <th>Benchmark</th>
@@ -251,8 +252,9 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
             {initialCycles.map((c) => (
               <tr key={c.key} style={c.active ? undefined : { opacity: 0.5 }}>
                 <td>{c.name}{!c.active && <span className="muted"> (inactive)</span>}</td>
-                <td>{c.subjects.join(', ')}</td>
-                <td className="muted">{c.startDate} → {c.endDate}</td>
+                <td className="muted">
+                  <div className="cycle-dates"><span>{c.startDate}</span><span>{c.endDate}</span></div>
+                </td>
                 <td className="muted">{gradeSummary(c)}</td>
                 <td className="muted">
                   {c.subjects.includes('Reading')
