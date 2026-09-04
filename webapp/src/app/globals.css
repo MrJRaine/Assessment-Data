@@ -226,15 +226,19 @@ a { color: inherit; text-decoration: none; }
 .cycle-row-actions { display: flex; flex-direction: column; gap: 0.35rem; align-items: stretch; }
 .cycle-row-actions .btn-ghost { width: 100%; text-align: center; }
 
-/* Cycles list: top-align every cell so the row dividers line up across the tall (multi-line
-   grades) rows, and size columns to minimize wrapping. Column order:
-   1 Cycle | 2 Dates | 3 Grades | 4 Benchmark | 5 Status | 6 Actions. */
+/* Cycles list: FIXED layout with widths summing to 100% keeps every column (including Actions)
+   inside the card border and makes the stacked buttons a uniform width. Top-align every cell so
+   the row dividers line up across the tall (multi-line grades) rows.
+   Column order: 1 Cycle | 2 Dates | 3 Grades | 4 Benchmark | 5 Status | 6 Actions. */
+.cycles-grid { table-layout: fixed; }
 .cycles-grid th, .cycles-grid td { vertical-align: top; }
-.cycles-grid td:nth-child(1) { white-space: nowrap; }                       /* Cycle name */
-.cycles-grid th:nth-child(2), .cycles-grid td:nth-child(2) { width: 7rem; white-space: nowrap; }  /* Dates */
-.cycles-grid th:nth-child(4), .cycles-grid td:nth-child(4) { width: 6rem; }  /* Benchmark */
-.cycles-grid th:nth-child(5), .cycles-grid td:nth-child(5) { width: 7rem; }  /* Status */
-.cycles-grid th:nth-child(6), .cycles-grid td:nth-child(6) { width: 1%; white-space: nowrap; }    /* Actions */
+.cycles-grid th:nth-child(1) { width: 17%; }  /* Cycle */
+.cycles-grid th:nth-child(2) { width: 11%; }  /* Dates */
+.cycles-grid th:nth-child(3) { width: 30%; }  /* Grades */
+.cycles-grid th:nth-child(4) { width: 14%; }  /* Benchmark */
+.cycles-grid th:nth-child(5) { width: 13%; }  /* Status */
+.cycles-grid th:nth-child(6) { width: 15%; }  /* Actions */
+.cycles-grid td:nth-child(1), .cycles-grid td:nth-child(2) { white-space: nowrap; }
 .cycle-dates { display: flex; flex-direction: column; gap: 0.1rem; }
 .cycle-grade-cell div { white-space: nowrap; }
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
