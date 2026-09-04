@@ -19,18 +19,25 @@ async function requireCycleAdmin(): Promise<string> {
   return upn
 }
 
+export interface SubjectGrades {
+  minGrade: string
+  maxGrade: string
+}
+
 export interface ShortCycleInput {
   groupId?: string | null // CycleGroupID for edit; omit/null to create a new cycle
   subjects: string[] // selected subjects, e.g. ['Reading', 'Writing']
+  grades: Record<string, SubjectGrades> // per-subject grade band (Reading P-8, Writing P-RG, Math P-6)
   cycleName: string
   startDate: string // 'YYYY-MM-DD'
   endDate: string
-  minGrade: string
-  maxGrade: string
   benchmarkMonth: number | null // reading only; null = dominant-month fallback
   active: boolean
   existingRows?: { subject: string; id: string }[] // the cycle's current per-subject rows (edit); reconcile against these
 }
+
+// Fallback band if a subject somehow has no grades entry (defensive; the form always supplies one).
+const DEFAULT_BAND: SubjectGrades = { minGrade: 'PP', maxGrade: '12' }
 
 /**
  * Create or edit a multi-subject Short Cycle. A cycle is one DimAssessmentWindow row PER subject,
@@ -59,27 +66,37 @@ export async function saveShortCycle(input: ShortCycleInput): Promise<void> {
     CycleName: input.cycleName.trim(),
     StartDate: input.startDate,
     EndDate: input.endDate,
-    MinGrade: input.minGrade,
-    MaxGrade: input.maxGrade,
     CycleGroupID: groupId,
     CallerUPN: upn,
   }
 
-  // Upsert each selected subject.
+  const bandFor = (subject: string): SubjectGrades => input.grades[subject] ?? DEFAULT_BAND
+
+  // Upsert each selected subject with ITS OWN grade band.
   for (const subject of subjects) {
-    const inputs: Record<string, unknown> = { ...base, AssessmentType: subject, ActiveFlag: input.active }
+    const band = bandFor(subject)
+    const inputs: Record<string, unknown> = {
+      ...base,
+      AssessmentType: subject,
+      MinGrade: band.minGrade,
+      MaxGrade: band.maxGrade,
+      ActiveFlag: input.active,
+    }
     if (subject === 'Reading' && input.benchmarkMonth != null) inputs.BenchmarkMonth = input.benchmarkMonth
     const existingId = idBySubject.get(subject)
     if (existingId) inputs.AssessmentWindowID = existingId
     await execProc('usp_UpsertShortCycle', inputs)
   }
 
-  // Deactivate rows for subjects removed from the cycle.
+  // Deactivate rows for subjects removed from the cycle (band preserved for the audit trail).
   for (const [subject, id] of idBySubject) {
     if (!selected.has(subject)) {
+      const band = bandFor(subject)
       await execProc('usp_UpsertShortCycle', {
         ...base,
         AssessmentType: subject,
+        MinGrade: band.minGrade,
+        MaxGrade: band.maxGrade,
         AssessmentWindowID: id,
         ActiveFlag: false,
       })

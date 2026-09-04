@@ -74,6 +74,8 @@ export interface ShortCycleRow {
   subject: string // 'Reading' | 'Writing' | 'Math'
   id: string // that subject's AssessmentWindowID (string -- BIGINT precision)
   active: boolean
+  minGrade: string // this subject's grade band (per-subject: Reading P-8, Writing P-RG, Math P-6)
+  maxGrade: string
 }
 
 export interface ShortCycle {
@@ -156,7 +158,7 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
       maxGrade: first.MaxGrade,
       benchmarkMonth: readingRow?.BenchmarkMonth == null ? null : Number(readingRow.BenchmarkMonth),
       active: grp.some((r) => r.ActiveFlag),
-      rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag) })),
+      rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag), minGrade: r.MinGrade, maxGrade: r.MaxGrade })),
     })
   }
   return cycles.sort((a, b) => b.startDate.localeCompare(a.startDate) || a.name.localeCompare(b.name))

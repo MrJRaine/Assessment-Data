@@ -6,39 +6,68 @@ import type { ShortCycle } from '@/lib/data'
 import { saveShortCycle, type ShortCycleInput } from './actions'
 
 const SUBJECTS = ['Reading', 'Writing', 'Math'] as const
-const GRADES = ['PP', 'P', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+const GRADES = ['PP', 'P', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'RG']
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+// Standard grade band per subject (the assessment-policy split): a subject's range is prefilled
+// with these when it is checked, and stays editable. Reading P-8, Writing P-RG, Math P-6.
+const SUBJECT_DEFAULT_GRADES: Record<string, { minGrade: string; maxGrade: string }> = {
+  Reading: { minGrade: 'P', maxGrade: '8' },
+  Writing: { minGrade: 'P', maxGrade: 'RG' },
+  Math: { minGrade: 'P', maxGrade: '6' },
+}
+
+function gradeLabel(g: string): string {
+  if (g === 'PP') return 'Pre-Primary'
+  if (g === 'P') return 'Primary'
+  if (g === 'RG') return 'Returning Grad'
+  return `Grade ${g}`
+}
+
 function blankForm(): ShortCycleInput {
   return {
     groupId: null,
     subjects: ['Reading'],
+    grades: { Reading: { ...SUBJECT_DEFAULT_GRADES.Reading } },
     cycleName: '',
     startDate: '',
     endDate: '',
-    minGrade: 'PP',
-    maxGrade: '12',
     benchmarkMonth: null,
     active: true,
   }
 }
 
 function toForm(c: ShortCycle): ShortCycleInput {
+  const grades: Record<string, { minGrade: string; maxGrade: string }> = {}
+  for (const r of c.rows) grades[r.subject] = { minGrade: r.minGrade, maxGrade: r.maxGrade }
   return {
     groupId: c.groupId,
     subjects: [...c.subjects],
+    grades,
     cycleName: c.name,
     startDate: c.startDate,
     endDate: c.endDate,
-    minGrade: c.minGrade,
-    maxGrade: c.maxGrade,
     benchmarkMonth: c.benchmarkMonth,
     active: c.active,
     existingRows: c.rows.map((r) => ({ subject: r.subject, id: r.id })),
   }
+}
+
+// How the Grades column renders in the list: a single range if every subject shares it, else one
+// compact line per subject (so a mixed cycle shows Reading P-8 / Math P-6 at a glance).
+function gradeSummary(c: ShortCycle) {
+  const rows = c.rows.filter((r) => r.active)
+  const src = rows.length ? rows : c.rows
+  const uniq = [...new Set(src.map((r) => `${r.minGrade}–${r.maxGrade}`))]
+  if (uniq.length <= 1) return <>{uniq[0] ?? `${c.minGrade}–${c.maxGrade}`}</>
+  return (
+    <div className="cycle-grade-cell">
+      {src.map((r) => <div key={r.subject}>{r.subject}: {r.minGrade}–{r.maxGrade}</div>)}
+    </div>
+  )
 }
 
 function statusClass(status: string): string {
@@ -61,7 +90,10 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
     if (!f.cycleName.trim()) return 'Cycle name is required.'
     if (!f.startDate || !f.endDate) return 'Start and end dates are required.'
     if (f.endDate < f.startDate) return 'End date must be on or after the start date.'
-    if (GRADES.indexOf(f.minGrade) > GRADES.indexOf(f.maxGrade)) return 'Min grade must be at or below max grade.'
+    for (const s of f.subjects) {
+      const b = f.grades[s] ?? SUBJECT_DEFAULT_GRADES[s]
+      if (GRADES.indexOf(b.minGrade) > GRADES.indexOf(b.maxGrade)) return `${s}: min grade must be at or below max grade.`
+    }
     return null
   }
 
@@ -83,8 +115,17 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
   }
 
   function toggleSubject(f: ShortCycleInput, s: string) {
-    const subjects = f.subjects.includes(s) ? f.subjects.filter((x) => x !== s) : [...f.subjects, s]
-    setForm({ ...f, subjects })
+    const has = f.subjects.includes(s)
+    const subjects = has ? f.subjects.filter((x) => x !== s) : [...f.subjects, s]
+    const grades = { ...f.grades }
+    // Seed the standard band the first time a subject is checked; keep any prior edit if re-checked.
+    if (!has && !grades[s]) grades[s] = { ...SUBJECT_DEFAULT_GRADES[s] }
+    setForm({ ...f, subjects, grades })
+  }
+
+  function setGrade(f: ShortCycleInput, subject: string, field: 'minGrade' | 'maxGrade', value: string) {
+    const current = f.grades[subject] ?? SUBJECT_DEFAULT_GRADES[subject]
+    setForm({ ...f, grades: { ...f.grades, [subject]: { ...current, [field]: value } } })
   }
 
   const showBenchmark = form?.subjects.includes('Reading')
@@ -121,6 +162,28 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 ))}
               </div>
             </div>
+            <div className="cycle-form-grades">
+              <span className="cycle-form-label">Grade ranges</span>
+              {form.subjects.length === 0 ? (
+                <span className="muted cycle-grades-empty">Select a subject to set its grade range.</span>
+              ) : (
+                SUBJECTS.filter((s) => form.subjects.includes(s)).map((s) => {
+                  const b = form.grades[s] ?? SUBJECT_DEFAULT_GRADES[s]
+                  return (
+                    <div key={s} className="cycle-grade-row">
+                      <span className="cycle-grade-subject">{s}</span>
+                      <select value={b.minGrade} onChange={(e) => setGrade(form, s, 'minGrade', e.target.value)}>
+                        {GRADES.map((g) => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+                      </select>
+                      <span className="cycle-grade-dash">to</span>
+                      <select value={b.maxGrade} onChange={(e) => setGrade(form, s, 'maxGrade', e.target.value)}>
+                        {GRADES.map((g) => <option key={g} value={g}>{gradeLabel(g)}</option>)}
+                      </select>
+                    </div>
+                  )
+                })
+              )}
+            </div>
             <label>Cycle name
               <input type="text" value={form.cycleName} placeholder="e.g. Cycle 1 – Fall"
                      onChange={(e) => setForm({ ...form, cycleName: e.target.value })} />
@@ -132,16 +195,6 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
             <label>End date
               <input type="date" value={form.endDate}
                      onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
-            </label>
-            <label>Min grade
-              <select value={form.minGrade} onChange={(e) => setForm({ ...form, minGrade: e.target.value })}>
-                {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </label>
-            <label>Max grade
-              <select value={form.maxGrade} onChange={(e) => setForm({ ...form, maxGrade: e.target.value })}>
-                {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
             </label>
             {showBenchmark && (
               <label>Benchmark month <span className="muted">(reading)</span>
@@ -200,7 +253,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 <td>{c.name}{!c.active && <span className="muted"> (inactive)</span>}</td>
                 <td>{c.subjects.join(', ')}</td>
                 <td className="muted">{c.startDate} → {c.endDate}</td>
-                <td className="muted">{c.minGrade}–{c.maxGrade}</td>
+                <td className="muted">{gradeSummary(c)}</td>
                 <td className="muted">
                   {c.subjects.includes('Reading')
                     ? (c.benchmarkMonth ? MONTHS[c.benchmarkMonth - 1] : 'Auto')
