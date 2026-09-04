@@ -79,7 +79,7 @@ export default async function RosterGrid({
       {error ? (
         <ErrorNote message={error} />
       ) : count === 0 ? (
-        <EmptyState title="No students in this group for this window" />
+        <EmptyState title="No students in this group for this cycle" />
       ) : isWriting ? (
         <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} />
       ) : isMath ? (

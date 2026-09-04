@@ -18,18 +18,18 @@ export default async function GroupSelect({ params }: { params: Promise<{ window
 
   return (
     <>
-      <PageHeader title="Choose a group" subtitle="Step 2 — your homerooms / sections for this window" />
+      <PageHeader title="Choose a group" subtitle="Step 2 — your homerooms / sections for this cycle" />
       <p>
         <Link href="/enter" className="back-link">
-          &larr; Back to windows
+          &larr; Back to cycles
         </Link>
       </p>
       {error ? (
         <ErrorNote message={error} />
       ) : groups.length === 0 ? (
         <EmptyState
-          title="No groups for this window"
-          hint="You have no homeroom or section roster in this window's grade/program scope."
+          title="No groups for this cycle"
+          hint="You have no homeroom or section roster in this cycle's grade/program scope."
         />
       ) : (
         <div className="card-grid">
