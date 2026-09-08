@@ -16,3 +16,7 @@ Desktop.ini
 data/imports/*
 !data/imports/README.md
 !data/imports/_generate_test_dummies.ps1
+
+# Editor + local scratch dumps
+.vscode/
+math-xlsx-dump.txt

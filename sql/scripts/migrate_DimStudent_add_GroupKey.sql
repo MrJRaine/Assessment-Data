@@ -16,10 +16,13 @@
  ******************************************************************************/
 
 -- Schema: add the column to the fact/staging tables if not already present.
-IF COL_LENGTH('dbo.DimStudent', 'GroupKey') IS NULL
+-- (Fabric Warehouse does NOT support COL_LENGTH -- use INFORMATION_SCHEMA.COLUMNS.)
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'DimStudent' AND COLUMN_NAME = 'GroupKey')
     ALTER TABLE DimStudent ADD GroupKey VARCHAR(70) NULL;
 GO
-IF COL_LENGTH('dbo.Wrk_Student', 'GroupKey') IS NULL
+IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Wrk_Student' AND COLUMN_NAME = 'GroupKey')
     ALTER TABLE Wrk_Student ADD GroupKey VARCHAR(70) NULL;
 GO
 
