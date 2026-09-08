@@ -1,16 +1,22 @@
 /*******************************************************************************
  * Function: tvf_TeacherGroups  (INLINE table-valued function)
  * Purpose: @UPN-parameterized equivalent of vw_TeacherGroups for the web app
- *          (Phase 3b). Same three role branches + group-resolution rules (PP-9
- *          -> 'HR:'+Homeroom; 10-12/RG -> 'SEC:'+SectionID). Takes the signed-in
- *          UPN + target window; returns one row per group.
+ *          (Phase 3b). Same three role branches + group-resolution rules:
+ *          PP-9 -> the student's stored DimStudent.GroupKey (URL-safe,
+ *          school-qualified: '<SchoolAbbrev>-<cleanedHomeroom>'); 10-12/RG ->
+ *          'SEC:'+SectionID (numeric, already URL-safe). Takes the signed-in UPN
+ *          + target window; returns one row per group, including SchoolName for
+ *          display.
  * Created: 2026-06-22
+ * Modified: 2026-09-08 — homeroom GroupKey now the stored DimStudent.GroupKey
+ *          (fixes '/'-in-homeroom 404s + same-name-different-school collisions);
+ *          added SchoolName for the card subtitle. GroupLabel still the raw
+ *          homeroom for display.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
- * (trusts @UPN; SELECT granted to the SP only). Mirrors vw_TeacherGroups with
- * CURRENT_USER -> @UPN. @AssessmentWindowID is VARCHAR (Power-Fx/JS precision);
- * cast inline to BIGINT. ORDER BY omitted -- the caller sorts.
+ * (trusts @UPN; SELECT granted to the SP only). @AssessmentWindowID is VARCHAR
+ * (Power-Fx/JS precision); cast inline to BIGINT. ORDER BY omitted -- caller sorts.
  ******************************************************************************/
 
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherGroups;
@@ -42,6 +48,7 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom,
+            s.GroupKey AS HomeroomKey, sch.SchoolName,
             sec.SectionID, sec.SectionNumber, sec.CourseName
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -56,6 +63,7 @@ RETURN
                AND e.StartDate  <= wed.WindowEndDate
                AND (e.EndDate IS NULL OR e.EndDate >= wed.WindowStartDate)
         INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -67,13 +75,14 @@ RETURN
     AdminAnalystApplicable AS (
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
         INNER JOIN DimStudent s
                 ON s.SchoolID = ssa.SchoolID
                AND wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -86,11 +95,12 @@ RETURN
 
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN DimStudent s
                 ON wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -101,7 +111,7 @@ RETURN
     ),
     AdminAnalystWithSections AS (
         SELECT
-            a.AssessmentWindowID, a.StudentKey, a.Grade, a.GradeOrder, a.Homeroom,
+            a.AssessmentWindowID, a.StudentKey, a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName,
             sec.SectionID, sec.SectionNumber, sec.CourseName
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
@@ -114,21 +124,24 @@ RETURN
               AND a.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
     ),
     ApplicableStudents AS (
-        SELECT AssessmentWindowID, StudentKey, Grade, GradeOrder, Homeroom, SectionID, SectionNumber, CourseName
+        SELECT AssessmentWindowID, StudentKey, Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SectionID, SectionNumber, CourseName
         FROM TeacherApplicable
         UNION ALL
-        SELECT AssessmentWindowID, StudentKey, Grade, GradeOrder, Homeroom, SectionID, SectionNumber, CourseName
+        SELECT AssessmentWindowID, StudentKey, Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SectionID, SectionNumber, CourseName
         FROM AdminAnalystWithSections
     ),
     StudentGroups AS (
         SELECT
-            AssessmentWindowID, StudentKey, Grade,
-            CASE WHEN GradeOrder <= 9  THEN 'HR:'  + COALESCE(Homeroom, '(none)')
+            AssessmentWindowID, StudentKey, Grade, SchoolName,
+            -- PP-9: the stored, URL-safe, school-qualified homeroom key.
+            -- 10-12/RG: numeric SectionID (already URL-safe).
+            CASE WHEN GradeOrder <= 9  THEN HomeroomKey
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
             END AS GroupKey,
             CASE WHEN GradeOrder <= 9  THEN 'Homeroom'
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'Section'
             END AS GroupType,
+            -- Display label keeps the real homeroom name (slash and all -- it is just text).
             CASE WHEN GradeOrder <= 9  THEN 'Homeroom ' + COALESCE(Homeroom, '(none)')
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN SectionNumber + ' — ' + CourseName
             END AS GroupLabel
@@ -139,6 +152,7 @@ RETURN
         sg.GroupKey,
         sg.GroupType,
         sg.GroupLabel,
+        MAX(sg.SchoolName) AS SchoolName,
         MAX(sg.Grade) AS Grade,
         COUNT(DISTINCT sg.StudentKey) AS ApplicableStudentCount,
         -- "Entered" = students with >=1 entry in the fact matching the window's TYPE (Reading vs
@@ -159,4 +173,7 @@ RETURN
     WHERE sg.GroupKey IS NOT NULL
     GROUP BY sg.AssessmentWindowID, sg.GroupKey, sg.GroupType, sg.GroupLabel
 );
+GO
+
+GRANT SELECT ON [dbo].[tvf_TeacherGroups] TO [StudentDataAssessment];
 GO

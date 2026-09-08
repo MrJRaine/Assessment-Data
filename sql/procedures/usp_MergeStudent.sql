@@ -100,7 +100,7 @@ BEGIN
     INSERT INTO Wrk_Student (
         StudentNumber, SourceSystemID, FirstName, MiddleName, LastName,
         DateOfBirth, Grade, SchoolID, ProgramCode, EnrollStatus,
-        Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap
+        Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap, GroupKey
     )
     SELECT
         CAST(s.Student_Number AS BIGINT)                            AS StudentNumber,
@@ -138,8 +138,17 @@ BEGIN
              WHEN 'Y' THEN CAST(1 AS BIT)
              WHEN 'N' THEN CAST(0 AS BIT)
              WHEN ''  THEN NULL
-             ELSE NULL END                                          AS Adap
+             ELSE NULL END                                          AS Adap,
+        -- URL-safe homeroom group key: school abbreviation + '-' + cleaned homeroom
+        -- ('/', space, '\' -> '-'); no-homeroom students fall back to '<abbr>-none'
+        -- (matching the prior 'HR:(none)' grouping). Used for grades <=9; grades 10+
+        -- group by SectionID so their key is computed but unused. COALESCE to the
+        -- padded SchoolID guards any school ingested before its Abbreviation is set.
+        COALESCE(sch.Abbreviation, RIGHT('0000' + s.SchoolID, 4)) + '-' +
+        REPLACE(REPLACE(REPLACE(COALESCE(NULLIF(s.Home_Room, ''), 'none'), '/', '-'), ' ', '-'), '\', '-')
+                                                                    AS GroupKey
     FROM Stg_Student s
+    LEFT JOIN DimSchool sch ON sch.SchoolID = RIGHT('0000' + s.SchoolID, 4)
     WHERE NULLIF(LTRIM(RTRIM(s.Student_Number)), '') IS NOT NULL;   -- drop blank-Student_Number rows (a trailing empty CSV line reads as an all-empty row)
 
     SELECT @StgRowCount = COUNT(*) FROM Wrk_Student;
@@ -188,7 +197,7 @@ BEGIN
         DateOfBirth = w.DateOfBirth, Grade = w.Grade, SchoolID = w.SchoolID,
         ProgramCode = w.ProgramCode, EnrollStatus = w.EnrollStatus, Homeroom = w.Homeroom,
         Gender = w.Gender, SelfIDAfrican = w.SelfIDAfrican, SelfIDIndigenous = w.SelfIDIndigenous,
-        IPP = w.IPP, Adap = w.Adap, LastUpdated = GETDATE()
+        IPP = w.IPP, Adap = w.Adap, GroupKey = w.GroupKey, LastUpdated = GETDATE()
     FROM DimStudent d
     INNER JOIN Wrk_Student w
             ON w.StudentNumber = d.StudentNumber
@@ -222,7 +231,7 @@ BEGIN
         DateOfBirth = w.DateOfBirth, Grade = w.Grade, SchoolID = w.SchoolID,
         ProgramCode = w.ProgramCode, EnrollStatus = w.EnrollStatus, Homeroom = w.Homeroom,
         Gender = w.Gender, SelfIDAfrican = w.SelfIDAfrican, SelfIDIndigenous = w.SelfIDIndigenous,
-        IPP = w.IPP, Adap = w.Adap,
+        IPP = w.IPP, Adap = w.Adap, GroupKey = w.GroupKey,
         EffectiveEndDate = NULL, IsCurrent = 1, LastUpdated = GETDATE()
     FROM DimStudent d
     INNER JOIN Wrk_Student w
@@ -248,13 +257,13 @@ BEGIN
     INSERT INTO DimStudent (
         StudentNumber, FirstName, MiddleName, LastName, DateOfBirth,
         Grade, SchoolID, ProgramCode, EnrollStatus, Homeroom,
-        Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap,
+        Gender, SelfIDAfrican, SelfIDIndigenous, IPP, Adap, GroupKey,
         EffectiveStartDate, EffectiveEndDate, IsCurrent, SourceSystemID, LastUpdated
     )
     SELECT
         w.StudentNumber, w.FirstName, w.MiddleName, w.LastName, w.DateOfBirth,
         w.Grade, w.SchoolID, w.ProgramCode, w.EnrollStatus, w.Homeroom,
-        w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous, w.IPP, w.Adap,
+        w.Gender, w.SelfIDAfrican, w.SelfIDIndigenous, w.IPP, w.Adap, w.GroupKey,
         @EffectiveDate, NULL, 1, w.SourceSystemID, GETDATE()
     FROM Wrk_Student w
     WHERE NOT EXISTS (

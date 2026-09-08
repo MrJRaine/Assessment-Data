@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { PageHeader, CardLink, EmptyState, ErrorNote } from '@/components/ui'
+import { PageHeader, EmptyState, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import { getTeacherGroups, type TeacherGroup } from '@/lib/data'
+import GroupCards from './GroupCards'
 
 export const dynamic = 'force-dynamic'
 
@@ -32,16 +33,7 @@ export default async function GroupSelect({ params }: { params: Promise<{ window
           hint="You have no homeroom or section roster in this window's grade/program scope."
         />
       ) : (
-        <div className="card-grid">
-          {groups.map((g) => (
-            <CardLink
-              key={g.key}
-              href={`/enter/${windowId}/${g.key}`}
-              title={g.label}
-              meta={`${g.enteredCount}/${g.applicableCount} entered`}
-            />
-          ))}
-        </div>
+        <GroupCards groups={groups} windowId={windowId} />
       )}
     </>
   )

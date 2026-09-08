@@ -64,6 +64,7 @@ CREATE TABLE DimStudent (
     SelfIDIndigenous    BIT             NULL,       -- PS NS_aboriginal — student self-ID as Indigenous descent
     IPP                 BIT             NULL,       -- PS CurrentIPP — has at least one IPP
     Adap                BIT             NULL,       -- PS CurrentAdap — has adaptations
+    GroupKey            VARCHAR(70)     NULL,       -- URL-safe homeroom group key = School Abbreviation + '-' + cleaned Homeroom (grades <=9); derived from School+Homeroom at ingest; NULL when no homeroom. Both tvf_TeacherGroups (emit) and the roster TVFs (match) read this same stored value.
     EffectiveStartDate  DATE            NOT NULL,
     EffectiveEndDate    DATE            NULL,        -- NULL = current version
     IsCurrent           BIT             NOT NULL,

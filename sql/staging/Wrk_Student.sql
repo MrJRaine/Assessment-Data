@@ -39,5 +39,6 @@ CREATE TABLE Wrk_Student (
     SelfIDAfrican       BIT             NULL,
     SelfIDIndigenous    BIT             NULL,
     IPP                 BIT             NULL,
-    Adap                BIT             NULL
+    Adap                BIT             NULL,
+    GroupKey            VARCHAR(70)     NULL
 );
