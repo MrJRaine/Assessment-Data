@@ -9,6 +9,8 @@
  *          each grade's own task set against its own students. The web app
  *          pivots these rows into the student x task matrix.
  * Created: 2026-09-03
+ * Modified: 2026-09-08 — @GroupKey now matches the stored DimStudent.GroupKey for
+ *          homerooms (URL-safe, school-qualified); returns Homeroom + SchoolName.
  * Region: Canada East (PIIDPA compliant)
  *
  * Task selection: DimMathTask WHERE GradeCode = student.Grade AND AssessmentMonth
@@ -27,7 +29,7 @@
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherRosterMath;
 GO
 
-CREATE FUNCTION dbo.tvf_TeacherRosterMath(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(60))
+CREATE FUNCTION dbo.tvf_TeacherRosterMath(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(70))
 RETURNS TABLE
 AS
 RETURN
@@ -52,7 +54,6 @@ RETURN
           AND w.AssessmentType = 'Math'
     ),
     WindowDominantMonth AS (
-        -- Explicit benchmark month on the Short Cycle wins; else the dominant month of the range.
         SELECT
             wed.AssessmentWindowID,
             COALESCE(
@@ -68,7 +69,8 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.ProgramCode, dp.ProgramFamily, sec.SectionID
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN FactSectionTeachers fst
@@ -82,6 +84,7 @@ RETURN
                AND e.StartDate  <= wed.WindowEndDate
                AND (e.EndDate IS NULL OR e.EndDate >= wed.WindowStartDate)
         INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -94,13 +97,15 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.ProgramCode, dp.ProgramFamily
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
         INNER JOIN DimStudent s
                 ON s.SchoolID = ssa.SchoolID
                AND wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -114,11 +119,13 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.ProgramCode, dp.ProgramFamily
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN DimStudent s
                 ON wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -130,7 +137,7 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -143,17 +150,18 @@ RETURN
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
         FROM TeacherApplicable
         UNION ALL
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
     StudentGroups AS (
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            CASE WHEN GradeOrder <= 9  THEN 'HR:'  + COALESCE(Homeroom, '(none)')
+            Homeroom, SchoolName,
+            CASE WHEN GradeOrder <= 9  THEN HomeroomKey
                  WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
             END AS GroupKey
         FROM ApplicableStudents
@@ -175,6 +183,8 @@ RETURN
         sg.FirstName,
         sg.LastName,
         sg.Grade,
+        sg.Homeroom,
+        sg.SchoolName,
         sg.ProgramFamily,
         CAST(mt.MathTaskKey AS VARCHAR(20)) AS MathTaskKey,
         mt.UnitName,

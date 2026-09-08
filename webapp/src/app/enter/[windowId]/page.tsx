@@ -38,6 +38,7 @@ export default async function GroupSelect({ params }: { params: Promise<{ window
               key={g.key}
               href={`/enter/${windowId}/${g.key}`}
               title={g.label}
+              desc={g.schoolName ?? undefined}
               meta={`${g.enteredCount}/${g.applicableCount} entered`}
             />
           ))}

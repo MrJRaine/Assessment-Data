@@ -20,10 +20,6 @@ import MathRosterEntry from './MathRosterEntry'
 
 export const dynamic = 'force-dynamic'
 
-function groupLabel(groupKey: string): string {
-  return groupKey.startsWith('HR:') ? `Homeroom ${groupKey.slice(3)}` : groupKey
-}
-
 export default async function RosterGrid({
   params,
 }: {
@@ -67,13 +63,20 @@ export default async function RosterGrid({
       ? writingRoster.length
       : roster.length
 
+  // Friendly header from the roster rows (the URL key is opaque). Homeroom groups show
+  // 'Homeroom <name> · <school>'; section groups (grade 10+) have no homeroom, so fall
+  // back to the key as before.
+  const firstRow = isWriting ? writingRoster[0] : isMath ? mathRoster[0] : roster[0]
+  const groupDisplay = firstRow?.homeroom ? `Homeroom ${firstRow.homeroom}` : groupKey
+  const schoolName = firstRow?.schoolName ?? null
+
   return (
     <>
       <div className="back-row">
         <Link href={`/enter/${windowId}`} className="back-link">
           &larr; Back to groups
         </Link>
-        <span className="group-label">{groupLabel(groupKey)} · {subject}</span>
+        <span className="group-label">{groupDisplay}{schoolName ? ` · ${schoolName}` : ''} · {subject}</span>
       </div>
 
       {error ? (
