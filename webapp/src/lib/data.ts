@@ -37,8 +37,9 @@ function toYMD(v: unknown): string {
 }
 
 export interface TeacherGroup {
-  key: string // GroupKey: 'HR:<homeroom>' or 'SEC:<sectionId>'
-  label: string
+  key: string // GroupKey: URL-safe homeroom key '<SchoolAbbrev>-<cleanHomeroom>' (grades <=9) or 'SEC:<sectionId>' (10+)
+  label: string // display name, e.g. 'Homeroom 5/6' (real name; the key is what travels in the URL)
+  schoolName: string | null
   grade: string | null
   applicableCount: number
   enteredCount: number
@@ -181,6 +182,7 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
   const rows = await queryAsUser<{
     GroupKey: string
     GroupLabel: string | null
+    SchoolName: string | null
     Grade: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
@@ -191,11 +193,12 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
   )
   return rows.map((r) => {
     const key = String(r.GroupKey)
-    // Build homeroom labels in the app (reliable spacing); use the TVF label for section groups.
-    const label = key.startsWith('HR:') ? `Homeroom ${key.slice(3)}` : (r.GroupLabel ?? key)
+    // The TVF supplies the display label (real homeroom name, or section number+course);
+    // the key is the URL-safe token and no longer encodes the label.
     return {
       key,
-      label,
+      label: r.GroupLabel ?? key,
+      schoolName: r.SchoolName ?? null,
       grade: r.Grade ?? null,
       applicableCount: Number(r.ApplicableStudentCount ?? 0),
       enteredCount: Number(r.EnteredStudentCount ?? 0),
@@ -209,6 +212,8 @@ export interface RosterStudent {
   firstName: string
   lastName: string
   grade: string | null
+  homeroom: string | null // real homeroom name (for the roster header)
+  schoolName: string | null
   scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   currentLevel: string | null // existing LevelCode for this window, or null if not yet entered
@@ -241,6 +246,8 @@ export async function getTeacherRoster(
     ExistingAssessmentDate: Date | string | null
     ExpectedMinLevel: string | null
     ExpectedMaxLevel: string | null
+    Homeroom: string | null
+    SchoolName: string | null
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
@@ -259,6 +266,8 @@ export async function getTeacherRoster(
     firstName: r.FirstName,
     lastName: r.LastName,
     grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
     scaleSystem: r.ScaleSystem ?? null,
     programFamily: r.IPPProgramFamily ?? null,
     currentLevel: r.ExistingScaleValue ?? null,
@@ -292,6 +301,8 @@ export interface WritingRosterStudent {
   firstName: string
   lastName: string
   grade: string | null
+  homeroom: string | null
+  schoolName: string | null
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
   organization: number | null
@@ -324,6 +335,8 @@ export async function getTeacherRosterWriting(
     ExistingConventionsScore: number | null
     ExistingAvgScore: number | null
     ExistingAssessmentDate: Date | string | null
+    Homeroom: string | null
+    SchoolName: string | null
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
@@ -341,6 +354,8 @@ export async function getTeacherRosterWriting(
     firstName: r.FirstName,
     lastName: r.LastName,
     grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
     programFamily: r.IPPProgramFamily ?? null,
     ideas: r.ExistingIdeasScore ?? null,
     organization: r.ExistingOrganizationScore ?? null,
