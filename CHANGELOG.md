@@ -11,6 +11,13 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased] — `0.4.0-dev` (`feat/math-p6-entry`)
+
+Work staged on the dev branch, not yet released to live. Headline: **Math P–6
+task-based short cycles** (binary can-do/cannot mastery, by-task proportion +
+by-student 4-tier achievement level; data layer + entry matrix). Also carries the
+Math-aware variants of the `0.3.0` group-key TVFs. Not on `main` / live yet.
+
 ## [0.3.0] — 2026-09-08
 
 First release under formal version tracking. Ships to the live container as
