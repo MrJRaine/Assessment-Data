@@ -39,15 +39,20 @@
  *   6. Append one summary row to FactSubmissionAudit.
  *
  * ActiveFlag computation (in step 1 Wrk-build):
- *   DateLeft IS NULL                                              -> 1
- *   YEAR(DateLeft) = DimTerm.SchoolYearEnd
- *     AND MONTH(DateLeft) = expected term-end month for TermCode  -> 1
- *   otherwise                                                     -> 0
+ *   DateLeft IS NULL                    -> 1  (open-ended enrollment)
+ *   DateLeft >= @EffectiveDate (today)  -> 1  (scheduled removal date not reached)
+ *   otherwise (DateLeft in the past)    -> 0  (student has already left)
  *
- * Expected term-end month per TermCode:
- *   0 (Year Long)  = June  (month 6)
- *   1 (Semester 1) = January (month 1)
- *   2 (Semester 2) = June  (month 6)
+ * Rationale (fixed 2026-09-09): PowerSchool ALWAYS populates CC.DateLeft with
+ * the student's SCHEDULED removal date (term/semester end), never blank for a
+ * continuing student. The old logic assumed blank=active + a hardcoded term-end
+ * month map (Jan/June) and so evaluated EVERY enrollment to 0 (all 39 098 rows
+ * ActiveFlag=0 on live). The correct, term/month/year-agnostic test is simply
+ * "has the removal date arrived yet?" — future/today = still enrolled, past =
+ * left. This also flips a Semester-1 course to inactive once January passes,
+ * which the old year+month map got wrong at the school-year boundary. DimTerm is
+ * no longer needed for this compute (the join is retained only for row-scope
+ * parity; removing it is a possible follow-up).
  *
  * Match key: SourceSystemID (PS CC.ID). PS issues a fresh ID when a student
  * leaves and re-enrolls in the same section, so two enrollment episodes are
@@ -71,6 +76,9 @@
  * for the touch-LastUpdated phase. (FactEnrollment has no SCD effective
  * dates of its own; StartDate/EndDate are PS-sourced.)
  ******************************************************************************/
+
+DROP PROCEDURE IF EXISTS usp_MergeEnrollment;
+GO
 
 CREATE PROCEDURE usp_MergeEnrollment
     @EffectiveDate DATE = NULL
@@ -127,14 +135,9 @@ BEGIN
         CASE WHEN NULLIF(s.DateLeft, '') IS NULL THEN NULL
              ELSE CONVERT(DATE, s.DateLeft, 101) END                AS EndDate,
         CASE
-            WHEN NULLIF(s.DateLeft, '') IS NULL THEN CAST(1 AS BIT)
-            WHEN YEAR(CONVERT(DATE, s.DateLeft, 101)) = t.SchoolYearEnd
-                 AND MONTH(CONVERT(DATE, s.DateLeft, 101)) =
-                     CASE t.TermCode WHEN 0 THEN 6
-                                     WHEN 1 THEN 1
-                                     WHEN 2 THEN 6 END
-                 THEN CAST(1 AS BIT)
-            ELSE CAST(0 AS BIT)
+            WHEN NULLIF(s.DateLeft, '') IS NULL                   THEN CAST(1 AS BIT)  -- open-ended
+            WHEN CONVERT(DATE, s.DateLeft, 101) >= @EffectiveDate THEN CAST(1 AS BIT)  -- removal date not reached
+            ELSE CAST(0 AS BIT)                                                        -- already left (past DateLeft)
         END                                                         AS ActiveFlag,
         s.ID                                                        AS SourceSystemID
     FROM Stg_Enrollment s
