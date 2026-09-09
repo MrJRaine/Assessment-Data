@@ -1,17 +1,24 @@
 ---
 name: project_section_undercapture_bug
-description: "OPEN BUG (found 2026-09-08, on LIVE) — high-school section cards appear to under-count enrolled students. Drumlin English 10 shows 4 students but should be ~15. Root-cause + fix next session."
+description: "RESOLVED 2026-09-09 — HS section under-count root cause was the FactEnrollment.ActiveFlag bug (all rows inactive → SectionKey freeze), NOT the TVFs. Fixing ActiveFlag + re-merge snapped rosters to current (Drumlin ENG10 4→16)."
 metadata: 
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-08T18:43:54.969Z
+  modified: 2026-09-09T18:44:17.964Z
 ---
 
-**Open bug, found 2026-09-08 on LIVE, not yet diagnosed.** Senior-high **section** groups appear
-to be **missing students** — the section roster/count does not capture everyone enrolled.
+**RESOLVED 2026-09-09.** Root cause was NOT the TVFs — it was the `FactEnrollment.ActiveFlag`
+bug (see [[project_assessment_platform]] deployment state / the 2026-09-09 archive entry). PowerSchool
+always fills `DateLeft` with the scheduled term-end, so the old `usp_MergeEnrollment` ActiveFlag logic
+marked EVERY enrollment inactive. Its Step 2 only re-resolves an enrollment's `SectionKey` to the
+current `DimSection` version when the row is active, else it FREEZES the key — so with everything
+"inactive," every `SectionKey` froze, and when a section re-versioned (EnrollmentCount churn), the
+enrollments stranded on stale versions → the roster (which joins the current version) under-counted.
+Fixing ActiveFlag + re-running the merge re-resolved them: **Drumlin ENG10 141513 4→16, 141512 0→18.**
+No TVF change needed. Original symptom below for history.
 
-Concrete reproduction: **Drumlin's English 10 section on live shows 4 students; it should be ~15.**
+Concrete reproduction (original): **Drumlin's English 10 section on live showed 4 students; should be ~16.**
 
 Where to look (all in the section path of tvf_TeacherGroups / tvf_TeacherRoster*, and the enrollment
 model): the enrollment→section join (`FactEnrollment.SectionKey = DimSection.SectionKey`), the

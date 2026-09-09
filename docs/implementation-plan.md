@@ -589,6 +589,12 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
   4. Validate via "View as → Other user" using the same 5 impersonation users from Step 10's SQL tests.
 - **Blockers**: None.
 
+### Left Off — 2026-09-09
+- **Last completed**: (1) **`FactEnrollment.ActiveFlag` fix** — PS always fills DateLeft with the term-end so the old logic marked all 39 098 rows inactive; fixed `usp_MergeEnrollment` ("DateLeft NULL or >= today = active"), deployed live + re-merged (0→38 028 active). This ALSO fixed the HS section roster under-count (frozen SectionKey chain) — Drumlin ENG10 4→16. **PR #29 → main.** (2) **Prior-year baseline** loaded to live — `PriorYearBaseline` table + `load_prior_year_baseline.sql` from four ELA/FLA sheets (6221 rows / 5385 current-student matches).
+- **In progress**: the **prior-year baseline DISPLAY** (v0.4.0 minor). Branch `feature/prior-year-baseline` created off `main` with the baseline SQL cherry-picked on; **display not started**.
+- **Next action**: build the display — a starting-point read `COALESCE(latest prior-year FactAssessment*, PriorYearBaseline seed)` (auto-flips to facts Sept 2027) → reading-roster TVF + `data.ts` + row UI (June level + cumulative Δ via `DimReadingScale.LevelOrder`) → writing → student-detail per-cycle Δ → 0.4.0 container to live. Spec in memory `project_prior_year_baseline`. Alternatively the group-display redesign (`project_group_display_redesign`) is also open.
+- **Blockers**: none. (Also open: deploy the ActiveFlag fix to DEV; user to add teacher emails in PS for the 12 blank-email sections; confirm reading-vs-writing baseline coverage.)
+
 ### Left Off — 2026-09-08
 > NOTE: this plan predates Phase 3b (web app), the production cutover, and the Short Cycles work by months. The authoritative current-state record is the memory decision file `project_assessment_platform.md` + the session archive; this Left Off captures only where the live session stopped.
 - **Last completed step**: **v0.3.0 shipped to `main`** — homeroom `/`-in-name 404 fix (materialized `DimStudent.GroupKey`) + small-group roster filter + collapsible school filter. PR #28 merged, `v0.3.0` tagged, semver image scheme started (`CHANGELOG.md`, `package.json` 0.3.0, `docs/prod-container-swap.md` updated). Live warehouse SQL deployed; `/` 404 confirmed cleared on data.tcrce.ca. `feat` reconciled to `0.4.0-dev`, pushed to origin for backup (NOT merged to main).
