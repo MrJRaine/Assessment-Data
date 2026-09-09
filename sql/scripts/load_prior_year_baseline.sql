@@ -9,7 +9,7 @@
  *   1. Run PriorYearBaseline.sql and Stg_PriorYearBaseline.sql first.
  *   2. Convert the four workbooks to CSV (scratchpad\xlsx_to_csv.ps1) and upload
  *      to OneLake  Files/imports/prior-year-baseline/  :
- *        reading-ela.csv  reading-fla.csv  writing-ela.csv  writing-fla.csv
+ *        "ELA Reading.csv"  "FLA Reading.csv"  "ELA Writing.csv"  "FLA Writing.csv"
  *   3. The abfss paths below use the LIVE workspace/lakehouse GUIDs (same as the
  *      usp_Load*Staging loaders). For a DEV test, swap the lakehouse GUID to the
  *      _Dev lakehouse (as the dev loaders do).
@@ -26,7 +26,7 @@ GO
 COPY INTO Stg_PriorReading
     (StudentNumber, StudentName, School, Homeroom, LiteracyIPP, Grade, Gender,
      SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdaptations, ReadingLevel)
-FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/reading-ela.csv'
+FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/ELA%20Reading.csv'
 WITH (FILE_TYPE = 'CSV', FIELDTERMINATOR = ',', FIELDQUOTE = '"', FIRSTROW = 2);
 GO
 UPDATE Stg_PriorReading SET AssessmentLanguage = 'English' WHERE AssessmentLanguage IS NULL;
@@ -35,7 +35,7 @@ GO
 COPY INTO Stg_PriorReading
     (StudentNumber, StudentName, School, Homeroom, LiteracyIPP, Grade, Gender,
      SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdaptations, ReadingLevel)
-FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/reading-fla.csv'
+FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/FLA%20Reading.csv'
 WITH (FILE_TYPE = 'CSV', FIELDTERMINATOR = ',', FIELDQUOTE = '"', FIRSTROW = 2);
 GO
 UPDATE Stg_PriorReading SET AssessmentLanguage = 'French' WHERE AssessmentLanguage IS NULL;
@@ -49,7 +49,7 @@ COPY INTO Stg_PriorWriting
     (StudentNumber, StudentName, School, Homeroom, Grade, Gender, SelfIDAfrican,
      SelfIDIndigenous, CurrentIPP, CurrentAdaptations, LiteracyIPP,
      Conventions, Organization, Ideas, LanguageUse)
-FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/writing-ela.csv'
+FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/ELA%20Writing.csv'
 WITH (FILE_TYPE = 'CSV', FIELDTERMINATOR = ',', FIELDQUOTE = '"', FIRSTROW = 2);
 GO
 UPDATE Stg_PriorWriting SET AssessmentLanguage = 'English' WHERE AssessmentLanguage IS NULL;
@@ -59,7 +59,7 @@ COPY INTO Stg_PriorWriting
     (StudentNumber, StudentName, School, Homeroom, Grade, Gender, SelfIDAfrican,
      SelfIDIndigenous, CurrentIPP, CurrentAdaptations, LiteracyIPP,
      Conventions, Organization, Ideas, LanguageUse)
-FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/writing-fla.csv'
+FROM 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/prior-year-baseline/FLA%20Writing.csv'
 WITH (FILE_TYPE = 'CSV', FIELDTERMINATOR = ',', FIELDQUOTE = '"', FIRSTROW = 2);
 GO
 UPDATE Stg_PriorWriting SET AssessmentLanguage = 'French' WHERE AssessmentLanguage IS NULL;
