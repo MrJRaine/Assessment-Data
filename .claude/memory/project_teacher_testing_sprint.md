@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-09T18:51:13.326Z
+  modified: 2026-09-09T18:53:02.988Z
 ---
 
 **Hard target: everything teacher-test-ready by end of Friday 2026-09-11, for teacher testing
@@ -22,6 +22,11 @@ the week of 2026-09-14.** Set by the user 2026-09-09. Work is time-boxed — mov
      confirm flow [[project_ipp_type_labelling]], and the "Current Adaptations" attribute).
 - **Fri 2026-09-11:** TEST + CLEAN the IPP/Adaptations makeover AND **Math** (Math P-6 is on
   `feat/math-p6-entry`, [[project_math_assessment_model]]) → get them teacher-test-ready.
+- **Also before teacher testing:** revisit/update the **teacher instructions for Math and
+  IPPs/Adaptations** — the ASD-STE100 one-pagers in `docs/user-guides/*.docx` (Open-XML-generated,
+  `[SCREENSHOT]` markers, "assessment" term avoided per [[feedback_avoid_assessment_term]]). The
+  IPP/Adaptations makeover + Math finalization will change those UIs, so their guides go stale and
+  need updating to match.
 - **Week of 2026-09-14:** teacher testing.
 
 **How to apply:** at session start tomorrow, don't sprawl — the baseline display is a first-few-hours
