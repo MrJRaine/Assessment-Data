@@ -86,7 +86,10 @@ export default function RosterEntry({
   const defaultHiddenKeys = new Set<string>()
   for (const s of roster) {
     if ((s.grade === '7' || s.grade === '8') && s.ippStatus !== true && !s.ippNeedsConfirmation) {
-      const lo = s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null
+      // Most recent reading = latest this-year entry, falling back to the Prev June anchor when a
+      // student hasn't been assessed yet this year.
+      const recent = s.lastLevel ?? s.juneLevel
+      const lo = recent ? orderByCode.get(recent) ?? null : null
       const mn = s.expectedMin ? orderByCode.get(s.expectedMin) ?? null : null
       const mx = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
       const d = computeDelta(lo, mn, mx)
@@ -150,7 +153,14 @@ export default function RosterEntry({
 
   return (
     <>
-      <SmallGroupFilter sg={sg} />
+      <SmallGroupFilter
+        sg={sg}
+        note={
+          defaultHiddenKeys.size > 0
+            ? 'Students who previously met expectations are automatically hidden at the start of the cycle — open the list to show them.'
+            : undefined
+        }
+      />
       <table className="grid">
         <thead>
           <tr>

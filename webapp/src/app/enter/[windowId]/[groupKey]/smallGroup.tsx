@@ -80,7 +80,7 @@ export function useSmallGroup(roster: FilterStudent[], defaultHidden?: ReadonlyS
 
 export type SmallGroup = ReturnType<typeof useSmallGroup>
 
-export function SmallGroupFilter({ sg }: { sg: SmallGroup }) {
+export function SmallGroupFilter({ sg, note }: { sg: SmallGroup; note?: string }) {
   const {
     gradeGroups, multi, totalStudents, shownGrades, shownStu, pickerOpen, setPickerOpen,
     toggleGrade, toggleStudent, selectAll, clearAll,
@@ -109,6 +109,7 @@ export function SmallGroupFilter({ sg }: { sg: SmallGroup }) {
           <span className="chev">{pickerOpen ? '▾' : '▸'}</span> Students{' '}
           <span className="muted">({[...shownStu].length} of {totalStudents} shown)</span>
         </button>
+        {note ? <p className="muted small" style={{ margin: '0.35rem 0 0' }}>{note}</p> : null}
         {pickerOpen && (
           <div className="mfilter-body">
             <div className="mfilter-actions">
