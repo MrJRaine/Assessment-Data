@@ -157,7 +157,7 @@ export default function RosterEntry({
         sg={sg}
         note={
           defaultHiddenKeys.size > 0
-            ? 'Students who previously met expectations are automatically hidden at the start of the cycle — open the list to show them.'
+            ? '*Note: Students who previously met expectations are automatically hidden at the start of the cycle — open the list to show them.'
             : undefined
         }
       />

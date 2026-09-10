@@ -109,7 +109,11 @@ export function SmallGroupFilter({ sg, note }: { sg: SmallGroup; note?: string }
           <span className="chev">{pickerOpen ? '▾' : '▸'}</span> Students{' '}
           <span className="muted">({[...shownStu].length} of {totalStudents} shown)</span>
         </button>
-        {note ? <p className="muted small" style={{ margin: '0.35rem 0 0' }}>{note}</p> : null}
+        {note ? (
+          <p className="muted small" style={{ textAlign: 'center', margin: 0, padding: '0.35rem 0.75rem 0.6rem' }}>
+            {note}
+          </p>
+        ) : null}
         {pickerOpen && (
           <div className="mfilter-body">
             <div className="mfilter-actions">
