@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-09T18:43:16.486Z
+  modified: 2026-09-10T17:32:03.359Z
 ---
 
 **Goal:** teachers see each student's **starting point** (prior-year reading level + writing) on
@@ -39,9 +39,11 @@ a level count (e.g. `M→P = +3`). Writing Δ = change in the 4-trait **average*
 (`SCR`/`ABS`/`INS`/`EAL`) become **NULL** in any average (excluded from numerator AND denominator,
 never 0) — see [[project_writing_scribed_score_code]]. All-codes → NULL average → no starting point.
 
-**Build plan (NOT built):** ships from branch `feature/prior-year-baseline` (off `main`, baseline SQL
-cherry-picked on) as **v0.4.0 minor** (adds a display → app/semver change), independent of the Math
-work on `feat`. Order: (1) starting-point read/view, (2) reading-roster TVF + `data.ts` + row UI
-(June level + cumulative Δ), (3) writing, (4) student-detail per-cycle Δ (fast follow), (5) 0.4.0
-container to live. Validate the join with the Maple-Grove grade-6 query (in this session's transcript).
+**READING display SHIPPED to LIVE 2026-09-10 (v0.4.0):** built from `feature/prior-year-baseline`
+(off `main`). Reading roster row now shows Prev June / Since June / Expected / Current / Diff from
+Prev Cycle / New level; 7-8 auto-hide of already-Meeting students (+ accordion note); optimistic
+instant save (revalidatePath/router.refresh removed). Year-flip view `dbo.vw_StudentReadingStartingPoint`
+= COALESCE(prior-year FactAssessmentReading, PriorYearBaseline seed). Cutover clean.
+**WRITING intentionally has NO prior-June baseline** — last year's writing was too sporadic to anchor.
+Still DEFERRED: student-detail per-cycle Δ (fast follow), option-A full historical star-schema.
 See [[project_assessment_platform]], [[project_ongoing_assessment_model]] (latest-in-window picks).
