@@ -7,6 +7,7 @@ running Podman container for a new one. Most recent cutover: `c30095b` (SHA-tagg
 ## Environment facts
 
 - **Prod host:** Windows Server; IIS (`W3SVC`) reverse-proxies `https://data.tcrce.ca` → `127.0.0.1:3000`.
+- **Access:** the project lead has **direct Windows Remote Desktop access** to the prod host — copy the tar to `C:\temp` and run the swap yourself; IT is NOT in the deploy loop.
 - **Container:** name `aw`, **rootless** Podman running inside WSL2 as user **`appuser`** (uid 1001).
   - Every podman command is wrapped: `wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && <cmd>"`.
 - **Env / secrets:** non-secret config from `--env-file /mnt/c/temp/.env.live`; three credentials come
@@ -29,7 +30,7 @@ build's version (e.g. `0.3.0`), **`<PREV>`** = the currently-running one.
 > Builds before `0.3.0` were tagged by short commit SHA (`:c30095b`, …); those tars/images stay valid
 > for rollback and are still referenced by SHA.
 
-> Files are delivered by IT to `C:\temp` on the prod host, e.g. `C:\temp\assessment-webapp-<NEW>.tar`.
+> Copy the tar to `C:\temp` on the prod host over RDP, e.g. `C:\temp\assessment-webapp-<NEW>.tar`.
 > Inside WSL that path is `/mnt/c/temp/assessment-webapp-<NEW>.tar`.
 
 ---
@@ -43,7 +44,7 @@ podman build -t assessment-webapp:<NEW> .
 podman save -o /c/Git-Repos/assessment-webapp-<NEW>.tar assessment-webapp:<NEW>
 ```
 
-Hand `assessment-webapp-<NEW>.tar` to IT to place in `C:\temp` on the prod host.
+Copy `assessment-webapp-<NEW>.tar` to `C:\temp` on the prod host over RDP.
 
 ## ⚠ Release SQL prerequisite
 
