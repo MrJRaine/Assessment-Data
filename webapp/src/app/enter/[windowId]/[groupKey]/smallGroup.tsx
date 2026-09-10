@@ -35,7 +35,9 @@ const toggleIn = (set: Set<string>, val: string) => {
   return next
 }
 
-export function useSmallGroup(roster: FilterStudent[]) {
+// `defaultHidden` (optional) = studentKeys to start UNchecked (e.g. grades 7-8 already Meeting the
+// expected level, which those teachers don't re-assess). They stay listed in the picker to re-show.
+export function useSmallGroup(roster: FilterStudent[], defaultHidden?: ReadonlySet<string>) {
   const gradeGroups = useMemo<GradeGroup[]>(() => {
     const byGrade = new Map<string, GradeGroup>()
     for (const s of roster) {
@@ -54,7 +56,9 @@ export function useSmallGroup(roster: FilterStudent[]) {
 
   // Filtering is display-only: hidden students keep any staged edits and still save.
   const [shownGrades, setShownGrades] = useState<Set<string>>(() => new Set(gradeGroups.map((g) => g.grade)))
-  const [shownStu, setShownStu] = useState<Set<string>>(() => new Set(roster.map((s) => s.studentKey)))
+  const [shownStu, setShownStu] = useState<Set<string>>(
+    () => new Set(roster.filter((s) => !defaultHidden?.has(s.studentKey)).map((s) => s.studentKey)),
+  )
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const multi = gradeGroups.length > 1
@@ -76,7 +80,7 @@ export function useSmallGroup(roster: FilterStudent[]) {
 
 export type SmallGroup = ReturnType<typeof useSmallGroup>
 
-export function SmallGroupFilter({ sg }: { sg: SmallGroup }) {
+export function SmallGroupFilter({ sg, note }: { sg: SmallGroup; note?: string }) {
   const {
     gradeGroups, multi, totalStudents, shownGrades, shownStu, pickerOpen, setPickerOpen,
     toggleGrade, toggleStudent, selectAll, clearAll,
@@ -105,6 +109,11 @@ export function SmallGroupFilter({ sg }: { sg: SmallGroup }) {
           <span className="chev">{pickerOpen ? '▾' : '▸'}</span> Students{' '}
           <span className="muted">({[...shownStu].length} of {totalStudents} shown)</span>
         </button>
+        {note ? (
+          <p className="muted small" style={{ textAlign: 'center', margin: 0, padding: '0.35rem 0.75rem 0.6rem' }}>
+            {note}
+          </p>
+        ) : null}
         {pickerOpen && (
           <div className="mfilter-body">
             <div className="mfilter-actions">

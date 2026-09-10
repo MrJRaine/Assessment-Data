@@ -39,6 +39,13 @@ function matchBand(delta: number | null, bands: AchievementBand[]): AchievementB
   return null
 }
 
+// Signed, colour-coded delta (green gain / red loss). Shared by Since-June + Diff-from-Prev-Cycle.
+function DeltaCell({ value }: { value: number | null }) {
+  if (value == null) return <span className="muted">—</span>
+  const color = value > 0 ? '#137333' : value < 0 ? '#a50e0e' : 'inherit'
+  return <strong style={{ color }}>{value > 0 ? `+${value}` : value}</strong>
+}
+
 type SaveSummary = { saved: number; errors: { label: string; message: string }[] }
 
 export default function RosterEntry({
@@ -55,6 +62,7 @@ export default function RosterEntry({
   achievementLevels: AchievementBand[]
 }) {
   const codeToId = new Map(levels.map((l) => [l.levelCode, l.readingScaleId] as const))
+  const idToCode = new Map(levels.map((l) => [l.readingScaleId, l.levelCode] as const))
   const orderById = new Map(levels.map((l) => [l.readingScaleId, l.levelOrder] as const))
   const orderByCode = new Map(levels.map((l) => [l.levelCode, l.levelOrder] as const))
   const numByKey = new Map(roster.map((s) => [s.studentKey, s.studentNumber] as const))
@@ -72,7 +80,23 @@ export default function RosterEntry({
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
-  const sg = useSmallGroup(roster)
+  // Grades 7-8 are assessed only until a student reaches the expected (Grade-6 June) level, so
+  // default-hide any 7/8 student whose most recent reading is already Meeting/Exceeding (delta >= 0).
+  // Non-IPP, benchmark-resolved only; they stay listed in the Students picker to re-show.
+  const defaultHiddenKeys = new Set<string>()
+  for (const s of roster) {
+    if ((s.grade === '7' || s.grade === '8') && s.ippStatus !== true && !s.ippNeedsConfirmation) {
+      // Most recent reading = latest this-year entry, falling back to the Prev June anchor when a
+      // student hasn't been assessed yet this year.
+      const recent = s.lastLevel ?? s.juneLevel
+      const lo = recent ? orderByCode.get(recent) ?? null : null
+      const mn = s.expectedMin ? orderByCode.get(s.expectedMin) ?? null : null
+      const mx = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
+      const d = computeDelta(lo, mn, mx)
+      if (d != null && d >= 0) defaultHiddenKeys.add(s.studentKey)
+    }
+  }
+  const sg = useSmallGroup(roster, defaultHiddenKeys)
 
   const changedLevelKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
   const ippKeys = Object.keys(ippSel)
@@ -122,22 +146,38 @@ export default function RosterEntry({
         for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
         return next
       })
+      // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
+      // recompute instantly from that — no server re-fetch (which was the ~5s lag).
     })
   }
 
   return (
     <>
-      <SmallGroupFilter sg={sg} />
+      <SmallGroupFilter
+        sg={sg}
+        note={
+          defaultHiddenKeys.size > 0
+            ? '*Note: Students who previously met expectations are automatically hidden at the start of the cycle — open the list to show them.'
+            : undefined
+        }
+      />
       <table className="grid">
         <thead>
           <tr>
             <th>Student</th>
             <th>Grade</th>
-            <th>Current</th>
+            <th>
+              Prev<br />June
+            </th>
+            <th>
+              Since<br />June
+            </th>
             <th>Expected</th>
-            <th>Δ</th>
+            <th>Current</th>
+            <th>
+              Diff from<br />Prev Cycle
+            </th>
             <th>New level</th>
-            <th>IPP</th>
           </tr>
         </thead>
         <tbody>
@@ -154,6 +194,18 @@ export default function RosterEntry({
             const maxOrder = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
             const delta = suppress ? null : computeDelta(order, minOrder, maxOrder)
             const band = matchBand(delta, achievementLevels)
+            // Committed level (baseline; updates the instant Save succeeds — optimistic, no
+            // server re-fetch) drives Current + the Since-June / Diff deltas. Falls back to the
+            // last recorded level (any cycle) when there's no current-window entry yet.
+            const committedId = baseline[s.studentKey] ?? ''
+            const committedCode = committedId ? idToCode.get(committedId) ?? null : s.currentLevel ?? null
+            const committedOrder =
+              (committedId ? orderById.get(committedId) ?? null : null) ??
+              (s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null)
+            const juneOrder = s.juneLevel ? orderByCode.get(s.juneLevel) ?? null : null
+            const prevOrder = s.prevLevel ? orderByCode.get(s.prevLevel) ?? null : null
+            const sinceJune = committedOrder != null && juneOrder != null ? committedOrder - juneOrder : null
+            const diffPrevCycle = committedOrder != null && prevOrder != null ? committedOrder - prevOrder : null
             return (
               <tr
                 key={s.studentKey}
@@ -164,7 +216,12 @@ export default function RosterEntry({
                   {s.lastName}, {s.firstName}
                 </td>
                 <td>{s.grade ?? '—'}</td>
-                <td>{s.currentLevel ?? <span className="muted">—</span>}</td>
+                {/* Prev June — prior-year starting level (anchor) */}
+                <td>{s.juneLevel ?? <span className="muted">—</span>}</td>
+                {/* Since June — committed level vs the June anchor */}
+                <td>
+                  <DeltaCell value={sinceJune} />
+                </td>
                 <td className="muted">
                   {needsConfirm ? (
                     <span className="ipp-confirm">Confirm IPP</span>
@@ -173,35 +230,19 @@ export default function RosterEntry({
                     // benchmark range doesn't apply, so show "IPP" instead of an expectation.
                     <span className="ipp-badge">IPP</span>
                   ) : s.expectedMin && s.expectedMax ? (
-                    `${s.expectedMin}–${s.expectedMax}`
+                    s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
                   ) : (
                     '—'
                   )}
                 </td>
-                <td style={band ? { color: band.hexColor, fontWeight: 600 } : undefined} title={band?.name}>
-                  {isIPP ? 'IPP' : delta == null ? '—' : delta > 0 ? `+${delta}` : delta}
-                </td>
+                <td>{committedCode ?? <span className="muted">—</span>}</td>
+                {/* Diff from Prev Cycle — committed level vs the cycle before it */}
+                <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={diffPrevCycle} />}</td>
                 <td>
                   {needsConfirm ? (
-                    <span className="muted">—</span>
-                  ) : (
-                    <select
-                      value={selId}
-                      disabled={pending || levels.length === 0}
-                      onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
-                    >
-                      <option value="">—</option>
-                      {levels.map((l) => (
-                        <option key={l.readingScaleId} value={l.readingScaleId}>
-                          {l.levelCode}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-                <td>
-                  {needsConfirm ? (
-                    // Staged segmented choice — saved with the Save button (not on click).
+                    // IPP needs confirmation before a level can be entered, so the Yes/No confirm
+                    // control lives here (the dedicated IPP column was dropped to save width).
+                    // Staged — committed with Save, not on click.
                     <span className="ipp-seg">
                       <button
                         className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
@@ -218,12 +259,19 @@ export default function RosterEntry({
                         No
                       </button>
                     </span>
-                  ) : isIPP ? (
-                    <span className="ipp-badge">IPP</span>
-                  ) : s.ippStatus === false ? (
-                    <span className="muted">Not IPP</span>
                   ) : (
-                    <span className="muted">—</span>
+                    <select
+                      value={selId}
+                      disabled={pending || levels.length === 0}
+                      onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {levels.map((l) => (
+                        <option key={l.readingScaleId} value={l.readingScaleId}>
+                          {l.levelCode}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </td>
               </tr>

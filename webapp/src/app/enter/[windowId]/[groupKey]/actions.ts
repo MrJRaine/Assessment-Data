@@ -4,7 +4,6 @@ import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
 import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
-import { revalidatePath } from 'next/cache'
 
 export interface SaveEntry {
   studentNumber: string
@@ -63,8 +62,8 @@ export async function saveReadingAssessments(
     }
   }
 
-  // Re-read the roster so the grid reflects the new levels/deltas.
-  revalidatePath(`/enter/${windowId}/${groupKey}`)
+  // No re-read: the grid updates optimistically from the entry state, and the page is
+  // force-dynamic so any later navigation re-fetches fresh anyway.
   return { saved, errors }
 }
 
@@ -116,8 +115,6 @@ export async function saveWritingAssessments(
       errors.push({ studentNumber: e.studentNumber, message: toUserMessage(err) })
     }
   }
-
-  revalidatePath(`/enter/${windowId}/${groupKey}`)
   return { saved, errors }
 }
 
@@ -173,7 +170,5 @@ export async function confirmRosterIPPs(
       errors.push({ studentKey: e.studentKey, message: toUserMessage(err) })
     }
   }
-
-  revalidatePath(`/enter/${windowId}/${groupKey}`)
   return { saved, errors }
 }
