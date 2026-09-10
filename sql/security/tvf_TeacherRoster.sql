@@ -180,8 +180,13 @@ RETURN
                ROW_NUMBER() OVER (PARTITION BY ds.StudentNumber, far.AssessmentWindowID
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS wrn
         FROM FactAssessmentReading far
-        INNER JOIN DimStudent      ds  ON ds.StudentKey      = far.StudentKey
-        INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
+        INNER JOIN DimStudent          ds  ON ds.StudentKey        = far.StudentKey
+        INNER JOIN DimReadingScale     drs ON drs.ReadingScaleID   = far.ReadingScaleID
+        INNER JOIN DimAssessmentWindow rw  ON rw.AssessmentWindowID = far.AssessmentWindowID
+        -- Scope to the current cycle's SCHOOL YEAR (previous cycle is within the year) so the
+        -- cross-cycle scan stays small instead of ranking all reading history for every student.
+        WHERE rw.SchoolYear = (SELECT w2.SchoolYear FROM DimAssessmentWindow w2
+                               WHERE w2.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT))
     ),
     ReadingCycleRank AS (
         SELECT StudentNumber, LevelCode, LevelOrder,
@@ -214,11 +219,9 @@ RETURN
         dal.HexColorTint         AS AchievementHexColorTint,
         -- "Prev June" prior-year starting level (auto-flips to prior-year facts from
         -- Sept 2027 — see vw_StudentReadingStartingPoint):
-        sp.StartingLevelCode     AS JuneReadingLevel,
-        -- Since June = last recorded level (ANY cycle) minus the June anchor.
-        (lastR.LevelOrder - sp.StartingLevelOrder) AS ReadingSinceJune,
-        -- Diff from previous cycle = last recorded level minus the cycle before it.
-        (lastR.LevelOrder - prevR.LevelOrder)      AS ReadingDiffPrevCycle
+        sp.StartingLevelCode     AS JuneReadingLevel,     -- "Prev June" anchor
+        lastR.LevelCode          AS LastReadingLevel,     -- last recorded level, ANY cycle (fallback current)
+        prevR.LevelCode          AS PrevCycleReadingLevel -- the cycle before the last (for Diff)
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID

@@ -62,6 +62,7 @@ export default function RosterEntry({
   achievementLevels: AchievementBand[]
 }) {
   const codeToId = new Map(levels.map((l) => [l.levelCode, l.readingScaleId] as const))
+  const idToCode = new Map(levels.map((l) => [l.readingScaleId, l.levelCode] as const))
   const orderById = new Map(levels.map((l) => [l.readingScaleId, l.levelOrder] as const))
   const orderByCode = new Map(levels.map((l) => [l.levelCode, l.levelOrder] as const))
   const numByKey = new Map(roster.map((s) => [s.studentKey, s.studentNumber] as const))
@@ -129,6 +130,8 @@ export default function RosterEntry({
         for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
         return next
       })
+      // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
+      // recompute instantly from that — no server re-fetch (which was the ~5s lag).
     })
   }
 
@@ -168,6 +171,18 @@ export default function RosterEntry({
             const maxOrder = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
             const delta = suppress ? null : computeDelta(order, minOrder, maxOrder)
             const band = matchBand(delta, achievementLevels)
+            // Committed level (baseline; updates the instant Save succeeds — optimistic, no
+            // server re-fetch) drives Current + the Since-June / Diff deltas. Falls back to the
+            // last recorded level (any cycle) when there's no current-window entry yet.
+            const committedId = baseline[s.studentKey] ?? ''
+            const committedCode = committedId ? idToCode.get(committedId) ?? null : s.currentLevel ?? null
+            const committedOrder =
+              (committedId ? orderById.get(committedId) ?? null : null) ??
+              (s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null)
+            const juneOrder = s.juneLevel ? orderByCode.get(s.juneLevel) ?? null : null
+            const prevOrder = s.prevLevel ? orderByCode.get(s.prevLevel) ?? null : null
+            const sinceJune = committedOrder != null && juneOrder != null ? committedOrder - juneOrder : null
+            const diffPrevCycle = committedOrder != null && prevOrder != null ? committedOrder - prevOrder : null
             return (
               <tr
                 key={s.studentKey}
@@ -180,9 +195,9 @@ export default function RosterEntry({
                 <td>{s.grade ?? '—'}</td>
                 {/* Prev June — prior-year starting level (anchor) */}
                 <td>{s.juneLevel ?? <span className="muted">—</span>}</td>
-                {/* Since June — last recorded level (any cycle) vs the June anchor */}
+                {/* Since June — committed level vs the June anchor */}
                 <td>
-                  <DeltaCell value={s.sinceJune} />
+                  <DeltaCell value={sinceJune} />
                 </td>
                 <td className="muted">
                   {needsConfirm ? (
@@ -197,9 +212,9 @@ export default function RosterEntry({
                     '—'
                   )}
                 </td>
-                <td>{s.currentLevel ?? <span className="muted">—</span>}</td>
-                {/* Diff from Prev Cycle — last recorded level vs the cycle before it */}
-                <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={s.diffPrevCycle} />}</td>
+                <td>{committedCode ?? <span className="muted">—</span>}</td>
+                {/* Diff from Prev Cycle — committed level vs the cycle before it */}
+                <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={diffPrevCycle} />}</td>
                 <td>
                   {needsConfirm ? (
                     // IPP needs confirmation before a level can be entered, so the Yes/No confirm
