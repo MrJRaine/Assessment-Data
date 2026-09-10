@@ -193,7 +193,14 @@ RETURN
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
-        dal.HexColorTint         AS AchievementHexColorTint
+        dal.HexColorTint         AS AchievementHexColorTint,
+        -- Prior-year "starting point" (this year: PriorYearBaseline; auto-flips to
+        -- prior-year facts from Sept 2027 — see vw_StudentReadingStartingPoint):
+        sp.StartingLevelCode     AS JuneReadingLevel,
+        sp.StartingSource        AS JuneReadingSource,
+        -- cumulative progress since June = current level order - starting level order
+        -- (NULL if there's no current entry yet or no mappable starting level).
+        (drs.LevelOrder - sp.StartingLevelOrder) AS ReadingSinceJune
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
@@ -223,6 +230,10 @@ RETURN
                OR (dal.UpperOp = '<=' AND far.ReadingDelta <= dal.UpperBound)
                OR (dal.UpperOp = '<'  AND far.ReadingDelta <  dal.UpperBound)
                OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
+    LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
+           ON sp.StudentNumber = sg.StudentNumber
+          AND sp.ScaleSystem   = CASE sg.ProgramFamily WHEN 'English'          THEN 'EN_Reading'
+                                                        WHEN 'French Immersion' THEN 'FR_Reading' END
     WHERE sg.GroupKey = @GroupKey
 );
 GO

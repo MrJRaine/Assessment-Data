@@ -226,6 +226,8 @@ export interface RosterStudent {
   achievementLevel: string | null // DimAchievementLevel code/name for the current delta
   achievementHexColor: string | null // strong colour (text/border)
   achievementHexColorTint: string | null // light colour (cell background)
+  juneLevel: string | null // prior-year starting reading level (the "June" anchor)
+  sinceJune: number | null // cumulative reading levels gained(+)/lost(-) since June
 }
 
 /** One window's roster for the signed-in teacher + group, with each student's existing entry. */
@@ -255,6 +257,9 @@ export async function getTeacherRoster(
     AchievementLevelName: string | null
     AchievementHexColor: string | null
     AchievementHexColorTint: string | null
+    JuneReadingLevel: string | null
+    JuneReadingSource: string | null
+    ReadingSinceJune: number | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
@@ -283,6 +288,8 @@ export async function getTeacherRoster(
     achievementLevel: r.AchievementLevelName ?? r.AchievementLevel ?? null,
     achievementHexColor: r.AchievementHexColor ?? null,
     achievementHexColorTint: r.AchievementHexColorTint ?? null,
+    juneLevel: r.JuneReadingLevel ?? null,
+    sinceJune: r.ReadingSinceJune ?? null,
   }))
 }
 
