@@ -220,7 +220,7 @@ export default function RosterEntry({
                     // benchmark range doesn't apply, so show "IPP" instead of an expectation.
                     <span className="ipp-badge">IPP</span>
                   ) : s.expectedMin && s.expectedMax ? (
-                    `${s.expectedMin}–${s.expectedMax}`
+                    s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
                   ) : (
                     '—'
                   )}
