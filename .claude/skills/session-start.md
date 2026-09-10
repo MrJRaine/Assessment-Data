@@ -10,6 +10,14 @@ The MEMORY.md index is auto-injected into context every session — its one-line
 standing behavioral rules and advertise what deeper memories exist. You do not need to read a
 memory file to be bound by its rule; the hook line IS the rule.
 
+**Standing output rule — ALWAYS use clickable file links.** Whenever you refer to a file —
+ESPECIALLY a SQL script, `.md`, or anything the user needs to open or run — write it as a
+clickable markdown link `[name](relative/path)`, never a bare code span or plain text. Use the
+correct path relative to the user's workspace root, INCLUDING for files in a sibling git worktree
+(e.g. `[vw_x.sql](../Assessment-Data-prod/sql/security/vw_x.sql)`), so the user can click to open it
+in VS Code instead of hunting for it. This is a recurring correction — apply it every time. See
+[[feedback_file_links_in_instructions]].
+
 (Memory lives IN the repo at `.claude/memory/` — since 2026-06-11 — so it travels with
 git to every machine. Each machine's Claude Code harness reaches it via a directory
 junction from its expected per-machine memory path to the repo folder; that junction is
