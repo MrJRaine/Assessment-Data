@@ -152,7 +152,6 @@ export default function RosterEntry({
               Diff from<br />Prev Cycle
             </th>
             <th>New level</th>
-            <th>IPP</th>
           </tr>
         </thead>
         <tbody>
@@ -203,25 +202,9 @@ export default function RosterEntry({
                 <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={s.diffPrevCycle} />}</td>
                 <td>
                   {needsConfirm ? (
-                    <span className="muted">—</span>
-                  ) : (
-                    <select
-                      value={selId}
-                      disabled={pending || levels.length === 0}
-                      onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
-                    >
-                      <option value="">—</option>
-                      {levels.map((l) => (
-                        <option key={l.readingScaleId} value={l.readingScaleId}>
-                          {l.levelCode}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-                <td>
-                  {needsConfirm ? (
-                    // Staged segmented choice — saved with the Save button (not on click).
+                    // IPP needs confirmation before a level can be entered, so the Yes/No confirm
+                    // control lives here (the dedicated IPP column was dropped to save width).
+                    // Staged — committed with Save, not on click.
                     <span className="ipp-seg">
                       <button
                         className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
@@ -238,12 +221,19 @@ export default function RosterEntry({
                         No
                       </button>
                     </span>
-                  ) : isIPP ? (
-                    <span className="ipp-badge">IPP</span>
-                  ) : s.ippStatus === false ? (
-                    <span className="muted">Not IPP</span>
                   ) : (
-                    <span className="muted">—</span>
+                    <select
+                      value={selId}
+                      disabled={pending || levels.length === 0}
+                      onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {levels.map((l) => (
+                        <option key={l.readingScaleId} value={l.readingScaleId}>
+                          {l.levelCode}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </td>
               </tr>
