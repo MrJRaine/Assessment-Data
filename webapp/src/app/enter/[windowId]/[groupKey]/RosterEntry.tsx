@@ -80,7 +80,20 @@ export default function RosterEntry({
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
-  const sg = useSmallGroup(roster)
+  // Grades 7-8 are assessed only until a student reaches the expected (Grade-6 June) level, so
+  // default-hide any 7/8 student whose most recent reading is already Meeting/Exceeding (delta >= 0).
+  // Non-IPP, benchmark-resolved only; they stay listed in the Students picker to re-show.
+  const defaultHiddenKeys = new Set<string>()
+  for (const s of roster) {
+    if ((s.grade === '7' || s.grade === '8') && s.ippStatus !== true && !s.ippNeedsConfirmation) {
+      const lo = s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null
+      const mn = s.expectedMin ? orderByCode.get(s.expectedMin) ?? null : null
+      const mx = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
+      const d = computeDelta(lo, mn, mx)
+      if (d != null && d >= 0) defaultHiddenKeys.add(s.studentKey)
+    }
+  }
+  const sg = useSmallGroup(roster, defaultHiddenKeys)
 
   const changedLevelKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
   const ippKeys = Object.keys(ippSel)
