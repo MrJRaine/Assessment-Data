@@ -11,6 +11,22 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.4.0] — 2026-09-10
+
+### Added
+- **Prior-year "starting point" on the reading roster.** Each student's June (previous
+  school year) reading level plus a **cumulative Δ since June** (levels gained/lost, by
+  `DimReadingScale.LevelOrder`) now show in a "Since June" column, so teachers see where a
+  student began and how far they've moved.
+
+### SQL (deploy to warehouse before / with the container)
+1. `sql/facts/PriorYearBaseline.sql` + `sql/scripts/load_prior_year_baseline.sql` — the
+   2025-2026 baseline table + load (already on live from 2026-09-09).
+2. `sql/security/vw_StudentReadingStartingPoint.sql` — the starting-point read
+   (`COALESCE(latest prior-year FactAssessmentReading, PriorYearBaseline seed)`; auto-flips
+   to in-system facts from Sept 2027).
+3. `sql/security/tvf_TeacherRoster.sql` — returns `JuneReadingLevel` + `ReadingSinceJune`.
+
 ## [0.3.0] — 2026-09-08
 
 First release under formal version tracking. Ships to the live container as
