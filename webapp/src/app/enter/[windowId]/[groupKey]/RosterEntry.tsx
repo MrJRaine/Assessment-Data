@@ -39,6 +39,13 @@ function matchBand(delta: number | null, bands: AchievementBand[]): AchievementB
   return null
 }
 
+// Signed, colour-coded delta (green gain / red loss). Shared by Since-June + Diff-from-Prev-Cycle.
+function DeltaCell({ value }: { value: number | null }) {
+  if (value == null) return <span className="muted">—</span>
+  const color = value > 0 ? '#137333' : value < 0 ? '#a50e0e' : 'inherit'
+  return <strong style={{ color }}>{value > 0 ? `+${value}` : value}</strong>
+}
+
 type SaveSummary = { saved: number; errors: { label: string; message: string }[] }
 
 export default function RosterEntry({
@@ -133,10 +140,17 @@ export default function RosterEntry({
           <tr>
             <th>Student</th>
             <th>Grade</th>
-            <th>Current</th>
+            <th>
+              Prev<br />June
+            </th>
+            <th>
+              Since<br />June
+            </th>
             <th>Expected</th>
-            <th>Δ</th>
-            <th>Since June</th>
+            <th>Current</th>
+            <th>
+              Diff from<br />Prev Cycle
+            </th>
             <th>New level</th>
             <th>IPP</th>
           </tr>
@@ -155,10 +169,6 @@ export default function RosterEntry({
             const maxOrder = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
             const delta = suppress ? null : computeDelta(order, minOrder, maxOrder)
             const band = matchBand(delta, achievementLevels)
-            // Cumulative progress since the prior-year (June) anchor: current/selected level order
-            // minus the June level's order, in the same scale. Live (tracks the New-level pick).
-            const juneOrder = s.juneLevel ? orderByCode.get(s.juneLevel) ?? null : null
-            const sinceJune = order != null && juneOrder != null ? order - juneOrder : null
             return (
               <tr
                 key={s.studentKey}
@@ -169,7 +179,12 @@ export default function RosterEntry({
                   {s.lastName}, {s.firstName}
                 </td>
                 <td>{s.grade ?? '—'}</td>
-                <td>{s.currentLevel ?? <span className="muted">—</span>}</td>
+                {/* Prev June — prior-year starting level (anchor) */}
+                <td>{s.juneLevel ?? <span className="muted">—</span>}</td>
+                {/* Since June — last recorded level (any cycle) vs the June anchor */}
+                <td>
+                  <DeltaCell value={s.sinceJune} />
+                </td>
                 <td className="muted">
                   {needsConfirm ? (
                     <span className="ipp-confirm">Confirm IPP</span>
@@ -183,28 +198,9 @@ export default function RosterEntry({
                     '—'
                   )}
                 </td>
-                <td style={band ? { color: band.hexColor, fontWeight: 600 } : undefined} title={band?.name}>
-                  {isIPP ? 'IPP' : delta == null ? '—' : delta > 0 ? `+${delta}` : delta}
-                </td>
-                <td title={s.juneLevel ? `June starting level: ${s.juneLevel}` : undefined}>
-                  {s.juneLevel == null ? (
-                    <span className="muted">—</span>
-                  ) : (
-                    <>
-                      <span className="muted">{s.juneLevel}</span>
-                      {sinceJune != null ? (
-                        <strong
-                          style={{
-                            marginLeft: 4,
-                            color: sinceJune > 0 ? '#137333' : sinceJune < 0 ? '#a50e0e' : 'inherit',
-                          }}
-                        >
-                          {sinceJune > 0 ? `+${sinceJune}` : sinceJune}
-                        </strong>
-                      ) : null}
-                    </>
-                  )}
-                </td>
+                <td>{s.currentLevel ?? <span className="muted">—</span>}</td>
+                {/* Diff from Prev Cycle — last recorded level vs the cycle before it */}
+                <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={s.diffPrevCycle} />}</td>
                 <td>
                   {needsConfirm ? (
                     <span className="muted">—</span>

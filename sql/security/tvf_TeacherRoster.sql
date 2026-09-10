@@ -170,6 +170,24 @@ RETURN
             ) AS rn
         FROM FactAssessmentReading
         WHERE AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
+    ),
+    -- Cross-cycle reading history per student: the latest level in EACH window (wrn=1),
+    -- then windows ranked newest-first (rn). rn=1 = last recorded level (any cycle);
+    -- rn=2 = the previous cycle's level. Keyed by StudentNumber so it survives SCD
+    -- versioning. Drives "Since June" (last vs June) and "Diff from Prev Cycle" (rn1 vs rn2).
+    ReadingByWindow AS (
+        SELECT ds.StudentNumber, far.AssessmentWindowID, drs.LevelCode, drs.LevelOrder, far.AssessmentDate,
+               ROW_NUMBER() OVER (PARTITION BY ds.StudentNumber, far.AssessmentWindowID
+                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS wrn
+        FROM FactAssessmentReading far
+        INNER JOIN DimStudent      ds  ON ds.StudentKey      = far.StudentKey
+        INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
+    ),
+    ReadingCycleRank AS (
+        SELECT StudentNumber, LevelCode, LevelOrder,
+               ROW_NUMBER() OVER (PARTITION BY StudentNumber ORDER BY AssessmentDate DESC) AS rn
+        FROM ReadingByWindow
+        WHERE wrn = 1
     )
     SELECT DISTINCT
         CAST(sg.StudentKey AS VARCHAR(20)) AS StudentKey,
@@ -194,13 +212,13 @@ RETURN
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
         dal.HexColorTint         AS AchievementHexColorTint,
-        -- Prior-year "starting point" (this year: PriorYearBaseline; auto-flips to
-        -- prior-year facts from Sept 2027 — see vw_StudentReadingStartingPoint):
+        -- "Prev June" prior-year starting level (auto-flips to prior-year facts from
+        -- Sept 2027 — see vw_StudentReadingStartingPoint):
         sp.StartingLevelCode     AS JuneReadingLevel,
-        sp.StartingSource        AS JuneReadingSource,
-        -- cumulative progress since June = current level order - starting level order
-        -- (NULL if there's no current entry yet or no mappable starting level).
-        (drs.LevelOrder - sp.StartingLevelOrder) AS ReadingSinceJune
+        -- Since June = last recorded level (ANY cycle) minus the June anchor.
+        (lastR.LevelOrder - sp.StartingLevelOrder) AS ReadingSinceJune,
+        -- Diff from previous cycle = last recorded level minus the cycle before it.
+        (lastR.LevelOrder - prevR.LevelOrder)      AS ReadingDiffPrevCycle
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
@@ -234,6 +252,8 @@ RETURN
            ON sp.StudentNumber = sg.StudentNumber
           AND sp.ScaleSystem   = CASE sg.ProgramFamily WHEN 'English'          THEN 'EN_Reading'
                                                         WHEN 'French Immersion' THEN 'FR_Reading' END
+    LEFT JOIN ReadingCycleRank lastR ON lastR.StudentNumber = sg.StudentNumber AND lastR.rn = 1
+    LEFT JOIN ReadingCycleRank prevR ON prevR.StudentNumber = sg.StudentNumber AND prevR.rn = 2
     WHERE sg.GroupKey = @GroupKey
 );
 GO
