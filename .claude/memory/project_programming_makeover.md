@@ -116,9 +116,16 @@ both old branches are deleted. Workflow: [[feedback_git_workflow]]. Bigger than 
    backlog item. Touches the LIVE Data Entry flow → design carefully + test every role combo.
 
 ## BUILD SEQUENCE (2026-09-11)
-- **Phase 0 — backend, picker-agnostic (start now):** Math IPP guard relax + `usp_MergeStudent` seed
-  (Math P-6, own program, single row); `FactStudentAdaptation` + `usp_UpsertStudentAdaptation` +
-  vw/tvf mirrors, seeded from `DimStudent.Adap`.
+- ✅ **Phase 0 — backend DONE on `dev` (2026-09-11), seeding validated on dev data.** Math guard
+  relaxed (`usp_UpsertStudentIPP`); `FactStudentAdaptation` table; `usp_MergeStudent` Step 6 rewrite —
+  Math IPP (P-6, own family, single row) + per-subject grade bands (Reading P-8/Writing P-RG/Math P-6,
+  PP excluded) + parallel Adaptation seeding (6c/6d from `Adap=1`); `usp_UpsertStudentAdaptation` (write,
+  granted) + `tvf_StudentAdaptation` (@UPN read). IPP read `tvf_StudentIPP` already returns both program
+  families → no change. **Seeding proven on dev: Math/FI IPP rows created + English 9+ get Writing-not-
+  Reading = bands working.** Dev tooling: `reseed_programming_rows_dev.sql` (Step-6-only, safe — do NOT
+  use the full ingest to seed, it reconciles DimStudent from staging & closes direct-inserted rows).
+  Deploy list (dev/live): `FactStudentAdaptation.sql` → `usp_MergeStudent.sql` → `usp_UpsertStudentAdaptation.sql`
+  → `tvf_StudentAdaptation.sql` → re-run `grant_webapp_sp.sql`.
 - **Phase 1 — shared group picker (the big/risky piece):** redesign the group-resolution SQL
   (`tvf_TeacherGroups` etc.) + a shared choose-a-group UI adopted by Data Entry AND Programming.
 - **Phase 2 — Programming pages:** nav rename `/ipp`→`/programming`; TWO rosters (IPP + Adaptations),
