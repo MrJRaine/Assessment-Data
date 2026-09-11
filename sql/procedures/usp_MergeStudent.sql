@@ -9,6 +9,10 @@
  * Modified: 2026-05-13 — Grade_Level '13' -> 'RG' translation for Step 18
  *           2026-05-26 — Step 6 added: FactStudentIPP reconciliation. Audit
  *                       renumbered to Step 7 and gained two IPP counters.
+ *           2026-09-11 — Step 6 extended: Math IPPs (P-6, own family, single row)
+ *                       + per-subject grade bands (Reading P-8, Writing P-RG,
+ *                       Math P-6; PP excluded) + parallel FactStudentAdaptation
+ *                       reconciliation (steps 6c/6d, keyed on DimStudent.Adap).
  * Region: Canada East (PIIDPA compliant)
  *
  * Pipeline (set-based throughout — no row-by-row WHILE loops):
@@ -30,19 +34,22 @@
  *      (Inactive=2 or Graduated=3) they're in, and IsCurrent=1 filters
  *      everywhere already exclude them. Returning students get a fresh
  *      current row from Step 3 on the next ingest.
- *   6. Reconcile FactStudentIPP against the current DimStudent state. For
- *      students with DimStudent.IPP = 1, ensure the applicable
- *      (Subject, ProgramFamily) triples have a current FactStudentIPP row.
- *      Close rows whose triple is no longer applicable (student lost IPP,
- *      changed program, dropped below grade 3 as an FI student, or was
- *      deactivated). New rows are inserted with IsIPP = NULL (unresolved
- *      gate) and ChangedBy = 'system'; teachers/admins flip these via
- *      usp_UpsertStudentIPP from scrIPP / scrRosterGrid.
+ *   6. Reconcile FactStudentIPP AND FactStudentAdaptation against the current
+ *      DimStudent state. For students with DimStudent.IPP = 1 (resp. Adap = 1),
+ *      ensure the applicable (Subject, ProgramFamily) triples have a current row;
+ *      close rows no longer applicable (lost the flag, changed program, aged out
+ *      of a subject's grade band, or deactivated). New rows insert with
+ *      IsIPP / HasAdaptation = NULL (unresolved gate), ChangedBy = 'system';
+ *      teachers/admins resolve them (IPP via usp_UpsertStudentIPP, adaptation via
+ *      usp_UpsertStudentAdaptation) from the Programming rosters.
  *
- *      Applicability rules:
- *        English-program student:           {Reading, Writing} x {English}
- *        French-Immersion student (all):    {Reading, Writing} x {French Immersion}
- *        French-Immersion grade >= 3:       additionally {Reading, Writing} x {English}
+ *      Applicability rules (per-subject grade bands: Reading P-8, Writing P-RG,
+ *      Math P-6; PP excluded):
+ *        English-program student:        {Reading, Writing} x {English}
+ *        French-Immersion student (all): {Reading, Writing} x {French Immersion}
+ *        French-Immersion grade >= 3:    additionally {Reading, Writing} x {English}
+ *        Any (Eng/FI) student, grades P-6: {Math} x {own family}  (single row)
+ *      Core French ('French Second Language') is not assessed -> no rows.
  *   7. Append one summary row to FactSubmissionAudit.
  *
  * Change detection: a row counts as CHANGED if any of the 14 Type 2 trigger
@@ -89,6 +96,8 @@ BEGIN
     DECLARE @MissingClosed   INT = 0;   -- Currently-active students in DimStudent absent from this import
     DECLARE @IPPRowsClosed   INT = 0;   -- FactStudentIPP rows closed because no longer applicable
     DECLARE @IPPRowsCreated  INT = 0;   -- FactStudentIPP rows inserted with IsIPP = NULL
+    DECLARE @AdapRowsClosed  INT = 0;   -- FactStudentAdaptation rows closed because no longer applicable
+    DECLARE @AdapRowsCreated INT = 0;   -- FactStudentAdaptation rows inserted with HasAdaptation = NULL
     DECLARE @SameDayUpdated  INT = 0;   -- Current rows updated IN PLACE (same-day correction; no new version)
     DECLARE @SameDayRevived  INT = 0;   -- Same-day-closed rows re-opened IN PLACE on same-day return (no overlap)
 
@@ -310,43 +319,63 @@ BEGIN
     -- ------------------------------------------------------------------------
     -- Step 6a: Close FactStudentIPP rows whose (StudentKey, Subject,
     -- ProgramFamily) triple is no longer in the "expected current" set.
-    -- The expected set is derived live from the post-step-5 DimStudent state,
-    -- restricted to IsCurrent=1 students with IPP=1, applying the
-    -- program/grade applicability rules.
+    -- Expected set = post-step-5 DimStudent (IsCurrent=1, IPP=1), per-subject
+    -- grade bands + programme rules:
+    --   * English stream:         Reading + Writing x 'English'
+    --   * French Immersion (FLA): Reading + Writing x 'French Immersion' (any grade)
+    --   * FI grade >= 3 (ELA):    ALSO Reading + Writing x 'English'
+    --   * Math (Eng or FI), P-6:  Math x <own family> (single row; Math is not
+    --                             language-split and Math cycles are P-6 only)
+    -- Grade bands match the per-subject cycle ranges: Reading P-8 (GradeOrder 0-8),
+    -- Writing P-RG (0-13), Math P-6 (0-6). PP (GradeOrder -1) excluded (bands start
+    -- at P). Core French ('French Second Language') is not assessed -> no rows.
     -- ------------------------------------------------------------------------
     ;WITH ExpectedIPP AS (
-        -- English-program students: {Reading, Writing} x {English}
-        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
-        FROM   DimStudent s
-        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
-          AND  p.ProgramFamily = 'English'
-
-        UNION ALL
-
-        -- French-Immersion students (any grade): {Reading, Writing} x {French Immersion}
-        SELECT s.StudentKey, sub.Subject, CAST('French Immersion' AS VARCHAR(50))
-        FROM   DimStudent s
-        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
-          AND  p.ProgramFamily = 'French Immersion'
-
-        UNION ALL
-
-        -- French-Immersion students grade >= 3: additionally {Reading, Writing} x {English}
-        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50))
+        -- English-literacy stream: {Reading<=8, Writing<=13} x {English}
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)) AS Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
         FROM   DimStudent s
         JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
         JOIN   DimGrade   g ON g.GradeCode   = s.Grade
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily = 'English'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        -- French Immersion (FLA), any grade: {Reading<=8, Writing<=13} x {French Immersion}
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        -- French Immersion grade >= 3 (ELA): additionally {Reading<=8, Writing<=13} x {English}
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder >= 3
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        -- Math (English or FI), grades P-6: Math x <own family>, single row
+        SELECT s.StudentKey, CAST('Math' AS VARCHAR(20)), CAST(p.ProgramFamily AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily IN ('English', 'French Immersion')
+          AND  g.GradeOrder BETWEEN 0 AND 6
     )
     UPDATE fsi
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
@@ -364,40 +393,52 @@ BEGIN
     SET @IPPRowsClosed = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
-    -- Step 6b: Insert new FactStudentIPP rows (IsIPP = NULL) for every
-    -- (StudentKey, Subject, ProgramFamily) in the expected set that does not
-    -- yet have a current row. ChangedBy = 'system' marks these as auto-created.
+    -- Step 6b: Insert new FactStudentIPP rows (IsIPP = NULL) for every expected
+    -- triple lacking a current row. ChangedBy='system' marks auto-created rows.
+    -- (ExpectedIPP repeated -- Fabric CTEs don't persist across statements.)
     -- ------------------------------------------------------------------------
     ;WITH ExpectedIPP AS (
-        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
-        FROM   DimStudent s
-        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
-          AND  p.ProgramFamily = 'English'
-
-        UNION ALL
-
-        SELECT s.StudentKey, sub.Subject, CAST('French Immersion' AS VARCHAR(50))
-        FROM   DimStudent s
-        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
-          AND  p.ProgramFamily = 'French Immersion'
-
-        UNION ALL
-
-        SELECT s.StudentKey, sub.Subject, CAST('English' AS VARCHAR(50))
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)) AS Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
         FROM   DimStudent s
         JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
         JOIN   DimGrade   g ON g.GradeCode   = s.Grade
-        CROSS JOIN (VALUES ('Reading'), ('Writing')) AS sub(Subject)
-        WHERE  s.IsCurrent = 1
-          AND  s.IPP       = 1
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily = 'English'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder >= 3
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST('Math' AS VARCHAR(20)), CAST(p.ProgramFamily AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        WHERE  s.IsCurrent = 1 AND s.IPP = 1
+          AND  p.ProgramFamily IN ('English', 'French Immersion')
+          AND  g.GradeOrder BETWEEN 0 AND 6
     )
     INSERT INTO FactStudentIPP (
         StudentKey, Subject, ProgramFamily, IsIPP,
@@ -416,6 +457,133 @@ BEGIN
     );
 
     SET @IPPRowsCreated = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 6c: Same reconciliation for FactStudentAdaptation, keyed on Adap=1
+    -- (structural mirror of 6a; same per-subject grade bands + programme rules).
+    -- ------------------------------------------------------------------------
+    ;WITH ExpectedAdap AS (
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)) AS Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'English'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder >= 3
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST('Math' AS VARCHAR(20)), CAST(p.ProgramFamily AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily IN ('English', 'French Immersion')
+          AND  g.GradeOrder BETWEEN 0 AND 6
+    )
+    UPDATE fsa
+    SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
+        IsCurrent        = 0,
+        LastUpdated      = GETDATE()
+    FROM FactStudentAdaptation fsa
+    WHERE fsa.IsCurrent = 1
+      AND NOT EXISTS (
+          SELECT 1 FROM ExpectedAdap e
+          WHERE e.StudentKey    = fsa.StudentKey
+            AND e.Subject       = fsa.Subject
+            AND e.ProgramFamily = fsa.ProgramFamily
+      );
+
+    SET @AdapRowsClosed = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 6d: Insert new FactStudentAdaptation rows (HasAdaptation = NULL) for
+    -- every expected triple lacking a current row.
+    -- ------------------------------------------------------------------------
+    ;WITH ExpectedAdap AS (
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)) AS Subject, CAST('English' AS VARCHAR(50)) AS ProgramFamily
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'English'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('French Immersion' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST(sub.Subject AS VARCHAR(20)), CAST('English' AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        CROSS JOIN (VALUES ('Reading', 8), ('Writing', 13)) AS sub(Subject, MaxOrd)
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily = 'French Immersion'
+          AND  g.GradeOrder >= 3
+          AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+
+        UNION ALL
+
+        SELECT s.StudentKey, CAST('Math' AS VARCHAR(20)), CAST(p.ProgramFamily AS VARCHAR(50))
+        FROM   DimStudent s
+        JOIN   DimProgram p ON p.ProgramCode = s.ProgramCode
+        JOIN   DimGrade   g ON g.GradeCode   = s.Grade
+        WHERE  s.IsCurrent = 1 AND s.Adap = 1
+          AND  p.ProgramFamily IN ('English', 'French Immersion')
+          AND  g.GradeOrder BETWEEN 0 AND 6
+    )
+    INSERT INTO FactStudentAdaptation (
+        StudentKey, Subject, ProgramFamily, HasAdaptation,
+        EffectiveStartDate, EffectiveEndDate, IsCurrent, ChangedBy, LastUpdated
+    )
+    SELECT
+        e.StudentKey, e.Subject, e.ProgramFamily, NULL,
+        @EffectiveDate, NULL, 1, 'system', GETDATE()
+    FROM ExpectedAdap e
+    WHERE NOT EXISTS (
+        SELECT 1 FROM FactStudentAdaptation fsa
+        WHERE fsa.StudentKey    = e.StudentKey
+          AND fsa.Subject       = e.Subject
+          AND fsa.ProgramFamily = e.ProgramFamily
+          AND fsa.IsCurrent     = 1
+    );
+
+    SET @AdapRowsCreated = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
     -- Step 7: Audit. One summary row per run.
@@ -442,7 +610,10 @@ BEGIN
             CAST(@MissingClosed   AS VARCHAR(20)), ' deactivated (missing from import)',
             ' || FactStudentIPP: ',
             CAST(@IPPRowsCreated  AS VARCHAR(20)), ' rows created (NULL) | ',
-            CAST(@IPPRowsClosed   AS VARCHAR(20)), ' rows closed (no longer applicable)'
+            CAST(@IPPRowsClosed   AS VARCHAR(20)), ' rows closed (no longer applicable)',
+            ' || FactStudentAdaptation: ',
+            CAST(@AdapRowsCreated AS VARCHAR(20)), ' rows created (NULL) | ',
+            CAST(@AdapRowsClosed  AS VARCHAR(20)), ' rows closed (no longer applicable)'
         ),
         @StgRowCount,
         GETDATE()
