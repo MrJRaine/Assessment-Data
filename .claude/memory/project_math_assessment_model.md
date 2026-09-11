@@ -1,8 +1,11 @@
 ---
 name: project_math_assessment_model
-description: P-6 Math assessment model (task-based binary mastery) + its warehouse schema and CSV-mirror seed loader. Math was pulled into the 1.0 rollout 2026-09-02; supersedes the old "Math post-MVP, scoring TBD".
-metadata:
+description: "P-6 Math assessment model (task-based binary mastery) + its warehouse schema and CSV-mirror seed loader. Math was pulled into the 1.0 rollout 2026-09-02; supersedes the old \"Math post-MVP, scoring TBD\"."
+metadata: 
+  node_type: memory
   type: project
+  originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
+  modified: 2026-09-10T18:20:29.995Z
 ---
 
 **Math pulled into the 1.0 rollout (2026-09-02)** on a condensed timeline — no
@@ -38,6 +41,11 @@ step is **scoped to the (Grade, Month) pairs in the batch**, so a single-grade l
 never touches other grades. Loaded Primary Term-1 on dev: **35 tasks** (Unit 1 = 13,
 Unit 3 = 22). Only the Primary sheet is complete; more grades finishing by the hour.
 Seed-template lives at `C:\Git-Repos\DimMathTask-seed-template.csv` (not in repo).
+
+**EXTERNAL DEPENDENCY (as of 2026-09-10):** the **grade 1-6 outcomes are still owed by the math
+team** — Math is blocked on their delivery, not on our build. So Math teacher-testing is NOT on the
+project's critical path right now: we're not the bottleneck, and Math test/clean happens whenever the
+outcomes arrive. This is why the Fri 2026-09-11 sprint pressure eased (see [[project_teacher_testing_sprint]]).
 
 **Still to build (next session):** the read/write path — `usp_UpsertMathAssessment`
 (validate `AssessmentType='Math'`, student-in-roster, task matches grade+month, write
