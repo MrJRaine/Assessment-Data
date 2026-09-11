@@ -1,8 +1,8 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `c30095b` (SHA-tagged) → `0.3.0`
-(first semver-tagged build) on 2026-09-08.
+running Podman container for a new one. Most recent cutover: `0.4.0` → `0.4.1` on 2026-09-11
+(a mid-day hotfix; container swap only, no live-warehouse SQL).
 
 ## Environment facts
 
