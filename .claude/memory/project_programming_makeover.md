@@ -10,13 +10,11 @@ metadata:
 
 **The "IPP + Adaptations makeover"** (sprint item from [[project_teacher_testing_sprint]]). Scoped
 with the user 2026-09-10; build started 2026-09-11.
-**BRANCH (corrected 2026-09-11): this CONTINUES the Math P-6 work on `feat/math-p6-entry`** — the
-makeover integrates with math (Math IPP needs the math infra), so it builds where math lives, NOT on
-a 0.5.0 line. `feature/prior-year-baseline` was a mistake home for it and has been **CLOSED/deleted**
-(its v0.4.0 baseline shipped to main via PR #30; the "0.5.0-dev" bump was discarded). Phase 0 groundwork
-was cherry-picked to feat (`c4d7e2b`). Version/release off feat is TBD — NOTE feat is currently behind
-main (lacks the 0.4.0 baseline + 0.4.1 footer/diff-fix); reconciling feat with main is a pending
-decision. Bigger than one sitting — see schedule note.
+**BRANCH (settled 2026-09-11): the makeover builds on `dev`** (the long-lived integration branch @
+`0.5.0-dev`), alongside the Math P-6 work it integrates with. The earlier detour — building on
+`feature/prior-year-baseline`, then briefly `feat/math-p6-entry` — is over: `dev` was cut off current
+`main` and `feat` (math + Phase 0) merged in, so `dev` now has baseline + footer + math + Phase 0, and
+both old branches are deleted. Workflow: [[feedback_git_workflow]]. Bigger than one sitting — see schedule note.
 
 ## The vision (user's words, distilled)
 - **Core goal: IPPs identifiable for BOTH Math and Literacy.** Current app only does Literacy.
