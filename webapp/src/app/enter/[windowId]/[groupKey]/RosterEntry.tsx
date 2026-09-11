@@ -203,7 +203,11 @@ export default function RosterEntry({
               (committedId ? orderById.get(committedId) ?? null : null) ??
               (s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null)
             const juneOrder = s.juneLevel ? orderByCode.get(s.juneLevel) ?? null : null
-            const prevOrder = s.prevLevel ? orderByCode.get(s.prevLevel) ?? null : null
+            // "Previous cycle" for the point-to-point diff is the immediately-preceding in-year
+            // cycle; for the FIRST cycle of the year there is none, so it falls back to the
+            // prior-year anchor (Prev June) — the same starting point Since June measures from.
+            // Net effect: on cycle 1, Diff from Prev Cycle == Since June (only one cycle so far).
+            const prevOrder = (s.prevLevel ? orderByCode.get(s.prevLevel) ?? null : null) ?? juneOrder
             const sinceJune = committedOrder != null && juneOrder != null ? committedOrder - juneOrder : null
             const diffPrevCycle = committedOrder != null && prevOrder != null ? committedOrder - prevOrder : null
             return (

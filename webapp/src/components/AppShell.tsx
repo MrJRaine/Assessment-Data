@@ -3,6 +3,7 @@ import Nav from './Nav'
 import AuthArea from './AuthArea'
 import PostLoginRefresh from './PostLoginRefresh'
 import DevImpersonationBar from './DevImpersonationBar'
+import VersionFooter from './VersionFooter'
 import { getCurrentUpn, DEV_IMPERSONATE_COOKIE } from '@/lib/auth'
 import { getCallerCapabilities, getImpersonationTargets, type ImpersonationTarget } from '@/lib/data'
 
@@ -72,6 +73,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
         </div>
       </header>
       <main className="container">{children}</main>
+      <VersionFooter />
       {entraMode && <PostLoginRefresh authed={authed} />}
     </>
   )
