@@ -34,6 +34,7 @@ GRANT EXECUTE ON [dbo].[usp_UpsertReadingAssessment] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_UpsertWritingAssessment] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_DeleteReadingAssessment] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_UpsertStudentIPP]        TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_UpsertStudentAdaptation] TO [StudentDataAssessment];
 GRANT EXECUTE ON [dbo].[usp_InsertSubmissionAudit]   TO [StudentDataAssessment];
 
 -- ---- Read surface: @UPN-parameterized role-aware entry-flow INLINE TVFs (Phase 3b).
