@@ -30,8 +30,7 @@
  * Parameters:
  *   @StudentKey      VARCHAR(20) -- required, surfaced as text per BIGINT-precision
  *                                  memory; CAST to BIGINT internally
- *   @Subject         VARCHAR(20) -- required, must be 'Reading' or 'Writing'
- *                                  (extensible: add 'Math' here when ready)
+ *   @Subject         VARCHAR(20) -- required, must be 'Reading', 'Writing', or 'Math'
  *   @ProgramFamily   VARCHAR(50) -- required, must be 'English' or 'French Immersion'
  *   @IsIPP           BIT         -- required, must be 1 or 0 (NULL not allowed
  *                                  on input; this is a SET action, not a CLEAR)
@@ -44,7 +43,7 @@
  *   --- Layer 2 input validation (51010-51029) ---
  *   51010  required parameter NULL
  *   51011  @StudentKey does not resolve to a current DimStudent row
- *   51012  @Subject not in allowed values ('Reading', 'Writing')
+ *   51012  @Subject not in allowed values ('Reading', 'Writing', 'Math')
  *   51013  @ProgramFamily not in allowed values ('English', 'French Immersion')
  *   51014  no current FactStudentIPP row exists for the triple. Indicates an
  *          out-of-band state -- usp_MergeStudent should have auto-created it.
@@ -100,9 +99,9 @@ BEGIN
     -- =========================================================================
     -- Layer 2 - 51012: subject allow-list
     -- =========================================================================
-    IF @Subject NOT IN ('Reading', 'Writing')
+    IF @Subject NOT IN ('Reading', 'Writing', 'Math')
     BEGIN
-        ;THROW 51012, 'usp_UpsertStudentIPP: @Subject must be ''Reading'' or ''Writing''. (Math will be added when ready.)', 1;
+        ;THROW 51012, 'usp_UpsertStudentIPP: @Subject must be ''Reading'', ''Writing'', or ''Math''.', 1;
     END;
 
     -- =========================================================================

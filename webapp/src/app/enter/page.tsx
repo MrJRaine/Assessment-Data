@@ -62,7 +62,8 @@ export default async function WindowSelect() {
 
   const reading = windows.filter((w) => w.assessmentType === 'Reading')
   const writing = windows.filter((w) => w.assessmentType === 'Writing')
-  const other = windows.filter((w) => w.assessmentType !== 'Reading' && w.assessmentType !== 'Writing')
+  const math = windows.filter((w) => w.assessmentType === 'Math')
+  const other = windows.filter((w) => !['Reading', 'Writing', 'Math'].includes(w.assessmentType))
 
   return (
     <>
@@ -78,6 +79,7 @@ export default async function WindowSelect() {
         <>
           {reading.length > 0 ? <SubjectSection title="Reading" windows={reading} /> : null}
           {writing.length > 0 ? <SubjectSection title="Writing" windows={writing} /> : null}
+          {math.length > 0 ? <SubjectSection title="Math" windows={math} /> : null}
           {other.length > 0 ? <SubjectSection title="Other" windows={other} /> : null}
         </>
       )}

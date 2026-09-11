@@ -310,3 +310,21 @@ This bit `usp_UpsertShortCycle` — every validation THROW errored Msg 102, the 
 **DQ orphan / IsCurrent checks examine ALL SCD versions, not just `IsCurrent=1`.** A merge fix that only *closes* a bad row (IsCurrent=0) does NOT clear the orphan — the closed row still trips the check. To clear existing bad rows after a merge fix, TRUNCATE the affected table (or reset) before re-ingesting.
 
 **Staff data reality:** staff carry stale `CanChangeSchool` / `HomeSchoolID` to CLOSED schools plus the `0000` district marker → filter `StaffSchoolAccess` + `FactStaffAssignment` to `DimSchool.ActiveFlag = 1`. Two PS Group numbers can map to the same RoleCode at one school → `GROUP BY (Email, School, Role)` to avoid duplicate current `FactStaffAssignment` rows (the "2 current rows" IsCurrent violation).
+
+## Discovered 2026-09-09 (baseline load + enrollment diagnostics)
+
+**`LIKE` is CASE-SENSITIVE.** The default warehouse collation is `Latin1_General_100_BIN2_UTF8` (binary) — so `WHERE CourseName LIKE '%English%'` does NOT match `ENGLISH 10`, and returns zero rows silently. Wrap both sides in `UPPER()` (`UPPER(CourseName) LIKE '%ENGLISH%'`) or match the stored case exactly. Bit us on a diagnostic that came back empty; also prefer the unambiguous key (`SchoolID`) over `LIKE` on names.
+
+**No aggregate over a subquery (Msg 130).** `SUM(CASE WHEN EXISTS (SELECT ...) THEN 1 ELSE 0 END)` fails with `Msg 130 'Cannot perform an aggregate function on an expression containing an aggregate or a subquery.'` Compute the per-row flag in a CTE/derived table first, then aggregate the plain column:
+```sql
+WITH Flagged AS (
+    SELECT x.id, CASE WHEN EXISTS (SELECT 1 FROM Other o WHERE o.id = x.id) THEN 1 ELSE 0 END AS Hit
+    FROM X x
+)
+SELECT SUM(Hit) FROM Flagged;   -- SUM over a plain column is fine
+```
+Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine — it's specifically an aggregate *wrapping* a subquery that's rejected.
+
+**`COPY INTO` FROM path is a STORAGE PATH, not a URL — use literal spaces, not `%20`.** Fabric does not URL-decode the `abfss://…` path, so `.../ELA%20Reading.csv` is looked up literally (a file named `ELA%20Reading.csv`) and matches nothing → silent 0-row load. Use the real space: `.../ELA Reading.csv`. (OneLake paths support spaces.) Same silent-0-row failure class as a non-matching glob — always `SELECT COUNT(*) FROM Stg_*` after a `COPY INTO`.
+
+**`TRY_CAST` and `FULL OUTER JOIN` are supported** (used in `load_prior_year_baseline.sql` to type StudentNumber and stitch reading↔writing per student).
