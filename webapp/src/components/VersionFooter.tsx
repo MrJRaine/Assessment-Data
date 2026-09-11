@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { APP_VERSION, CURRENT_MINOR, currentMinorNotes } from '@/lib/patchNotes'
+import { APP_VERSION, currentMinorNotes } from '@/lib/patchNotes'
 
 // ISO date ("2026-09-11") -> "MM/DD/YYYY". Split the string rather than new Date() to avoid a
 // timezone shift moving the day.
@@ -45,7 +45,7 @@ export default function VersionFooter() {
           >
             <div className="modal-head">
               <h2 id="whatsnew-title">
-                What&rsquo;s new in {CURRENT_MINOR}
+                What&rsquo;s new in {APP_VERSION}
                 {lastUpdated ? <span className="whatsnew-updated"> (Updated on {lastUpdated})</span> : null}
               </h2>
               <button className="modal-close" onClick={() => setOpen(false)} aria-label="Close" autoFocus>
