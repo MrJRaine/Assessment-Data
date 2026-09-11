@@ -11,6 +11,16 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.4.1] — 2026-09-11
+
+### Fixed
+- **"Diff from Prev Cycle" was blank on the first cycle of the year.** The point-to-point diff
+  compares a student's current level to the immediately-preceding cycle; on the first cycle there
+  is no in-year predecessor, so it now falls back to the prior-year anchor (Prev June) — the same
+  starting point "Since June" measures from. On cycle 1 the two columns therefore read the same
+  value, as intended; from cycle 2 on they diverge (cumulative vs point-to-point). Display-only
+  fix in the reading roster — **no warehouse SQL change**.
+
 ## [0.4.0] — 2026-09-10
 
 ### Added
