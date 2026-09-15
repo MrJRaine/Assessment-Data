@@ -92,8 +92,10 @@ function Oversight({
     () => [...new Set(groups.map((g) => g.schoolName).filter((s): s is string => !!s))].sort(),
     [groups],
   )
+  // Every grade PRESENT across the oversight groups (a split P/1 homeroom contributes both P and 1),
+  // sorted by grade order — these are the filter chips.
   const grades = useMemo(
-    () => [...new Set(groups.map((g) => g.grade).filter((g): g is string => !!g))].sort(
+    () => [...new Set(groups.flatMap((g) => g.grades))].sort(
       (a, b) => (GRADE_ORDER[a] ?? 99) - (GRADE_ORDER[b] ?? 99),
     ),
     [groups],
@@ -136,7 +138,9 @@ function Oversight({
   const visible = groups.filter(
     (g) =>
       g.groupType === lens &&
-      (g.grade == null || shownGrades.has(g.grade)) &&
+      // Grade match: show the card if ANY grade it contains is selected (a split class surfaces
+      // under each of its grades). Groups with no grade info aren't hidden by the filter.
+      (g.grades.length === 0 || g.grades.some((gr) => shownGrades.has(gr))) &&
       (!multiSchool || (g.schoolName != null && shownSchools.has(g.schoolName))),
   )
 

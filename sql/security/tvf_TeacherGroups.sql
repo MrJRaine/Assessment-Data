@@ -168,6 +168,19 @@ RETURN
                'SEC:' + SectionID,
                SectionNumber + ' — ' + CourseName
         FROM OversightSections
+    ),
+    -- Grades PRESENT in each group, as a comma-delimited distinct list (e.g. 'P,1' for a split
+    -- P/1 homeroom). Lets the client grade filter match a group if ANY of its grades is selected,
+    -- so a split/combined class surfaces under each of its grades -- not just MAX(Grade). Handles
+    -- any number of grades in a split, not just two.
+    GroupGrades AS (
+        SELECT AssessmentWindowID, Scope, GroupType, GroupKey, STRING_AGG(Grade, ',') AS Grades
+        FROM (
+            SELECT DISTINCT AssessmentWindowID, Scope, GroupType, GroupKey, Grade
+            FROM GroupRows
+            WHERE GroupKey IS NOT NULL AND Grade IS NOT NULL
+        ) d
+        GROUP BY AssessmentWindowID, Scope, GroupType, GroupKey
     )
     SELECT
         CAST(gr.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
@@ -177,6 +190,7 @@ RETURN
         gr.GroupLabel,
         MAX(gr.SchoolName) AS SchoolName,
         MAX(gr.Grade) AS Grade,
+        MAX(gg.Grades) AS Grades,
         COUNT(DISTINCT gr.StudentKey) AS ApplicableStudentCount,
         COUNT(DISTINCT CASE
             WHEN aw.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN gr.StudentKey
@@ -190,6 +204,11 @@ RETURN
     LEFT JOIN FactAssessmentWriting faw
            ON faw.AssessmentWindowID = gr.AssessmentWindowID
           AND faw.StudentKey         = gr.StudentKey
+    LEFT JOIN GroupGrades gg
+           ON gg.AssessmentWindowID = gr.AssessmentWindowID
+          AND gg.Scope              = gr.Scope
+          AND gg.GroupType          = gr.GroupType
+          AND gg.GroupKey           = gr.GroupKey
     WHERE gr.GroupKey IS NOT NULL
     GROUP BY gr.AssessmentWindowID, gr.Scope, gr.GroupType, gr.GroupKey, gr.GroupLabel
 );

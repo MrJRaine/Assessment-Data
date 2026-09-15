@@ -42,7 +42,8 @@ export interface TeacherGroup {
   scope: 'Taught' | 'Oversight' // 'Taught' = the caller's own classes (any role); 'Oversight' = above-teacher school/region view
   groupType: 'Homeroom' | 'Section' // which lens this card belongs to (the above-teacher toggle switches between them)
   schoolName: string | null
-  grade: string | null
+  grade: string | null // MAX(grade) in the group — kept for display/back-compat
+  grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
   applicableCount: number
   enteredCount: number
 }
@@ -190,6 +191,7 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
     GroupType: string
     SchoolName: string | null
     Grade: string | null
+    Grades: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
   }>(
@@ -208,6 +210,7 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
       groupType: r.GroupType === 'Section' ? 'Section' : 'Homeroom',
       schoolName: r.SchoolName ?? null,
       grade: r.Grade ?? null,
+      grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
       applicableCount: Number(r.ApplicableStudentCount ?? 0),
       enteredCount: Number(r.EnteredStudentCount ?? 0),
     }
