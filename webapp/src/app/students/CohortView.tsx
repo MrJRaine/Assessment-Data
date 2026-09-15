@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CohortStudent, AchievementBand } from '@/lib/data'
 
 // Distinct, order-preserving helper.
@@ -10,6 +10,30 @@ function distinct<T>(xs: T[]): T[] {
 }
 
 type Tri = 'All' | 'Yes' | 'No'
+
+// Persist the cohort filters for the tab session (sessionStorage: per-tab, survives Back /
+// re-visits, clears on tab close). Read wrapped in try/catch (private mode / blocked storage).
+const COHORT_FILTER_KEY = 'cohortFilters'
+type CohortPersist = {
+  expanded?: boolean
+  gradeMin?: number
+  gradeMax?: number
+  gender?: string
+  african?: Tri
+  indigenous?: Tri
+  hr?: string[]
+  prog?: string[]
+  sch?: string[]
+  ach?: number[]
+}
+function readCohortFilters(): CohortPersist {
+  try {
+    const raw = sessionStorage.getItem(COHORT_FILTER_KEY)
+    return raw ? (JSON.parse(raw) as CohortPersist) : {}
+  } catch {
+    return {}
+  }
+}
 
 function triMatch(sel: Tri, v: boolean | null): boolean {
   if (sel === 'All') return true
@@ -97,6 +121,41 @@ export default function CohortView({
     setSch(new Set())
     setAch(new Set())
   }
+
+  // Persist cohort filters for the tab session, so filtering the cohort, opening a student, and
+  // hitting Back doesn't wipe the selection. Restore runs once on mount (client-only → no SSR
+  // hydration mismatch); an empty Set means "show all", so we just intersect saved values with the
+  // current options and drop anything no longer present, and clamp the grade bounds into range.
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const p = readCohortFilters()
+    const schoolIds = schools.map((s) => s.id)
+    const achCodes = orderedBands.map((b) => Number(b.code))
+    if (typeof p.expanded === 'boolean') setExpanded(p.expanded)
+    if (typeof p.gradeMin === 'number') setGradeMin(Math.min(Math.max(p.gradeMin, minOrd), maxOrd))
+    if (typeof p.gradeMax === 'number') setGradeMax(Math.min(Math.max(p.gradeMax, minOrd), maxOrd))
+    if (p.gender === 'All' || (p.gender && genders.includes(p.gender))) setGender(p.gender)
+    if (p.african === 'All' || p.african === 'Yes' || p.african === 'No') setAfrican(p.african)
+    if (p.indigenous === 'All' || p.indigenous === 'Yes' || p.indigenous === 'No') setIndigenous(p.indigenous)
+    if (p.hr) setHr(new Set(p.hr.filter((v) => homerooms.includes(v))))
+    if (p.prog) setProg(new Set(p.prog.filter((v) => programs.includes(v))))
+    if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
+    if (p.ach) setAch(new Set(p.ach.filter((v) => achCodes.includes(v))))
+    setReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!ready) return
+    try {
+      sessionStorage.setItem(
+        COHORT_FILTER_KEY,
+        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach] }),
+      )
+    } catch {
+      /* private mode / storage blocked — filters just won't persist */
+    }
+  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach])
 
   const filtered = useMemo(
     () =>
