@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-10T18:16:26.984Z
+  modified: 2026-09-15T18:13:47.242Z
 ---
 
 **The "IPP + Adaptations makeover"** (sprint item from [[project_teacher_testing_sprint]]). Scoped
@@ -126,8 +126,32 @@ both old branches are deleted. Workflow: [[feedback_git_workflow]]. Bigger than 
   use the full ingest to seed, it reconciles DimStudent from staging & closes direct-inserted rows).
   Deploy list (dev/live): `FactStudentAdaptation.sql` → `usp_MergeStudent.sql` → `usp_UpsertStudentAdaptation.sql`
   → `tvf_StudentAdaptation.sql` → re-run `grant_webapp_sp.sql`.
-- **Phase 1 — shared group picker (the big/risky piece):** redesign the group-resolution SQL
-  (`tvf_TeacherGroups` etc.) + a shared choose-a-group UI adopted by Data Entry AND Programming.
+- ✅ **Phase 1 — shared group picker DONE + verified on dev (2026-09-15).** `tvf_TeacherGroups`
+  rewritten: two SCOPES (`Taught` = own classes via FactSectionTeachers for ALL roles = dual-role fix;
+  `Oversight` = above-teacher, both a Homeroom lens over full P-RG AND a Section lens for HS). Shared
+  `GroupCards.tsx` renders "My classes" (taught) + "All groups" (oversight [Homerooms|Sections] toggle,
+  grade filter w/ inline Select all/Clear all, collapsible school filter). Oversight lens/grade/school
+  filters persist via sessionStorage. Two follow-on fixes this session:
+  (a) **Roster resolution is lens-agnostic** — `tvf_TeacherRoster` + `tvf_TeacherRosterWriting`
+      `StudentGroups` now emit a homeroom candidate key AND (HS) a section key per student, so an
+      oversight HS *homeroom* card resolves its roster instead of returning empty. Math (P-6) unchanged.
+  (b) **Grade filter is grade-span aware** — picker returns a `Grades` list per group (GroupGrades CTE +
+      STRING_AGG); client shows a card if ANY of its grades is selected (split/combined P/1/2 classes
+      surface under each grade). Test fixture: `seed_split_homeroom_dev.sql` makes the DEVSEED Drumlin
+      homeroom a P/1/2 split.
+  Deployed on dev: re-ran tvf_TeacherRoster / tvf_TeacherRosterWriting / tvf_TeacherGroups.
+  Loose threads CLOSED 2026-09-15: (1) `sql/scripts/deploy_groupkey_tvfs.sql` regenerated from the
+  four current sources (verbatim concat); (2) ✅ **oversight Homeroom lens KEEPS full P-RG** (user
+  chose to keep both lenses over the whole range — HS students appear under Homeroom AND Section
+  lenses; do NOT clamp at grade 9).
+- ✅ **Oversight Grade lens added (2026-09-15).** Third grouping alongside Homerooms/Sections: pick a
+  whole grade cohort. `tvf_TeacherGroups` emits one Oversight `Grade` card per (school, grade), key
+  `GRADE:<SchoolID>:<Grade>` — PER-SCHOOL (decision: **respect the school filter**, so the existing
+  school filter carries it, no URL params; no single cross-school grade roster). Respects the window's
+  program family. All three roster TVFs thread `SchoolID` + resolve the GRADE: key (Math too). Client:
+  `[Homerooms|Sections|Grades]` tab; grade-chip filter hidden+not-applied on the Grade lens; roster
+  header labels the cohort by grade. Decision: available in **BOTH Data Entry and Programming**.
+  Deploy: re-run the four TVFs / `deploy_groupkey_tvfs.sql`.
 - **Phase 2 — Programming pages:** nav rename `/ipp`→`/programming`; TWO rosters (IPP + Adaptations),
   each a student×`Reading|Writing|Math` grid with the adaptive cell (2-way / 4-way FLA-ELA / Math),
   rendered by ONE shared roster component parameterized IPP-vs-Adaptation. Reads return the per-student

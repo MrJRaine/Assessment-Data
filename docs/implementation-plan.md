@@ -667,3 +667,8 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - **Year-end close-out procedure** added as deferred work (see Notes section above) — needed before September rollout.
 - **Next action**: Drop a test CSV in `data/imports/` for me to validate format, OR start Step 8 (merge procedures). Project memory has full design notes for Step 8.
 - **Blockers**: None.
+
+### Left Off — 2026-09-15
+- **Note**: This plan covers the ORIGINAL warehouse/ingest build (through ~2026-04). Since then the project moved to the Phase 3b web app + feature work, tracked in **project memory**, not here. For current state read [[project_assessment_platform]] (distilled) and the per-feature memories; the running narrative is [[project_session_archive]].
+- **Current focus (not in this plan)**: Programming (IPP+Adaptations) makeover on `dev` (0.5.0-dev). Phase 0 backend + Phase 1 shared group picker (Homeroom/Section/Grade lenses) DONE + verified on dev. **Next: Phase 2** — the Programming pages (`/ipp`→`/programming`; two IPP/Adaptations rosters).
+- **Blockers**: None.
