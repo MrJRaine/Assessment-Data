@@ -1,8 +1,29 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { CardLink } from '@/components/ui'
 import type { TeacherGroup } from '@/lib/data'
+
+// Persist the oversight lens/grade/school filters for the tab session, so an analyst who
+// filters to a school, opens a group, and hits Back doesn't lose their selection. sessionStorage
+// (not a cookie): per-tab, survives navigation, clears when the tab closes, no server round-trip.
+const FILTER_KEY = 'oversightGroupFilters'
+type PersistedFilters = { lens?: 'Homeroom' | 'Section'; grades?: string[]; schools?: string[] }
+function readPersistedFilters(): PersistedFilters {
+  try {
+    const raw = sessionStorage.getItem(FILTER_KEY)
+    return raw ? (JSON.parse(raw) as PersistedFilters) : {}
+  } catch {
+    return {}
+  }
+}
+// Restore a saved selection, but only for values still present; fall back to "all" if the saved
+// set would hide everything (e.g. a different cycle's grades), so we never restore an empty screen.
+function restoreSet(available: string[], saved?: string[]): Set<string> {
+  if (!saved) return new Set(available)
+  const keep = available.filter((v) => saved.includes(v))
+  return new Set(keep.length ? keep : available)
+}
 
 /**
  * Shared choose-a-group picker (Data Entry now; Programming reuses it in Phase 2).
@@ -83,6 +104,27 @@ function Oversight({
   const [shownGrades, setShownGrades] = useState<Set<string>>(() => new Set(grades))
   const [shownSchools, setShownSchools] = useState<Set<string>>(() => new Set(schools))
   const [schoolsOpen, setSchoolsOpen] = useState(false)
+  const [ready, setReady] = useState(false)
+
+  // Restore saved filters once on mount (client-only, so no SSR hydration mismatch).
+  useEffect(() => {
+    const p = readPersistedFilters()
+    if (p.lens === 'Section' && hasSections) setLens('Section')
+    if (p.grades) setShownGrades(restoreSet(grades, p.grades))
+    if (p.schools) setShownSchools(restoreSet(schools, p.schools))
+    setReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Persist selections after the initial restore (survives Back / re-visits this session).
+  useEffect(() => {
+    if (!ready) return
+    try {
+      sessionStorage.setItem(FILTER_KEY, JSON.stringify({ lens, grades: [...shownGrades], schools: [...shownSchools] }))
+    } catch {
+      /* private mode / storage blocked — filters just won't persist */
+    }
+  }, [ready, lens, shownGrades, shownSchools])
 
   const toggle = (set: Set<string>, v: string, setter: (s: Set<string>) => void) => {
     const next = new Set(set)
