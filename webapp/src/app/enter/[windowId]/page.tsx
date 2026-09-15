@@ -33,7 +33,7 @@ export default async function GroupSelect({ params }: { params: Promise<{ window
           hint="You have no homeroom or section roster in this cycle's grade/program scope."
         />
       ) : (
-        <GroupCards groups={groups} windowId={windowId} />
+        <GroupCards groups={groups} hrefBase={`/enter/${windowId}`} />
       )}
     </>
   )
