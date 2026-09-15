@@ -160,6 +160,10 @@ function Oversight({
       {grades.length > 1 && (
         <>
           <p className="filter-label">Grades</p>
+          <div className="mfilter-actions" style={{ margin: '0 0 0.5rem' }}>
+            <button type="button" className="btn-ghost" onClick={() => setShownGrades(new Set(grades))}>Select all</button>
+            <button type="button" className="btn-ghost" onClick={() => setShownGrades(new Set())}>Clear all</button>
+          </div>
           <div className="grade-chips">
             {grades.map((g) => (
               <button key={g} className={`grade-chip${shownGrades.has(g) ? ' on' : ''}`} onClick={() => toggle(shownGrades, g, setShownGrades)}>
