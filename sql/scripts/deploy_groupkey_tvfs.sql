@@ -345,14 +345,24 @@ RETURN
                Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
+    -- A student is resolvable by EITHER their homeroom key OR (HS) a section key. The shared
+    -- oversight picker offers a Homeroom lens (a homeroom card for EVERY grade, P-RG) and a
+    -- Section lens (HS -> section card), so both keys must resolve to the same student. Emit one
+    -- candidate row per key; only the row whose key equals @GroupKey survives the final WHERE, and
+    -- SELECT DISTINCT collapses the fan-out. (Was a single CASE that gave HS students a section key
+    -- only, so an HS homeroom card resolved to an empty roster.)
     StudentGroups AS (
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            Homeroom, SchoolName,
-            CASE WHEN GradeOrder <= 9  THEN HomeroomKey
-                 WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
-            END AS GroupKey
+            Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
+        WHERE HomeroomKey IS NOT NULL
+        UNION ALL
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
+        FROM ApplicableStudents
+        WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
@@ -568,14 +578,24 @@ RETURN
                Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
+    -- A student is resolvable by EITHER their homeroom key OR (HS) a section key. The shared
+    -- oversight picker offers a Homeroom lens (a homeroom card for EVERY grade, P-RG) and a
+    -- Section lens (HS -> section card), so both keys must resolve to the same student. Emit one
+    -- candidate row per key; only the row whose key equals @GroupKey survives the final WHERE, and
+    -- SELECT DISTINCT collapses the fan-out. (Was a single CASE that gave HS students a section key
+    -- only, so an HS homeroom card resolved to an empty roster.)
     StudentGroups AS (
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            Homeroom, SchoolName,
-            CASE WHEN GradeOrder <= 9  THEN HomeroomKey
-                 WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
-            END AS GroupKey
+            Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
+        WHERE HomeroomKey IS NOT NULL
+        UNION ALL
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
+        FROM ApplicableStudents
+        WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
     ),
     -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
     LatestWritingInWindow AS (
