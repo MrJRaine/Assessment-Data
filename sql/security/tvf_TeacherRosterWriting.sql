@@ -13,6 +13,8 @@
  *          2026-09-15 — @GroupKey resolution is now lens-agnostic: a student is
  *          matched by their homeroom key OR (HS) a section key, so the oversight
  *          picker's Homeroom lens resolves an HS homeroom card instead of empty.
+ *          2026-09-15b — also resolves a 'GRADE:<SchoolID>:<Grade>' key (oversight
+ *          Grade lens = a whole school+grade cohort). SchoolID threaded through.
  * Region: Canada East (PIIDPA compliant)
  *
  * Band = average mapped to a code (3.50/2.75/1.75) then joined to
@@ -49,7 +51,7 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -77,7 +79,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -99,7 +101,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -117,7 +119,7 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -130,11 +132,11 @@ RETURN
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM TeacherApplicable
         UNION ALL
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
     -- A student is resolvable by EITHER their homeroom key OR (HS) a section key. The shared
@@ -159,6 +161,15 @@ RETURN
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+
+        UNION ALL
+
+        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
+        FROM ApplicableStudents
+        WHERE SchoolID IS NOT NULL
     ),
     -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
     LatestWritingInWindow AS (

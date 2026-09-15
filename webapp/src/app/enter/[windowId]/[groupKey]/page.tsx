@@ -63,11 +63,17 @@ export default async function RosterGrid({
       ? writingRoster.length
       : roster.length
 
-  // Friendly header from the roster rows (the URL key is opaque). Homeroom groups show
-  // 'Homeroom <name> · <school>'; section groups (grade 10+) have no homeroom, so fall
-  // back to the key as before.
+  // Friendly header from the roster rows (the URL key is opaque). Grade cohorts
+  // ('GRADE:<school>:<grade>') span many homerooms → label by grade; homeroom groups show
+  // 'Homeroom <name>'; section groups (grade 10+) have no homeroom, so fall back to the key.
   const firstRow = isWriting ? writingRoster[0] : isMath ? mathRoster[0] : roster[0]
-  const groupDisplay = firstRow?.homeroom ? `Homeroom ${firstRow.homeroom}` : groupKey
+  const gradeLabel = (g: string) =>
+    g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : g === 'RG' ? 'Graduating' : `Grade ${g}`
+  const groupDisplay = groupKey.startsWith('GRADE:')
+    ? gradeLabel(firstRow?.grade ?? groupKey.split(':').pop() ?? '')
+    : firstRow?.homeroom
+      ? `Homeroom ${firstRow.homeroom}`
+      : groupKey
   const schoolName = firstRow?.schoolName ?? null
 
   return (

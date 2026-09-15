@@ -8,7 +8,7 @@ import type { TeacherGroup } from '@/lib/data'
 // filters to a school, opens a group, and hits Back doesn't lose their selection. sessionStorage
 // (not a cookie): per-tab, survives navigation, clears when the tab closes, no server round-trip.
 const FILTER_KEY = 'oversightGroupFilters'
-type PersistedFilters = { lens?: 'Homeroom' | 'Section'; grades?: string[]; schools?: string[] }
+type PersistedFilters = { lens?: 'Homeroom' | 'Section' | 'Grade'; grades?: string[]; schools?: string[] }
 function readPersistedFilters(): PersistedFilters {
   try {
     const raw = sessionStorage.getItem(FILTER_KEY)
@@ -88,6 +88,7 @@ function Oversight({
   showHeading: boolean
 }) {
   const hasSections = useMemo(() => groups.some((g) => g.groupType === 'Section'), [groups])
+  const hasGrades = useMemo(() => groups.some((g) => g.groupType === 'Grade'), [groups])
   const schools = useMemo(
     () => [...new Set(groups.map((g) => g.schoolName).filter((s): s is string => !!s))].sort(),
     [groups],
@@ -102,7 +103,7 @@ function Oversight({
   )
   const multiSchool = schools.length > 1
 
-  const [lens, setLens] = useState<'Homeroom' | 'Section'>('Homeroom')
+  const [lens, setLens] = useState<'Homeroom' | 'Section' | 'Grade'>('Homeroom')
   const [shownGrades, setShownGrades] = useState<Set<string>>(() => new Set(grades))
   const [shownSchools, setShownSchools] = useState<Set<string>>(() => new Set(schools))
   const [schoolsOpen, setSchoolsOpen] = useState(false)
@@ -112,6 +113,7 @@ function Oversight({
   useEffect(() => {
     const p = readPersistedFilters()
     if (p.lens === 'Section' && hasSections) setLens('Section')
+    else if (p.lens === 'Grade' && hasGrades) setLens('Grade')
     if (p.grades) setShownGrades(restoreSet(grades, p.grades))
     if (p.schools) setShownSchools(restoreSet(schools, p.schools))
     setReady(true)
@@ -139,8 +141,9 @@ function Oversight({
     (g) =>
       g.groupType === lens &&
       // Grade match: show the card if ANY grade it contains is selected (a split class surfaces
-      // under each of its grades). Groups with no grade info aren't hidden by the filter.
-      (g.grades.length === 0 || g.grades.some((gr) => shownGrades.has(gr))) &&
+      // under each of its grades). Groups with no grade info aren't hidden by the filter. The Grade
+      // lens is exempt — its filter UI is hidden, so applying it would silently drop cards.
+      (lens === 'Grade' || g.grades.length === 0 || g.grades.some((gr) => shownGrades.has(gr))) &&
       (!multiSchool || (g.schoolName != null && shownSchools.has(g.schoolName))),
   )
 
@@ -148,20 +151,28 @@ function Oversight({
     <section className="window-section">
       {showHeading && <h2 className="section-heading">All groups</h2>}
 
-      {/* Homeroom | Section lens toggle (Section only offered when there are HS sections) */}
-      {hasSections && (
+      {/* Lens toggle: Homerooms always; Sections when there are HS sections; Grades = whole-grade
+          cohorts (per school). Only rendered when there's more than one lens to switch between. */}
+      {(hasSections || hasGrades) && (
         <div className="subject-toggle" role="tablist">
           <button type="button" role="tab" className={lens === 'Homeroom' ? 'toggle-on' : ''} onClick={() => setLens('Homeroom')}>
             Homerooms
           </button>
-          <button type="button" role="tab" className={lens === 'Section' ? 'toggle-on' : ''} onClick={() => setLens('Section')}>
-            Sections
-          </button>
+          {hasSections && (
+            <button type="button" role="tab" className={lens === 'Section' ? 'toggle-on' : ''} onClick={() => setLens('Section')}>
+              Sections
+            </button>
+          )}
+          {hasGrades && (
+            <button type="button" role="tab" className={lens === 'Grade' ? 'toggle-on' : ''} onClick={() => setLens('Grade')}>
+              Grades
+            </button>
+          )}
         </div>
       )}
 
-      {/* Grade filter */}
-      {grades.length > 1 && (
+      {/* Grade filter — hidden on the Grade lens, where the cards themselves are the grades. */}
+      {lens !== 'Grade' && grades.length > 1 && (
         <>
           <p className="filter-label">Grades</p>
           <div className="grade-chips">
@@ -207,7 +218,7 @@ function Oversight({
       )}
 
       {visible.length === 0 ? (
-        <p className="muted" style={{ marginTop: '1rem' }}>No {lens === 'Section' ? 'sections' : 'homerooms'} match the current filters.</p>
+        <p className="muted" style={{ marginTop: '1rem' }}>No {lens === 'Section' ? 'sections' : lens === 'Grade' ? 'grades' : 'homerooms'} match the current filters.</p>
       ) : (
         <div className="card-grid">{visible.map(card)}</div>
       )}

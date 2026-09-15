@@ -5,8 +5,9 @@
  *          source of truth); REGENERATE from them after any TVF change rather
  *          than hand-patching here.
  *          Includes the Phase 1 shared-picker rewrite of tvf_TeacherGroups
- *          (Scope = Taught/Oversight, both lenses, Grades list) and the
- *          lens-agnostic @GroupKey resolution in the roster TVFs.
+ *          (Scope = Taught/Oversight, Homeroom/Section/Grade lenses, Grades list)
+ *          and the lens-agnostic @GroupKey resolution in the roster TVFs
+ *          (homeroom OR section OR 'GRADE:<SchoolID>:<Grade>' cohort).
  * PREREQ: DimStudent.GroupKey must exist (migrate_DimStudent_add_GroupKey.sql +
  *          usp_MergeStudent.sql). Re-grants SELECT to StudentDataAssessment inline.
  * Regenerated: 2026-09-15
@@ -28,19 +29,25 @@
  *                          Grade split: PP-9 -> homeroom, 10+ -> section.
  *            'Oversight' — for above-teacher roles only (Administrator /
  *                          SpecialistTeacher = their schools; RegionalAnalyst =
- *                          region-wide). Returns BOTH lenses over the full P-RG
+ *                          region-wide). Returns THREE lenses over the full P-RG
  *                          range: a Homeroom lens (every in-scope student -> their
- *                          homeroom) AND a Section lens (HS 10+ students -> their
- *                          sections). The web toggle switches lens client-side.
+ *                          homeroom), a Section lens (HS 10+ students -> their
+ *                          sections), and a Grade lens (every student -> their
+ *                          school+grade cohort). The web toggle switches lens
+ *                          client-side.
  *          GroupKey: PP-9/homeroom -> stored DimStudent.GroupKey (URL-safe,
- *          school-qualified); sections -> 'SEC:'+SectionID.
+ *          school-qualified); sections -> 'SEC:'+SectionID; grade cohort ->
+ *          'GRADE:'+SchoolID+':'+Grade (per-school, so the school filter carries it).
  * Created: 2026-06-22
  * Modified: 2026-09-08 — homeroom GroupKey = stored DimStudent.GroupKey.
  *          2026-09-15 — REDESIGN ([[project_group_display_redesign]]): teacher rule
- *          fires for all (Scope='Taught'); above-teacher gets a both-lens
+ *          fires for all (Scope='Taught'); above-teacher gets a multi-lens
  *          'Oversight' scope over full P-RG (was a mutually-exclusive AccessLevel
  *          dispatch with a hard grade/homeroom-vs-section split). New output
  *          column: Scope. Shared by Data Entry now + Programming (Phase 2).
+ *          2026-09-15b — added the Oversight Grade lens (per-school grade cohorts)
+ *          + a Grades list column (grade-span filter). SchoolID threaded into
+ *          OversightStudents for the grade GroupKey.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
@@ -106,7 +113,7 @@ RETURN
     OversightStudents AS (
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
@@ -126,7 +133,7 @@ RETURN
 
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN DimStudent s
@@ -185,6 +192,18 @@ RETURN
                'SEC:' + SectionID,
                SectionNumber + ' — ' + CourseName
         FROM OversightSections
+
+        UNION ALL
+
+        -- OVERSIGHT grade lens: every in-scope student -> their (school, grade) cohort. Scoped per
+        -- SCHOOL so the client school filter narrows it and the 'GRADE:<SchoolID>:<Grade>' key routes
+        -- to one school's grade cohort with no extra params (respects the school filter by design).
+        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
+               CAST('Oversight' AS VARCHAR(10)), CAST('Grade' AS VARCHAR(10)),
+               'GRADE:' + SchoolID + ':' + Grade,
+               CASE Grade WHEN 'P' THEN 'Primary' WHEN 'PP' THEN 'Pre-Primary' WHEN 'RG' THEN 'Graduating'
+                          ELSE 'Grade ' + Grade END
+        FROM OversightStudents
     ),
     -- Grades PRESENT in each group, as a comma-delimited distinct list (e.g. 'P,1' for a split
     -- P/1 homeroom). Lets the client grade filter match a group if ANY of its grades is selected,
@@ -253,6 +272,8 @@ GO
  *          2026-09-15 — @GroupKey resolution is now lens-agnostic: a student is
  *          matched by their homeroom key OR (HS) a section key, so the oversight
  *          picker's Homeroom lens resolves an HS homeroom card instead of empty.
+ *          2026-09-15b — also resolves a 'GRADE:<SchoolID>:<Grade>' key (oversight
+ *          Grade lens = a whole school+grade cohort). SchoolID threaded through.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
@@ -304,7 +325,7 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -332,7 +353,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -354,7 +375,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -372,7 +393,7 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -385,11 +406,11 @@ RETURN
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM TeacherApplicable
         UNION ALL
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
     -- A student is resolvable by EITHER their homeroom key OR (HS) a section key. The shared
@@ -414,6 +435,15 @@ RETURN
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+
+        UNION ALL
+
+        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
+        FROM ApplicableStudents
+        WHERE SchoolID IS NOT NULL
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
@@ -542,6 +572,8 @@ GO
  *          2026-09-15 — @GroupKey resolution is now lens-agnostic: a student is
  *          matched by their homeroom key OR (HS) a section key, so the oversight
  *          picker's Homeroom lens resolves an HS homeroom card instead of empty.
+ *          2026-09-15b — also resolves a 'GRADE:<SchoolID>:<Grade>' key (oversight
+ *          Grade lens = a whole school+grade cohort). SchoolID threaded through.
  * Region: Canada East (PIIDPA compliant)
  *
  * Band = average mapped to a code (3.50/2.75/1.75) then joined to
@@ -578,7 +610,7 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -606,7 +638,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -628,7 +660,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -646,7 +678,7 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -659,11 +691,11 @@ RETURN
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM TeacherApplicable
         UNION ALL
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
     -- A student is resolvable by EITHER their homeroom key OR (HS) a section key. The shared
@@ -688,6 +720,15 @@ RETURN
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+
+        UNION ALL
+
+        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
+        FROM ApplicableStudents
+        WHERE SchoolID IS NOT NULL
     ),
     -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
     LatestWritingInWindow AS (
@@ -767,6 +808,9 @@ GO
  * Created: 2026-09-03
  * Modified: 2026-09-08 — @GroupKey now matches the stored DimStudent.GroupKey for
  *          homerooms (URL-safe, school-qualified); returns Homeroom + SchoolName.
+ *          2026-09-15b — @GroupKey resolves homeroom OR (HS) section OR a
+ *          'GRADE:<SchoolID>:<Grade>' cohort key (oversight Grade lens); StudentGroups
+ *          rewritten to the multi-candidate form. SchoolID threaded through.
  * Region: Canada East (PIIDPA compliant)
  *
  * Task selection: DimMathTask WHERE GradeCode = student.Grade AND AssessmentMonth
@@ -825,7 +869,7 @@ RETURN
     TeacherApplicable AS (
         SELECT
             wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily, sec.SectionID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -853,7 +897,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -875,7 +919,7 @@ RETURN
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
             s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName,
+            s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID,
             s.ProgramCode, dp.ProgramFamily
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
@@ -893,7 +937,7 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
         LEFT JOIN FactEnrollment e
                ON a.GradeOrder >= 10
@@ -906,21 +950,42 @@ RETURN
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM TeacherApplicable
         UNION ALL
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
-               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, ProgramCode, ProgramFamily, SectionID
+               Grade, GradeOrder, Homeroom, HomeroomKey, SchoolName, SchoolID, ProgramCode, ProgramFamily, SectionID
         FROM AdminAnalystWithSections
     ),
+    -- A student is resolvable by their homeroom key, (HS) a section key, OR their school+grade
+    -- cohort key (oversight Grade lens). Math is P-6 so the section candidate never fires, but the
+    -- shape is kept identical to the Reading/Writing roster TVFs. Only the row whose key equals
+    -- @GroupKey survives the final WHERE; SELECT DISTINCT collapses the fan-out.
     StudentGroups AS (
+        -- Homeroom candidate
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            Homeroom, SchoolName,
-            CASE WHEN GradeOrder <= 9  THEN HomeroomKey
-                 WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID
-            END AS GroupKey
+            Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
+        WHERE HomeroomKey IS NOT NULL
+
+        UNION ALL
+
+        -- Section candidate (HS section enrollments)
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
+        FROM ApplicableStudents
+        WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+
+        UNION ALL
+
+        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
+        SELECT
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
+        FROM ApplicableStudents
+        WHERE SchoolID IS NOT NULL
     ),
     -- Latest math result per (student, window, task). Dated history is kept, so pick the most recent.
     LatestMathPerTask AS (

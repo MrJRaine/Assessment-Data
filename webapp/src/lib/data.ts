@@ -40,7 +40,7 @@ export interface TeacherGroup {
   key: string // GroupKey: URL-safe homeroom key '<SchoolAbbrev>-<cleanHomeroom>' (grades <=9) or 'SEC:<sectionId>' (10+)
   label: string // display name, e.g. 'Homeroom 5/6' (real name; the key is what travels in the URL)
   scope: 'Taught' | 'Oversight' // 'Taught' = the caller's own classes (any role); 'Oversight' = above-teacher school/region view
-  groupType: 'Homeroom' | 'Section' // which lens this card belongs to (the above-teacher toggle switches between them)
+  groupType: 'Homeroom' | 'Section' | 'Grade' // which lens this card belongs to (the above-teacher toggle switches between them)
   schoolName: string | null
   grade: string | null // MAX(grade) in the group — kept for display/back-compat
   grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
@@ -207,7 +207,7 @@ export async function getTeacherGroups(upn: string, windowId: string): Promise<T
       key,
       label: r.GroupLabel ?? key,
       scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
-      groupType: r.GroupType === 'Section' ? 'Section' : 'Homeroom',
+      groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
       schoolName: r.SchoolName ?? null,
       grade: r.Grade ?? null,
       grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),

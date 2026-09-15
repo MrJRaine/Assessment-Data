@@ -11,19 +11,25 @@
  *                          Grade split: PP-9 -> homeroom, 10+ -> section.
  *            'Oversight' — for above-teacher roles only (Administrator /
  *                          SpecialistTeacher = their schools; RegionalAnalyst =
- *                          region-wide). Returns BOTH lenses over the full P-RG
+ *                          region-wide). Returns THREE lenses over the full P-RG
  *                          range: a Homeroom lens (every in-scope student -> their
- *                          homeroom) AND a Section lens (HS 10+ students -> their
- *                          sections). The web toggle switches lens client-side.
+ *                          homeroom), a Section lens (HS 10+ students -> their
+ *                          sections), and a Grade lens (every student -> their
+ *                          school+grade cohort). The web toggle switches lens
+ *                          client-side.
  *          GroupKey: PP-9/homeroom -> stored DimStudent.GroupKey (URL-safe,
- *          school-qualified); sections -> 'SEC:'+SectionID.
+ *          school-qualified); sections -> 'SEC:'+SectionID; grade cohort ->
+ *          'GRADE:'+SchoolID+':'+Grade (per-school, so the school filter carries it).
  * Created: 2026-06-22
  * Modified: 2026-09-08 — homeroom GroupKey = stored DimStudent.GroupKey.
  *          2026-09-15 — REDESIGN ([[project_group_display_redesign]]): teacher rule
- *          fires for all (Scope='Taught'); above-teacher gets a both-lens
+ *          fires for all (Scope='Taught'); above-teacher gets a multi-lens
  *          'Oversight' scope over full P-RG (was a mutually-exclusive AccessLevel
  *          dispatch with a hard grade/homeroom-vs-section split). New output
  *          column: Scope. Shared by Data Entry now + Programming (Phase 2).
+ *          2026-09-15b — added the Oversight Grade lens (per-school grade cohorts)
+ *          + a Grades list column (grade-span filter). SchoolID threaded into
+ *          OversightStudents for the grade GroupKey.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
@@ -89,7 +95,7 @@ RETURN
     OversightStudents AS (
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
@@ -109,7 +115,7 @@ RETURN
 
         SELECT
             wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName
+            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN DimStudent s
@@ -168,6 +174,18 @@ RETURN
                'SEC:' + SectionID,
                SectionNumber + ' — ' + CourseName
         FROM OversightSections
+
+        UNION ALL
+
+        -- OVERSIGHT grade lens: every in-scope student -> their (school, grade) cohort. Scoped per
+        -- SCHOOL so the client school filter narrows it and the 'GRADE:<SchoolID>:<Grade>' key routes
+        -- to one school's grade cohort with no extra params (respects the school filter by design).
+        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
+               CAST('Oversight' AS VARCHAR(10)), CAST('Grade' AS VARCHAR(10)),
+               'GRADE:' + SchoolID + ':' + Grade,
+               CASE Grade WHEN 'P' THEN 'Primary' WHEN 'PP' THEN 'Pre-Primary' WHEN 'RG' THEN 'Graduating'
+                          ELSE 'Grade ' + Grade END
+        FROM OversightStudents
     ),
     -- Grades PRESENT in each group, as a comma-delimited distinct list (e.g. 'P,1' for a split
     -- P/1 homeroom). Lets the client grade filter match a group if ANY of its grades is selected,
