@@ -57,7 +57,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <MaintenanceProvider>
+    <MaintenanceProvider isSysAdmin={caps.isSysAdmin}>
       {/* Above the header so it sits outside the app chrome -- keeps the header-and-below area
           clean for how-to-doc screenshots (crop this bar out and the shot looks like production). */}
       {devMode && (

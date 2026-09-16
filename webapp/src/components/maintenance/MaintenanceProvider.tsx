@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from 'react'
+import { clearMaintenance } from '@/app/admin/maintenance/actions'
 
 // Staged maintenance lifecycle, keyed off SERVER time (each client offsets its own clock).
 //   none          — no window (or too far out to matter)
@@ -39,7 +40,13 @@ export function useMaintenance(): MaintenanceState {
   return useContext(Ctx)
 }
 
-export default function MaintenanceProvider({ children }: { children: React.ReactNode }) {
+export default function MaintenanceProvider({
+  children,
+  isSysAdmin = false,
+}: {
+  children: React.ReactNode
+  isSysAdmin?: boolean
+}) {
   // Raw window from the server + the clock offset measured at fetch time.
   const windowRef = useRef<{ atMs: number | null; message: string | null; offsetMs: number }>({
     atMs: null,
@@ -108,23 +115,50 @@ export default function MaintenanceProvider({ children }: { children: React.Reac
     }
   }, [poll, recompute])
 
+  // Sysadmin escape hatch: clear the window from wherever you are — including the locked/down screen,
+  // where the nav is covered. Optimistically drop the local window so it lifts instantly for the
+  // sysadmin; the server row is nulled and every other client picks it up on the next poll.
+  const [clearing, startClear] = useTransition()
+  const clearNow = useCallback(() => {
+    startClear(async () => {
+      try {
+        const res = await clearMaintenance()
+        if (res.ok) {
+          windowRef.current = { atMs: null, message: null, offsetMs: windowRef.current.offsetMs }
+          recompute()
+        }
+      } catch {
+        /* leave state as-is; the poller will reconcile */
+      }
+    })
+  }, [recompute])
+
+  const admin = isSysAdmin ? { onClear: clearNow, clearing } : null
+
   return (
     <Ctx.Provider value={state}>
-      <MaintenanceBanner state={state} />
+      <MaintenanceBanner state={state} admin={admin} />
       {children}
       {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
           grid mid auto-save). The poller keeps trying; when the window clears/expires it disappears. */}
-      {state.stage === 'down' ? <MaintenanceDown message={state.message} /> : null}
+      {state.stage === 'down' ? <MaintenanceDown message={state.message} admin={admin} /> : null}
     </Ctx.Provider>
   )
 }
 
-function MaintenanceDown({ message }: { message: string | null }) {
+type AdminClear = { onClear: () => void; clearing: boolean } | null
+
+function MaintenanceDown({ message, admin }: { message: string | null; admin: AdminClear }) {
   return (
     <div className="maint-down-screen" role="alert">
       <div className="maint-down-card">
         <h1>We&rsquo;ll be right back</h1>
         <p>{message || 'The Short Cycles of Response app is being updated. Please check back in a few minutes — this page will return automatically.'}</p>
+        {admin ? (
+          <button className="btn" style={{ marginTop: '1.25rem' }} disabled={admin.clearing} onClick={admin.onClear}>
+            {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -150,7 +184,7 @@ function mmss(total: number): string {
   return `${m}:${String(r).padStart(2, '0')}`
 }
 
-function MaintenanceBanner({ state }: { state: MaintenanceState }) {
+function MaintenanceBanner({ state, admin }: { state: MaintenanceState; admin: AdminClear }) {
   const { stage, secondsRemaining, maintenanceAt, message } = state
   if (stage === 'none') return null
 
@@ -185,6 +219,11 @@ function MaintenanceBanner({ state }: { state: MaintenanceState }) {
     <div className={`maint-banner maint-${tone}`} role="alert">
       {message && stage !== 'down' ? <strong>{message} </strong> : null}
       {text}
+      {admin ? (
+        <button className="maint-clear-btn" disabled={admin.clearing} onClick={admin.onClear}>
+          {admin.clearing ? 'Clearing…' : 'Clear now'}
+        </button>
+      ) : null}
     </div>
   )
 }
