@@ -1,17 +1,20 @@
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getStudentIPPList, type IPPRow } from '@/lib/data'
-import IPPManager from './IPPManager'
+import { getProgrammingGroups, type TeacherGroup } from '@/lib/data'
+import GroupCards from '../enter/[windowId]/GroupCards'
 
 export const dynamic = 'force-dynamic'
 
-export default async function IppPage() {
+// Programming landing = the shared choose-a-group picker (window-less groups over flagged students).
+// Teachers see their own classes ("My classes"); above-teacher roles get the oversight lenses.
+// Picking a group opens its IPP + Adaptations roster.
+export default async function ProgrammingPage() {
   const upn = await getCurrentUpn()
 
-  let rows: IPPRow[] = []
+  let groups: TeacherGroup[] = []
   let error: string | null = null
   try {
-    rows = await getStudentIPPList(upn)
+    groups = await getProgrammingGroups(upn)
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -20,14 +23,17 @@ export default async function IppPage() {
     <>
       <PageHeader
         title="Programming"
-        subtitle="Confirm each student's Literacy IPP so results are interpreted correctly"
+        subtitle="Record each student's Individual Program Plans and Adaptations by subject, so results are interpreted correctly."
       />
       {error ? (
         <ErrorNote message={error} />
-      ) : rows.length === 0 ? (
-        <EmptyState title="No IPP rows in your scope" hint="Students flagged for an IPP appear here once PowerSchool marks them." />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          title="No IPP or Adaptation records in your scope"
+          hint="A class appears here once PowerSchool flags one of its students for an IPP or an Adaptation."
+        />
       ) : (
-        <IPPManager rows={rows} />
+        <GroupCards groups={groups} hrefBase="/programming" metaSuffix="need confirmation" />
       )}
     </>
   )

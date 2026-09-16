@@ -786,6 +786,96 @@ export async function getStudentIPPList(upn: string): Promise<IPPRow[]> {
   }))
 }
 
+// ---------------------------------------------------------------------------
+// Programming (IPP + Adaptations) — window-less group picker + group roster.
+// tvf_ProgrammingGroups mirrors tvf_TeacherGroups' shape (so GroupCards renders it),
+// but over FLAGGED students only, with the "needs confirmation" count in enteredCount.
+// ---------------------------------------------------------------------------
+export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]> {
+  const rows = await queryAsUser<{
+    GroupKey: string
+    GroupLabel: string | null
+    Scope: string
+    GroupType: string
+    SchoolName: string | null
+    Grade: string | null
+    Grades: string | null
+    ApplicableStudentCount: number
+    NeedsConfirmCount: number
+  }>(upn, 'SELECT * FROM dbo.tvf_ProgrammingGroups(@UPN) ORDER BY GroupKey')
+  return rows.map((r) => ({
+    key: String(r.GroupKey),
+    label: r.GroupLabel ?? String(r.GroupKey),
+    scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
+    groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
+    schoolName: r.SchoolName ?? null,
+    grade: r.Grade ?? null,
+    grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
+    applicableCount: Number(r.ApplicableStudentCount ?? 0),
+    enteredCount: Number(r.NeedsConfirmCount ?? 0), // reuses the slot: shown as "N need confirmation"
+  }))
+}
+
+// One row per (student, subject, programFamily) present in EITHER fact for the chosen group.
+// The client pivots these into the IPP and Adaptations grids (subjects as columns), and the
+// English+FrenchImmersion pair on a literacy subject drives the FI grade-3+ 4-way cell.
+export interface ProgrammingRosterRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  studentProgramFamily: string | null // the student's OWN program (English / French Immersion)
+  subject: string // 'Reading' | 'Writing' | 'Math'
+  programFamily: string // the fact row's ProgramFamily
+  ippExists: boolean // an IPP row exists for this (student, subject, family)
+  adaptationExists: boolean // an Adaptation row exists for this (student, subject, family)
+  isIPP: boolean | null // meaningful only when ippExists; null = unconfirmed
+  hasAdaptation: boolean | null // meaningful only when adaptationExists; null = unresolved
+}
+
+export async function getProgrammingRoster(upn: string, groupKey: string): Promise<ProgrammingRosterRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    Homeroom: string | null
+    SchoolName: string | null
+    StudentProgramFamily: string | null
+    Subject: string
+    ProgramFamily: string
+    IPPExists: boolean | number
+    AdaptationExists: boolean | number
+    IsIPP: boolean | number | null
+    HasAdaptation: boolean | number | null
+  }>(
+    upn,
+    `SELECT * FROM dbo.tvf_ProgrammingRoster(@UPN, @GroupKey)
+     ORDER BY LastName, FirstName, Subject, ProgramFamily`,
+    { GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
+    studentProgramFamily: r.StudentProgramFamily ?? null,
+    subject: r.Subject,
+    programFamily: r.ProgramFamily,
+    ippExists: Boolean(toBool(r.IPPExists)),
+    adaptationExists: Boolean(toBool(r.AdaptationExists)),
+    isIPP: toBool(r.IsIPP),
+    hasAdaptation: toBool(r.HasAdaptation),
+  }))
+}
+
 export interface AchievementBand {
   code: string
   name: string
