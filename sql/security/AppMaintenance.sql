@@ -19,7 +19,7 @@
 
 IF OBJECT_ID('dbo.AppMaintenance') IS NULL
     CREATE TABLE AppMaintenance (
-        Id             TINYINT       NOT NULL,   -- always 1 (single-row table)
+        Id             INT           NOT NULL,   -- always 1 (single-row table; Fabric has no TINYINT)
         MaintenanceAt  DATETIME2(0)  NULL,       -- UTC swap moment T; NULL = no window active
         Message        VARCHAR(500)  NULL,       -- optional custom banner message
         SetByEmail     VARCHAR(255)  NULL,       -- who set it (lowercased)
