@@ -166,15 +166,15 @@ function MaintenanceBanner({ state }: { state: MaintenanceState }) {
   let tone: 'warn' | 'lock' | 'down' = 'warn'
   switch (stage) {
     case 'warn':
-      text = `Scheduled maintenance at ${at}. Data entry will lock 5 minutes before — please save your work. (${countdown})`
+      text = `Scheduled maintenance at ${at}. Data entry will lock a few minutes beforehand — a good time to save your work. (${countdown})`
       tone = 'warn'
       break
     case 'lockAfterSave':
-      text = `Maintenance at ${at}. Entry locks after your next save — finish and Save now. (${countdown})`
-      tone = 'lock'
+      text = `Maintenance at ${at}. Inputs will lock after your next save — save when you're ready. (${countdown})`
+      tone = 'warn'
       break
     case 'fullLock':
-      text = `Entry is locked for maintenance at ${at}. Any unsaved changes will be saved automatically before the server restarts. (${countdown})`
+      text = `Data entry is paused for maintenance at ${at}. Anything unsaved will be saved for you before the restart. (${countdown})`
       tone = 'lock'
       break
     case 'autoSave':

@@ -445,17 +445,30 @@ export interface CallerCapabilities {
  * Gates /cycles and /ingest (their pages, server actions, nav items, and home cards).
  */
 export async function getCallerCapabilities(upn: string): Promise<CallerCapabilities> {
-  const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
-    `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
-    { UPN: upn },
-  )
-  const r = rows[0]
-  const sysAdmin = Boolean(r?.IsSysAdmin)
-  return {
-    isSysAdmin: sysAdmin,
-    canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
-    canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+  // Capabilities drive the app chrome (nav gating), so this runs on the FIRST authenticated render.
+  // A cold connection pool / token warm-up can make that first query throw; retry a few times so the
+  // nav resolves correctly without the user having to refresh. A "no row" result is NOT an error
+  // (that user simply has no admin capabilities) — only a thrown query retries.
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
+        { UPN: upn },
+      )
+      const r = rows[0]
+      const sysAdmin = Boolean(r?.IsSysAdmin)
+      return {
+        isSysAdmin: sysAdmin,
+        canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
+        canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+      }
+    } catch (e) {
+      lastErr = e
+      await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
+    }
   }
+  throw lastErr
 }
 
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);

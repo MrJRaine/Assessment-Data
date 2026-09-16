@@ -17,13 +17,20 @@ export default async function AppShell({ children }: { children: React.ReactNode
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   let authed = false
   let currentUpn: string | null = null
+  let capsError = false
   try {
     const upn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
     authed = true
     currentUpn = upn
-    caps = await getCallerCapabilities(upn)
+    // Resolve caps in its OWN try so a transient caps-query failure can't flip the user to signed-out
+    // (which would also hide the non-gated nav). getCallerCapabilities already retries a cold pool;
+    // if it still fails, flag it so the client does a bounded refresh rather than stranding the nav.
+    try {
+      caps = await getCallerCapabilities(upn)
+    } catch {
+      capsError = true
+    }
   } catch {
-    caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
     authed = false
     currentUpn = null
   }
@@ -75,7 +82,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
       </header>
       <main className="container">{children}</main>
       <VersionFooter />
-      {entraMode && <PostLoginRefresh authed={authed} />}
+      <PostLoginRefresh authed={authed} capsError={capsError} enablePostLogin={entraMode} />
     </MaintenanceProvider>
   )
 }
