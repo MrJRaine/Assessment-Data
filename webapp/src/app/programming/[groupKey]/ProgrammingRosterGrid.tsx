@@ -67,6 +67,15 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
     return k in pending ? pending[k] : storedVal
   }
 
+  // A cell "needs confirmation" when any of its family values is still unset (null) after staging.
+  const cellNeedsConfirm = (studentKey: string, subject: string): boolean => {
+    const c = cells.get(`${studentKey}|${subject}`)
+    if (!c) return false
+    return c.families.some((f) => effective(studentKey, subject, f.programFamily, f.value) === null)
+  }
+  // Students in this roster with at least one unconfirmed cell.
+  const needStudents = students.filter((st) => subjects.some((s) => cellNeedsConfirm(st.studentKey, s)))
+
   // Stage one family value; revert to stored (drop the pending key) if it matches.
   function stage(studentKey: string, subject: string, family: string, value: boolean, storedVal: boolean | null) {
     const k = pkey(studentKey, subject, family)
@@ -162,6 +171,16 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
     <>
       <RosterToggle kind={kind} setKind={setKind} />
 
+      <div className="ipp-toolbar">
+        {kind === 'IPP' ? (
+          <span className={needStudents.length ? 'ipp-need-pill' : 'ipp-need-pill ipp-need-clear'}>
+            {needStudents.length} of {students.length} still need IPP confirmation
+          </span>
+        ) : (
+          <span className="muted">Adaptations are recorded per subject (no confirmation gate). Unset cells are highlighted.</span>
+        )}
+      </div>
+
       <table className="grid">
         <thead>
           <tr>
@@ -178,7 +197,9 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
               <td>{st.lastName}, {st.firstName}</td>
               <td>{st.grade ?? '—'}</td>
               {subjects.map((s) => (
-                <td key={s}>{cellNode(st.studentKey, s)}</td>
+                <td key={s} className={cellNeedsConfirm(st.studentKey, s) ? 'pgm-need' : undefined}>
+                  {cellNode(st.studentKey, s)}
+                </td>
               ))}
             </tr>
           ))}

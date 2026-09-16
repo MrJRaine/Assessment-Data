@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import { getProgrammingGroups, type TeacherGroup } from '@/lib/data'
@@ -17,6 +18,12 @@ export default async function ProgrammingPage() {
     groups = await getProgrammingGroups(upn)
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
+  }
+
+  // A caller with exactly one group (e.g. a teacher with a single homeroom) skips the picker and
+  // goes straight to that roster — "teacher → straight to their students".
+  if (!error && groups.length === 1) {
+    redirect(`/programming/${groups[0].key}`)
   }
 
   return (
