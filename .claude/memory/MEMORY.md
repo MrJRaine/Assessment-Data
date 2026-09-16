@@ -80,10 +80,10 @@
 - [Image Versioning Scheme (DONE)](project_image_versioning_scheme.md) — RESOLVED 2026-09-08: semver-tagged prod images, tar by version, CHANGELOG + git tag; first = v0.3.0.
 - [Prior-Year Baseline (v0.4.0 SHIPPED)](project_prior_year_baseline.md) — Reading prior-year starting point LIVE 2026-09-10; COALESCE(prior facts, baseline seed). Writing has NO baseline.
 - [Group Display Redesign](project_group_display_redesign.md) — shared choose-a-group picker (teacher own classes / oversight lenses + filters). Built via the makeover Phase 1.
-- [Programming Makeover (IPP+Adaptations)](project_programming_makeover.md) — Programming nav, two rosters (IPP/Adaptations) student×Reading|Writing|Math grids; Phase 0 backend + Phase 1 picker DONE on dev; Grade lens added. Remaining: Phase 2 pages.
+- [Programming Makeover (IPP+Adaptations)](project_programming_makeover.md) — DONE through Phase 2 on dev/0.5.0: `/programming` nav, window-less picker (tvf_ProgrammingGroups/Roster) + IPP⟷Adaptations grid with the data-driven 2-way/4-way FI cell. Deploy: tvf_ProgrammingGroups.sql + tvf_ProgrammingRoster.sql.
 
 ## Backlog / wishlist (NOT built)
 - [Writing Scribed Score Code (PLANNED)](project_writing_scribed_score_code.md) — score code "SCR" on Conventions+Organization only, omitted from calcs.
 - [Subject↔Course Dim (QoL, 1.0→likely 1.1)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.
-- [Maintenance Mode (PRE-1.0)](project_maintenance_mode.md) — graceful poll-based maintenance window for emergency container swaps; quiet auto-save net; sysadmin countdown page.
+- [Maintenance Mode (BUILT dev/0.5.0)](project_maintenance_mode.md) — graceful poll-based lockout for emergency container swaps: AppMaintenance row + set/clear procs + /api/status; staged banner→lock→auto-save→down overlay; sysadmin one-click Clear (banner+overlay) + sign-in on overlay. SQL on dev. Fabric: no TINYINT; ;THROW needs BEGIN…END.

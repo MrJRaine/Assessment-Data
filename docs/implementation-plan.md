@@ -672,3 +672,9 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - **Note**: This plan covers the ORIGINAL warehouse/ingest build (through ~2026-04). Since then the project moved to the Phase 3b web app + feature work, tracked in **project memory**, not here. For current state read [[project_assessment_platform]] (distilled) and the per-feature memories; the running narrative is [[project_session_archive]].
 - **Current focus (not in this plan)**: Programming (IPP+Adaptations) makeover on `dev` (0.5.0-dev). Phase 0 backend + Phase 1 shared group picker (Homeroom/Section/Grade lenses) DONE + verified on dev. **Next: Phase 2** — the Programming pages (`/ipp`→`/programming`; two IPP/Adaptations rosters).
 - **Blockers**: None.
+
+### Left Off — 2026-09-16
+- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + per-feature memories; narrative in [[project_session_archive]].
+- **This session (dev/0.5.0)**: Programming makeover **complete through Phase 2** (`/programming`, window-less picker + IPP⟷Adaptations grid) + **Maintenance mode** built (banner/lock/auto-save/sysadmin page) + nav first-load caps fix. All on dev, SQL deployed to dev.
+- **Next action**: build **Writing `SCR` (Scribed)** — scope the approach first (touches the live writing path) — or continue polishing.
+- **Blockers**: None.

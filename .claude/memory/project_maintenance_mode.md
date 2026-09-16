@@ -30,7 +30,25 @@ Files: `sql/security/AppMaintenance.sql`, `sql/procedures/usp_Set|ClearMaintenan
 (`MaintenanceProvider.tsx` = poller+banner+down overlay+context, `useEntryLock.ts` = grid lock/
 auto-save/beforeunload); grids reading/writing/math **and** Programming consume `useEntryLock`;
 `app/admin/maintenance/` (page+control+actions, isSysAdmin-gated, nav item). **Deploy to dev/live:**
-run the 3 SQL files (self-granting). Original agreed spec + timeline preserved below.
+run the 3 SQL files (self-granting). **SQL deployed to DEV 2026-09-16.**
+
+**Refinements (2026-09-16 testing):**
+- Fabric gotchas hit + fixed (also → fabric-warehouse-sql skill): **no `TINYINT`** (Msg 24574 — used INT);
+  a bare `IF`-body **`;THROW` must be wrapped in `BEGIN…END`** (Msg 102).
+- **Sticky lock across navigation**: `useEntryLock` persists "locked after next save" in sessionStorage
+  keyed by T, so navigating away/back or between sections stays locked for the rest of the window (was
+  per-mount state that reset). Auto-save wrapped in try/catch.
+- **Down = fixed overlay ON TOP** of the still-mounted app (was replacing children → suspected the ~T-1
+  client-side crash from tearing down a grid mid auto-save).
+- **Sysadmin one-click Clear** on the banner (every stage) + the down overlay (optimistic local clear),
+  and **AuthArea (sign in/out) on the down overlay** so a signed-out / wrong-account sysadmin can switch
+  accounts and clear it (else the overlay traps them). Dev impersonation bar moved above the overlay.
+- **Poll cadence tightened** so open tabs pick up a new window fast: `/api/status` cache 4s; client poll
+  8s far / 4s near (fresh loads already poll on mount = immediate; banner is app-wide via AppShell).
+- **Banner copy softened** (user: "too aggressive") — kept T-5/T-3/T-1 timing, gentler wording, T-5 stage
+  amber not red.
+
+Original agreed spec + timeline preserved below.
 
 **Why POLL, not push:** the app holds no persistent client↔server connection (pages are
 server-rendered + force-dynamic), so a client poller drives this, not a socket. True SSE push is the

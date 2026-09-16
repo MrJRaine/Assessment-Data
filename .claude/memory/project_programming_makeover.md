@@ -152,11 +152,19 @@ both old branches are deleted. Workflow: [[feedback_git_workflow]]. Bigger than 
   `[Homerooms|Sections|Grades]` tab; grade-chip filter hidden+not-applied on the Grade lens; roster
   header labels the cohort by grade. Decision: available in **BOTH Data Entry and Programming**.
   Deploy: re-run the four TVFs / `deploy_groupkey_tvfs.sql`.
-- **Phase 2 — Programming pages:** nav rename `/ipp`→`/programming`; TWO rosters (IPP + Adaptations),
-  each a student×`Reading|Writing|Math` grid with the adaptive cell (2-way / 4-way FLA-ELA / Math),
-  rendered by ONE shared roster component parameterized IPP-vs-Adaptation. Reads return the per-student
-  per-subject statuses for BOTH program families (so the cell can pick 2-way vs 4-way); writes reuse
-  the existing per-(subject,programFamily) upsert procs.
+- ✅ **Phase 2 — Programming pages DONE 2026-09-16 (dev/0.5.0).** `/ipp`→`/programming` (git-mv, redirect
+  kept). NON-teacher scope = **card picker first** (user's choice over inline filters): two NEW window-less
+  TVFs — `tvf_ProgrammingGroups(@UPN)` (Taught/Oversight groups over FLAGGED students; count = "needs
+  IPP confirmation") + `tvf_ProgrammingRoster(@UPN,@GroupKey)` (one group's students, 1 row per
+  (subject,family) in EITHER fact, IsIPP/HasAdaptation + existence flags; group membership by key shape
+  intersected with the caller scope). `getProgrammingGroups` reuses the `TeacherGroup` shape → feeds
+  `GroupCards`. Roster `ProgrammingRosterGrid`: **IPP⟷Adaptations** toggle, student×Reading|Writing|Math,
+  **adaptive cell driven by the DATA** — 1 family row → 2-way No/Yes, 2 rows (EN+FI) → 4-way No/FLA-Only/
+  ELA-Only/Both (so FLA option shows ONLY for FI grade-3+ literacy, per the seeding). Save via
+  `saveProgramming` (usp_UpsertStudentIPP/Adaptation), scope+existence gated. Polish: single-group
+  auto-skip; amber needs-confirmation cue + "X of Y need IPP confirmation" pill. **Deploy to dev/live:**
+  `tvf_ProgrammingGroups.sql` + `tvf_ProgrammingRoster.sql` (self-granting). **Makeover is now feature-
+  complete through Phase 2 on dev.**
 
 ## Schedule note (user owns the call)
 This grew past a Thu-EOD slice: nav restructure + Math IPP data path + a NET-NEW Adaptations data

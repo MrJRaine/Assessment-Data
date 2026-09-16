@@ -39,6 +39,8 @@ Fabric Warehouse is NOT standard SQL Server. It rejects many common T-SQL constr
 | `VARCHAR(n)` | Use instead of NVARCHAR; supports Unicode via UTF-8 collation |
 | `VARCHAR(MAX)` | Supported for large text (e.g. audit message columns) |
 
+**NOT supported — `TINYINT`** (confirmed 2026-09-16): `CREATE TABLE` with a `TINYINT` column fails `Msg 24574 Level 16 'The data type 'tinyint' ... is not supported in this edition of SQL Server.'` — and the failed CREATE cascades ("Invalid object name" on the following INSERT/GRANT). Use **`INT`** even for a tiny single-row key/flag. (Fabric's type surface is narrow; when unsure, prefer `INT` / `BIGINT` / `BIT` / `VARCHAR` / `DATETIME2`.)
+
 ---
 
 ## CREATE TABLE — Minimal Valid Pattern
