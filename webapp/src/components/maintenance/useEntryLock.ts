@@ -3,18 +3,40 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMaintenance } from './MaintenanceProvider'
 
+// Sticky "locked after save" flag, keyed by the window's T so it persists across navigation (same
+// section or between sections) for the rest of THAT window, and a past window never locks a new one.
+const LOCK_KEY = 'maintLockedAfterSave'
+
 /**
- * Maintenance-aware entry lock for the reading / writing / math grids.
+ * Maintenance-aware entry lock for the reading / writing / math / programming grids.
  * Returns `inputsLocked` (thread into input `disabled`) and `markSaved` (call after a successful
- * save so the T-5 "lock after next save" stage actually locks). Also fires a QUIET one-shot auto-save
- * at T-1 if there are unsaved changes, and installs a beforeunload guard while dirty.
- *
- * Save itself is never blocked (the banner locks INPUT, not Save) so staged edits can still flush.
+ * save so the T-5 "lock after next save" stage actually locks — and STAYS locked across navigation
+ * for the rest of the window). Also fires a QUIET one-shot auto-save at T-1 if there are unsaved
+ * changes, and installs a beforeunload guard while dirty. Save itself is never blocked.
  */
 export function useEntryLock({ dirty, onSave }: { dirty: boolean; onSave: () => void }) {
-  const { stage } = useMaintenance()
+  const { stage, maintenanceAt } = useMaintenance()
   const [lockedAfterSave, setLockedAfterSave] = useState(false)
   const autoSavedRef = useRef(false)
+
+  // Restore the sticky flag on mount / when the window changes; clear it when the window ends.
+  useEffect(() => {
+    if (stage === 'none' || stage === 'warn') {
+      setLockedAfterSave(false)
+      autoSavedRef.current = false
+      try {
+        sessionStorage.removeItem(LOCK_KEY)
+      } catch {
+        /* private mode — nothing to clear */
+      }
+      return
+    }
+    try {
+      if (maintenanceAt && sessionStorage.getItem(LOCK_KEY) === maintenanceAt) setLockedAfterSave(true)
+    } catch {
+      /* ignore */
+    }
+  }, [stage, maintenanceAt])
 
   const inputsLocked =
     stage === 'fullLock' ||
@@ -22,23 +44,19 @@ export function useEntryLock({ dirty, onSave }: { dirty: boolean; onSave: () => 
     stage === 'down' ||
     (stage === 'lockAfterSave' && lockedAfterSave)
 
-  // Reset when the window clears / hasn't reached the lock stages.
-  useEffect(() => {
-    if (stage === 'none' || stage === 'warn') {
-      setLockedAfterSave(false)
-      autoSavedRef.current = false
-    }
-  }, [stage])
-
-  // Quiet auto-save at T-1 — fire once if there's unsaved work.
+  // Quiet auto-save at T-1 — fire once if there's unsaved work. Best-effort (never crash the page).
   useEffect(() => {
     if (stage === 'autoSave' && dirty && !autoSavedRef.current) {
       autoSavedRef.current = true
-      onSave()
+      try {
+        onSave()
+      } catch {
+        /* auto-save is a safety net; a failure must not take down the app */
+      }
     }
   }, [stage, dirty, onSave])
 
-  // beforeunload guard while there are unsaved changes (belt + suspenders with the auto-save).
+  // beforeunload guard while there are unsaved changes.
   useEffect(() => {
     if (!dirty) return
     const handler = (e: BeforeUnloadEvent) => {
@@ -49,10 +67,18 @@ export function useEntryLock({ dirty, onSave }: { dirty: boolean; onSave: () => 
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty])
 
-  // Call after a successful save: at T-5 (lockAfterSave) the next save is what locks input.
+  // Call after a successful save: from T-5 on, the next save locks input — and it stays locked in
+  // every section for the rest of the window (persisted, so navigating away/back can't re-open it).
   const markSaved = useCallback(() => {
-    setLockedAfterSave((prev) => prev || stage === 'lockAfterSave')
-  }, [stage])
+    if (stage === 'lockAfterSave' || stage === 'fullLock' || stage === 'autoSave') {
+      setLockedAfterSave(true)
+      try {
+        if (maintenanceAt) sessionStorage.setItem(LOCK_KEY, maintenanceAt)
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [stage, maintenanceAt])
 
   return { inputsLocked, markSaved }
 }

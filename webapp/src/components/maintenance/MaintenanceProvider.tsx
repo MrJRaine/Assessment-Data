@@ -110,16 +110,11 @@ export default function MaintenanceProvider({ children }: { children: React.Reac
 
   return (
     <Ctx.Provider value={state}>
-      {state.stage === 'down' ? (
-        // Full takeover once past T: the container is (being) swapped. The poller keeps trying;
-        // when the new container is up and the window is cleared/expired, the app returns on its own.
-        <MaintenanceDown message={state.message} />
-      ) : (
-        <>
-          <MaintenanceBanner state={state} />
-          {children}
-        </>
-      )}
+      <MaintenanceBanner state={state} />
+      {children}
+      {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
+          grid mid auto-save). The poller keeps trying; when the window clears/expires it disappears. */}
+      {state.stage === 'down' ? <MaintenanceDown message={state.message} /> : null}
     </Ctx.Provider>
   )
 }
