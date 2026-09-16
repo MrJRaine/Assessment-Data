@@ -29,10 +29,14 @@ BEGIN
     DECLARE @Caller VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
 
     IF NOT EXISTS (SELECT 1 FROM StaffAppAccess WHERE LOWER(Email) = @Caller AND IsSysAdmin = 1)
+    BEGIN
         ;THROW 51040, 'usp_SetMaintenanceWindow: caller is not a sysadmin.', 1;
+    END;
 
     IF @MaintenanceAt IS NULL
+    BEGIN
         ;THROW 51041, 'usp_SetMaintenanceWindow: @MaintenanceAt is required.', 1;
+    END;
 
     DECLARE @At DATETIME2(0) = CAST(@MaintenanceAt AS DATETIME2(0));
 
