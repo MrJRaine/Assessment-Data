@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 // Public status endpoint for the client maintenance poller. Returns the scheduled window (UTC) plus
 // the SERVER clock so each client can offset its own possibly-skewed laptop clock. The warehouse read
 // is cached briefly so hundreds of polling tabs hit the DB at most once per CACHE_MS.
-const CACHE_MS = 10_000
+const CACHE_MS = 4_000
 // Ignore a window well past T (a forgotten "all clear") so the app self-heals after a swap; an
 // explicit clear lifts it immediately.
 const AUTO_EXPIRE_MS = 10 * 60_000

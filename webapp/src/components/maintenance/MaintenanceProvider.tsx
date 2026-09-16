@@ -93,7 +93,7 @@ export default function MaintenanceProvider({ children }: { children: React.Reac
     let pollTimer: ReturnType<typeof setTimeout>
     const schedule = () => {
       const s = windowRef.current.atMs == null ? null : Math.round((windowRef.current.atMs - (Date.now() + windowRef.current.offsetMs)) / 1000)
-      const delay = s != null && s <= 6 * 60 ? 5000 : 20000 // 5s when close, else 20s
+      const delay = s != null && s <= 6 * 60 ? 4000 : 8000 // 4s when close, else 8s — pick up a newly-set window promptly
       pollTimer = setTimeout(async () => {
         if (stopped) return
         await poll()
