@@ -753,7 +753,7 @@ export interface IPPRow {
 }
 
 /**
- * Reading-IPP rows in the signed-in user's scope, for the bulk IPP-management screen (/ipp).
+ * Reading-IPP rows in the signed-in user's scope, for the bulk IPP-management screen (/programming).
  * Reading only for the pilot (mirrors scrIPP's Subject='Reading' filter); Writing/Math join later.
  */
 export async function getStudentIPPList(upn: string): Promise<IPPRow[]> {

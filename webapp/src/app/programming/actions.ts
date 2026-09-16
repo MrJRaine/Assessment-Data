@@ -19,7 +19,7 @@ export interface IPPSaveResult {
 }
 
 /**
- * Bulk-save IPP confirmations from the /ipp management screen. UPN resolved server-side as
+ * Bulk-save IPP confirmations from the /programming management screen. UPN resolved server-side as
  * @CallerUPN (never trusted from the client); @ProgramFamily is the row's IPPProgramFamily so the
  * proc finds the matching current FactStudentIPP row. Mirrors scrIPP's ForAll save.
  */
@@ -51,6 +51,6 @@ export async function saveStudentIPPs(entries: IPPSaveEntry[]): Promise<IPPSaveR
       errors.push({ studentKey: e.studentKey, message: toUserMessage(err) })
     }
   }
-  revalidatePath('/ipp')
+  revalidatePath('/programming')
   return { saved, errors }
 }

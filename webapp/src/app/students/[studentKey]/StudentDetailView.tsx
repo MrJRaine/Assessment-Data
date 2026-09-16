@@ -150,7 +150,7 @@ export default function StudentDetailView({
       ) : current.ippStatus === 'Unresolved' ? (
         <div className="ipp-note">
           {subject} IPP needs confirmation — achievement is not shown until the IPP type is confirmed
-          (on the roster or the IPPs screen).
+          (on the roster or the Programming screen).
         </div>
       ) : null}
 

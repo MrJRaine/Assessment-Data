@@ -47,10 +47,10 @@ export default async function Home() {
           cta="Enter Data"
         />
         <CardLink
-          href="/ipp"
-          title="Student IPPs"
-          desc="Confirm which students have an Individual Program Plan by subject, so assessment data is interpreted correctly."
-          cta="Confirm plans"
+          href="/programming"
+          title="Programming"
+          desc="Record each student's Individual Program Plans and Adaptations by subject, so results are interpreted correctly."
+          cta="Open Programming"
         />
         {caps.canManageCycles ? (
           <CardLink
