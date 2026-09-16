@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { saveWritingAssessments, confirmRosterIPPs, type WritingEntry, type IppEntry } from './actions'
 import type { WritingRosterStudent } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
+import { useEntryLock } from '@/components/maintenance/useEntryLock'
 
 const TRAITS = [
   { key: 'ideas', label: 'Ideas' },
@@ -64,6 +65,10 @@ export default function WritingRosterEntry({
   const ippKeys = Object.keys(ippSel)
   const dirtyCount = changedKeys.length + ippKeys.length
 
+  // Maintenance lock: writing's onSave already sends COMPLETE rows only, so the T-1 auto-save saves
+  // finished rows and flags partial ones (never a partial-row failure).
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
+
   function setTrait(sk: string, trait: TraitKey, val: number | null) {
     setSel((p) => ({ ...p, [sk]: { ...p[sk], [trait]: val } }))
   }
@@ -119,6 +124,7 @@ export default function WritingRosterEntry({
         for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
         return next
       })
+      markSaved() // at T-5 the next save is what locks input
     })
   }
 
@@ -161,7 +167,7 @@ export default function WritingRosterEntry({
                     ) : (
                       <select
                         value={cur[t.key] ?? ''}
-                        disabled={pending}
+                        disabled={pending || inputsLocked}
                         onChange={(e) => setTrait(s.studentKey, t.key, e.target.value ? Number(e.target.value) : null)}
                       >
                         <option value="">—</option>
@@ -183,14 +189,14 @@ export default function WritingRosterEntry({
                     <span className="ipp-seg">
                       <button
                         className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
-                        disabled={pending}
+                        disabled={pending || inputsLocked}
                         onClick={() => chooseIPP(s.studentKey, true)}
                       >
                         Yes (Literacy IPP)
                       </button>
                       <button
                         className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
-                        disabled={pending}
+                        disabled={pending || inputsLocked}
                         onClick={() => chooseIPP(s.studentKey, false)}
                       >
                         No

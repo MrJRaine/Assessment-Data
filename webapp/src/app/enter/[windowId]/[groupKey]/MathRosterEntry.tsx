@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { MathRosterRow } from '@/lib/data'
 import { saveMathAssessments, type MathEntry } from './actions'
+import { useEntryLock } from '@/components/maintenance/useEntryLock'
 
 // Cell state: '1' can-do · '0' cannot · 'clear' explicit blank · 'ipp' the IPP default (no stored mark).
 type Mark = '1' | '0' | 'clear' | 'ipp'
@@ -167,6 +168,9 @@ export default function MathRosterEntry({
   const totalTasks = grades.reduce((a, g) => a + g.units.reduce((b, u) => b + u.tasks.length, 0), 0)
   const selTasks = totalTasks - deselected.size
 
+  // Maintenance lock: math is per-task (cell-independent), so the T-1 auto-save is safe.
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyKeys.length > 0, onSave: () => save() })
+
   function save() {
     const entries: MathEntry[] = dirtyKeys.map((k) => {
       const [studentKey, mathTaskKey] = k.split(':')
@@ -190,6 +194,7 @@ export default function MathRosterEntry({
         }
         return nextC
       })
+      markSaved() // at T-5 the next save is what locks input
     })
   }
 
@@ -425,6 +430,7 @@ export default function MathRosterEntry({
                                     <td className="cell stu" key={s.studentKey}>
                                       <button
                                         className={`mtoggle ${cls}`}
+                                        disabled={inputsLocked}
                                         onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP)}
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { ProgrammingRosterRow } from '@/lib/data'
 import { saveProgramming, type ProgrammingKind, type ProgrammingSaveEntry, type ProgrammingSaveResult } from './actions'
+import { useEntryLock } from '@/components/maintenance/useEntryLock'
 
 // Column order for the subject columns.
 const SUBJECT_ORDER: Record<string, number> = { Reading: 0, Writing: 1, Math: 2 }
@@ -89,6 +90,9 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
 
   const dirtyKeys = Object.keys(pending)
 
+  // Maintenance lock: per-(subject,family) upserts are independent, so the T-1 auto-save is safe.
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyKeys.length > 0, onSave: () => onSave() })
+
   function onSave() {
     const byKey = new Map(rows.map((r) => [pkey(r.studentKey, r.subject, r.programFamily), r]))
     const entries: ProgrammingSaveEntry[] = dirtyKeys.map((k) => {
@@ -104,6 +108,7 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
         for (const k of dirtyKeys) if (!failed.has(byKey.get(k)!.studentKey)) delete next[k]
         return next
       })
+      markSaved() // at T-5 the next save is what locks input
     })
   }
 
@@ -112,9 +117,9 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
     const eff = effective(studentKey, subject, fam.programFamily, fam.value)
     return (
       <span className="ipp-seg">
-        <button className={eff === false ? 'seg seg-no-on' : 'seg'} disabled={busy}
+        <button className={eff === false ? 'seg seg-no-on' : 'seg'} disabled={busy || inputsLocked}
           onClick={() => stage(studentKey, subject, fam.programFamily, false, fam.value)}>No</button>
-        <button className={eff === true ? 'seg seg-yes-on' : 'seg'} disabled={busy}
+        <button className={eff === true ? 'seg seg-yes-on' : 'seg'} disabled={busy || inputsLocked}
           onClick={() => stage(studentKey, subject, fam.programFamily, true, fam.value)}>Yes</button>
       </span>
     )
@@ -141,7 +146,7 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
     return (
       <span className="ipp-seg ipp-seg-4">
         {opts.map((o) => (
-          <button key={o} className={sel === o ? 'seg seg-yes-on' : 'seg'} disabled={busy} onClick={() => pick(o)}>
+          <button key={o} className={sel === o ? 'seg seg-yes-on' : 'seg'} disabled={busy || inputsLocked} onClick={() => pick(o)}>
             {o}
           </button>
         ))}

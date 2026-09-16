@@ -4,6 +4,7 @@ import AuthArea from './AuthArea'
 import PostLoginRefresh from './PostLoginRefresh'
 import DevImpersonationBar from './DevImpersonationBar'
 import VersionFooter from './VersionFooter'
+import MaintenanceProvider from './maintenance/MaintenanceProvider'
 import { getCurrentUpn, DEV_IMPERSONATE_COOKIE } from '@/lib/auth'
 import { getCallerCapabilities, getImpersonationTargets, type ImpersonationTarget } from '@/lib/data'
 
@@ -49,7 +50,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
   }
 
   return (
-    <>
+    <MaintenanceProvider>
       {/* Above the header so it sits outside the app chrome -- keeps the header-and-below area
           clean for how-to-doc screenshots (crop this bar out and the shot looks like production). */}
       {devMode && (
@@ -67,7 +68,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">Short Cycles of Response</span>
         </div>
-        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} />
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
         </div>
@@ -75,6 +76,6 @@ export default async function AppShell({ children }: { children: React.ReactNode
       <main className="container">{children}</main>
       <VersionFooter />
       {entraMode && <PostLoginRefresh authed={authed} />}
-    </>
+    </MaintenanceProvider>
   )
 }

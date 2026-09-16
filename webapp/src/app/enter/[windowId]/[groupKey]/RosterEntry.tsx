@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { saveReadingAssessments, confirmRosterIPPs, type SaveResult, type IppEntry } from './actions'
 import type { RosterStudent, ScaleLevel, AchievementBand } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
+import { useEntryLock } from '@/components/maintenance/useEntryLock'
 
 // ReadingDelta from a level's order vs the expected [min,max] range -- mirrors the server
 // formula in usp_UpsertReadingAssessment so the live (pre-save) value matches what Save stores.
@@ -102,6 +103,9 @@ export default function RosterEntry({
   const ippKeys = Object.keys(ippSel)
   const dirtyCount = changedLevelKeys.length + ippKeys.length
 
+  // Maintenance lock: reading saves are cell-independent, so the T-1 auto-save is safe.
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
+
   function chooseIPP(studentKey: string, value: boolean) {
     setIppSel((prev) => {
       const next = { ...prev }
@@ -146,6 +150,7 @@ export default function RosterEntry({
         for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
         return next
       })
+      markSaved() // at T-5 the next save is what locks input
       // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
       // recompute instantly from that — no server re-fetch (which was the ~5s lag).
     })
@@ -250,14 +255,14 @@ export default function RosterEntry({
                     <span className="ipp-seg">
                       <button
                         className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
-                        disabled={pending}
+                        disabled={pending || inputsLocked}
                         onClick={() => chooseIPP(s.studentKey, true)}
                       >
                         Yes ({ippTypeLabel('Reading')})
                       </button>
                       <button
                         className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
-                        disabled={pending}
+                        disabled={pending || inputsLocked}
                         onClick={() => chooseIPP(s.studentKey, false)}
                       >
                         No
@@ -266,7 +271,7 @@ export default function RosterEntry({
                   ) : (
                     <select
                       value={selId}
-                      disabled={pending || levels.length === 0}
+                      disabled={pending || inputsLocked || levels.length === 0}
                       onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
                     >
                       <option value="">—</option>

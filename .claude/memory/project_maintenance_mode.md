@@ -9,8 +9,28 @@ metadata:
 ---
 
 **Purpose:** deploy **emergency patches (container swaps) at ANY time of day** "generating as little
-aggro as possible." Scoped in discussion 2026-09-11; **NOT built.** Target: land **before 1.0**
-(a webapp minor). Motivated by shipping the 0.4.1 hotfix mid-day during teacher-testing prep.
+aggro as possible." Scoped 2026-09-11.
+
+**BUILT 2026-09-16 (on `dev`/0.5.0-dev; SQL pending dev deploy).** Decisions made at build:
+- **Store = WAREHOUSE ROW** (`AppMaintenance`, single row Id=1) + `usp_Set/ClearMaintenanceWindow`
+  (both sysadmin-gated in-proc via StaffAppAccess.IsSysAdmin). `/api/status` reads it with a ~10s
+  in-memory cache (poll load) and **fails OPEN** on a read error. MaintenanceAt stored UTC; the set
+  proc takes a VARCHAR 'YYYY-MM-DD HH:MM:SS' and CASTs (matches the app's VARCHAR-param convention).
+- **Clearing = BOTH** auto-expire (`/api/status` ignores a window >10 min past T) AND explicit
+  cancel/all-clear (`usp_ClearMaintenanceWindow`).
+- **Sysadmin UX = "lock down in N minutes"** (quick-pick 5/10/15/30 + custom 1–240 + optional
+  message) rather than an absolute datetime picker — avoids Atlantic/DST conversion; server computes T.
+- **M4 new-load redirect SIMPLIFIED:** a client full-screen "We'll be right back" overlay when stage
+  = 'down' (past T), covering open tabs AND fresh loads uniformly. The spec's server-path-aware
+  "redirect fresh loads at T-5" was skipped — during T-5..T fresh loads just get the banner + locked
+  inputs (harmless). Revisit only if that proves confusing.
+
+Files: `sql/security/AppMaintenance.sql`, `sql/procedures/usp_Set|ClearMaintenanceWindow.sql`
+(+ grant_webapp_sp.sql); `webapp/src/app/api/status/route.ts`; `components/maintenance/`
+(`MaintenanceProvider.tsx` = poller+banner+down overlay+context, `useEntryLock.ts` = grid lock/
+auto-save/beforeunload); grids reading/writing/math **and** Programming consume `useEntryLock`;
+`app/admin/maintenance/` (page+control+actions, isSysAdmin-gated, nav item). **Deploy to dev/live:**
+run the 3 SQL files (self-granting). Original agreed spec + timeline preserved below.
 
 **Why POLL, not push:** the app holds no persistent client↔server connection (pages are
 server-rendered + force-dynamic), so a client poller drives this, not a socket. True SSE push is the

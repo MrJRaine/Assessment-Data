@@ -47,11 +47,22 @@ GRANT SELECT ON [dbo].[tvf_TeacherRoster]            TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_StudentCohort]            TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_StudentAssessmentHistory] TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_StudentIPP]               TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_StudentAdaptation]        TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_TeacherRosterWriting]     TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_TeacherRosterMath]        TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_ProgrammingGroups]        TO [StudentDataAssessment];
+GRANT SELECT ON [dbo].[tvf_ProgrammingRoster]        TO [StudentDataAssessment];
 
 -- ---- Analyst-only ingest trigger (the web app's /ingest screen). The proc itself
 --      enforces the RegionalAnalyst role gate against @CallerUPN, so granting EXECUTE to
 --      the SP is safe. (Also self-granted at the bottom of usp_TriggerIngestCycle.sql.) ----
 GRANT EXECUTE ON [dbo].[usp_TriggerIngestCycle] TO [StudentDataAssessment];
+
+-- ---- Maintenance mode: sysadmin schedules/clears the window (both procs sysadmin-gated
+--      against @CallerUPN); the app reads the single AppMaintenance row via /api/status. ----
+GRANT SELECT  ON [dbo].[AppMaintenance]              TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_SetMaintenanceWindow]   TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_ClearMaintenanceWindow] TO [StudentDataAssessment];
 
 -- ---- Reference dimensions the app reads DIRECTLY (db.query, not @UPN-scoped — these are
 --      non-PII lookup data: reading levels + achievement bands). Grant explicitly so the SP does

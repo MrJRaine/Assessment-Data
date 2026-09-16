@@ -458,6 +458,23 @@ export async function getCallerCapabilities(upn: string): Promise<CallerCapabili
   }
 }
 
+// Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
+// surfaced by /api/status to the client poller. MaintenanceAt is UTC.
+export interface MaintenanceWindow {
+  maintenanceAt: string | null // ISO-8601 UTC, or null = no window
+  message: string | null
+}
+export async function getMaintenanceWindow(): Promise<MaintenanceWindow> {
+  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null }>(
+    'SELECT MaintenanceAt, Message FROM dbo.AppMaintenance WHERE Id = 1',
+  )
+  const at = rows[0]?.MaintenanceAt ?? null
+  return {
+    maintenanceAt: at == null ? null : at instanceof Date ? at.toISOString() : new Date(at).toISOString(),
+    message: rows[0]?.Message ?? null,
+  }
+}
+
 export interface ImpersonationTarget {
   upn: string
   fullName: string
