@@ -43,9 +43,11 @@ export function useMaintenance(): MaintenanceState {
 export default function MaintenanceProvider({
   children,
   isSysAdmin = false,
+  authSlot = null,
 }: {
   children: React.ReactNode
   isSysAdmin?: boolean
+  authSlot?: React.ReactNode // AuthArea (sign in / sign out), rendered on the down overlay
 }) {
   // Raw window from the server + the clock offset measured at fetch time.
   const windowRef = useRef<{ atMs: number | null; message: string | null; offsetMs: number }>({
@@ -141,14 +143,22 @@ export default function MaintenanceProvider({
       {children}
       {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
           grid mid auto-save). The poller keeps trying; when the window clears/expires it disappears. */}
-      {state.stage === 'down' ? <MaintenanceDown message={state.message} admin={admin} /> : null}
+      {state.stage === 'down' ? <MaintenanceDown message={state.message} admin={admin} authSlot={authSlot} /> : null}
     </Ctx.Provider>
   )
 }
 
 type AdminClear = { onClear: () => void; clearing: boolean } | null
 
-function MaintenanceDown({ message, admin }: { message: string | null; admin: AdminClear }) {
+function MaintenanceDown({
+  message,
+  admin,
+  authSlot,
+}: {
+  message: string | null
+  admin: AdminClear
+  authSlot: React.ReactNode
+}) {
   return (
     <div className="maint-down-screen" role="alert">
       <div className="maint-down-card">
@@ -159,6 +169,12 @@ function MaintenanceDown({ message, admin }: { message: string | null; admin: Ad
             {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}
           </button>
         ) : null}
+        {/* Identity controls so a non-sysadmin (or signed-out) sysadmin can switch accounts to clear
+            it — otherwise the overlay would trap them with no way to reach sign-in. */}
+        <div className="maint-down-auth">
+          {authSlot}
+          {!admin ? <span className="muted small">Sign in as a system administrator to clear maintenance.</span> : null}
+        </div>
       </div>
     </div>
   )
@@ -195,7 +211,7 @@ function MaintenanceBanner({ state, admin }: { state: MaintenanceState; admin: A
   let tone: 'warn' | 'lock' | 'down' = 'warn'
   switch (stage) {
     case 'warn':
-      text = `Scheduled maintenance at ${at}. Data entry will lock a few minutes beforehand — a good time to save your work. (${countdown})`
+      text = `Scheduled maintenance at ${at} — data entry will lock a few minutes beforehand. Now is a good time to save your work. (${countdown})`
       tone = 'warn'
       break
     case 'lockAfterSave':
