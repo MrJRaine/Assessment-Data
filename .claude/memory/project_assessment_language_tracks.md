@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-17T16:03:36.275Z
+  modified: 2026-09-17T18:42:39.382Z
 ---
 
 **Dual-language assessment + course-based write scoping — design decided 2026-09-17, not yet built.**
@@ -26,6 +26,31 @@ Language track = a per-(subject) axis, SAME rule already seeded in `usp_MergeStu
 - **French track (reading):** FI any grade **EXCEPT J020** (late immersion — no French reading
   benchmarks; they read in English). This J020-reading carve-out is the ONLY reading exception.
 - **Math:** single track, own family, P–6 only — never language-split (same as adaptations).
+
+## COURSE-SCOPED ENTRY + CYCLE-BASED /enter (design decided 2026-09-17, NOT yet built)
+The entry flow is being reworked from window-based to **cycle-based + course-scoped**. Design (all
+confirmed by user; do not re-decide — see [[feedback_no_unilateral_scope_decisions]]):
+- **/enter** shows one card per (open SCoR × subject) grouped under Reading/Writing/Math headings. NO
+  language toggle. -> choose group -> roster.
+- **Language comes from the COURSE the teacher teaches, not a toggle.** Course→(subject,language) map:
+  ELA + Immersion-ELA-3–6 → English literacy; FLA → French literacy; Math → Math. A Language-Arts
+  course = BOTH Reading+Writing in its language. Course list saved in docs/course-assessment-mapping.md.
+- **Group picker** = the caller's **sections whose CourseCode is in the map** only (their gym/science
+  drop off). Cards are **multi-selectable within ONE language** (same-language cards combine into one
+  roster; can't mix EN+FR). Cards are **grouped under language headings** (like /enter groups by
+  subject), shown only when >1 language applies.
+- **Roster/save**: combined roster across the picked sections; each student's result routes to THEIR
+  program's instance window for that language.
+- **Oversight (admin/specialist/analyst) loses BROAD entry** — they only enter if they teach a mapped
+  course; otherwise view-only. View/reports stay broad (teaches OR school access). The 3 oversight
+  branches in the entry roster TVFs effectively retire (kept for reports).
+- Chain that makes it work: teacher → FactSectionTeachers → SectionID → DimSection.CourseCode → map.
+- **The EN/FR toggle built 2026-09-17 (roster + reverted picker) is INTERIM — remove it** once course
+  scoping lands.
+- **BLOCKER (2026-09-17): dev data can't test this.** DimSection on dev = 11 synthetic sections with
+  made-up codes (FRA-1-FI, MTH-K-FI, LET-K-FI, HR, SCI-7-FI…), NONE matching the real list, no English
+  LA at all. Need real-code dev sections (reseed) OR a dev-only map for the synthetic codes before the
+  scoping is verifiable. Awaiting user decision.
 
 ## FINAL MODEL (2026-09-17) — supersedes everything below. READ THIS.
 The user's binding requirement: **assessment methodology (which grades/programs/languages are

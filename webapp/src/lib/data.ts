@@ -24,6 +24,10 @@ export interface TeacherWindow {
   assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
   status: string // Upcoming | Open | ClosesToday | Closed
   scaleSystem: string | null
+  language: string | null // 'English' | 'French' | null (Both) — distinguishes same-name instances
+  programScope: string[] // {English, Early Immersion, Late Immersion}; [] = all programs
+  minGrade: string
+  maxGrade: string
   startDate: string // 'YYYY-MM-DD' (window opens on the 1st of its month)
   endDate: string // 'YYYY-MM-DD' (window closes on the last day of its month)
   applicableCount: number
@@ -56,6 +60,10 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     AssessmentType: string
     WindowStatus: string
     ScaleSystem: string | null
+    AssessmentLanguage: string | null
+    ProgramScope: string | null
+    MinGrade: string
+    MaxGrade: string
     StartDate: unknown
     EndDate: unknown
     ApplicableStudentCount: number
@@ -67,6 +75,10 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     assessmentType: r.AssessmentType,
     status: r.WindowStatus,
     scaleSystem: r.ScaleSystem,
+    language: r.AssessmentLanguage ?? null,
+    programScope: r.ProgramScope ? r.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+    minGrade: r.MinGrade,
+    maxGrade: r.MaxGrade,
     startDate: toYMD(r.StartDate),
     endDate: toYMD(r.EndDate),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),

@@ -42,7 +42,7 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.WindowName, w.AssessmentType, w.SchoolYear,
-            w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem,
+            w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage, w.ScaleSystem,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate,
             CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
                  WHEN at.Today > w.EndDate   THEN 'Closed'
@@ -120,6 +120,8 @@ RETURN
         wed.MinGrade,
         wed.MaxGrade,
         wed.ProgramFamily,
+        wed.ProgramScope,
+        wed.AssessmentLanguage,
         wed.ScaleSystem,
         wed.WindowStatus,
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
@@ -140,6 +142,6 @@ RETURN
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
-        wed.ScaleSystem, wed.WindowStatus
+        wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.WindowStatus
 );
 GO
