@@ -846,6 +846,40 @@ export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]>
   }))
 }
 
+// Scope-wide Programming confirmation summary (for the picker landing) — a STUDENT is "done" only
+// when every one of their IPP (or Adaptation) rows is set (not NULL). Reuses the existing @UPN
+// role-scoped reads, so no new TVF. Confirmed = IsIPP set; recorded = HasAdaptation set.
+export interface ProgrammingSummary {
+  ipp: { confirmed: number; total: number }
+  adaptation: { confirmed: number; total: number }
+}
+function studentLevel(rows: { key: string; set: boolean }[]): { confirmed: number; total: number } {
+  const byStu = new Map<string, boolean>()
+  for (const r of rows) {
+    const prev = byStu.get(r.key)
+    byStu.set(r.key, prev === undefined ? r.set : prev && r.set)
+  }
+  let confirmed = 0
+  for (const done of byStu.values()) if (done) confirmed++
+  return { confirmed, total: byStu.size }
+}
+export async function getProgrammingSummary(upn: string): Promise<ProgrammingSummary> {
+  const [ippRows, adapRows] = await Promise.all([
+    queryAsUser<{ StudentKey: string; IsIPP: boolean | number | null }>(
+      upn,
+      'SELECT StudentKey, IsIPP FROM dbo.tvf_StudentIPP(@UPN)',
+    ),
+    queryAsUser<{ StudentKey: string; HasAdaptation: boolean | number | null }>(
+      upn,
+      'SELECT StudentKey, HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
+    ),
+  ])
+  return {
+    ipp: studentLevel(ippRows.map((r) => ({ key: String(r.StudentKey), set: r.IsIPP != null }))),
+    adaptation: studentLevel(adapRows.map((r) => ({ key: String(r.StudentKey), set: r.HasAdaptation != null }))),
+  }
+}
+
 // One row per (student, subject, programFamily) present in EITHER fact for the chosen group.
 // The client pivots these into the IPP and Adaptations grids (subjects as columns), and the
 // English+FrenchImmersion pair on a literacy subject drives the FI grade-3+ 4-way cell.

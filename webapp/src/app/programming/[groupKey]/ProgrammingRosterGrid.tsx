@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react'
 import type { ProgrammingRosterRow } from '@/lib/data'
 import { saveProgramming, type ProgrammingKind, type ProgrammingSaveEntry, type ProgrammingSaveResult } from './actions'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
+import ProgrammingProgress, { type ProgStat } from '../ProgrammingProgress'
 
 // Column order for the subject columns.
 const SUBJECT_ORDER: Record<string, number> = { Reading: 0, Writing: 1, Math: 2 }
@@ -76,6 +77,25 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
   }
   // Students in this roster with at least one unconfirmed cell.
   const needStudents = students.filter((st) => subjects.some((s) => cellNeedsConfirm(st.studentKey, s)))
+
+  // Group-level progress for BOTH kinds (pending-aware, so it moves as cells are set) — shown at the
+  // top regardless of the active toggle, so remaining work in the OTHER kind is still visible.
+  const summarize = (k: ProgrammingKind): ProgStat => {
+    const byStu = new Map<string, boolean>()
+    for (const r of rows) {
+      const has = k === 'IPP' ? r.ippExists : r.adaptationExists
+      if (!has) continue
+      const storedVal = k === 'IPP' ? r.isIPP : r.hasAdaptation
+      const set = effective(r.studentKey, r.subject, r.programFamily, storedVal) !== null
+      const prev = byStu.get(r.studentKey)
+      byStu.set(r.studentKey, prev === undefined ? set : prev && set)
+    }
+    let confirmed = 0
+    for (const done of byStu.values()) if (done) confirmed++
+    return { confirmed, total: byStu.size }
+  }
+  const ippStat = summarize('IPP')
+  const adaptationStat = summarize('Adaptation')
 
   // Stage one family value; revert to stored (drop the pending key) if it matches.
   function stage(studentKey: string, subject: string, family: string, value: boolean, storedVal: boolean | null) {
@@ -164,6 +184,7 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
   if (students.length === 0) {
     return (
       <>
+        <ProgrammingProgress ipp={ippStat} adaptation={adaptationStat} />
         <RosterToggle kind={kind} setKind={setKind} />
         <p className="muted" style={{ marginTop: '1rem' }}>
           No {kind === 'IPP' ? 'IPP' : 'Adaptation'} records for this group.
@@ -174,6 +195,7 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
 
   return (
     <>
+      <ProgrammingProgress ipp={ippStat} adaptation={adaptationStat} />
       <RosterToggle kind={kind} setKind={setKind} />
 
       <div className="ipp-toolbar">

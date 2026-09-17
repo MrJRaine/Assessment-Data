@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getProgrammingGroups, type TeacherGroup } from '@/lib/data'
+import { getProgrammingGroups, getProgrammingSummary, type TeacherGroup, type ProgrammingSummary } from '@/lib/data'
 import GroupCards from '../enter/[windowId]/GroupCards'
+import ProgrammingProgress from './ProgrammingProgress'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,9 +14,10 @@ export default async function ProgrammingPage() {
   const upn = await getCurrentUpn()
 
   let groups: TeacherGroup[] = []
+  let summary: ProgrammingSummary | null = null
   let error: string | null = null
   try {
-    groups = await getProgrammingGroups(upn)
+    ;[groups, summary] = await Promise.all([getProgrammingGroups(upn), getProgrammingSummary(upn)])
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -40,7 +42,10 @@ export default async function ProgrammingPage() {
           hint="A class appears here once PowerSchool flags one of its students for an IPP or an Adaptation."
         />
       ) : (
-        <GroupCards groups={groups} hrefBase="/programming" metaSuffix="need confirmation" />
+        <>
+          {summary ? <ProgrammingProgress ipp={summary.ipp} adaptation={summary.adaptation} /> : null}
+          <GroupCards groups={groups} hrefBase="/programming" metaSuffix="need confirmation" />
+        </>
       )}
     </>
   )
