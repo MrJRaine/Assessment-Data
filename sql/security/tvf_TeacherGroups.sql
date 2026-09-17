@@ -153,8 +153,8 @@ RETURN
                     WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CAST('Section' AS VARCHAR(10)) END AS GroupType,
                CASE WHEN GradeOrder <= 9  THEN HomeroomKey
                     WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID END AS GroupKey,
-               CASE WHEN GradeOrder <= 9  THEN 'Homeroom ' + COALESCE(Homeroom, '(none)')
-                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN SectionNumber + ' — ' + CourseName END AS GroupLabel
+               CASE WHEN GradeOrder <= 9  THEN CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
+                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CONCAT(SectionNumber, ' — ', CourseName) END AS GroupLabel
         FROM TaughtStudents
 
         UNION ALL
@@ -163,7 +163,7 @@ RETURN
         SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
                CAST('Oversight' AS VARCHAR(10)), CAST('Homeroom' AS VARCHAR(10)),
                HomeroomKey,
-               'Homeroom ' + COALESCE(Homeroom, '(none)')
+               CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
         FROM OversightStudents
 
         UNION ALL
@@ -172,7 +172,7 @@ RETURN
         SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
                CAST('Oversight' AS VARCHAR(10)), CAST('Section' AS VARCHAR(10)),
                'SEC:' + SectionID,
-               SectionNumber + ' — ' + CourseName
+               CONCAT(SectionNumber, ' — ', CourseName)
         FROM OversightSections
 
         UNION ALL
@@ -184,7 +184,7 @@ RETURN
                CAST('Oversight' AS VARCHAR(10)), CAST('Grade' AS VARCHAR(10)),
                'GRADE:' + SchoolID + ':' + Grade,
                CASE Grade WHEN 'P' THEN 'Primary' WHEN 'PP' THEN 'Pre-Primary' WHEN 'RG' THEN 'Graduating'
-                          ELSE 'Grade ' + Grade END
+                          ELSE CONCAT('Grade', ' ', Grade) END
         FROM OversightStudents
     ),
     -- Grades PRESENT in each group, as a comma-delimited distinct list (e.g. 'P,1' for a split

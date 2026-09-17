@@ -104,8 +104,8 @@ RETURN
                     WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CAST('Section' AS VARCHAR(10)) END AS GroupType,
                CASE WHEN GradeOrder <= 9  THEN HomeroomKey
                     WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID END AS GroupKey,
-               CASE WHEN GradeOrder <= 9  THEN 'Homeroom ' + COALESCE(Homeroom, '(none)')
-                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN SectionNumber + ' — ' + CourseName END AS GroupLabel
+               CASE WHEN GradeOrder <= 9  THEN CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
+                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CONCAT(SectionNumber, ' — ', CourseName) END AS GroupLabel
         FROM TaughtStudents
 
         UNION ALL
@@ -114,7 +114,7 @@ RETURN
         SELECT StudentKey, Grade, SchoolName, NeedsIPP,
                CAST('Oversight' AS VARCHAR(10)), CAST('Homeroom' AS VARCHAR(10)),
                HomeroomKey,
-               'Homeroom ' + COALESCE(Homeroom, '(none)')
+               CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
         FROM OversightStudents
 
         UNION ALL
@@ -123,7 +123,7 @@ RETURN
         SELECT StudentKey, Grade, SchoolName, NeedsIPP,
                CAST('Oversight' AS VARCHAR(10)), CAST('Section' AS VARCHAR(10)),
                'SEC:' + SectionID,
-               SectionNumber + ' — ' + CourseName
+               CONCAT(SectionNumber, ' — ', CourseName)
         FROM OversightSections
 
         UNION ALL
@@ -133,7 +133,7 @@ RETURN
                CAST('Oversight' AS VARCHAR(10)), CAST('Grade' AS VARCHAR(10)),
                'GRADE:' + o.SchoolID + ':' + o.Grade,
                CASE o.Grade WHEN 'P' THEN 'Primary' WHEN 'PP' THEN 'Pre-Primary' WHEN 'RG' THEN 'Graduating'
-                            ELSE 'Grade ' + o.Grade END
+                            ELSE CONCAT('Grade', ' ', o.Grade) END
         FROM OversightStudents o
     ),
     -- Grades present in each group (comma-delimited distinct list), for the client grade-span filter.
