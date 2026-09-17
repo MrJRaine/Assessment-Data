@@ -28,6 +28,8 @@
  *   @LanguageScore      INT          required, 1–4
  *   @ConventionsScore   VARCHAR(10)  required, '1'–'4' or 'SCR' (Scribed; omitted from the average)
  *   @AssessmentDate     DATE         required (effective-date StudentKey resolution + stored)
+ *   @AssessmentLanguage VARCHAR(10)  'English'|'French' writing track (part of the grain); NULL ->
+ *                                    derive from program family (single-language students)
  *   @CallerUPN          VARCHAR(255) web-app/SP path: signed-in teacher UPN; NULL -> CURRENT_USER
  *
  * THROW codes (writing variants of the shared scheme):
@@ -38,8 +40,9 @@
  *   51016  student grade (at AssessmentDate) outside window's [MinGrade, MaxGrade]
  *   51017  @AssessmentDate outside [window.StartDate, MIN(today_atlantic, window.EndDate)]
  *   51018  a trait score is outside 1–4
- *   51019  student ProgramFamily does not match the window's (writing's equivalent of the
- *          reading 51014 scale-system guard, since writing has no ScaleSystem proxy)
+ *   51019  student ProgramFamily does not match the window's (when program-scoped), OR
+ *          @AssessmentLanguage invalid for the student (French writing requires French Immersion;
+ *          English writing for an immersion student requires grade 3+) — the dual-language track guard
  *   51030  caller not in DimStaff (IsCurrent=1)
  *   51032  window is Upcoming (not yet started)
  *
@@ -58,6 +61,7 @@ CREATE PROCEDURE usp_UpsertWritingAssessment
     @LanguageScore      INT,
     @ConventionsScore   VARCHAR(10),  -- '1'-'4', or 'SCR' (Scribed) — scribed is omitted from the average
     @AssessmentDate     DATE,
+    @AssessmentLanguage VARCHAR(10)  = NULL,  -- 'English' | 'French' writing track; NULL = derive from the student's program family (single-language students)
     @CallerUPN          VARCHAR(255) = NULL
 AS
 BEGIN
@@ -192,15 +196,35 @@ BEGIN
         ;THROW 51017, 'usp_UpsertWritingAssessment: @AssessmentDate is outside this window''s range [StartDate, min(today, EndDate)].', 1;
     END;
 
+    -- Language track: default to the student's program language when not supplied
+    -- (single-language students), then validate against the writing tracks (mirrors
+    -- usp_MergeStudent Step 6): French writing requires French Immersion; English
+    -- writing for an immersion student requires grade >= 3 (ELA).
+    IF @AssessmentLanguage IS NULL
+        SET @AssessmentLanguage = CASE WHEN @StudentProgramFamily = 'French Immersion' THEN 'French' ELSE 'English' END;
+
+    IF @AssessmentLanguage NOT IN ('English', 'French')
+    BEGIN
+        ;THROW 51019, 'usp_UpsertWritingAssessment: @AssessmentLanguage must be ''English'' or ''French''.', 1;
+    END;
+
+    IF (@AssessmentLanguage = 'French'  AND @StudentProgramFamily <> 'French Immersion')
+       OR (@AssessmentLanguage = 'English' AND @StudentProgramFamily = 'French Immersion' AND @StudentGradeOrder < 3)
+    BEGIN
+        ;THROW 51019, 'usp_UpsertWritingAssessment: @AssessmentLanguage is not valid for this student (French writing requires French Immersion; English writing for an immersion student requires grade 3+).', 1;
+    END;
+
     -- =========================================================================
     -- UPSERT into FactAssessmentWriting, grain = (StudentKey, AssessmentWindowID,
-    -- AssessmentDate). Same-date re-save = correction (UPDATE the four scores);
-    -- a new date = a new row (prior entries kept; cohort pulls the latest date).
+    -- AssessmentLanguage, AssessmentDate). A student may hold an English AND a French
+    -- result in the same cycle (FI grade 3+). Same (language,date) re-save = correction;
+    -- a new date = a new row (prior entries kept; cohort pulls the latest date per language).
     -- =========================================================================
     SELECT @ExistingAssessmentID = WritingAssessmentID
     FROM FactAssessmentWriting
     WHERE StudentKey = @StudentKey
       AND AssessmentWindowID = @AssessmentWindowID_BI
+      AND AssessmentLanguage = @AssessmentLanguage
       AND AssessmentDate = @AssessmentDate;
 
     IF @ExistingAssessmentID IS NOT NULL
@@ -218,12 +242,12 @@ BEGIN
     ELSE
     BEGIN
         INSERT INTO FactAssessmentWriting (
-            StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore,
+            StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
             LanguageScore, ConventionsScore, AssessmentDate, EnteredByStaffKey,
             SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @IdeasScore, @OrganizationScore,
+            @StudentKey, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasScore, @OrganizationScore,
             @LanguageScore, @ConventionsScore, @AssessmentDate, @CallerStaffKey,
             @Now, @Now
         );
@@ -244,6 +268,7 @@ BEGIN
             CASE WHEN @ExistingAssessmentID IS NULL THEN 'INSERT' ELSE 'UPDATE' END,
             ' | StudentNumber=',      CAST(@StudentNumber AS VARCHAR(20)),
             ' | AssessmentWindowID=', @AssessmentWindowID,
+            ' | Language=',           @AssessmentLanguage,
             ' | Scores I/O/L/C=',     CONCAT(@IdeasScore, '/', @OrganizationScore, '/', @LanguageScore, '/', @ConventionsScore)
         ),
         1,

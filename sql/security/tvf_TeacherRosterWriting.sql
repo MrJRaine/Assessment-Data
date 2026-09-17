@@ -15,6 +15,11 @@
  *          picker's Homeroom lens resolves an HS homeroom card instead of empty.
  *          2026-09-15b — also resolves a 'GRADE:<SchoolID>:<Grade>' key (oversight
  *          Grade lens = a whole school+grade cohort). SchoolID threaded through.
+ *          2026-09-17 — DUAL-LANGUAGE writing: new @Language ('English'|'French')
+ *          param (the EN/FR toggle). Roster membership is the language track (English =
+ *          English/FSL any grade OR FI grade>=3; French = French Immersion incl. J020),
+ *          and the existing scores shown are that language's FactAssessmentWriting row.
+ *          Caller MUST pass @Language.
  * Region: Canada East (PIIDPA compliant)
  *
  * Band = average mapped to a code (3.50/2.75/1.75) then joined to
@@ -25,7 +30,7 @@
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherRosterWriting;
 GO
 
-CREATE FUNCTION dbo.tvf_TeacherRosterWriting(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(70))
+CREATE FUNCTION dbo.tvf_TeacherRosterWriting(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(70), @Language VARCHAR(10))
 RETURNS TABLE
 AS
 RETURN
@@ -74,6 +79,12 @@ RETURN
         WHERE c.AccessLevel IS NULL
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
+          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          AND (
+                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
+             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+              )
     ),
     AdminAnalystApplicable AS (
         SELECT
@@ -95,6 +106,12 @@ RETURN
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
+          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          AND (
+                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
+             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+              )
 
         UNION ALL
 
@@ -115,6 +132,12 @@ RETURN
         WHERE c.AccessLevel = 'RegionalAnalyst'
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
+          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          AND (
+                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
+             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+              )
     ),
     AdminAnalystWithSections AS (
         SELECT
@@ -192,6 +215,7 @@ RETURN
             ) AS rn
         FROM FactAssessmentWriting
         WHERE AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
+          AND AssessmentLanguage = @Language   -- show the score for the selected EN/FR track
     )
     SELECT DISTINCT
         CAST(sg.StudentKey AS VARCHAR(20)) AS StudentKey,
@@ -210,7 +234,8 @@ RETURN
         ipp.IsIPP              AS WritingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS WritingIPPNeedsConfirmation,
-        COALESCE(wed.ProgramFamily, sg.ProgramFamily) AS IPPProgramFamily,
+        -- Writing IPP family follows the language track (English track -> 'English').
+        CASE WHEN @Language = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
@@ -224,7 +249,7 @@ RETURN
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
           AND ipp.Subject       = 'Writing'
-          AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
+          AND ipp.ProgramFamily = CASE WHEN @Language = 'French' THEN 'French Immersion' ELSE 'English' END
           AND ipp.IsCurrent     = 1
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1

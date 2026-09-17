@@ -14,6 +14,9 @@
  *     ScaleSystem = NULL. The reading scale/benchmark for each student is
  *     resolved from the student's PROGRAM + GRADE at scoring/read time (not
  *     from the cycle), so one cycle serves English and French Immersion alike.
+ *     (Dual-language writing is carried on FactAssessmentWriting.AssessmentLanguage
+ *     + the roster @Language toggle, not on the cycle; reading is single-language
+ *     per student incl. the J020->English rule. See project_assessment_language_tracks.)
  *   - This proc writes ONE subject-row per call. A multi-subject cycle is several
  *     rows sharing a @CycleGroupID (the app calls this once per selected subject).
  *   - MinGrade/MaxGrade optionally narrow the cycle to a grade band; default is

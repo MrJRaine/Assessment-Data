@@ -230,8 +230,12 @@ RETURN
         sg.Grade,
         sg.Homeroom,
         sg.SchoolName,
-        CASE sg.ProgramFamily WHEN 'English'          THEN 'EN_Reading'
-                              WHEN 'French Immersion' THEN 'FR_Reading' END AS ScaleSystem,
+        -- Effective reading scale: the cycle's declared scale when it's language-scoped,
+        -- else per-student by family -- with J020 (late immersion) always EN_Reading.
+        COALESCE(wed.ScaleSystem,
+                 CASE WHEN sg.ProgramCode      = 'J020'             THEN 'EN_Reading'
+                      WHEN sg.ProgramFamily     = 'English'          THEN 'EN_Reading'
+                      WHEN sg.ProgramFamily     = 'French Immersion' THEN 'FR_Reading' END) AS ScaleSystem,
         drs.LevelCode        AS ExistingScaleValue,
         far.ReadingDelta     AS ExistingDelta,
         far.AssessmentDate   AS ExistingAssessmentDate,
@@ -240,7 +244,8 @@ RETURN
         ipp.IsIPP            AS ReadingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation,
-        COALESCE(wed.ProgramFamily, sg.ProgramFamily) AS IPPProgramFamily,
+        -- Reading family the app confirms an IPP under (matches the ipp join above); J020 -> English.
+        CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
@@ -259,14 +264,18 @@ RETURN
           AND far.rn = 1
     LEFT JOIN DimReadingScale drs
            ON drs.ReadingScaleID = far.ReadingScaleID
+    -- Benchmark + reading-IPP resolve by the student's reading family, with J020
+    -- (late immersion) -> 'English' (reads in English; no French reading benchmarks).
     LEFT JOIN DimReadingBenchmark drb
-           ON drb.ProgramFamily   = sg.ProgramFamily
+           ON drb.ProgramFamily   =
+              CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END
           AND drb.GradeCode       = sg.Grade
           AND drb.AssessmentMonth = wdm.DominantMonth
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
           AND ipp.Subject       = 'Reading'
-          AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
+          AND ipp.ProgramFamily =
+              CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END
           AND ipp.IsCurrent     = 1
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
@@ -281,8 +290,10 @@ RETURN
                OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
     LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
            ON sp.StudentNumber = sg.StudentNumber
-          AND sp.ScaleSystem   = CASE sg.ProgramFamily WHEN 'English'          THEN 'EN_Reading'
-                                                        WHEN 'French Immersion' THEN 'FR_Reading' END
+          AND sp.ScaleSystem   = COALESCE(wed.ScaleSystem,
+                                     CASE WHEN sg.ProgramCode  = 'J020'             THEN 'EN_Reading'
+                                          WHEN sg.ProgramFamily = 'English'          THEN 'EN_Reading'
+                                          WHEN sg.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END)
     LEFT JOIN ReadingCycleRank lastR ON lastR.StudentNumber = sg.StudentNumber AND lastR.rn = 1
     LEFT JOIN ReadingCycleRank prevR ON prevR.StudentNumber = sg.StudentNumber AND prevR.rn = 2
     WHERE sg.GroupKey = @GroupKey

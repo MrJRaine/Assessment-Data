@@ -352,6 +352,11 @@ BEGIN
         WHERE  s.IsCurrent = 1 AND s.IPP = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+          -- J020 (Late French Immersion) reads in ENGLISH only -- there are no French
+          -- reading benchmarks for late-entry students. Drop its (Reading,'French Immersion')
+          -- row; Writing x 'French Immersion' stays, and Reading/Writing x 'English' come from
+          -- the grade>=3 (ELA) branch below. Keeps assessment tracks == adaptation/IPP tracks.
+          AND  NOT (sub.Subject = 'Reading' AND s.ProgramCode = 'J020')
 
         UNION ALL
 
@@ -417,6 +422,11 @@ BEGIN
         WHERE  s.IsCurrent = 1 AND s.IPP = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+          -- J020 (Late French Immersion) reads in ENGLISH only -- there are no French
+          -- reading benchmarks for late-entry students. Drop its (Reading,'French Immersion')
+          -- row; Writing x 'French Immersion' stays, and Reading/Writing x 'English' come from
+          -- the grade>=3 (ELA) branch below. Keeps assessment tracks == adaptation/IPP tracks.
+          AND  NOT (sub.Subject = 'Reading' AND s.ProgramCode = 'J020')
 
         UNION ALL
 
@@ -482,6 +492,11 @@ BEGIN
         WHERE  s.IsCurrent = 1 AND s.Adap = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+          -- J020 (Late French Immersion) reads in ENGLISH only -- there are no French
+          -- reading benchmarks for late-entry students. Drop its (Reading,'French Immersion')
+          -- row; Writing x 'French Immersion' stays, and Reading/Writing x 'English' come from
+          -- the grade>=3 (ELA) branch below. Keeps assessment tracks == adaptation/IPP tracks.
+          AND  NOT (sub.Subject = 'Reading' AND s.ProgramCode = 'J020')
 
         UNION ALL
 
@@ -544,6 +559,11 @@ BEGIN
         WHERE  s.IsCurrent = 1 AND s.Adap = 1
           AND  p.ProgramFamily = 'French Immersion'
           AND  g.GradeOrder BETWEEN 0 AND sub.MaxOrd
+          -- J020 (Late French Immersion) reads in ENGLISH only -- there are no French
+          -- reading benchmarks for late-entry students. Drop its (Reading,'French Immersion')
+          -- row; Writing x 'French Immersion' stays, and Reading/Writing x 'English' come from
+          -- the grade>=3 (ELA) branch below. Keeps assessment tracks == adaptation/IPP tracks.
+          AND  NOT (sub.Subject = 'Reading' AND s.ProgramCode = 'J020')
 
         UNION ALL
 
