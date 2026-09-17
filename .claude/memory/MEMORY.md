@@ -84,8 +84,9 @@
 - [Programming Makeover (IPP+Adaptations)](project_programming_makeover.md) — DONE through Phase 2 on dev/0.5.0: `/programming` nav, window-less picker (tvf_ProgrammingGroups/Roster) + IPP⟷Adaptations grid with the data-driven 2-way/4-way FI cell. Deploy: tvf_ProgrammingGroups.sql + tvf_ProgrammingRoster.sql.
 
 ## Backlog / wishlist (NOT built)
+- [Assessment Language Tracks + Course Write-Scoping (DESIGN)](project_assessment_language_tracks.md) — dual-language EN/FR reading+writing via the CYCLE (no fact schema change); EN/FR toggle on picker+rosters; course-based WRITE scoping (list pending); J020 reading = English only. Reuses the IPP/Adaptation split rule.
 - [Pre-launch Work Queue](project_prelaunch_queue.md) — running list of user-requested 0.5.x items ahead of launch (SCR, early/late immersion reading, writing-cohort layout, Math reporting, Students→Reports rename, split-grade math pacing, linked math tasks carry-forward, math ✗→yellow circle, dark mode). Keep current as items ship.
-- [Writing Scribed Score Code (PLANNED)](project_writing_scribed_score_code.md) — score code "SCR" on Conventions+Organization only, omitted from calcs.
+- [Writing Scribed Score Code (DONE dev)](project_writing_scribed_score_code.md) — "SCR" on Conventions ONLY, omitted from the average; ConventionsScore→VARCHAR. Dev 2026-09-17; live pending.
 - [Subject↔Course Dim (QoL, 1.0→likely 1.1)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.
 - [Maintenance Mode (BUILT dev/0.5.0)](project_maintenance_mode.md) — graceful poll-based lockout for emergency container swaps: AppMaintenance row + set/clear procs + /api/status; staged banner→lock→auto-save→down overlay; sysadmin one-click Clear (banner+overlay) + sign-in on overlay. SQL on dev. Fabric: no TINYINT; ;THROW needs BEGIN…END.

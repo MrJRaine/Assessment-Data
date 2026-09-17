@@ -1,18 +1,23 @@
 ---
 name: project_writing_scribed_score_code
-description: "PLANNED writing-model change — add score code \"SCR\" (Scribed), selectable ONLY for the Conventions and Organization traits, and OMITTED from all calculations (average / achievement band computed over the remaining scored traits)."
+description: "DONE on dev (0.5.0, 2026-09-17): writing score code \"SCR\" (Scribed), selectable ONLY on Conventions (scope narrowed from Conventions+Organization), OMITTED from the average (computed over scored traits). ConventionsScore is now VARCHAR. Not yet on live."
 metadata: 
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-09T18:42:26.686Z
+  modified: 2026-09-17T13:52:50.728Z
 ---
 
-**Planned addition to the writing assessment model (requested 2026-09-09, not built).**
+**BUILT + verified on dev 2026-09-17 (0.5.0-dev, commit cabdd56); not yet on live.**
+Scope was narrowed on build from Conventions+Organization to **Conventions ONLY** per updated
+guidance from the user. Deploy chain (dev done, live pending — see CHANGELOG deploy list):
+`migrate_FactWriting_conventions_varchar.sql` (INT→VARCHAR, run once) → `usp_UpsertWritingAssessment.sql`
+→ the 3 writing read TVFs → `grant_webapp_sp.sql`. The text below is the original spec; the only
+change from it is Conventions-only (Organization stays a normal 1–4 trait).
 
 Add a score code **`SCR` = "Scribed"** for writing entry, available **only on the
-Conventions and Organization** traits (NOT Ideas, NOT Language). When a student's writing
-is scribed (someone else physically writes for them), conventions and organization aren't
+Conventions** trait (NOT Ideas, NOT Organization, NOT Language). When a student's writing
+is scribed (someone else physically writes for them), conventions aren't
 the student's own production, so scoring them would be invalid.
 
 **`SCR` is OMITTED from every calculation.** The 4-trait average (and therefore the
