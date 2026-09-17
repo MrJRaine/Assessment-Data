@@ -41,6 +41,8 @@ Fabric Warehouse is NOT standard SQL Server. It rejects many common T-SQL constr
 
 **NOT supported — `TINYINT`** (confirmed 2026-09-16): `CREATE TABLE` with a `TINYINT` column fails `Msg 24574 Level 16 'The data type 'tinyint' ... is not supported in this edition of SQL Server.'` — and the failed CREATE cascades ("Invalid object name" on the following INSERT/GRANT). Use **`INT`** even for a tiny single-row key/flag. (Fabric's type surface is narrow; when unsure, prefer `INT` / `BIGINT` / `BIT` / `VARCHAR` / `DATETIME2`.)
 
+**`+` string concat TRIMS a literal's trailing/edge space next to a real VARCHAR column** (confirmed 2026-09-17): `'Grade ' + s.Grade` yields `Grade1`, `'Homeroom ' + s.Homeroom` yields `HomeroomPA` — the literal's space adjacent to a stored VARCHAR column is dropped (literal `+` literal is fine, which masks it in quick tests). Also affects a separator literal between two columns (`a + ' — ' + b`). **Fix: use `CONCAT(...)`** with the space as its own argument — `CONCAT('Grade', ' ', s.Grade)` → `Grade 1`. Bit us on the group-picker card labels (`tvf_TeacherGroups` / `tvf_ProgrammingGroups`). Build any label that joins a literal to a column with `CONCAT`, not `+`.
+
 ---
 
 ## CREATE TABLE — Minimal Valid Pattern
