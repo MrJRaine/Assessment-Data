@@ -78,21 +78,20 @@ export default function ProgrammingRosterGrid({ groupKey, rows }: { groupKey: st
   // Students in this roster with at least one unconfirmed cell.
   const needStudents = students.filter((st) => subjects.some((s) => cellNeedsConfirm(st.studentKey, s)))
 
-  // Group-level progress for BOTH kinds (pending-aware, so it moves as cells are set) — shown at the
-  // top regardless of the active toggle, so remaining work in the OTHER kind is still visible.
+  // Group-level progress for BOTH kinds — CELL-level (each existing record), pending-aware (moves as
+  // cells are set), shown at the top regardless of the active toggle so remaining work in the OTHER
+  // kind is still visible.
   const summarize = (k: ProgrammingKind): ProgStat => {
-    const byStu = new Map<string, boolean>()
+    let total = 0
+    let confirmed = 0
     for (const r of rows) {
       const has = k === 'IPP' ? r.ippExists : r.adaptationExists
       if (!has) continue
+      total++
       const storedVal = k === 'IPP' ? r.isIPP : r.hasAdaptation
-      const set = effective(r.studentKey, r.subject, r.programFamily, storedVal) !== null
-      const prev = byStu.get(r.studentKey)
-      byStu.set(r.studentKey, prev === undefined ? set : prev && set)
+      if (effective(r.studentKey, r.subject, r.programFamily, storedVal) !== null) confirmed++
     }
-    let confirmed = 0
-    for (const done of byStu.values()) if (done) confirmed++
-    return { confirmed, total: byStu.size }
+    return { confirmed, total }
   }
   const ippStat = summarize('IPP')
   const adaptationStat = summarize('Adaptation')

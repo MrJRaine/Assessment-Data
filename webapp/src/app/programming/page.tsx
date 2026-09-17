@@ -17,9 +17,16 @@ export default async function ProgrammingPage() {
   let summary: ProgrammingSummary | null = null
   let error: string | null = null
   try {
-    ;[groups, summary] = await Promise.all([getProgrammingGroups(upn), getProgrammingSummary(upn)])
+    groups = await getProgrammingGroups(upn)
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
+  }
+  // The progress cue is a nice-to-have — a failure here (e.g. tvf_StudentAdaptation not yet deployed)
+  // must not break the picker, so resolve it separately and just drop the chip on error.
+  try {
+    summary = await getProgrammingSummary(upn)
+  } catch {
+    summary = null
   }
 
   // A caller with exactly one group (e.g. a teacher with a single homeroom) skips the picker and

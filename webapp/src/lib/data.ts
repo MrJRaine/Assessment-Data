@@ -846,37 +846,27 @@ export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]>
   }))
 }
 
-// Scope-wide Programming confirmation summary (for the picker landing) — a STUDENT is "done" only
-// when every one of their IPP (or Adaptation) rows is set (not NULL). Reuses the existing @UPN
-// role-scoped reads, so no new TVF. Confirmed = IsIPP set; recorded = HasAdaptation set.
+// Scope-wide Programming confirmation summary (for the picker landing). CELL-level: each
+// (student, subject, family) record is one "detail" being confirmed — total = records that exist,
+// confirmed = records with a set value (not NULL). Reuses the existing @UPN role-scoped reads.
 export interface ProgrammingSummary {
   ipp: { confirmed: number; total: number }
   adaptation: { confirmed: number; total: number }
 }
-function studentLevel(rows: { key: string; set: boolean }[]): { confirmed: number; total: number } {
-  const byStu = new Map<string, boolean>()
-  for (const r of rows) {
-    const prev = byStu.get(r.key)
-    byStu.set(r.key, prev === undefined ? r.set : prev && r.set)
-  }
-  let confirmed = 0
-  for (const done of byStu.values()) if (done) confirmed++
-  return { confirmed, total: byStu.size }
+function cellLevel(sets: boolean[]): { confirmed: number; total: number } {
+  return { confirmed: sets.filter(Boolean).length, total: sets.length }
 }
 export async function getProgrammingSummary(upn: string): Promise<ProgrammingSummary> {
   const [ippRows, adapRows] = await Promise.all([
-    queryAsUser<{ StudentKey: string; IsIPP: boolean | number | null }>(
+    queryAsUser<{ IsIPP: boolean | number | null }>(upn, 'SELECT IsIPP FROM dbo.tvf_StudentIPP(@UPN)'),
+    queryAsUser<{ HasAdaptation: boolean | number | null }>(
       upn,
-      'SELECT StudentKey, IsIPP FROM dbo.tvf_StudentIPP(@UPN)',
-    ),
-    queryAsUser<{ StudentKey: string; HasAdaptation: boolean | number | null }>(
-      upn,
-      'SELECT StudentKey, HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
+      'SELECT HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
     ),
   ])
   return {
-    ipp: studentLevel(ippRows.map((r) => ({ key: String(r.StudentKey), set: r.IsIPP != null }))),
-    adaptation: studentLevel(adapRows.map((r) => ({ key: String(r.StudentKey), set: r.HasAdaptation != null }))),
+    ipp: cellLevel(ippRows.map((r) => r.IsIPP != null)),
+    adaptation: cellLevel(adapRows.map((r) => r.HasAdaptation != null)),
   }
 }
 

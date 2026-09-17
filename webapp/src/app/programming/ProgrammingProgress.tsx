@@ -27,7 +27,7 @@ export default function ProgrammingProgress({ ipp, adaptation }: { ipp: ProgStat
   return (
     <div className="pgm-progress">
       <Chip label="IPPs" verb="confirmed" stat={ipp} />
-      <Chip label="Adaptations" verb="recorded" stat={adaptation} />
+      <Chip label="Adaptations" verb="confirmed" stat={adaptation} />
     </div>
   )
 }
