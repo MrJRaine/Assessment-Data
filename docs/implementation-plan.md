@@ -678,3 +678,9 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - **This session (dev/0.5.0)**: Programming makeover **complete through Phase 2** (`/programming`, window-less picker + IPP⟷Adaptations grid) + **Maintenance mode** built (banner/lock/auto-save/sysadmin page) + nav first-load caps fix. All on dev, SQL deployed to dev.
 - **Next action**: build **Writing `SCR` (Scribed)** — scope the approach first (touches the live writing path) — or continue polishing.
 - **Blockers**: None.
+
+### Left Off — 2026-09-17
+- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + [[project_assessment_language_tracks]]; narrative in [[project_session_archive]].
+- **This session (dev/0.5.0)**: shipped **Writing SCR** (Conventions-only, verified on dev); built + deployed **dual-language literacy + app-level per-cycle scoping** (DimShortCycle header + scoped instances on `/cycles`, DimProgram.ScopeBucket, ProgramScope/AssessmentLanguage on windows, writing result-level language, J020→English reading); built the **course→assessment map foundation** (DimCourseAssessment + dev/live seeds).
+- **Next action**: the **course-scoped / cycle-based `/enter` rewrite** (banked) — group picker filtered to the caller's mapped-course sections (language-grouped, same-language multi-select) → combined roster with per-student instance routing on save → one card per (SCoR × subject) → remove the interim EN/FR toggle. Deploy `DimCourseAssessment.sql` + `seed_DimCourseAssessment_dev.sql` and test on dev's French/Math sections. Full design in [[project_assessment_language_tracks]].
+- **Blockers**: None (dev-data testability solved via the dev seed of synthetic course codes).
