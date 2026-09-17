@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next'
+import { readFileSync } from 'node:fs'
+
+// Single source of truth for the app version = webapp/package.json. Exposed to the browser so the
+// footer always shows the ACTUAL running version (no drift vs. the patch-notes list).
+const appVersion = (JSON.parse(readFileSync('./package.json', 'utf8')) as { version: string }).version
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_APP_VERSION: appVersion },
   // 'standalone' emits a minimal self-contained server (server.js + traced node_modules)
   // so the container image stays small. See Dockerfile runner stage.
   output: 'standalone',
