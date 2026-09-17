@@ -13,6 +13,7 @@ import {
   type MathRosterRow,
   type ScaleLevel,
   type AchievementBand,
+  type WritingLanguage,
 } from '@/lib/data'
 import RosterEntry from './RosterEntry'
 import WritingRosterEntry from './WritingRosterEntry'
@@ -22,12 +23,17 @@ export const dynamic = 'force-dynamic'
 
 export default async function RosterGrid({
   params,
+  searchParams,
 }: {
   params: Promise<{ windowId: string; groupKey: string }>
+  searchParams: Promise<{ lang?: string }>
 }) {
   const { windowId, groupKey: rawGroupKey } = await params
   const groupKey = decodeURIComponent(rawGroupKey)
   const upn = await getCurrentUpn()
+
+  // Writing is dual-language: ?lang picks the track (default English). Ignored for Reading/Math.
+  const writingLanguage: WritingLanguage = (await searchParams).lang === 'French' ? 'French' : 'English'
 
   // The window's type drives which grid renders: Writing → four 1-4 trait inputs;
   // Math → the student × task mastery matrix; Reading → level dropdown.
@@ -41,7 +47,7 @@ export default async function RosterGrid({
   try {
     assessmentType = await getWindowAssessmentType(windowId)
     if (assessmentType === 'Writing') {
-      writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey)
+      writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey, writingLanguage)
     } else if (assessmentType === 'Math') {
       mathRoster = await getMathRoster(upn, windowId, groupKey)
     } else {
@@ -85,12 +91,28 @@ export default async function RosterGrid({
         <span className="group-label">{groupDisplay}{schoolName ? ` · ${schoolName}` : ''} · {subject}</span>
       </div>
 
+      {isWriting ? (
+        // Dual-language writing: switch the track being entered. Stays visible even when a
+        // language's roster is empty, so a teacher can toggle back. Reading/Math have no toggle.
+        <div className="lang-toggle">
+          <span className="lang-toggle-label">Writing in:</span>
+          <span className="ipp-seg">
+            <Link href={`/enter/${windowId}/${rawGroupKey}?lang=English`} className={writingLanguage === 'English' ? 'seg seg-on' : 'seg'}>
+              English
+            </Link>
+            <Link href={`/enter/${windowId}/${rawGroupKey}?lang=French`} className={writingLanguage === 'French' ? 'seg seg-on' : 'seg'}>
+              French
+            </Link>
+          </span>
+        </div>
+      ) : null}
+
       {error ? (
         <ErrorNote message={error} />
       ) : count === 0 ? (
         <EmptyState title="No students in this group for this cycle" />
       ) : isWriting ? (
-        <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} />
+        <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} language={writingLanguage} />
       ) : isMath ? (
         <MathRosterEntry windowId={windowId} groupKey={groupKey} rows={mathRoster} />
       ) : (

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { saveWritingAssessments, confirmRosterIPPs, type WritingEntry, type IppEntry } from './actions'
-import type { WritingRosterStudent } from '@/lib/data'
+import type { WritingRosterStudent, WritingLanguage } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
 
@@ -64,10 +64,12 @@ export default function WritingRosterEntry({
   windowId,
   groupKey,
   roster,
+  language,
 }: {
   windowId: string
   groupKey: string
   roster: WritingRosterStudent[]
+  language: WritingLanguage
 }) {
   const numByKey = new Map(roster.map((s) => [s.studentKey, s.studentNumber] as const))
   const nameByKey = new Map(roster.map((s) => [s.studentKey, `${s.lastName}, ${s.firstName}`] as const))
@@ -127,10 +129,10 @@ export default function WritingRosterEntry({
 
     startTransition(async () => {
       const wRes = writingEntries.length
-        ? await saveWritingAssessments(windowId, groupKey, writingEntries)
+        ? await saveWritingAssessments(windowId, groupKey, writingEntries, language)
         : { saved: 0, errors: [] as { studentNumber: string; message: string }[] }
       const ippRes = ippEntries.length
-        ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing')
+        ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing', language)
         : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
 
       const errs: SaveSummary['errors'] = []

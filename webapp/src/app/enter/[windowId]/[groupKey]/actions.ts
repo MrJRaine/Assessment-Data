@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
-import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate, getMathRoster } from '@/lib/data'
+import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate, getMathRoster, type WritingLanguage } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 
 export interface SaveEntry {
@@ -85,13 +85,16 @@ export async function saveWritingAssessments(
   windowId: string,
   groupKey: string,
   entries: WritingEntry[],
+  language: WritingLanguage,
 ): Promise<SaveResult> {
   const upn = await getCurrentUpn()
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
   const windowEnd = await getWindowEndDate(windowId)
   const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
 
-  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, groupKey)).map((r) => r.studentNumber))
+  // Scope-gate against THIS language's roster (dual-language writing): an FI grade-3+ student is
+  // on both rosters, but an English-only student isn't on the French roster and vice-versa.
+  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, groupKey, language)).map((r) => r.studentNumber))
 
   const errors: SaveResult['errors'] = []
   let saved = 0
@@ -109,6 +112,7 @@ export async function saveWritingAssessments(
         LanguageScore: e.language,
         ConventionsScore: e.conventions,
         AssessmentDate: assessmentDate,
+        AssessmentLanguage: language,
         CallerUPN: upn,
       })
       saved++
@@ -196,12 +200,13 @@ export async function confirmRosterIPPs(
   groupKey: string,
   entries: IppEntry[],
   subject: 'Reading' | 'Writing' = 'Reading',
+  language: WritingLanguage = 'English',
 ): Promise<IppSaveResult> {
   const upn = await getCurrentUpn()
-  // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster (the matching
-  // subject's roster, though both scope to the same students for a given window/group).
+  // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster. Writing is
+  // dual-language, so scope to the confirmed track's roster (language is ignored for Reading).
   const roster = subject === 'Writing'
-    ? await getTeacherRosterWriting(upn, windowId, groupKey)
+    ? await getTeacherRosterWriting(upn, windowId, groupKey, language)
     : await getTeacherRoster(upn, windowId, groupKey)
   const allowed = new Set(roster.map((r) => r.studentKey))
 

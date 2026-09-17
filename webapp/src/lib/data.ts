@@ -315,6 +315,10 @@ export async function getWindowAssessmentType(windowId: string): Promise<string 
   return rows.length ? rows[0].AssessmentType : null
 }
 
+// Writing is dual-language: a French-Immersion grade-3+ student is assessed in BOTH English and
+// French. The EN/FR toggle picks which track's roster + scores you see and enter.
+export type WritingLanguage = 'English' | 'French'
+
 export interface WritingRosterStudent {
   studentKey: string
   studentNumber: string
@@ -342,6 +346,7 @@ export async function getTeacherRosterWriting(
   upn: string,
   windowId: string,
   groupKey: string,
+  language: WritingLanguage,
 ): Promise<WritingRosterStudent[]> {
   const rows = await queryAsUser<{
     StudentKey: string
@@ -365,8 +370,8 @@ export async function getTeacherRosterWriting(
     AchievementHexColorTint: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
-    { WindowID: windowId, GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey, @Language) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKey: groupKey, Language: language },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
