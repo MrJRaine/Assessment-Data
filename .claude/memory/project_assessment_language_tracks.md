@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-17T15:10:21.615Z
+  modified: 2026-09-17T16:03:36.275Z
 ---
 
 **Dual-language assessment + course-based write scoping — design decided 2026-09-17, not yet built.**
@@ -27,6 +27,40 @@ Language track = a per-(subject) axis, SAME rule already seeded in `usp_MergeStu
   benchmarks; they read in English). This J020-reading carve-out is the ONLY reading exception.
 - **Math:** single track, own family, P–6 only — never language-split (same as adaptations).
 
+## FINAL MODEL (2026-09-17) — supersedes everything below. READ THIS.
+The user's binding requirement: **assessment methodology (which grades/programs/languages are
+assessed how) is configured at the APP LEVEL, per cycle — never hardcoded in a TVF/proc.** I relapsed
+into hardcoding rules (grade-3 threshold, "reading is single-language") multiple times; do NOT.
+See [[feedback_no_unilateral_scope_decisions]].
+
+**Cycle scope (set on /cycles, stored on DimAssessmentWindow):**
+- `AssessmentLanguage` 'English' | 'French' | NULL(Both). Writing "Both" → EN/FR toggle on the entry
+  roster; a language-scoped cycle fixes the language (static label, no toggle). Reading: the cycle IS
+  the language (English/French sets ScaleSystem; no reading toggle).
+- `ProgramScope` — comma-delimited **multi-select** of buckets {English, Early Immersion, Late
+  Immersion}; NULL = all. Buckets = `DimProgram.ScopeBucket` (added; non-immersion incl. FSL → English;
+  FI name-contains-'Late' → Late; other FI → Early). Roster filters via delimiter-guarded LIKE.
+- Grade band `MinGrade`/`MaxGrade` (already existed).
+- The admin creates whatever cycles express current policy; e.g. "Immersion 3-6 writing French only" =
+  ProgramScope 'Early Immersion,Late Immersion' + grades 3-6 + Language French. Reading in English for
+  early immersion 3-6 = just create an English reading cycle scoped to them.
+
+**Result-level language (storage, separate concern):** `FactAssessmentWriting.AssessmentLanguage`
+(backfilled by program family) lets a student hold an EN and a FR writing result per cycle;
+`usp_UpsertWritingAssessment` stores it. Reading language is already on the result via ReadingScaleID.
+
+**The ONLY hardcoded (structural, factual) rule:** French literacy = French Immersion program (reading
+also excludes J020 — late immersion, no French reading benchmarks). Everything else (grades, programs,
+language) is cycle config.
+
+**Deploy (dev, this feature):** migrate_DimProgram_add_ScopeBucket.sql +
+migrate_DimAssessmentWindow_add_AssessmentLanguage.sql (adds AssessmentLanguage + ProgramScope) +
+migrate_FactWriting_add_AssessmentLanguage.sql (done) → usp_UpsertShortCycle.sql →
+usp_UpsertWritingAssessment.sql → tvf_TeacherRoster.sql + tvf_TeacherRosterWriting.sql → grants →
+swap app image.
+
+---
+## (Superseded working notes below)
 ## CORRECTED MODEL (2026-09-17, after user clarified) — language on the RESULT
 Supersedes the "language on the cycle" approach explored below (kept for context). The user
 confirmed: **reading is single-language per student** (English program + J020 -> English; early

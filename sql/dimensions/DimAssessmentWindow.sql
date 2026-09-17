@@ -13,6 +13,10 @@
  *                          add    ScaleSystem  (reading-specific; NULL otherwise)
  *                          MinGrade/MaxGrade now NOT NULL (use 'PP'/'12' for
  *                            whole-population windows)
+ *           2026-09-17 - Added AssessmentLanguage ('English'/'French'/NULL=Both) so a
+ *                          literacy cycle can be scoped to a language at the app level
+ *                          (see migrate_DimAssessmentWindow_add_AssessmentLanguage.sql,
+ *                          usp_UpsertShortCycle, memory project_assessment_language_tracks).
  * Region: Canada East (PIIDPA compliant)
  *
  * Design notes:
@@ -39,6 +43,8 @@ CREATE TABLE DimAssessmentWindow (
     MaxGrade            VARCHAR(10)     NOT NULL,   -- joins DimGrade.GradeCode; '12' for whole-population
     ProgramFamily       VARCHAR(50)     NULL,       -- joins DimProgram.ProgramFamily; NULL = all programs (region-wide Short Cycle)
     ScaleSystem         VARCHAR(20)     NULL,       -- joins DimReadingScale.ScaleSystem; NULL for Writing/Math and region-wide cycles (scale resolved per student)
+    AssessmentLanguage  VARCHAR(10)     NULL,       -- 'English' | 'French' scopes a literacy CYCLE to one language track; NULL = Both (writing EN/FR toggle; reading per student). Set on /cycles. (The writing RESULT carries its own language for storage.)
+    ProgramScope        VARCHAR(100)    NULL,       -- comma-delimited cycle program-scope buckets from {English, Early Immersion, Late Immersion} (matches DimProgram.ScopeBucket); NULL = all programs. Set on /cycles. Combines with AssessmentLanguage + MinGrade/MaxGrade.
     BenchmarkMonth      INT             NULL,       -- 1-12: explicit grade-month benchmark for a READING cycle; NULL = fall back to the dominant month of [StartDate, EndDate]
     CycleGroupID        VARCHAR(36)     NULL,       -- groups the per-subject rows of one multi-subject Short Cycle of Response (shared name/dates); NULL for legacy single windows
     ActiveFlag          BIT             NOT NULL,

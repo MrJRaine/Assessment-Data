@@ -32,6 +32,8 @@ export interface ShortCycleInput {
   startDate: string // 'YYYY-MM-DD'
   endDate: string
   benchmarkMonth: number | null // reading only; null = dominant-month fallback
+  programScope: string[] // buckets from {English, Early Immersion, Late Immersion}; empty = all programs
+  language: string | null // 'English' | 'French' | null (Both — writing shows the toggle; reading resolves per student)
   active: boolean
   existingRows?: { subject: string; id: string }[] // the cycle's current per-subject rows (edit); reconcile against these
 }
@@ -69,6 +71,10 @@ export async function saveShortCycle(input: ShortCycleInput): Promise<void> {
     CycleGroupID: groupId,
     CallerUPN: upn,
   }
+  // Cycle-level scope (all optional). Omit when empty so the proc's NULL defaults apply
+  // (mssql can't infer a SQL type from a bare JS null).
+  if (input.programScope.length) base.ProgramScope = input.programScope.join(',')
+  if (input.language) base.AssessmentLanguage = input.language
 
   const bandFor = (subject: string): SubjectGrades => input.grades[subject] ?? DEFAULT_BAND
 

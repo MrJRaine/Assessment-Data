@@ -43,7 +43,7 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem, w.BenchmarkMonth,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.ScaleSystem, w.AssessmentLanguage, w.BenchmarkMonth,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
@@ -89,6 +89,20 @@ RETURN
         WHERE c.AccessLevel IS NULL
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track scoped by the CYCLE (reading has no per-request toggle; the cycle IS the
+          -- language). NULL = unscoped -> all students, per-student scale (legacy). Structural rule:
+          -- French reading = French Immersion, minus J020 (late immersion reads English, no FR bench).
+          -- English reading = open to all programs; grade/program scope comes from the cycle config.
+          AND (
+                wed.AssessmentLanguage IS NULL
+             OR wed.AssessmentLanguage = 'English'
+             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion' AND s.ProgramCode <> 'J020')
+              )
     ),
     AdminAnalystApplicable AS (
         SELECT
@@ -110,6 +124,20 @@ RETURN
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track scoped by the CYCLE (reading has no per-request toggle; the cycle IS the
+          -- language). NULL = unscoped -> all students, per-student scale (legacy). Structural rule:
+          -- French reading = French Immersion, minus J020 (late immersion reads English, no FR bench).
+          -- English reading = open to all programs; grade/program scope comes from the cycle config.
+          AND (
+                wed.AssessmentLanguage IS NULL
+             OR wed.AssessmentLanguage = 'English'
+             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion' AND s.ProgramCode <> 'J020')
+              )
 
         UNION ALL
 
@@ -130,6 +158,20 @@ RETURN
         WHERE c.AccessLevel = 'RegionalAnalyst'
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track scoped by the CYCLE (reading has no per-request toggle; the cycle IS the
+          -- language). NULL = unscoped -> all students, per-student scale (legacy). Structural rule:
+          -- French reading = French Immersion, minus J020 (late immersion reads English, no FR bench).
+          -- English reading = open to all programs; grade/program scope comes from the cycle config.
+          AND (
+                wed.AssessmentLanguage IS NULL
+             OR wed.AssessmentLanguage = 'English'
+             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion' AND s.ProgramCode <> 'J020')
+              )
     ),
     AdminAnalystWithSections AS (
         SELECT
@@ -244,8 +286,11 @@ RETURN
         ipp.IsIPP            AS ReadingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS ReadingIPPNeedsConfirmation,
-        -- Reading family the app confirms an IPP under (matches the ipp join above); J020 -> English.
-        CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END AS IPPProgramFamily,
+        -- Reading family the app confirms an IPP under (matches the ipp join above); cycle language wins, J020 -> English.
+        CASE WHEN wed.AssessmentLanguage = 'English' THEN 'English'
+             WHEN wed.AssessmentLanguage = 'French'  THEN 'French Immersion'
+             WHEN sg.ProgramCode = 'J020'            THEN 'English'
+             ELSE sg.ProgramFamily END AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
@@ -264,18 +309,24 @@ RETURN
           AND far.rn = 1
     LEFT JOIN DimReadingScale drs
            ON drs.ReadingScaleID = far.ReadingScaleID
-    -- Benchmark + reading-IPP resolve by the student's reading family, with J020
-    -- (late immersion) -> 'English' (reads in English; no French reading benchmarks).
+    -- Benchmark + reading-IPP resolve by the EFFECTIVE reading family: the cycle's language when
+    -- scoped ('English'/'French Immersion'), else per-student, with J020 (late immersion) -> 'English'.
     LEFT JOIN DimReadingBenchmark drb
            ON drb.ProgramFamily   =
-              CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END
+              CASE WHEN wed.AssessmentLanguage = 'English' THEN 'English'
+                   WHEN wed.AssessmentLanguage = 'French'  THEN 'French Immersion'
+                   WHEN sg.ProgramCode = 'J020'            THEN 'English'
+                   ELSE sg.ProgramFamily END
           AND drb.GradeCode       = sg.Grade
           AND drb.AssessmentMonth = wdm.DominantMonth
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
           AND ipp.Subject       = 'Reading'
           AND ipp.ProgramFamily =
-              CASE WHEN sg.ProgramCode = 'J020' THEN 'English' ELSE sg.ProgramFamily END
+              CASE WHEN wed.AssessmentLanguage = 'English' THEN 'English'
+                   WHEN wed.AssessmentLanguage = 'French'  THEN 'French Immersion'
+                   WHEN sg.ProgramCode = 'J020'            THEN 'English'
+                   ELSE sg.ProgramFamily END
           AND ipp.IsCurrent     = 1
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1

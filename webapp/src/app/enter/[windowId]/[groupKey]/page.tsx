@@ -3,6 +3,7 @@ import { EmptyState, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import {
   getWindowAssessmentType,
+  getWindowLanguage,
   getTeacherRoster,
   getTeacherRosterWriting,
   getMathRoster,
@@ -32,8 +33,10 @@ export default async function RosterGrid({
   const groupKey = decodeURIComponent(rawGroupKey)
   const upn = await getCurrentUpn()
 
-  // Writing is dual-language: ?lang picks the track (default English). Ignored for Reading/Math.
-  const writingLanguage: WritingLanguage = (await searchParams).lang === 'French' ? 'French' : 'English'
+  // Writing is dual-language. If the CYCLE is scoped to a language, that wins (no toggle). Otherwise
+  // (Both) the ?lang param picks the track (default English). Ignored for Reading/Math.
+  const langParam: WritingLanguage = (await searchParams).lang === 'French' ? 'French' : 'English'
+  let cycleLanguage: WritingLanguage | null = null
 
   // The window's type drives which grid renders: Writing → four 1-4 trait inputs;
   // Math → the student × task mastery matrix; Reading → level dropdown.
@@ -47,7 +50,8 @@ export default async function RosterGrid({
   try {
     assessmentType = await getWindowAssessmentType(windowId)
     if (assessmentType === 'Writing') {
-      writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey, writingLanguage)
+      cycleLanguage = await getWindowLanguage(windowId)
+      writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey, cycleLanguage ?? langParam)
     } else if (assessmentType === 'Math') {
       mathRoster = await getMathRoster(upn, windowId, groupKey)
     } else {
@@ -61,6 +65,7 @@ export default async function RosterGrid({
   }
 
   const isWriting = assessmentType === 'Writing'
+  const effectiveLanguage: WritingLanguage = cycleLanguage ?? langParam
   const isMath = assessmentType === 'Math'
   const subject = isWriting ? 'Writing' : isMath ? 'Math' : 'Reading'
   const count = isMath
@@ -92,18 +97,23 @@ export default async function RosterGrid({
       </div>
 
       {isWriting ? (
-        // Dual-language writing: switch the track being entered. Stays visible even when a
-        // language's roster is empty, so a teacher can toggle back. Reading/Math have no toggle.
+        // Dual-language writing. A "Both" cycle shows the EN/FR toggle (stays visible even when a
+        // language's roster is empty, so a teacher can switch back). A language-scoped cycle fixes
+        // the language and shows it as a static label. Reading/Math have no toggle.
         <div className="lang-toggle">
           <span className="lang-toggle-label">Writing in:</span>
-          <span className="ipp-seg">
-            <Link href={`/enter/${windowId}/${rawGroupKey}?lang=English`} className={writingLanguage === 'English' ? 'seg seg-on' : 'seg'}>
-              English
-            </Link>
-            <Link href={`/enter/${windowId}/${rawGroupKey}?lang=French`} className={writingLanguage === 'French' ? 'seg seg-on' : 'seg'}>
-              French
-            </Link>
-          </span>
+          {cycleLanguage ? (
+            <span className="seg seg-on">{cycleLanguage}</span>
+          ) : (
+            <span className="ipp-seg">
+              <Link href={`/enter/${windowId}/${rawGroupKey}?lang=English`} className={effectiveLanguage === 'English' ? 'seg seg-on' : 'seg'}>
+                English
+              </Link>
+              <Link href={`/enter/${windowId}/${rawGroupKey}?lang=French`} className={effectiveLanguage === 'French' ? 'seg seg-on' : 'seg'}>
+                French
+              </Link>
+            </span>
+          )}
         </div>
       ) : null}
 
@@ -112,7 +122,7 @@ export default async function RosterGrid({
       ) : count === 0 ? (
         <EmptyState title="No students in this group for this cycle" />
       ) : isWriting ? (
-        <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} language={writingLanguage} />
+        <WritingRosterEntry windowId={windowId} groupKey={groupKey} roster={writingRoster} language={effectiveLanguage} />
       ) : isMath ? (
         <MathRosterEntry windowId={windowId} groupKey={groupKey} rows={mathRoster} />
       ) : (

@@ -94,6 +94,8 @@ export interface ShortCycle {
   minGrade: string
   maxGrade: string
   benchmarkMonth: number | null // 1-12, from the reading row; null = dominant-month fallback
+  programScope: string[] // cycle program-scope buckets ({English, Early Immersion, Late Immersion}); [] = all
+  language: string | null // 'English' | 'French' | null (Both)
   active: boolean // any row active
   rows: ShortCycleRow[] // every per-subject row (for edit reconciliation)
 }
@@ -115,6 +117,8 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     MinGrade: string
     MaxGrade: string
     BenchmarkMonth: number | null
+    ProgramScope: string | null
+    AssessmentLanguage: string | null
     CycleGroupID: string | null
     ActiveFlag: boolean
     Status: string
@@ -122,7 +126,7 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     SELECT
       CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
       WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-      MinGrade, MaxGrade, BenchmarkMonth, CycleGroupID, ActiveFlag,
+      MinGrade, MaxGrade, BenchmarkMonth, ProgramScope, AssessmentLanguage, CycleGroupID, ActiveFlag,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
@@ -161,6 +165,8 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
       minGrade: first.MinGrade,
       maxGrade: first.MaxGrade,
       benchmarkMonth: readingRow?.BenchmarkMonth == null ? null : Number(readingRow.BenchmarkMonth),
+      programScope: first.ProgramScope ? first.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      language: first.AssessmentLanguage ?? null,
       active: grp.some((r) => r.ActiveFlag),
       rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag), minGrade: r.MinGrade, maxGrade: r.MaxGrade })),
     })
@@ -313,6 +319,17 @@ export async function getWindowAssessmentType(windowId: string): Promise<string 
     { WID: windowId },
   )
   return rows.length ? rows[0].AssessmentType : null
+}
+
+// A cycle's language scope: 'English'/'French' FIXES the language (no toggle); null = Both
+// (writing shows the EN/FR toggle). Set on /cycles.
+export async function getWindowLanguage(windowId: string): Promise<WritingLanguage | null> {
+  const rows = await query<{ AssessmentLanguage: string | null }>(
+    'SELECT AssessmentLanguage FROM DimAssessmentWindow WHERE AssessmentWindowID = CAST(@WID AS BIGINT)',
+    { WID: windowId },
+  )
+  const v = rows.length ? rows[0].AssessmentLanguage : null
+  return v === 'English' || v === 'French' ? v : null
 }
 
 // Writing is dual-language: a French-Immersion grade-3+ student is assessed in BOTH English and

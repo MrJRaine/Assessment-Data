@@ -46,7 +46,7 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
@@ -79,11 +79,19 @@ RETURN
         WHERE c.AccessLevel IS NULL
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
-          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track. The ONLY structural rule: French literacy = French Immersion only.
+          -- English literacy is open to every program. WHICH grades/programs are in scope is the
+          -- CYCLE's decision (ProgramFamily + MinGrade/MaxGrade, set on /cycles) -- deliberately not
+          -- hardcoded here, so policy (e.g. "FI does English writing from grade 3") is an app-level
+          -- config, not code. Effective language = the cycle's scope when set, else the EN/FR toggle.
           AND (
-                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
-             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+                COALESCE(wed.AssessmentLanguage, @Language) = 'English'
+             OR (COALESCE(wed.AssessmentLanguage, @Language) = 'French' AND dp.ProgramFamily = 'French Immersion')
               )
     ),
     AdminAnalystApplicable AS (
@@ -106,11 +114,19 @@ RETURN
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
-          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track. The ONLY structural rule: French literacy = French Immersion only.
+          -- English literacy is open to every program. WHICH grades/programs are in scope is the
+          -- CYCLE's decision (ProgramFamily + MinGrade/MaxGrade, set on /cycles) -- deliberately not
+          -- hardcoded here, so policy (e.g. "FI does English writing from grade 3") is an app-level
+          -- config, not code. Effective language = the cycle's scope when set, else the EN/FR toggle.
           AND (
-                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
-             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+                COALESCE(wed.AssessmentLanguage, @Language) = 'English'
+             OR (COALESCE(wed.AssessmentLanguage, @Language) = 'French' AND dp.ProgramFamily = 'French Immersion')
               )
 
         UNION ALL
@@ -132,11 +148,19 @@ RETURN
         WHERE c.AccessLevel = 'RegionalAnalyst'
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-          -- Writing language TRACK membership (mirrors usp_MergeStudent Step 6): English track =
-          -- English/FSL any grade OR FI grade>=3 (ELA); French track = French Immersion (incl. J020).
+          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
+          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
+          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+          -- Language track. The ONLY structural rule: French literacy = French Immersion only.
+          -- English literacy is open to every program. WHICH grades/programs are in scope is the
+          -- CYCLE's decision (ProgramFamily + MinGrade/MaxGrade, set on /cycles) -- deliberately not
+          -- hardcoded here, so policy (e.g. "FI does English writing from grade 3") is an app-level
+          -- config, not code. Effective language = the cycle's scope when set, else the EN/FR toggle.
           AND (
-                (@Language = 'English' AND (dp.ProgramFamily <> 'French Immersion' OR sg.GradeOrder >= 3))
-             OR (@Language = 'French'  AND dp.ProgramFamily = 'French Immersion')
+                COALESCE(wed.AssessmentLanguage, @Language) = 'English'
+             OR (COALESCE(wed.AssessmentLanguage, @Language) = 'French' AND dp.ProgramFamily = 'French Immersion')
               )
     ),
     AdminAnalystWithSections AS (
@@ -215,7 +239,10 @@ RETURN
             ) AS rn
         FROM FactAssessmentWriting
         WHERE AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
-          AND AssessmentLanguage = @Language   -- show the score for the selected EN/FR track
+          -- Show the score for the effective track: the cycle's language when scoped, else the toggle.
+          AND AssessmentLanguage = COALESCE(
+                (SELECT w.AssessmentLanguage FROM DimAssessmentWindow w
+                 WHERE w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)), @Language)
     )
     SELECT DISTINCT
         CAST(sg.StudentKey AS VARCHAR(20)) AS StudentKey,
@@ -234,8 +261,8 @@ RETURN
         ipp.IsIPP              AS WritingIPPStatus,
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS WritingIPPNeedsConfirmation,
-        -- Writing IPP family follows the language track (English track -> 'English').
-        CASE WHEN @Language = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
+        -- Writing IPP family follows the effective language track (cycle scope, else toggle).
+        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
         dal.AchievementLevelCode AS AchievementLevel,
         dal.AchievementLevelName AS AchievementLevelName,
         dal.HexColor             AS AchievementHexColor,
@@ -249,7 +276,7 @@ RETURN
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
           AND ipp.Subject       = 'Writing'
-          AND ipp.ProgramFamily = CASE WHEN @Language = 'French' THEN 'French Immersion' ELSE 'English' END
+          AND ipp.ProgramFamily = CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END
           AND ipp.IsCurrent     = 1
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1

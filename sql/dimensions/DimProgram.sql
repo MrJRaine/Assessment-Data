@@ -26,6 +26,7 @@ CREATE TABLE DimProgram (
     ProgramFamily   VARCHAR(50)     NOT NULL,   -- 'English', 'French Immersion', 'French Second Language'
     IsImmersion     BIT             NOT NULL,   -- Quick filter flag: 1 = French Immersion program
     SpecialtyType   VARCHAR(50)     NULL,       -- 'O2' (Options and Opportunities), 'IB' (International Baccalaureate), NULL otherwise
+    ScopeBucket     VARCHAR(20)     NULL,       -- cycle program-scope bucket: 'English' (all non-immersion incl. FSL) | 'Early Immersion' | 'Late Immersion'. Set by the UPDATE below.
     ActiveFlag      BIT             NOT NULL,
     LastUpdated     DATETIME2(0)    NOT NULL
 );
@@ -64,3 +65,11 @@ VALUES
     ('S215', 'Senior High Early French Immersion IB',       'Senior High',  'French Immersion',          1, 'IB',  1, GETDATE()),
     ('S220', 'Senior High Late French Immersion IB',        'Senior High',  'French Immersion',          1, 'IB',  1, GETDATE()),
     ('S225', 'Senior High Integrated French IB',            'Senior High',  'French Second Language',    0, 'IB',  1, GETDATE());
+
+-- Classify each program into the cycle program-scope bucket (non-immersion incl. FSL -> English;
+-- FI 'Late ...' -> Late Immersion; other FI incl. 'Elementary French Immersion' -> Early Immersion).
+UPDATE DimProgram
+SET ScopeBucket =
+    CASE WHEN IsImmersion = 0            THEN 'English'
+         WHEN ProgramName LIKE '%Late%'  THEN 'Late Immersion'
+         ELSE 'Early Immersion' END;

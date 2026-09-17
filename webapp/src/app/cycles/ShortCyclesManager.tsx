@@ -6,6 +6,8 @@ import type { ShortCycle } from '@/lib/data'
 import { saveShortCycle, type ShortCycleInput } from './actions'
 
 const SUBJECTS = ['Reading', 'Writing', 'Math'] as const
+// Cycle program-scope buckets (match DimProgram.ScopeBucket). Non-immersion folds into English.
+const PROGRAM_SCOPE = ['English', 'Early Immersion', 'Late Immersion'] as const
 const GRADES = ['PP', 'P', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'RG']
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -36,6 +38,8 @@ function blankForm(): ShortCycleInput {
     startDate: '',
     endDate: '',
     benchmarkMonth: null,
+    programScope: [],
+    language: null,
     active: true,
   }
 }
@@ -51,6 +55,8 @@ function toForm(c: ShortCycle): ShortCycleInput {
     startDate: c.startDate,
     endDate: c.endDate,
     benchmarkMonth: c.benchmarkMonth,
+    programScope: [...c.programScope],
+    language: c.language,
     active: c.active,
     existingRows: c.rows.map((r) => ({ subject: r.subject, id: r.id })),
   }
@@ -68,6 +74,9 @@ function gradeSummary(c: ShortCycle) {
   return (
     <div className="cycle-grade-cell">
       {src.map((r) => <div key={r.subject}>{r.subject}: {r.minGrade}–{r.maxGrade}</div>)}
+      <div className="muted cycle-scope-line">
+        {c.programScope.length ? c.programScope.join(', ') : 'All programs'} · {c.language ?? 'Both'}
+      </div>
     </div>
   )
 }
@@ -130,6 +139,11 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
     setForm({ ...f, grades: { ...f.grades, [subject]: { ...current, [field]: value } } })
   }
 
+  function toggleScope(f: ShortCycleInput, bucket: string) {
+    const has = f.programScope.includes(bucket)
+    setForm({ ...f, programScope: has ? f.programScope.filter((b) => b !== bucket) : [...f.programScope, bucket] })
+  }
+
   const showBenchmark = form?.subjects.includes('Reading')
 
   return (
@@ -186,6 +200,26 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 })
               )}
             </div>
+            <div className="cycle-form-scope">
+              <span className="cycle-form-label">Program scope <span className="muted">(none = all programs)</span></span>
+              <div className="cycle-subject-checks">
+                {PROGRAM_SCOPE.map((b) => (
+                  <label key={b}>
+                    <input type="checkbox" checked={form.programScope.includes(b)}
+                           onChange={() => toggleScope(form, b)} />
+                    {b}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <label>Language <span className="muted">(literacy)</span>
+              <select value={form.language ?? ''}
+                      onChange={(e) => setForm({ ...form, language: e.target.value || null })}>
+                <option value="">Both (English + French)</option>
+                <option value="English">English only</option>
+                <option value="French">French only</option>
+              </select>
+            </label>
             <label>Cycle name
               <input type="text" value={form.cycleName} placeholder="e.g. Cycle 1 – Fall"
                      onChange={(e) => setForm({ ...form, cycleName: e.target.value })} />

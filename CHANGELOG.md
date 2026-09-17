@@ -33,6 +33,18 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   teaching-admin being dumped into the school-wide list) and `Oversight` (Homeroom / Section /
   **Grade** lenses over full P–RG). Grade-span-aware grade filter (split/combined classes surface
   under each of their grades). Filters persist for the tab session.
+- **Dual-language literacy + app-level cycle scoping.** Reading and writing can be assessed in English
+  and/or French, and **which grades/programs/language a cycle covers is configured on `/cycles`** — not
+  hardcoded. Each cycle carries a **program scope** (multi-select of English / Early Immersion / Late
+  Immersion; non-immersion incl. FSL folds into English) + a **language** (Both / English / French) +
+  the existing grade band. Writing "Both" cycles show an EN/FR toggle on the entry roster and store the
+  language on the result (`FactAssessmentWriting.AssessmentLanguage`, so a student can hold an English
+  and a French result per cycle); a language-scoped cycle fixes the language. Reading language is the
+  cycle's (sets the scale). Only structural rule kept in code: French literacy = French Immersion
+  (reading excludes **J020** late immersion — reads in English, no French reading benchmarks).
+  SQL: `DimProgram.ScopeBucket`, `DimAssessmentWindow.AssessmentLanguage` + `ProgramScope`,
+  `FactAssessmentWriting.AssessmentLanguage`, `usp_UpsertShortCycle`, `usp_UpsertWritingAssessment`,
+  `tvf_TeacherRoster`, `tvf_TeacherRosterWriting`, `usp_MergeStudent` (J020 seeding).
 - **Writing "Scribed" (SCR) code.** Conventions can be marked **SCR** (scribed — someone else
   physically wrote for the student) in the writing entry grid; SCR is **omitted from the average**
   (sum/count over the scored traits, never counted as 0). `FactAssessmentWriting.ConventionsScore`
