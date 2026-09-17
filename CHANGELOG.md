@@ -33,6 +33,13 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   teaching-admin being dumped into the school-wide list) and `Oversight` (Homeroom / Section /
   **Grade** lenses over full P–RG). Grade-span-aware grade filter (split/combined classes surface
   under each of their grades). Filters persist for the tab session.
+- **Cycle header + scoped instances.** A Short Cycle is now a **header** (`DimShortCycle`: distinct key
+  + display name + date range, set once) plus a list of **scoped instances** — each a
+  `DimAssessmentWindow` row with its own Subject · Language · Program scope · grade band, all sharing
+  the header's dates. The `/cycles` page is a two-part builder (create the cycle, then add instances);
+  editing the header's dates re-propagates to every instance. Because results tie to the header's key
+  (via the instance window → `CycleGroupID`), a repeated name like "SCoR 1" each year stays separate
+  for roll-up. SQL: `DimShortCycle`, `usp_UpsertShortCycleHeader`, `backfill_DimShortCycle_headers.sql`.
 - **Dual-language literacy + app-level cycle scoping.** Reading and writing can be assessed in English
   and/or French, and **which grades/programs/language a cycle covers is configured on `/cycles`** — not
   hardcoded. Each cycle carries a **program scope** (multi-select of English / Early Immersion / Late

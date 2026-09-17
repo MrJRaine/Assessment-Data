@@ -53,6 +53,12 @@ GRANT SELECT ON [dbo].[tvf_TeacherRosterMath]        TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_ProgrammingGroups]        TO [StudentDataAssessment];
 GRANT SELECT ON [dbo].[tvf_ProgrammingRoster]        TO [StudentDataAssessment];
 
+-- ---- Short Cycle management (Manage-Cycles admins). Header + per-subject instance upserts are
+--      app-gated against the caller; the app also reads DimShortCycle directly for the cycle list. ----
+GRANT EXECUTE ON [dbo].[usp_UpsertShortCycle]       TO [StudentDataAssessment];
+GRANT EXECUTE ON [dbo].[usp_UpsertShortCycleHeader] TO [StudentDataAssessment];
+GRANT SELECT  ON [dbo].[DimShortCycle]              TO [StudentDataAssessment];
+
 -- ---- Analyst-only ingest trigger (the web app's /ingest screen). The proc itself
 --      enforces the RegionalAnalyst role gate against @CallerUPN, so granting EXECUTE to
 --      the SP is safe. (Also self-granted at the bottom of usp_TriggerIngestCycle.sql.) ----

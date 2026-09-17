@@ -215,6 +215,15 @@ a { color: inherit; text-decoration: none; }
 .cycle-subject-checks label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.9rem; color: var(--ink); }
 .cycle-subject-checks input { width: auto; }
 .cycle-form-hint { font-size: 0.8rem; color: var(--muted); margin: 0.75rem 0 0; }
+/* Instance builder: one scoped assessment per row */
+.cycle-instances { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.6rem 0; }
+.cycle-instance-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.cycle-instance-row select { padding: 0.3rem 0.4rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.82rem; color: var(--ink); background: #fff; }
+.cycle-inst-scope { display: inline-flex; gap: 0.5rem; flex-wrap: wrap; }
+.cycle-inst-scope label { display: inline-flex; align-items: center; gap: 0.2rem; font-size: 0.78rem; color: var(--ink); }
+.cycle-inst-scope input { width: auto; }
+.cycle-inst-na { min-width: 1rem; color: var(--muted); }
+.cycle-inst-remove { margin-left: auto; }
 .cycle-form-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
 .cycle-row-actions { display: flex; gap: 0.4rem; white-space: nowrap; }
 .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }

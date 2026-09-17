@@ -8,7 +8,7 @@ import { execProc } from '@/lib/db'
 /**
  * Managing Short Cycles of Response requires the CanManageCycles capability (StaffAppAccess
  * allowlist). The /cycles page hides the UI for everyone else, but authorization is enforced HERE
- * too (server-side) so the action can't be reached directly by a non-admin. Mirrors ingest gating.
+ * too (server-side) so the actions can't be reached directly by a non-admin. Mirrors ingest gating.
  */
 async function requireCycleAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
@@ -19,93 +19,85 @@ async function requireCycleAdmin(): Promise<string> {
   return upn
 }
 
-export interface SubjectGrades {
-  minGrade: string
-  maxGrade: string
-}
-
-export interface ShortCycleInput {
-  groupId?: string | null // CycleGroupID for edit; omit/null to create a new cycle
-  subjects: string[] // selected subjects, e.g. ['Reading', 'Writing']
-  grades: Record<string, SubjectGrades> // per-subject grade band (Reading P-8, Writing P-RG, Math P-6)
-  cycleName: string
+// ---- Cycle HEADER (DimShortCycle): display name + date range, its own distinct key ----
+export interface CycleHeaderInput {
+  cycleGroupId?: string | null // omit/null to create (a GUID is generated); set to edit
+  displayName: string
   startDate: string // 'YYYY-MM-DD'
   endDate: string
-  benchmarkMonth: number | null // reading only; null = dominant-month fallback
-  programScope: string[] // buckets from {English, Early Immersion, Late Immersion}; empty = all programs
-  language: string | null // 'English' | 'French' | null (Both — writing shows the toggle; reading resolves per student)
   active: boolean
-  existingRows?: { subject: string; id: string }[] // the cycle's current per-subject rows (edit); reconcile against these
 }
 
-// Fallback band if a subject somehow has no grades entry (defensive; the form always supplies one).
-const DEFAULT_BAND: SubjectGrades = { minGrade: 'PP', maxGrade: '12' }
-
 /**
- * Create or edit a multi-subject Short Cycle. A cycle is one DimAssessmentWindow row PER subject,
- * all sharing a CycleGroupID (a GUID we generate on create, reuse on edit). We upsert a row for
- * every selected subject and deactivate rows for any subject the analyst un-checked. Reconciliation
- * reads the group's existing rows so edits update in place (keeping surrogate keys / fact links).
- *
- * Nullable proc params (BenchmarkMonth, AssessmentWindowID) are OMITTED when empty so the proc's
- * own NULL defaults apply — mssql can't infer a SQL type from a bare JS null.
+ * Create or edit a cycle header. On create we generate the distinct key (GUID) so a header exists
+ * before any instances are attached; editing here re-propagates the name/dates to the cycle's
+ * instance windows (usp_UpsertShortCycleHeader). Returns the header's key so the caller can then
+ * add instances to it.
  */
-export async function saveShortCycle(input: ShortCycleInput): Promise<void> {
+export async function saveCycleHeader(input: CycleHeaderInput): Promise<string> {
   const upn = await requireCycleAdmin()
-  const subjects = input.subjects.filter((s) => ['Reading', 'Writing', 'Math'].includes(s))
-  if (subjects.length === 0) throw new Error('Select at least one subject for the cycle.')
-
-  // Reuse the group's GUID on edit; generate one on create. Legacy single windows have no group
-  // id -- editing one adopts its existing row into a fresh group (updated in place by its id below).
-  const groupId = input.groupId ?? randomUUID()
-
-  // The cycle's current per-subject rows (passed from the client), so edits update in place and
-  // un-checked subjects get deactivated.
-  const idBySubject = new Map((input.existingRows ?? []).map((r) => [r.subject, r.id]))
-  const selected = new Set(subjects)
-
-  const base: Record<string, unknown> = {
-    CycleName: input.cycleName.trim(),
+  const cycleGroupId = input.cycleGroupId ?? randomUUID()
+  await execProc('usp_UpsertShortCycleHeader', {
+    CycleGroupID: cycleGroupId,
+    DisplayName: input.displayName.trim(),
     StartDate: input.startDate,
     EndDate: input.endDate,
-    CycleGroupID: groupId,
+    ActiveFlag: input.active,
     CallerUPN: upn,
-  }
-  // Cycle-level scope (all optional). Omit when empty so the proc's NULL defaults apply
-  // (mssql can't infer a SQL type from a bare JS null).
-  if (input.programScope.length) base.ProgramScope = input.programScope.join(',')
-  if (input.language) base.AssessmentLanguage = input.language
+  })
+  return cycleGroupId
+}
 
-  const bandFor = (subject: string): SubjectGrades => input.grades[subject] ?? DEFAULT_BAND
+// ---- Scoped assessment INSTANCE (one DimAssessmentWindow row under a header) ----
+export interface CycleInstanceInput {
+  existingId?: string | null // AssessmentWindowID for edit; null/omit = create
+  subject: string // 'Reading' | 'Writing' | 'Math'
+  language: string | null // 'English' | 'French' | null (Both); ignored for Math
+  programScope: string[] // buckets {English, Early Immersion, Late Immersion}; [] = all
+  minGrade: string
+  maxGrade: string
+  benchmarkMonth: number | null // reading only
+  active: boolean
+}
 
-  // Upsert each selected subject with ITS OWN grade band.
-  for (const subject of subjects) {
-    const band = bandFor(subject)
-    const inputs: Record<string, unknown> = {
-      ...base,
-      AssessmentType: subject,
-      MinGrade: band.minGrade,
-      MaxGrade: band.maxGrade,
-      ActiveFlag: input.active,
+export interface SaveInstancesInput {
+  cycleGroupId: string // the header's key
+  displayName: string // from the header (stored on each window for the entry gate/picker)
+  startDate: string
+  endDate: string
+  instances: CycleInstanceInput[]
+}
+
+/**
+ * Save the scoped instances of a cycle. Each instance is one DimAssessmentWindow row (subject x
+ * language x program-scope x grade band) sharing the header's key + dates. Existing rows update in
+ * place (by AssessmentWindowID), new rows insert; "removing" an existing instance = saving it with
+ * active=false (its row/history is kept). Name + dates come from the header, not the client's whim
+ * (a header edit re-propagates them anyway).
+ */
+export async function saveShortCycle(input: SaveInstancesInput): Promise<void> {
+  const upn = await requireCycleAdmin()
+  const valid = input.instances.filter((i) => ['Reading', 'Writing', 'Math'].includes(i.subject))
+  if (valid.length === 0) throw new Error('Add at least one assessment instance to the cycle.')
+
+  for (const inst of valid) {
+    const params: Record<string, unknown> = {
+      AssessmentType: inst.subject,
+      CycleName: input.displayName.trim(),
+      StartDate: input.startDate,
+      EndDate: input.endDate,
+      MinGrade: inst.minGrade,
+      MaxGrade: inst.maxGrade,
+      CycleGroupID: input.cycleGroupId,
+      ActiveFlag: inst.active,
+      CallerUPN: upn,
     }
-    if (subject === 'Reading' && input.benchmarkMonth != null) inputs.BenchmarkMonth = input.benchmarkMonth
-    const existingId = idBySubject.get(subject)
-    if (existingId) inputs.AssessmentWindowID = existingId
-    await execProc('usp_UpsertShortCycle', inputs)
-  }
-
-  // Deactivate rows for subjects removed from the cycle (band preserved for the audit trail).
-  for (const [subject, id] of idBySubject) {
-    if (!selected.has(subject)) {
-      const band = bandFor(subject)
-      await execProc('usp_UpsertShortCycle', {
-        ...base,
-        AssessmentType: subject,
-        MinGrade: band.minGrade,
-        MaxGrade: band.maxGrade,
-        AssessmentWindowID: id,
-        ActiveFlag: false,
-      })
-    }
+    // Optional scope params: omit when empty so the proc's NULL defaults apply (mssql can't infer a
+    // SQL type from a bare JS null). Language/benchmark are literacy/reading-only.
+    if (inst.programScope.length) params.ProgramScope = inst.programScope.join(',')
+    if (inst.subject !== 'Math' && inst.language) params.AssessmentLanguage = inst.language
+    if (inst.subject === 'Reading' && inst.benchmarkMonth != null) params.BenchmarkMonth = inst.benchmarkMonth
+    if (inst.existingId) params.AssessmentWindowID = inst.existingId
+    await execProc('usp_UpsertShortCycle', params)
   }
 }

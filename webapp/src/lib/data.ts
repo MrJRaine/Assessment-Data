@@ -74,104 +74,101 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }))
 }
 
-export interface ShortCycleRow {
+// One scoped assessment INSTANCE within a cycle: a DimAssessmentWindow row (subject x language x
+// program-scope x grade band). Many can share a cycle header (CycleGroupID).
+export interface ShortCycleInstance {
+  id: string // AssessmentWindowID (string -- BIGINT precision)
   subject: string // 'Reading' | 'Writing' | 'Math'
-  id: string // that subject's AssessmentWindowID (string -- BIGINT precision)
-  active: boolean
-  minGrade: string // this subject's grade band (per-subject: Reading P-8, Writing P-RG, Math P-6)
-  maxGrade: string
-}
-
-export interface ShortCycle {
-  groupId: string | null // CycleGroupID; null for legacy single windows (each its own cycle)
-  key: string // stable grouping key for React (groupId ?? 'win:<id>')
-  name: string
-  subjects: string[] // subjects the cycle currently covers (active rows)
-  schoolYear: string
-  status: string // Upcoming | Open | ClosesToday | Closed (rows share dates -> same status)
-  startDate: string // 'YYYY-MM-DD'
-  endDate: string
+  language: string | null // 'English' | 'French' | null (Both); ignored for Math
+  programScope: string[] // buckets {English, Early Immersion, Late Immersion}; [] = all programs
   minGrade: string
   maxGrade: string
-  benchmarkMonth: number | null // 1-12, from the reading row; null = dominant-month fallback
-  programScope: string[] // cycle program-scope buckets ({English, Early Immersion, Late Immersion}); [] = all
-  language: string | null // 'English' | 'French' | null (Both)
-  active: boolean // any row active
-  rows: ShortCycleRow[] // every per-subject row (for edit reconciliation)
+  benchmarkMonth: number | null // reading only; null = dominant-month fallback
+  active: boolean
+}
+
+// A cycle = a DimShortCycle HEADER (distinct key + name + dates) plus its instances.
+export interface ShortCycle {
+  cycleGroupId: string // the header's distinct key (instances tie to this)
+  displayName: string
+  schoolYear: string
+  status: string // Upcoming | Open | ClosesToday | Closed (from header dates)
+  startDate: string // 'YYYY-MM-DD'
+  endDate: string
+  active: boolean // header active
+  instances: ShortCycleInstance[]
 }
 
 /**
- * All Short Cycles of Response, grouped for the admin screen. A cycle is one or more per-subject
- * DimAssessmentWindow rows sharing a CycleGroupID (multi-subject); legacy rows with no group id are
- * treated as their own single-subject cycle. Config, not per-user PII, so a plain SP query is fine
- * (mirrors getWindowEndDate). Status is date-derived in Atlantic time to match the entry gate.
+ * All Short Cycles of Response for the admin screen: each DimShortCycle HEADER (distinct key + name +
+ * dates) with its scoped instance windows (DimAssessmentWindow, tied by CycleGroupID). An empty header
+ * (no instances yet) is included so it can be picked in the instance builder. Config, not per-user PII,
+ * so a plain SP query is fine. Status is date-derived in Atlantic time to match the entry gate.
  */
 export async function getShortCycles(): Promise<ShortCycle[]> {
-  const rows = await query<{
-    AssessmentWindowID: string
-    WindowName: string
-    AssessmentType: string
-    SchoolYear: string
+  const headers = await query<{
+    CycleGroupID: string
+    DisplayName: string
     StartDate: unknown
     EndDate: unknown
-    MinGrade: string
-    MaxGrade: string
-    BenchmarkMonth: number | null
-    ProgramScope: string | null
-    AssessmentLanguage: string | null
-    CycleGroupID: string | null
+    SchoolYear: string
     ActiveFlag: boolean
     Status: string
   }>(`
-    SELECT
-      CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
-      WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-      MinGrade, MaxGrade, BenchmarkMonth, ProgramScope, AssessmentLanguage, CycleGroupID, ActiveFlag,
+    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) = EndDate   THEN 'ClosesToday'
         ELSE 'Open'
       END AS Status
-    FROM DimAssessmentWindow
-    ORDER BY StartDate DESC, WindowName, AssessmentType`)
+    FROM DimShortCycle
+    ORDER BY StartDate DESC, DisplayName`)
 
-  // Group per-subject rows into cycles by CycleGroupID (ungrouped rows stand alone).
-  const groups = new Map<string, typeof rows>()
-  for (const r of rows) {
-    const key = r.CycleGroupID ?? `win:${r.AssessmentWindowID}`
-    const g = groups.get(key)
-    if (g) g.push(r)
-    else groups.set(key, [r] as typeof rows)
+  const wins = await query<{
+    AssessmentWindowID: string
+    CycleGroupID: string | null
+    AssessmentType: string
+    MinGrade: string
+    MaxGrade: string
+    BenchmarkMonth: number | null
+    ProgramScope: string | null
+    AssessmentLanguage: string | null
+    ActiveFlag: boolean
+  }>(`
+    SELECT CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID, CycleGroupID, AssessmentType,
+           MinGrade, MaxGrade, BenchmarkMonth, ProgramScope, AssessmentLanguage, ActiveFlag
+    FROM DimAssessmentWindow`)
+
+  // Instances grouped by their header key.
+  const byGroup = new Map<string, ShortCycleInstance[]>()
+  for (const w of wins) {
+    if (!w.CycleGroupID) continue
+    const inst: ShortCycleInstance = {
+      id: String(w.AssessmentWindowID),
+      subject: w.AssessmentType,
+      language: w.AssessmentLanguage ?? null,
+      programScope: w.ProgramScope ? w.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      minGrade: w.MinGrade,
+      maxGrade: w.MaxGrade,
+      benchmarkMonth: w.BenchmarkMonth == null ? null : Number(w.BenchmarkMonth),
+      active: Boolean(w.ActiveFlag),
+    }
+    const arr = byGroup.get(w.CycleGroupID)
+    if (arr) arr.push(inst)
+    else byGroup.set(w.CycleGroupID, [inst])
   }
 
-  const cycles: ShortCycle[] = []
-  for (const [key, grp] of groups) {
-    const first = grp[0]
-    const activeRows = grp.filter((r) => r.ActiveFlag)
-    const subjectRows = activeRows.length ? activeRows : grp
-    const subjects = [...new Set(subjectRows.map((r) => r.AssessmentType))]
-    const readingRow = grp.find((r) => r.AssessmentType === 'Reading' && r.ActiveFlag)
-      ?? grp.find((r) => r.AssessmentType === 'Reading')
-    cycles.push({
-      groupId: first.CycleGroupID ?? null,
-      key,
-      name: first.WindowName,
-      subjects,
-      schoolYear: first.SchoolYear,
-      status: first.Status,
-      startDate: toYMD(first.StartDate),
-      endDate: toYMD(first.EndDate),
-      minGrade: first.MinGrade,
-      maxGrade: first.MaxGrade,
-      benchmarkMonth: readingRow?.BenchmarkMonth == null ? null : Number(readingRow.BenchmarkMonth),
-      programScope: first.ProgramScope ? first.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
-      language: first.AssessmentLanguage ?? null,
-      active: grp.some((r) => r.ActiveFlag),
-      rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag), minGrade: r.MinGrade, maxGrade: r.MaxGrade })),
-    })
-  }
-  return cycles.sort((a, b) => b.startDate.localeCompare(a.startDate) || a.name.localeCompare(b.name))
+  return headers.map((h) => ({
+    cycleGroupId: h.CycleGroupID,
+    displayName: h.DisplayName,
+    schoolYear: h.SchoolYear,
+    status: h.Status,
+    startDate: toYMD(h.StartDate),
+    endDate: toYMD(h.EndDate),
+    active: Boolean(h.ActiveFlag),
+    instances: byGroup.get(h.CycleGroupID) ?? [],
+  }))
 }
 
 /**
