@@ -13,9 +13,29 @@ const TRAITS = [
   { key: 'conventions', label: 'Conv.' },
 ] as const
 type TraitKey = (typeof TRAITS)[number]['key']
-type ScoreSet = Record<TraitKey, number | null>
+// Conventions may be 'SCR' (Scribed) — someone else physically wrote for the student, so conventions
+// aren't the student's own production. 'SCR' is OMITTED from the average. Ideas/Org/Language are 1-4.
+type ConvValue = number | 'SCR' | null
+interface ScoreSet {
+  ideas: number | null
+  organization: number | null
+  language: number | null
+  conventions: ConvValue
+}
 
-// Writing achievement band from the 4-trait average — mirrors DimAchievementLevel codes 1-4 and the
+// '1'–'4' / 'SCR' / null (from the roster read) -> ConvValue.
+function toConv(v: string | null): ConvValue {
+  if (v == null) return null
+  if (v === 'SCR') return 'SCR'
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+// Numeric part of a trait ('SCR' -> null, so it drops from the average).
+function numOf(v: ConvValue): number | null {
+  return typeof v === 'number' ? v : null
+}
+
+// Writing achievement band from the average — mirrors DimAchievementLevel codes 1-4 and the
 // 1.75/2.75/3.50 cut scores, so the live (pre-save) colour matches what the writing TVFs compute.
 function writingBand(avg: number | null): { name: string; hex: string; tint: string } | null {
   if (avg == null) return null
@@ -25,9 +45,14 @@ function writingBand(avg: number | null): { name: string; hex: string; tint: str
   return { name: 'Not Yet Meeting', hex: '#D1495B', tint: '#FCEDEF' }
 }
 
+// Average over the SCORED traits only — Conventions='SCR' drops from BOTH numerator and denominator.
 function avgOf(s: ScoreSet): number | null {
-  if (s.ideas == null || s.organization == null || s.language == null || s.conventions == null) return null
-  return (s.ideas + s.organization + s.language + s.conventions) / 4
+  const vals = [s.ideas, s.organization, s.language, numOf(s.conventions)].filter((v): v is number => v != null)
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
+}
+// A row is COMPLETE (saveable) when every trait is set — Conventions counts 'SCR' as set.
+function isComplete(s: ScoreSet): boolean {
+  return s.ideas != null && s.organization != null && s.language != null && s.conventions != null
 }
 function eqSet(a: ScoreSet, b: ScoreSet): boolean {
   return a.ideas === b.ideas && a.organization === b.organization && a.language === b.language && a.conventions === b.conventions
@@ -51,7 +76,7 @@ export default function WritingRosterEntry({
 
   const baselineFromProps: Record<string, ScoreSet> = {}
   for (const s of roster)
-    baselineFromProps[s.studentKey] = { ideas: s.ideas, organization: s.organization, language: s.language, conventions: s.conventions }
+    baselineFromProps[s.studentKey] = { ideas: s.ideas, organization: s.organization, language: s.language, conventions: toConv(s.conventions) }
 
   const [base, setBase] = useState(baselineFromProps)
   const [sel, setSel] = useState(baselineFromProps)
@@ -69,8 +94,10 @@ export default function WritingRosterEntry({
   // finished rows and flags partial ones (never a partial-row failure).
   const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
 
-  function setTrait(sk: string, trait: TraitKey, val: number | null) {
-    setSel((p) => ({ ...p, [sk]: { ...p[sk], [trait]: val } }))
+  function setTrait(sk: string, trait: TraitKey, val: ConvValue) {
+    // Only Conventions is ever set to 'SCR' (the SCR option is Conventions-only); the assertion
+    // reconciles the computed-key write with ScoreSet's precise field types.
+    setSel((p) => ({ ...p, [sk]: { ...p[sk], [trait]: val } as ScoreSet }))
   }
   function chooseIPP(studentKey: string, value: boolean) {
     setIppSel((prev) => {
@@ -82,15 +109,16 @@ export default function WritingRosterEntry({
   }
 
   function onSave() {
-    // A writing result needs ALL FOUR traits; changed rows missing any trait are flagged, not sent.
-    const ready = changedKeys.filter((k) => avgOf(sel[k]) != null)
-    const incomplete = changedKeys.filter((k) => avgOf(sel[k]) == null)
+    // A writing result needs ALL FOUR traits set (Conventions counts 'SCR' as set); incomplete rows
+    // are flagged, not sent. Conventions goes as a string ('1'-'4' or 'SCR'); the proc validates it.
+    const ready = changedKeys.filter((k) => isComplete(sel[k]))
+    const incomplete = changedKeys.filter((k) => !isComplete(sel[k]))
     const writingEntries: WritingEntry[] = ready.map((k) => ({
       studentNumber: numByKey.get(k)!,
       ideas: sel[k].ideas!,
       organization: sel[k].organization!,
       language: sel[k].language!,
-      conventions: sel[k].conventions!,
+      conventions: String(sel[k].conventions),
     }))
     const missingPf = ippKeys.filter((k) => !pfByKey.get(k))
     const ippEntries: IppEntry[] = ippKeys
@@ -168,7 +196,10 @@ export default function WritingRosterEntry({
                       <select
                         value={cur[t.key] ?? ''}
                         disabled={pending || inputsLocked}
-                        onChange={(e) => setTrait(s.studentKey, t.key, e.target.value ? Number(e.target.value) : null)}
+                        onChange={(e) => {
+                          const v = e.target.value
+                          setTrait(s.studentKey, t.key, v === '' ? null : v === 'SCR' ? 'SCR' : Number(v))
+                        }}
                       >
                         <option value="">—</option>
                         {[1, 2, 3, 4].map((n) => (
@@ -176,6 +207,8 @@ export default function WritingRosterEntry({
                             {n}
                           </option>
                         ))}
+                        {/* Scribed — Conventions only (someone else wrote for the student). */}
+                        {t.key === 'conventions' ? <option value="SCR">Scr</option> : null}
                       </select>
                     )}
                   </td>

@@ -73,7 +73,7 @@ export interface WritingEntry {
   ideas: number
   organization: number
   language: number
-  conventions: number
+  conventions: string // '1'–'4' or 'SCR' (Scribed); proc validates
 }
 
 /**

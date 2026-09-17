@@ -20,6 +20,13 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-09-17',
     kind: 'feature',
     summary:
+      'Writing entry: Conventions can now be marked “Scribed” when someone else physically wrote for the student — scribed conventions are left out of the writing average.',
+  },
+  {
+    version: '0.5.0-dev',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
       'The “IPPs” area is now “Programming” — confirm both Individual Program Plans and Adaptations for each student by subject (Reading, Writing, Math), with a colour cue showing how much is left to confirm.',
   },
   {

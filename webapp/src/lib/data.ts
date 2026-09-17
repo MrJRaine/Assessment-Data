@@ -327,7 +327,7 @@ export interface WritingRosterStudent {
   ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
   organization: number | null
   language: number | null
-  conventions: number | null
+  conventions: string | null // '1'–'4' or 'SCR' (Scribed) — Conventions can be scribed
   avgScore: number | null
   assessmentDate: string | null
   ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
@@ -352,7 +352,7 @@ export async function getTeacherRosterWriting(
     ExistingIdeasScore: number | null
     ExistingOrganizationScore: number | null
     ExistingLanguageScore: number | null
-    ExistingConventionsScore: number | null
+    ExistingConventionsScore: string | null // VARCHAR: '1'–'4' or 'SCR'
     ExistingAvgScore: number | null
     ExistingAssessmentDate: Date | string | null
     Homeroom: string | null
@@ -739,7 +739,7 @@ export interface WritingHistoryRow {
   ideas: number | null
   organization: number | null
   language: number | null
-  conventions: number | null
+  conventions: string | null // '1'–'4' or 'SCR' (Scribed)
   avgScore: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -762,7 +762,7 @@ export async function getStudentHistoryWriting(upn: string, studentKey: string):
     ideas: r.IdeasScore == null ? null : Number(r.IdeasScore),
     organization: r.OrganizationScore == null ? null : Number(r.OrganizationScore),
     language: r.LanguageScore == null ? null : Number(r.LanguageScore),
-    conventions: r.ConventionsScore == null ? null : Number(r.ConventionsScore),
+    conventions: r.ConventionsScore == null ? null : String(r.ConventionsScore),
     avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,

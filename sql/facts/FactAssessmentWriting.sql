@@ -18,7 +18,8 @@ CREATE TABLE FactAssessmentWriting (
     IdeasScore              INT             NULL,       -- 1–4 scale
     OrganizationScore       INT             NULL,
     LanguageScore           INT             NULL,
-    ConventionsScore        INT             NULL,
+    ConventionsScore        VARCHAR(10)     NULL,       -- '1'–'4', or 'SCR' (Scribed) — omitted from the average
+
     AssessmentDate          DATE            NOT NULL,
     EnteredByStaffKey       BIGINT          NOT NULL,   -- References DimStaff.StaffKey
     SubmissionTimestamp     DATETIME2(0)    NOT NULL,

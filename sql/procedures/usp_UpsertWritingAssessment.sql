@@ -26,7 +26,7 @@
  *   @IdeasScore         INT          required, 1–4
  *   @OrganizationScore  INT          required, 1–4
  *   @LanguageScore      INT          required, 1–4
- *   @ConventionsScore   INT          required, 1–4
+ *   @ConventionsScore   VARCHAR(10)  required, '1'–'4' or 'SCR' (Scribed; omitted from the average)
  *   @AssessmentDate     DATE         required (effective-date StudentKey resolution + stored)
  *   @CallerUPN          VARCHAR(255) web-app/SP path: signed-in teacher UPN; NULL -> CURRENT_USER
  *
@@ -56,7 +56,7 @@ CREATE PROCEDURE usp_UpsertWritingAssessment
     @IdeasScore         INT,
     @OrganizationScore  INT,
     @LanguageScore      INT,
-    @ConventionsScore   INT,
+    @ConventionsScore   VARCHAR(10),  -- '1'-'4', or 'SCR' (Scribed) — scribed is omitted from the average
     @AssessmentDate     DATE,
     @CallerUPN          VARCHAR(255) = NULL
 AS
@@ -92,13 +92,19 @@ BEGIN
         ;THROW 51010, 'usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, all four trait scores, and @AssessmentDate are required (no NULLs).', 1;
     END;
 
-    -- 51018: each trait score in 1..4
+    -- 51018: Ideas/Organization/Language in 1..4 (numeric); Conventions is '1'-'4' OR 'SCR' (Scribed,
+    -- the only non-numeric code allowed, and only on Conventions). SCR is omitted from the read-side
+    -- average (sum/count over scored traits).
     IF @IdeasScore        NOT BETWEEN 1 AND 4
        OR @OrganizationScore NOT BETWEEN 1 AND 4
        OR @LanguageScore  NOT BETWEEN 1 AND 4
-       OR @ConventionsScore NOT BETWEEN 1 AND 4
     BEGIN
-        ;THROW 51018, 'usp_UpsertWritingAssessment: each trait score (Ideas, Organization, Language, Conventions) must be an integer 1-4.', 1;
+        ;THROW 51018, 'usp_UpsertWritingAssessment: Ideas, Organization, and Language must each be an integer 1-4.', 1;
+    END;
+
+    IF @ConventionsScore NOT IN ('1', '2', '3', '4', 'SCR')
+    BEGIN
+        ;THROW 51018, 'usp_UpsertWritingAssessment: Conventions must be ''1''-''4'' or ''SCR'' (Scribed).', 1;
     END;
 
     SET @AssessmentWindowID_BI = CAST(@AssessmentWindowID AS BIGINT);

@@ -36,7 +36,14 @@ RETURN
             faw.LanguageScore,
             faw.ConventionsScore,
             faw.AssessmentDate,
-            CAST((faw.IdeasScore + faw.OrganizationScore + faw.LanguageScore + faw.ConventionsScore) / 4.0 AS DECIMAL(5,2)) AS AvgScore
+            CAST(
+                (COALESCE(faw.IdeasScore, 0) + COALESCE(faw.OrganizationScore, 0) + COALESCE(faw.LanguageScore, 0)
+                 + COALESCE(TRY_CAST(faw.ConventionsScore AS INT), 0)) * 1.0
+                / NULLIF((CASE WHEN faw.IdeasScore IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN faw.OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN faw.LanguageScore IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN TRY_CAST(faw.ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
+                AS DECIMAL(5,2)) AS AvgScore
         FROM FactAssessmentWriting faw
     )
     SELECT

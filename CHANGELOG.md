@@ -33,6 +33,11 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   teaching-admin being dumped into the school-wide list) and `Oversight` (Homeroom / Section /
   **Grade** lenses over full P–RG). Grade-span-aware grade filter (split/combined classes surface
   under each of their grades). Filters persist for the tab session.
+- **Writing "Scribed" (SCR) code.** Conventions can be marked **SCR** (scribed — someone else
+  physically wrote for the student) in the writing entry grid; SCR is **omitted from the average**
+  (sum/count over the scored traits, never counted as 0). `FactAssessmentWriting.ConventionsScore`
+  becomes VARCHAR (`'1'`–`'4'` or `'SCR'`); the three writing reads recompute the average over scored
+  traits; `usp_UpsertWritingAssessment` validates Conventions ∈ `'1'`–`'4'`/`'SCR'`.
 - **Maintenance mode.** Sysadmin can schedule a graceful lockout before an emergency container swap:
   `AppMaintenance` row + `usp_Set/ClearMaintenanceWindow`, `/api/status`, a staged countdown banner
   (warn → lock-after-next-save → full lock → quiet auto-save → "we'll be right back" overlay), a
@@ -57,11 +62,18 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   the cold-pool transient server-side, and a caps error no longer flips the user to signed-out.
 
 ### SQL to deploy to live at the 0.5.0 release
-Programming Phase 0 (`FactStudentAdaptation.sql` → `usp_MergeStudent.sql` →
-`usp_UpsertStudentAdaptation.sql` → `tvf_StudentAdaptation.sql`), the group/roster TVFs
-(`deploy_groupkey_tvfs.sql` + `tvf_ProgrammingGroups.sql` + `tvf_ProgrammingRoster.sql`),
-maintenance (`AppMaintenance.sql` + `usp_Set/ClearMaintenanceWindow.sql`), then re-run
-`grant_webapp_sp.sql`.
+1. Programming Phase 0: `FactStudentAdaptation.sql` → `usp_MergeStudent.sql` →
+   `usp_UpsertStudentAdaptation.sql` → `tvf_StudentAdaptation.sql`.
+2. Group/roster TVFs: `deploy_groupkey_tvfs.sql` + `tvf_ProgrammingGroups.sql` + `tvf_ProgrammingRoster.sql`.
+3. Maintenance: `AppMaintenance.sql` + `usp_SetMaintenanceWindow.sql` + `usp_ClearMaintenanceWindow.sql`.
+4. Grade-8 reading benchmarks: `seed_DimReadingBenchmark_grade8.sql` (if not already on live).
+5. Writing SCR: **`migrate_FactWriting_conventions_varchar.sql`** (run ONCE — converts
+   `ConventionsScore` INT→VARCHAR, preserving data) → `usp_UpsertWritingAssessment.sql` →
+   `tvf_TeacherRosterWriting.sql` + `tvf_StudentCohortWriting.sql` + `tvf_StudentAssessmentHistoryWriting.sql`.
+6. Re-run `grant_webapp_sp.sql` last (re-grants after every proc/TVF DROP+CREATE).
+
+Same list applies to DEV (run there first). The writing-SCR migration is the only step that changes an
+existing table's shape — run it before redeploying the writing proc/reads.
 
 ## [0.4.1] — 2026-09-11
 
