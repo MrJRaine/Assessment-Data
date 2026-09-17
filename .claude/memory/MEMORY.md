@@ -84,6 +84,7 @@
 - [Programming Makeover (IPP+Adaptations)](project_programming_makeover.md) — DONE through Phase 2 on dev/0.5.0: `/programming` nav, window-less picker (tvf_ProgrammingGroups/Roster) + IPP⟷Adaptations grid with the data-driven 2-way/4-way FI cell. Deploy: tvf_ProgrammingGroups.sql + tvf_ProgrammingRoster.sql.
 
 ## Backlog / wishlist (NOT built)
+- [Pre-launch Work Queue](project_prelaunch_queue.md) — running list of user-requested 0.5.x items ahead of launch (SCR, early/late immersion reading, writing-cohort layout, Math reporting, Students→Reports rename, split-grade math pacing, linked math tasks carry-forward, math ✗→yellow circle, dark mode). Keep current as items ship.
 - [Writing Scribed Score Code (PLANNED)](project_writing_scribed_score_code.md) — score code "SCR" on Conventions+Organization only, omitted from calcs.
 - [Subject↔Course Dim (QoL, 1.0→likely 1.1)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.
