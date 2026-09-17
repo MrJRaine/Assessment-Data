@@ -163,7 +163,7 @@ RETURN
     StudentGroups AS (
         -- Homeroom candidate (any grade that carries a stored homeroom key)
         SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
         WHERE HomeroomKey IS NOT NULL
@@ -172,7 +172,7 @@ RETURN
 
         -- Section candidate (HS section enrollments)
         SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
@@ -181,7 +181,7 @@ RETURN
 
         -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
         SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
+            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
         FROM ApplicableStudents
         WHERE SchoolID IS NOT NULL
