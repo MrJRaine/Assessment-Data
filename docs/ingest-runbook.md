@@ -37,6 +37,19 @@ overlay — flushes in-flight work *before* the data shifts underneath it.
 5. **The app comes back automatically** when the cycle finishes cleanly — including runs that skipped
    some rows. Nothing more to do.
 
+### The admin pages stay usable during maintenance
+
+The down overlay covers the app but NOT `/ingest` or `/admin/maintenance` — otherwise this procedure
+would be impossible: the window lands, the overlay covers the Run button, and the only control left
+is "Clear maintenance now", which throws away the wait. Any error from the run would also be hidden
+behind it.
+
+The banner still shows on those pages, so you can see the window is live.
+
+If you close the tab and come back mid-maintenance, the overlay offers **Go to Ingest** and **Go to
+Maintenance** links — shown only to users who hold the matching capability, the same way the Clear
+button is.
+
 ### What happens if the ingest fails
 
 If `usp_TriggerIngestCycle` throws, **maintenance stays on deliberately.** The app does not come back

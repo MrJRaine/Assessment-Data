@@ -68,7 +68,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           targets={impersonationTargets}
         />
       )}
-      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} authSlot={<AuthArea />}>
+      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
       <header className="header">
         <div className="brand">
           {/* TCRCE logo at webapp/public/logo.png */}

@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from 'react'
+import { usePathname } from 'next/navigation'
 import { clearMaintenance } from '@/app/admin/maintenance/actions'
 
 // Staged maintenance lifecycle, keyed off SERVER time (each client offsets its own clock).
@@ -43,10 +44,12 @@ export function useMaintenance(): MaintenanceState {
 export default function MaintenanceProvider({
   children,
   isSysAdmin = false,
+  canRunIngest = false,
   authSlot = null,
 }: {
   children: React.ReactNode
   isSysAdmin?: boolean
+  canRunIngest?: boolean
   authSlot?: React.ReactNode // AuthArea (sign in / sign out), rendered on the down overlay
 }) {
   // Raw window from the server + the clock offset measured at fetch time.
@@ -166,6 +169,19 @@ export default function MaintenanceProvider({
 
   const admin = isSysAdmin ? { onClear: clearNow, clearing } : null
 
+  // Pages that EXIST to run maintenance are not covered by it — otherwise the documented procedure
+  // (schedule -> wait -> run the ingest) is impossible: the window lands, the overlay covers /ingest,
+  // and the only control left is "Clear maintenance now", which undoes the wait. Any error from the
+  // run would also render behind the overlay, unseen.
+  //
+  // Exempting by PATH needs no capability check of its own: both routes already gate server-side and
+  // re-check uncached (/ingest on CanRunIngest, /admin/maintenance on IsSysAdmin), so nobody can be
+  // on them without having passed authorization. That also sidesteps the fact that CanRunIngest and
+  // IsSysAdmin are different capabilities. The BANNER still shows, so the admin can see the window
+  // is live and when it started.
+  const pathname = usePathname()
+  const onMaintenanceRoute = pathname.startsWith('/ingest') || pathname.startsWith('/admin/maintenance')
+
   return (
     <Ctx.Provider value={state}>
       <MaintenanceBanner state={state} admin={admin} />
@@ -173,7 +189,14 @@ export default function MaintenanceProvider({
       {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
           grid mid auto-save). The poller keeps trying; the overlay lifts when a sysadmin EXPLICITLY
           clears the window — there is no auto-expire, so a long maintenance job is never cut short. */}
-      {state.stage === 'down' ? <MaintenanceDown message={state.message} admin={admin} authSlot={authSlot} /> : null}
+      {state.stage === 'down' && !onMaintenanceRoute ? (
+        <MaintenanceDown
+          message={state.message}
+          admin={admin}
+          authSlot={authSlot}
+          links={{ ingest: canRunIngest, maintenance: isSysAdmin }}
+        />
+      ) : null}
     </Ctx.Provider>
   )
 }
@@ -184,10 +207,12 @@ function MaintenanceDown({
   message,
   admin,
   authSlot,
+  links,
 }: {
   message: string | null
   admin: AdminClear
   authSlot: React.ReactNode
+  links: { ingest: boolean; maintenance: boolean }
 }) {
   return (
     <div className="maint-down-screen" role="alert">
@@ -198,6 +223,17 @@ function MaintenanceDown({
           <button className="btn" style={{ marginTop: '1.25rem' }} disabled={admin.clearing} onClick={admin.onClear}>
             {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}
           </button>
+        ) : null}
+
+        {/* A way OUT of the overlay to the pages that work during maintenance — gated the same way
+            the Clear button is, so a teacher never sees them. Without this, an admin who closed the
+            tab and came back would be stranded here: the nav is behind the overlay, and the only
+            control would be Clear, which throws away the window they are waiting on. */}
+        {links.ingest || links.maintenance ? (
+          <div className="maint-down-links">
+            {links.ingest ? <a href="/ingest">Go to Ingest</a> : null}
+            {links.maintenance ? <a href="/admin/maintenance">Go to Maintenance</a> : null}
+          </div>
         ) : null}
         {/* Identity controls so a non-sysadmin (or signed-out) sysadmin can switch accounts to clear
             it — otherwise the overlay would trap them with no way to reach sign-in. */}

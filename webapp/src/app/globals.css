@@ -282,6 +282,10 @@ a { color: inherit; text-decoration: none; }
 .maint-down-card { max-width: 30rem; text-align: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; }
 .maint-down-card h1 { margin: 0 0 0.75rem; font-size: 1.4rem; color: var(--ink); }
 .maint-down-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+/* Escape hatches from the overlay to the pages that still work during maintenance. Capability-gated
+   in the component, so a teacher never sees them. */
+.maint-down-links { display: flex; gap: 1.25rem; justify-content: center; margin-top: 1rem; }
+.maint-down-links a { color: var(--primary); font-weight: 600; font-size: 0.9rem; text-decoration: underline; }
 .maint-down-auth { margin-top: 1.25rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
 /* Keep the dev impersonation bar clickable above the maintenance overlay (dev testing). */
 .dev-impersonate { position: relative; z-index: 1001; }
