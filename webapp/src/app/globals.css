@@ -124,7 +124,10 @@ a { color: inherit; text-decoration: none; }
 .section-subheading { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0.9rem 0 0.4rem; }
 /* One language's block of course sections, with its "enter several at once" control on the heading row. */
 .lang-block { margin-bottom: 0.5rem; }
-.lang-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+/* margin-left:auto on the button keeps it right-aligned even when there is no heading beside it
+   (every Math block, since math courses carry no language). */
+.lang-block-head { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.lang-block-head > button { margin-left: auto; }
 /* Multi-select card: same footprint as CardLink so the grid doesn't reflow when the mode flips. */
 .pick-card { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.75rem 0.9rem; border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: 8px; background: #fff; cursor: pointer; }
 .pick-card:hover { background: #f7fbfd; }
