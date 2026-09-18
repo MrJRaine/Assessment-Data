@@ -1,14 +1,27 @@
 ---
 name: feedback_commit_cadence
-description: Commit proactively at logical checkpoints (a fix solved / a coherent unit working) without being asked — but don't micro-commit every tiny edit, and don't go silent on commits. Push stays on-request / at wrap.
-metadata:
+description: "Commit AND push proactively at logical checkpoints — I own keeping GitHub backed up. Don't micro-commit every tiny edit, don't go silent. PRs only when instructed."
+metadata: 
+  node_type: memory
   type: feedback
+  originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
+  modified: 2026-09-18T14:02:26.764Z
 ---
 
 Commit at **logical checkpoints** — whenever a discrete piece of work is solved or a coherent unit works (a bug fixed, a feature path proven, a deploy completed) — proactively, without being asked. Do NOT micro-commit after every tiny edit, and do NOT stop committing altogether.
 
-Pushing is separate: push only on explicit request or as part of the session wrap. The standing "no need to keep pushing commits after every change" instruction is about *push cadence / per-change micro-commits*, NOT a ban on committing.
+**PUSHING IS MINE TOO (corrected 2026-09-18).** The user: *"you are responsible for making sure that
+the GH files are backed up via commits and pushes and are to take care of PRs when instructed."* So I
+push at those same checkpoints — keeping the remote backed up is my job, not something to wait for.
+**PRs remain on instruction only.**
 
-**Why:** When the user said "no need to keep pushing commits after every change" (that instruction came from a pre-meeting stretch where I was committing + pushing after every minute change to keep their laptop synced — the meeting has since passed), I over-corrected and stopped committing entirely, only committing when explicitly told. The user wants the sensible middle: regular local checkpoints, clear messages, no spam, no silence.
+This REPLACES the earlier "push stays on-request / at wrap" rule recorded here. That older rule came
+from a pre-meeting stretch where I was committing + pushing after every minute change to keep the
+user's laptop synced; I over-corrected from "stop pushing constantly" into "never push," and then into
+"stop committing at all." The meeting is long past. The sensible middle stands: regular checkpoints,
+clear messages, no spam, no silence — and the remote stays current.
 
-**How to apply:** after finishing a meaningful chunk, `git commit` locally with a clear message; batch trivial/in-progress edits into the next checkpoint rather than committing each one; reserve `git push` for an explicit ask or the wrap procedure (which has standing push/PR approval). Relates to [[feedback_no_wrap_prompts]].
+**How to apply:** after finishing a meaningful chunk, `git commit` with a clear message and `git push`;
+batch trivial/in-progress edits into the next checkpoint rather than doing each one separately; open a
+PR only when told to. Relates to [[feedback_no_wrap_prompts]], [[feedback_git_workflow]] (which branch),
+[[feedback_sql_write_authorization]] (what is NOT mine to run).

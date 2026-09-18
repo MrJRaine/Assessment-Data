@@ -4,6 +4,7 @@
 - [Project: Session Archive](project_session_archive.md) — ARCHIVE, do NOT auto-read; verbatim session log (2026-04 → 06-08). Open only to recover history.
 
 ## How I work with this user (feedback)
+- [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over. Reads are not assumed either.
 - [Licensing Gate on Every Design Decision](feedback_licensing_gate_on_design.md) — state a connector/service's license class + end-user cost at full scale in the same breath; maker-account tests prove nothing.
 - [Chat Abbreviations](feedback_abbreviations.md) — user's shorthand (e.g. PS = PowerSchool).
 - [Number Formatting](feedback_number_formatting.md) — never comma as thousands separator (reads as decimal, French education).
@@ -13,7 +14,7 @@
 - [Project Email](feedback_project_email.md) — use jeffrey.raine@tcrce.ca; ignore auto-memory userEmail (personal, unrelated).
 - [No Wrap Prompts](feedback_no_wrap_prompts.md) — never suggest wrapping; only run wrap on explicit trigger.
 - [Left Off Notes Newest-First](feedback_left_off_newest_first.md) — insert each Left Off note at the TOP of the chain in docs/implementation-plan.md, NEVER append at the bottom (session-start trusts the first heading); keep .claude/ + .github/ skill mirrors in sync.
-- [Commit Cadence](feedback_commit_cadence.md) — commit proactively at logical checkpoints; push on-request / at wrap.
+- [Commit Cadence](feedback_commit_cadence.md) — commit AND push proactively at logical checkpoints; keeping GitHub backed up is mine. PRs only when instructed.
 - [Changelog As We Go](feedback_changelog_as_you_go.md) — update CHANGELOG.md (+ patchNotes.ts for user-visible changes) AS each change lands, not at release. Footer version = package.json.
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; user owns scope. ESPECIALLY never hardcode ASSESSMENT-METHODOLOGY rules (which grades/programs/languages assessed how) — build the config knob, let the admin decide.
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
