@@ -73,8 +73,8 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
 
    Shape matters independently of colour: a FILLED disc reads as "done" and inverts the meaning — the
    open centre is what says "not yet". Both are drawn in CSS, not glyphs, because a font character
-   has no adjustable stroke (the check is two borders on a rotated box; as text it stayed hairline
-   beside the ring and made the green look washed out).
+   has no adjustable stroke (as text the check stayed hairline beside the ring and made the green look
+   washed out; it is now an SVG path stroked twice — see above).
 
    The failing attempts, MEASURED by the user (trust these, not my hand arithmetic, which was wrong
    twice) — kept because they show why fill-only cannot work here:
