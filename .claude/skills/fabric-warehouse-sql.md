@@ -332,3 +332,39 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
 **`COPY INTO` FROM path is a STORAGE PATH, not a URL — use literal spaces, not `%20`.** Fabric does not URL-decode the `abfss://…` path, so `.../ELA%20Reading.csv` is looked up literally (a file named `ELA%20Reading.csv`) and matches nothing → silent 0-row load. Use the real space: `.../ELA Reading.csv`. (OneLake paths support spaces.) Same silent-0-row failure class as a non-matching glob — always `SELECT COUNT(*) FROM Stg_*` after a `COPY INTO`.
 
 **`TRY_CAST` and `FULL OUTER JOIN` are supported** (used in `load_prior_year_baseline.sql` to type StudentNumber and stitch reading↔writing per student).
+
+17. **Fabric INLINES a CTE at EVERY reference — it does not materialise it once.** This is the single
+    most expensive Fabric behaviour found so far. A CTE referenced three times has its whole subtree
+    executed three times. `tvf_TeacherRoster` had `StudentGroups` referencing `ApplicableStudents`
+    three times (homeroom / section / grade candidates), and underneath that sat a branch enumerating
+    every student in the region — so one roster load ran that scan **three times**. Symptom: a query
+    that is "obviously" cheap takes seconds; removing a *reference* (not adding an index) fixes it.
+    **Rule: count how many times each CTE is referenced. Treat every reference as a re-execution.**
+    (2026-09-18)
+
+18. **A `@parameter` prevents the optimizer pruning branches it could otherwise eliminate.** Role-branched
+    TVFs written as `WHERE c.AccessLevel = 'RegionalAnalyst'` / `IS NULL` / `IN (...)` look like only one
+    branch can match — but because the caller arrives as `@UPN`, Fabric cannot know which at plan time
+    and plans for all of them. A plain classroom teacher was paying for the analyst's region-wide scan
+    on every roster load. **Fix: invert so the query starts from the SMALL known thing (the section
+    asked for) and expresses role as a PREDICATE on those few rows, instead of pre-building a per-role
+    universe and filtering down.** Measured 5127ms → 2731ms on an 11-section warehouse, where the scan
+    itself was nearly free — i.e. the win was plan shape, and it grows with real data. (2026-09-18)
+
+19. **`Msg 8623: The query processor ran out of internal resources and could not produce a query plan.`**
+    Not a data-volume error — a plan-COMPLEXITY error, and it fires before any rows are read. Triggered
+    by an unbounded fan-out join feeding several UNION ALL branches. Two things that caused it here:
+    a `LEFT JOIN` whose predicate was meant to filter (it does not — a LEFT join keeps every row and
+    just nulls the columns, so the "filter" only reduces work *downstream*), and redundant predicates
+    left on top of predicates that already settled the same thing. **Simplify the query; do not add
+    more predicates to it.** Push filters into the branch that produces the rows, or delete the branch.
+    (2026-09-18)
+
+20. **Cold-start cost is ~1.8s and it hides inside the first query's timing.** Entra token acquisition
+    ~330ms + TDS connect ~1497ms. If connection setup is awaited inside whatever times the query, the
+    first query reports both — and because concurrent callers await the same pool promise, a single
+    cold start inflates several unrelated queries at once and makes them look individually slow. Time
+    pool acquisition SEPARATELY before drawing any conclusion about a "slow query". The handshake
+    itself is not tunable; it can only be moved off the request path (warm at startup) or kept open
+    (`pool.min` — note `tarn` defaults to `min: 0` and `idleTimeoutMillis: 30000`, so a pool left idle
+    30s empties and the next request pays the full 1.8s again). (2026-09-18)

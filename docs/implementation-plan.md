@@ -130,6 +130,17 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > **Left Off ordering convention: NEWEST FIRST.** Insert each new note directly BELOW this line, at the
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
+
+### Left Off — 2026-09-18
+- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + [[project_prelaunch_queue]]; narrative in [[project_session_archive]].
+- **Last completed step**: The banked **course-scoped / cycle-based `/enter` rewrite** — DONE and verified on dev end-to-end: one card per (cycle × subject), course-scoped group picker, same-language multi-select into a combined roster (user verified, including saves), EN/FR toggle removed.
+- **Also shipped (dev/0.5.0)**: all three roster TVFs rewritten **section-first** (reading 5127→2731ms); groups + identity caches (identity SPLIT so authorization never reads a cached capability); `prefetch={false}`; math marks redrawn (hollow yellow ring + tapered check, WCAG-compliant via the EDGE); math students no longer silently dropped when their grade has no tasks; ingest maintenance procedure (`docs/ingest-runbook.md`) + 15-min scheduling + overlay exemption for `/ingest` and `/admin/maintenance`.
+- **In progress**: nothing mid-edit. Dev warehouse and container are both current with `dev`.
+- **Next action**: **draft the ordered LIVE deploy list** — live is **46 SQL objects behind** (the whole 0.5.0 release), and that release is ALSO the fix for the slowness measured on live (~6s cold roster on old code). Dependency-sorted, with the schema MIGRATIONS (FactAssessmentWriting ConventionsScore INT→VARCHAR, DimAssessmentWindow +CycleGroupID/+AssessmentLanguage, DimProgram +ScopeBucket) separated from the idempotent DROP/CREATE objects. Launch is 2026-09-24.
+- **Unverified by the user** (built, deployed to dev, nobody has exercised them): writing roster (measured at 1928ms but never opened), the maintenance overlay exemption, the ingest 15-min scheduling + auto-clear.
+- **Awaiting the user's decision**: combined roster flat vs split by class; whether to sharpen the SQL timing labels further; whether to add a build/version column to `logs/sql-timings.tsv` so future comparisons don't blend releases.
+- **Deferred by the user**: connection pre-warm at startup and `pool.min` / longer `idleTimeoutMillis` — cold start measured at **1827ms** (330 token + 1497 TDS connect), and tarn's defaults (`min: 0`, 30s idle) mean the pool empties between page loads. User is checking the risks of holding connections open against Fabric first. Details in [[project_perf_qol_backlog]].
+- **Blockers**: None technical. Math ships **P–4 only** at launch (grades 5–6 task sets still owed by the math team — known and expected, not a defect).
 > context. (Reordered 2026-09-18 after 09-15/16/17 were appended to the bottom.)
 
 ### Left Off — 2026-09-17

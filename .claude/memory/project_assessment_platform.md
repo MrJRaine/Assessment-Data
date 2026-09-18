@@ -130,6 +130,37 @@ App: **`Student Data Staff Portal`** (broader than MVP — Phase 5 adds viewer/a
 - **scrStudentData cohort filters (built 2026-06-10) + Pack B Teacher filter (built 2026-06-12).** Centralized `colCohortFiltered`; multi-select Homeroom/Program/School (analyst-only)/Achievement/**Teacher** (admin/analyst-gated, fed by `vw_StudentCohortTeachers` — DEPLOYED). NOTE: per the licensing pivot these SQL-bound screens are maker-only until rebound to lists (admin port). The as-of-window recompute idea ("Pack C") remains deferred.
 - **Entry-layer pivot (2026-06-12)**: `sql/security/bridge_views.sql` **DEPLOYED 2026-06-19** (5 RLS-bypassing bridge views — never grant to users; the web app reads them as the SP, scoped by `@UPN` in code); `docs/sharepoint-entry-pivot.md` (spec) + `docs/it-request-entra-bridge.md` (DO NOT send — 3b supersedes) + `docs/sharepoint-site-setup.md` (site + 4 list schemas).
 - **Web-app fork (Phase 3b)**: `webapp/` — Next.js 15 + TS, containerized (Podman/Alpine). **B2–B6 all PROVEN against live Fabric.** Connection: `@azure/identity` ClientSecretCredential token + `mssql@12` (tedious 19, NOT 11/tedious 18) as the SP; reads `@UPN`-scoped inline TVFs / bridge views; writes via wrapper procs (ownership chaining). **Screens built (2026-06-22→23):** roster grid with *staged* IPP confirm (Yes = "Literacy IPP"/"Math IPP"; commits on Save, no per-click freeze) + IPP shown in Expected & Δ; dedicated IPP manager; cohort (`/students`); student detail with client-side prev/next neighbour prefetch; **in-app ingest** (upload PS export → OneLake ADLS REST → `usp_TriggerIngestCycle`). **Security pass done (2026-06-23):** fail-closed `AUTH_MODE` (`ALLOW_DEV_AUTH` opt-in), `UserError`/`toUserMessage` PII-safe errors, baseline security headers, generic health/status in prod, deleted `/api/dbcheck` + `mock.ts`. **Dev env (2026-06-23):** synthetic Dev warehouse+lakehouse (`_Dev` items, same workspace) is the safe target for the APP and for demos — **NOT a sandbox I may execute SQL against**; the user runs all SQL, dev and live alike ([[feedback_sql_write_authorization]]); `.env` swap for live — [[project_dev_live_environment_split]], [[feedback_live_pii_boundary]]. Not logged in → redirect to Entra sign-in. **UI polish (2026-06-24→25):** home page reworded to mirror the Power App landing (heading "Reading Assessment" + welcome + Student Data / Data Entry / Student IPPs cards); brand sub-label "Assessment Data" → **"Data Platform"**; nav/screen "Enter Assessments" → **"Data Entry"** (card CTA "Enter Data"); **Ingest nav item + home card are role-gated** (rendered only for RegionalAnalyst, resolved server-side in AppShell — page/actions already enforced it). Branch `phase-3b-webapp-b6`. See [[project_webapp_fabric_connection]].
+- **Data Entry flow (CURRENT, dev/0.5.0 — 2026-09-18)**: you pick a **CYCLE, not an instance**.
+  `/enter` shows ONE card per (cycle × subject); the route is
+  `/enter/cycle/<cycleGroupId>/<subject>[/<groupKey>]`. Groups are **mapped-course SECTIONS**
+  (`DimCourseAssessment`), so the COURSE supplies the entry language and there is no EN/FR toggle;
+  an ELA teacher enters English, an FLA teacher French, and non-literacy/non-math sections never
+  appear. Same-language sections **multi-select into one combined roster** (this is also how a PS
+  IPP section — `MT151` / `MT151IP` — is entered alongside its regular section; auto-pairing is a
+  post-launch QoL item). Oversight roles see every mapped-course section they would normally see,
+  each card labelled with whose class it is. Keys travel comma-joined in the `[groupKey]` segment;
+  the roster re-resolves them against the caller's own groups, so an unseen key grants nothing.
+- **Roster TVF shape (CURRENT)**: all three roster TVFs (`tvf_TeacherRoster`, `…Writing`, `…Math`)
+  use **SECTION-FIRST** resolution — `RequestedSections` → `AccessibleSections` (role as a PREDICATE)
+  → `StudentGroups` — replacing three role branches that each enumerated every student the caller
+  could see. They take a comma-delimited `@GroupKeys` LIST and resolve `SEC:` keys ONLY (homeroom /
+  `GRADE:` lenses retired here; Programming has its own TVFs). Reading 5127→2731ms on dev. WHY it
+  matters beyond speed: `@UPN` is a parameter, so Fabric could not prune the unused role branches at
+  plan time — a classroom teacher paid for the analyst's region-wide scan. See
+  `fabric-warehouse-sql.md` 17–20 for the Fabric behaviours behind this.
+- **Server-side caches (CURRENT)**: `lib/groupCache` (tvf_TeacherGroups, 30s, cleared on every save
+  so progress counts never lag) and `lib/identityCache` (AccessLevel + capabilities, 1h, cleared by
+  the ingest that changes them). **Split, deliberately**: nav chrome reads the cache, but `/cycles`,
+  `/ingest` and `/admin/maintenance` — pages AND actions — re-check with `{ fresh: true }`, so a
+  stale entry can only show a menu item, never authorize an action. `CardLink` sets
+  `prefetch={false}`: these routes are force-dynamic, so a prefetch runs the page server-side.
+- **Ingest procedure (CURRENT)**: never ingest while teachers are entering — the save path
+  scope-checks each student against the caller's roster, so a mid-ingest save fails with "Not in your
+  roster" and the entry is lost. `/ingest` schedules a **15-minute** maintenance window (hidden tabs
+  poll every 8 min, so shorter risks their work not auto-saving) and clears it automatically on a
+  CLEAN finish; on a THROW the window stays ON deliberately. The down overlay EXEMPTS `/ingest` and
+  `/admin/maintenance`, and offers capability-gated links to them, so an admin is never stranded.
+  Full procedure + SQL fallback: `docs/ingest-runbook.md`.
 - **DEPLOYED TO LIVE since last wrap (2026-06-24→25):** the SCD same-day re-version fix + same-day **revival** (drop-then-re-add) + staff HomeSchoolID `'0000'` fix (all 4 merge procs); the **monthly-window / multiple-entry / late-entry** model (`usp_GenerateMonthlyWindows`, reworked `usp_UpsertReadingAssessment`) with 2026-2027 windows generated. The `@UPN` iTVFs + `@CallerUPN` procs were already on live (confirmed).
 - **DEPLOYED TO LIVE 2026-06 (post-06-25 wrap, per git log):** (a) the **whole Writing SQL** — `usp_UpsertWritingAssessment`, the three `tvf_*Writing`, DQ writing checks, `usp_GenerateMonthlyWindows` (writing scopes) + `EXEC '2026-2027'`, `grant_webapp_sp.sql` (writing windows confirmed on live); (b) the **entered-count fix** — `tvf_UserAssessmentWindows` + `tvf_TeacherGroups` count `EnteredStudentCount` by window TYPE (writing windows used to show 0 entered). NOTE those two do NOT self-grant → `grant_webapp_sp.sql` must follow any redeploy of them.
 - **Writing WEB UI + auth hardening — BUILT + COMMITTED (branch `phase-3b-webapp-b6`, PR #24):** writing entry grid (`WritingRosterEntry` + `saveWritingAssessments`), `/students` cohort `?subject` toggle, student-detail toggle (4-trait history + avg-over-time trend), `/enter` Reading/Writing sub-headings, subject-persistent cohort→detail nav, `db.ts` `runOnPool()` pool self-heal; **login/data Entra app split** — `auth.ts` reads `AUTH_ENTRA_*` (dedicated login app), `db.ts` reads `ENTRA_*` (warehouse SP), NO fallback; **file-mounted secrets** (`load-secrets.cjs` preloaded via `node --require`, podman `*_FILE` convention, fail-closed on missing mount). See [[project_webapp_fabric_connection]].

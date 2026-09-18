@@ -22,6 +22,7 @@
 - [Troubleshooting Method](feedback_troubleshooting_method.md) — gather facts before pinning a cause; one diagnostic at a time; wait for promised results.
 - [Loading States](feedback_loading_states.md) — show a loading indicator through the WHOLE async save→refresh (gate on isPending).
 - [Select all / Clear all Labels](feedback_select_clear_all_labels.md) — EXACT labels "Select all" / "Clear all" app-wide.
+- [Never Silently Omit](feedback_never_silently_omit.md) — UX drives adoption; anything filtered, dropped or unavailable must SAY SO, name who/what is affected, and say what to do. A silent omission is a defect even when the filter is correct.
 - [Avoid the term "assessment"](feedback_avoid_assessment_term.md) — keep "assessment" out of user-facing text; prefer "results"/"Short Cycle". Internal identifiers stay.
 
 ## Data residency / PII / environments
