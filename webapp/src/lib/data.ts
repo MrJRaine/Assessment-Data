@@ -531,10 +531,20 @@ export interface CallerCapabilities {
  * a staff email with no row here has NO admin capabilities. IsSysAdmin implies every capability.
  * Gates /cycles and /ingest (their pages, server actions, nav items, and home cards).
  */
-export async function getCallerCapabilities(upn: string): Promise<CallerCapabilities> {
-  // Same story as the access level: resolved on every navigation, cached an hour, cleared by ingest.
-  const cachedCaps = readCapabilities(upn)
-  if (cachedCaps.hit) return cachedCaps.value
+export async function getCallerCapabilities(
+  upn: string,
+  opts: { fresh?: boolean } = {},
+): Promise<CallerCapabilities> {
+  // Cached an hour (resolved on every navigation) and cleared by the ingest that can change it.
+  //
+  // `fresh: true` SKIPS the cache. The split that makes the TTL safe: rendering the nav reads the
+  // cache, but anything that AUTHORIZES a privileged action re-checks live. So the worst a stale
+  // entry can do is leave a menu item visible for an hour — it can never grant an action after the
+  // capability was removed. Those actions are rare, so the extra round trip costs nothing.
+  if (!opts.fresh) {
+    const cachedCaps = readCapabilities(upn)
+    if (cachedCaps.hit) return cachedCaps.value
+  }
 
   // Capabilities drive the app chrome (nav gating), so this runs on the FIRST authenticated render.
   // A cold connection pool / token warm-up can make that first query throw; retry a few times so the

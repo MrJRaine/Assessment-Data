@@ -13,7 +13,8 @@ import { revalidatePath } from 'next/cache'
 // crafted request can't bypass it; the upload writes PS PII to OneLake, so this gate matters.
 async function assertIngestAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
-  const caps = await getCallerCapabilities(upn)
+  // fresh: authorization must never come from a cached capability — see lib/identityCache.
+  const caps = await getCallerCapabilities(upn, { fresh: true })
   if (!caps.canRunIngest) {
     throw new UserError('You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed.')
   }

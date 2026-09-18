@@ -11,7 +11,7 @@ export default async function IngestPage() {
   let allowed = false
   let error: string | null = null
   try {
-    allowed = (await getCallerCapabilities(upn)).canRunIngest
+    allowed = (await getCallerCapabilities(upn, { fresh: true })).canRunIngest
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }

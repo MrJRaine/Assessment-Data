@@ -12,7 +12,8 @@ import { execProc } from '@/lib/db'
  */
 async function requireCycleAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
-  const caps = await getCallerCapabilities(upn)
+  // fresh: authorization must never come from a cached capability — see lib/identityCache.
+  const caps = await getCallerCapabilities(upn, { fresh: true })
   if (!caps.canManageCycles) {
     throw new Error('You do not have permission to manage assessment cycles.')
   }

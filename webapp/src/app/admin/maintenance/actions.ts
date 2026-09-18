@@ -18,7 +18,8 @@ function toSqlUtc(d: Date): string {
 
 async function assertSysAdmin(): Promise<string> {
   const upn = await getCurrentUpn()
-  const caps = await getCallerCapabilities(upn)
+  // fresh: authorization must never come from a cached capability — see lib/identityCache.
+  const caps = await getCallerCapabilities(upn, { fresh: true })
   if (!caps.isSysAdmin) throw new Error('Not authorized.')
   return upn
 }

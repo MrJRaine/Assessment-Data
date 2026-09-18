@@ -12,7 +12,7 @@ export default async function CyclesPage() {
   let cycles: ShortCycle[] = []
   let error: string | null = null
   try {
-    allowed = (await getCallerCapabilities(upn)).canManageCycles
+    allowed = (await getCallerCapabilities(upn, { fresh: true })).canManageCycles
     if (allowed) cycles = await getShortCycles()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
