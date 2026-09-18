@@ -20,3 +20,6 @@ data/imports/*
 # Editor + local scratch dumps
 .vscode/
 math-xlsx-dump.txt
+
+# Local SQL timing capture (scripts/redeploy-dev.sh) — measurements, not source
+logs/
