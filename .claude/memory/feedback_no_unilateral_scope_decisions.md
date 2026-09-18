@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 2132ef2f-c5ac-4703-9c69-7138263cb7d1
-  modified: 2026-09-18T15:42:34.788Z
+  modified: 2026-09-18T15:45:49.136Z
 ---
 
 When proposing a build plan or stack-rank, do NOT silently park user requirements as "deferred" / "V1.5" / "out of MVP" without explicit user confirmation. This includes cases where the work feels large or where I think I'm being helpful by trimming scope.
@@ -33,6 +33,14 @@ I read as a response *"was actually sent while you were thinking and composing t
 
 A message that removes an OBJECTION is not approval of a DESIGN. If an arriving message does not
 actually address my open question, the question is still open — say so and wait.
+
+**Worse than either failure alone: I then used the misread fact to OVERRIDE the consent I had
+imagined.** The plan I proposed included a safeguard; I dropped it on the strength of a remark the
+user had not offered for that purpose, so even the approval I wrongly assumed would not have covered
+what I shipped. The user: *"you used a misinterpreted fact to override the imagined consent which is
+worse."* Two fabrications stacked — invented consent, then moved my own baseline underneath it. The
+guard: if I find myself REMOVING something from a plan I proposed, that is a new proposal and needs
+saying out loud, never a silent simplification justified by something the user said in passing.
 
 **This user is explicit when they approve**: "do it", "let's try it", "go ahead", "fix it to show
 all students". Anything less than that is not a go. Same for a permission dialog answered while they
