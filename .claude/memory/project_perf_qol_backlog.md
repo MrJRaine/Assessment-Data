@@ -47,3 +47,43 @@ a single reading, and the pool ceiling gets dialled in over the same window. Jus
 given measurement came from.
 
 Related: [[project_capacity_rightsizing_intent]], [[project_prelaunch_queue]], [[project_dark_mode]] (other post-1.0 QoL).
+
+## Connection cold start — MEASURED 2026-09-18, decision DEFERRED
+
+Every cold pool costs a user **~1.8s before any query runs**:
+
+| | ms |
+|---|---|
+| Entra token | 330 |
+| **TDS connect** | **1497** |
+| pool total | 1827 |
+
+The handshake is 82% of it, so pre-warming the *credential* would buy almost nothing. The handshake
+itself is not tunable — TLS + Fabric session setup against the SQL endpoint.
+
+**How often it happens is set by OUR config, not Fabric's.** `webapp/src/lib/db.ts` sets
+`pool: { max: 20 }` only, so tarn's defaults apply (`tarn/dist/Pool.js:74`): `min = 0` and
+`idleTimeoutMillis = 30000`. The pool therefore empties after **30 seconds idle** and the next
+request pays the full 1.8s again.
+
+**This interacts with the hidden-tab poll change made the same day.** Visible tabs heartbeat every
+8s (keeps the pool warm); hidden tabs were moved to 480s to cut wake-ups. Whenever every tab is
+backgrounded — most of the working day — the pool goes cold. That optimisation quietly bought a cold
+start.
+
+**Two fixes identified, NEITHER APPLIED — user deferred 2026-09-18** pending advice on the risks of
+holding connections open against Fabric (capacity, security, cost):
+1. **Pre-warm at startup** via `instrumentation.ts` `register()` — moves the 1.8s into container
+   boot where nobody waits. Highest value: it lands on every deploy, launch day included.
+2. **`pool.min: 1-2` + a longer `idleTimeoutMillis`** — hold connections rather than sending
+   keepalive traffic. `runOnPool` already recovers from a server-side drop (fresh token, one retry),
+   so the failure mode is one slow request, not an error.
+
+**Still unknown: Fabric's OWN server-side idle timeout.** Not asserted here because it was never
+measured. Now testable — leave the container idle, load a page, and look for a `<tds connect>` line.
+
+**Lesson worth keeping:** this cost was invisible for most of the session because `getPool()` is
+awaited INSIDE each query's timer, so setup was reported as the first query's duration — and
+concurrent callers awaiting the same promise all inherited it, making several unrelated queries look
+slow at once. The user asked about pool overhead TWICE before it was measured; both times it was
+answered by reading the code instead. Measure. See [[feedback_sql_write_authorization]].
