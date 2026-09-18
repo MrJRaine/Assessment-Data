@@ -1,5 +1,6 @@
 import 'server-only'
 import { queryAsUser, query } from './db'
+import { readGroups, writeGroups } from './groupCache'
 
 /**
  * Secured data-access layer (SERVER-ONLY).
@@ -220,6 +221,11 @@ export async function getTeacherGroups(
   cycleGroupId: string,
   assessmentType: string,
 ): Promise<TeacherGroup[]> {
+  // The picker and the roster page both need these rows, seconds apart, and the TVF costs 1.4-2.2s.
+  // Cached for 30s per (user, cycle, subject) and invalidated on save — see lib/groupCache.
+  const cached = readGroups(upn, cycleGroupId, assessmentType)
+  if (cached) return cached
+
   const rows = await queryAsUser<{
     GroupKey: string
     GroupLabel: string | null
@@ -239,7 +245,7 @@ export async function getTeacherGroups(
     'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) ORDER BY GroupKey',
     { CycleGroupID: cycleGroupId, AssessmentType: assessmentType },
   )
-  return rows.map((r) => {
+  const groups: TeacherGroup[] = rows.map((r) => {
     const key = String(r.GroupKey)
     // The TVF supplies the display label (the course name + section number);
     // the key is the URL-safe token and no longer encodes the label.
@@ -264,6 +270,8 @@ export async function getTeacherGroups(
       enteredCount: Number(r.EnteredStudentCount ?? 0),
     }
   })
+  writeGroups(upn, cycleGroupId, assessmentType, groups)
+  return groups
 }
 
 export interface RosterStudent {

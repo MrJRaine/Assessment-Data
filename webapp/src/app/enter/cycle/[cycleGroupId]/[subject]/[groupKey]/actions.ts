@@ -5,6 +5,7 @@ import { getCurrentUpn } from '@/lib/auth'
 import { execProc } from '@/lib/db'
 import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate, getMathRoster, type WritingLanguage } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
+import { invalidateGroups } from '@/lib/groupCache'
 
 // The grid's groupKey can carry SEVERAL comma-joined classes (the picker's "enter several at once"
 // mode). The scope gates below re-resolve the roster for the same set, so a combined roster admits
@@ -68,6 +69,11 @@ export async function saveReadingAssessments(
     }
   }
 
+  // Progress counts on the picker cards come from the CACHED tvf_TeacherGroups rows, so drop that
+  // cache here — otherwise a teacher saves, hits Back, and sees their OLD count, which reads as
+  // data loss even though the write succeeded.
+  invalidateGroups(upn)
+
   // No re-read: the grid updates optimistically from the entry state, and the page is
   // force-dynamic so any later navigation re-fetches fresh anyway.
   return { saved, errors }
@@ -125,6 +131,7 @@ export async function saveWritingAssessments(
       errors.push({ studentNumber: e.studentNumber, message: toUserMessage(err) })
     }
   }
+  invalidateGroups(upn) // keep the picker's progress counts truthful after a save
   return { saved, errors }
 }
 
@@ -181,6 +188,7 @@ export async function saveMathAssessments(
   // The roster URL is keyed on the CYCLE now (/enter/cycle/<cycleGroupId>/<subject>/<groupKey>) and
   // the action only knows the window, so revalidate the /enter subtree rather than a path that no
   // longer resolves — this also refreshes the cycle card's progress count on the way back out.
+  invalidateGroups(upn) // keep the picker's progress counts truthful after a save
   revalidatePath('/enter', 'layout')
   return { saved, errors }
 }
