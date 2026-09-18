@@ -466,8 +466,14 @@ a { color: inherit; text-decoration: none; }
    State is never colour-alone either (✓ / disc / IPP / dot differ in shape), so 1.4.1 holds too. */
 .mtoggle.no .ring {
   width: 0.95em; height: 0.95em; border-radius: 50%; box-sizing: border-box;
-  background: #ffd21f;           /* the state colour — now fill, not contrast */
-  border: 3px solid var(--ink);  /* this is what actually satisfies 1.4.11 */
+  /* HOLLOW on purpose: an open circle reads as "not yet / empty"; a filled disc reads as done,
+     which is the opposite message. The cell shows through the middle. */
+  background: transparent;
+  border: 4px solid #ffd21f;
+  /* Dark hairline on BOTH edges of the yellow band. 1.4.11 asks for 3:1 against ADJACENT colours,
+     so these edges carry the ratio (--ink is ~14:1 on the cell) and the yellow stays bright. An
+     outer ring alone would leave the inner boundary as yellow-on-cell, which fails. */
+  box-shadow: 0 0 0 1px var(--ink), inset 0 0 0 1px var(--ink);
 }
 /* IPP stays TEXT, so it scales on its own line — big enough to read, small enough not to wrap. */
 .mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .8rem; letter-spacing: .02em; }
