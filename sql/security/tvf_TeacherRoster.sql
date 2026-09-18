@@ -270,9 +270,6 @@ RETURN
                                           WHEN sg.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END)
     LEFT JOIN ReadingCycleRank lastR ON lastR.StudentNumber = sg.StudentNumber AND lastR.rn = 1
     LEFT JOIN ReadingCycleRank prevR ON prevR.StudentNumber = sg.StudentNumber AND prevR.rn = 2
-    -- Match ANY key in the delimited list. Same guarded-LIKE trick as the program-scope match, so
-    -- there's no STRING_SPLIT dependency. Group keys contain ':' and '-' but never ',', so the
-    -- delimiter is unambiguous.
     -- No group-key filter here any more: RequestedSections already matched @GroupKeys and
     -- AccessibleSections already checked permission, so every row reaching this point is wanted.
 );
