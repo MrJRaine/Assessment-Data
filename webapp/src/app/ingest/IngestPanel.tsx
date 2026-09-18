@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useTransition } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import {
   uploadIngestFile,
   runIngestCycle,
@@ -43,21 +43,11 @@ export default function IngestPanel() {
     uploadIngestFile(topic, fd).then((res) => setRow(topic, { status: res }))
   }
 
-  // Countdown to the scheduled pause. Ticks locally off the returned timestamp rather than polling:
-  // the maintenance poller already owns the authoritative state, so this exists only so the admin can
-  // see how long is left instead of watching a clock.
+  // No countdown here on purpose: this schedules the SAME maintenance window as /admin/maintenance,
+  // so the app-wide banner already shows the time and a live (mm:ss) on every page, this one
+  // included. A second clock beside it would just be another thing to keep in sync.
   const [notice, setNotice] = useState<NoticeResult | null>(null)
   const [scheduling, startSchedule] = useTransition()
-  const [countdown, setCountdown] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!notice?.ok || !notice.at) return
-    const target = new Date(notice.at).getTime()
-    const tick = () => setCountdown(Math.max(0, Math.round((target - Date.now()) / 1000)))
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [notice])
 
   function schedule() {
     setNotice(null)
@@ -133,23 +123,19 @@ export default function IngestPanel() {
             message that sounds like their fault. The staged banner -> lock -> auto-save flushes
             their work first. See docs/ingest-runbook.md. */}
         <div className="actions">
-          <button className="btn-secondary" onClick={schedule} disabled={scheduling || running || countdown !== null}>
+          <button className="btn-secondary" onClick={schedule} disabled={scheduling || running}>
             {scheduling ? 'Scheduling…' : `Schedule maintenance (${INGEST_NOTICE_MINUTES} min)`}
           </button>
-          {countdown !== null ? (
-            <span className={countdown > 0 ? 'muted' : 'ingest-ok'}>
-              {countdown > 0
-                ? `App pauses in ${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, '0')} — wait for it before running.`
-                : 'App is paused. Safe to run the ingest.'}
-            </span>
-          ) : notice && !notice.ok ? (
+          {notice?.ok ? (
+            <span className="ingest-ok">Scheduled — see the banner for the time and countdown.</span>
+          ) : notice ? (
             <span className="ingest-err">{notice.error}</span>
           ) : null}
         </div>
 
-        {/* Step 2 — the run itself. Deliberately NOT gated on the countdown: a window may already
-            have been set by hand or from the Maintenance page, and blocking on state this component
-            cannot see would be worse than letting an admin judge it. */}
+        {/* Step 2 — the run itself. Deliberately NOT gated on the window: it may have been set by
+            hand or from the Maintenance page, and blocking on state this component cannot see would
+            be worse than letting the admin read the banner and judge. */}
         <div className="actions">
           <button className="btn" onClick={run} disabled={running}>
             {running ? 'Running ingest cycle…' : 'Run ingest cycle'}
@@ -158,12 +144,6 @@ export default function IngestPanel() {
             <span className={runResult.ok ? 'ingest-ok' : 'ingest-err'}>{runResult.message}</span>
           ) : null}
         </div>
-        {countdown !== null && countdown > 0 && !running ? (
-          <p className="muted">
-            Running now would cut the warning short — background tabs only check every 8 minutes, so
-            some teachers&apos; work may not have saved yet.
-          </p>
-        ) : null}
         {running ? (
           <p className="muted">The orchestrator runs all loads + merges + the data-quality gate; this can take a minute.</p>
         ) : null}
