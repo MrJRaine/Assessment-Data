@@ -89,7 +89,7 @@ export function SmallGroupFilter({ sg, note }: { sg: SmallGroup; note?: string }
     <>
       {multi && (
         <>
-          <p className="filter-label">Grades in this homeroom</p>
+          <p className="filter-label">Grades in this class</p>
           <div className="grade-chips">
             {gradeGroups.map((g) => (
               <button

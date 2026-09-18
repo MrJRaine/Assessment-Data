@@ -178,7 +178,7 @@ function LanguageBlock({
               </button>
             ) : (
               <button type="button" className="btn-ghost" onClick={() => setPicking(true)}>
-                Enter several at once
+                Select Multiple Sections
               </button>
             ))}
         </div>

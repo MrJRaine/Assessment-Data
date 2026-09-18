@@ -251,7 +251,7 @@ export default function MathRosterEntry({
       {/* grade filter */}
       {multi && (
         <>
-          <p className="filter-label">Grades in this homeroom</p>
+          <p className="filter-label">Grades in this class</p>
           <div className="grade-chips">
             {grades.map((g) => (
               <button
