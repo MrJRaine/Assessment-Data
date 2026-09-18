@@ -475,16 +475,17 @@ export default function MathRosterEntry({
                                             // a thinner bright one on top. Same trick as the ring —
                                             // the dark edge carries the contrast, so the green is
                                             // free to be a real green instead of a muddy dark one.
-                                            // A FILLED, closed outline rather than a stroked line: a
-                                            // stroke is one uniform width, so it can never taper.
-                                            // Traced fat at the elbow and converging to a point at
-                                            // each tip, with both arms bowed outward.
-                                            //   outer edge: left tip -> under the elbow -> top tip
-                                            //   inner edge: back down to the elbow -> left tip
-                                            // The two meet exactly at each tip, which is what makes
-                                            // the points sharp.
+                                            // One path stroked TWICE — a slightly wider dark stroke
+                                            // underneath, the bright one on top — so the dark reads
+                                            // as a thin edge on each side. The dark edge is what
+                                            // satisfies SC 1.4.11, which frees the green to be an
+                                            // actual green rather than the muddy dark one it had to
+                                            // be when the colour itself had to carry the ratio.
+                                            // Curves, not straight segments, and no taper: geometry
+                                            // chosen against the live preview rather than guessed.
                                             <svg className="check" viewBox="0 0 24 24" aria-hidden="true">
-                                              <path d="M3.2 12.9 Q6.3 15.4 9.5 20.5 Q14.4 11.4 21 4.0 Q14.9 12.7 9.9 16.1 Q7.3 14.5 3.2 12.9 Z" />
+                                              <path className="edge" d="M3.6 12.6 Q8.06 14.43 9.6 19 Q13.1 10.53 20.4 5" />
+                                              <path className="fill" d="M3.6 12.6 Q8.06 14.43 9.6 19 Q13.1 10.53 20.4 5" />
                                             </svg>
                                           )
                                           : glyph}
