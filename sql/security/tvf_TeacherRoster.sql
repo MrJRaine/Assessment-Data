@@ -127,13 +127,27 @@ RETURN
           AND (wed.ProgramScope IS NULL
                OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
           -- Language track scoped by the CYCLE (reading has no per-request toggle; the cycle IS the
-          -- language). NULL = unscoped -> all students, per-student scale (legacy). Structural rule:
-          -- French reading = French Immersion, minus J020 (late immersion reads English, no FR bench).
-          -- English reading = open to all programs; grade/program scope comes from the cycle config.
+          -- language). NULL = unscoped -> all students, per-student scale (legacy).
+          --
+          -- STRUCTURAL only: French reading = French Immersion. A French reading assessment on a
+          -- non-immersion student is meaningless whatever anyone decides, so it is safe here.
+          --
+          -- The `AND s.ProgramCode <> 'J020'` that used to sit on this line is GONE (2026-09-18).
+          -- "Late immersion reads English" is POLICY, not structure — it follows from French
+          -- benchmarks not existing yet, and it is already expressed where it belongs: the cycle's
+          -- ProgramScope. J020 sits in the Late Immersion bucket (DimProgram.ScopeBucket), so the
+          -- scope match above already excludes it from an Early-Immersion-scoped French instance.
+          -- Keeping it here made the TVF silently override the config, meaning a scope change on
+          -- /cycles would not do what it says, and it cost a per-row comparison plus a redundant
+          -- predicate fed to a planner that has already proved fragile on this query.
+          --
+          -- CONSEQUENCE: the config is now the single source of truth. A French reading instance
+          -- scoped to all programs (NULL) or including Late Immersion WILL include J020 students.
+          -- That is the intended behaviour — the admin decides — but it is no longer caught here.
           AND (
                 wed.AssessmentLanguage IS NULL
              OR wed.AssessmentLanguage = 'English'
-             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion' AND s.ProgramCode <> 'J020')
+             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion')
               )
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
