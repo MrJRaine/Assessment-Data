@@ -132,18 +132,40 @@ async function runOnPool<T>(fn: (pool: sql.ConnectionPool) => Promise<T>): Promi
 }
 
 /** Run a query that takes no per-user filtering (e.g. reference/lookup reads). */
+/**
+ * Per-query timing, on when SQL_TIMING=1 (dev diagnostics only — off in prod, no PII in the label).
+ * A page can issue several queries IN SERIES, so a slow page is not necessarily a slow query; this
+ * prints one line per query so the split between "one expensive query" and "four cheap ones in a
+ * row" is visible in `podman logs` instead of being guessed at.
+ */
+const TIMING = process.env.SQL_TIMING === '1'
+// First TVF/proc/table name in the statement — enough to identify it, never any parameter values.
+function sqlLabel(text: string): string {
+  const m = text.match(/dbo\.(\w+)/) ?? text.match(/FROM\s+(\w+)/i)
+  return m ? m[1] : text.slice(0, 40).replace(/\s+/g, ' ')
+}
+async function timed<T>(text: string, fn: () => Promise<T>): Promise<T> {
+  if (!TIMING) return fn()
+  const t0 = Date.now()
+  try {
+    return await fn()
+  } finally {
+    console.log(`[sql] ${Date.now() - t0}ms  ${sqlLabel(text)}`)
+  }
+}
+
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  return runOnPool(async (pool) => {
+  return timed(text, () => runOnPool(async (pool) => {
     const request = pool.request()
     for (const [name, value] of Object.entries(params)) {
       request.input(name, value)
     }
     const result = await request.query<T>(text)
     return result.recordset
-  })
+  }))
 }
 
 /**
@@ -159,7 +181,7 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  return runOnPool(async (pool) => {
+  return timed(text, () => runOnPool(async (pool) => {
     const request = pool.request()
     request.input('UPN', sql.VarChar(256), upn)
     for (const [name, value] of Object.entries(params)) {
@@ -167,7 +189,7 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
     }
     const result = await request.query<T>(text)
     return result.recordset
-  })
+  }))
 }
 
 /**
