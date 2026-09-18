@@ -4,6 +4,8 @@ import { getCurrentUpn } from '@/lib/auth'
 import { getCallerCapabilities } from '@/lib/data'
 import { execProc } from '@/lib/db'
 import { toUserMessage, UserError } from '@/lib/errors'
+import { invalidateAllIdentities } from '@/lib/identityCache'
+import { invalidateAllGroups } from '@/lib/groupCache'
 import { uploadImportFile, IMPORT_TOPICS, type ImportTopic } from '@/lib/onelake'
 import { revalidatePath } from 'next/cache'
 
@@ -60,6 +62,12 @@ export async function runIngestCycle(skipCoTeachers: boolean): Promise<RunResult
   try {
     const upn = await assertIngestAdmin()
     await execProc('usp_TriggerIngestCycle', { SkipCoTeachers: skipCoTeachers ? 1 : 0, CallerUPN: upn })
+    // The ingest rewrites DimStaff and StaffAppAccess-adjacent data, so every cached role and
+    // capability is now potentially wrong. Clearing here is what makes the 1h TTL on those caches
+    // safe: they can only be stale until the data behind them actually changes, and this is that
+    // moment. Rosters too — group membership is exactly what an ingest moves.
+    invalidateAllIdentities()
+    invalidateAllGroups()
     revalidatePath('/ingest')
     return { ok: true, message: 'Ingest cycle completed successfully.' }
   } catch (e) {

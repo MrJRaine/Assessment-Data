@@ -1,6 +1,7 @@
 import 'server-only'
 import { queryAsUser, query } from './db'
 import { readGroups, writeGroups } from './groupCache'
+import { readAccessLevel, writeAccessLevel, readCapabilities, writeCapabilities } from './identityCache'
 
 /**
  * Secured data-access layer (SERVER-ONLY).
@@ -504,11 +505,18 @@ export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]>
  * actions (e.g. ingest upload/trigger) server-side, mirroring the proc role checks.
  */
 export async function getCallerAccessLevel(upn: string): Promise<string | null> {
+  // Resolved on every navigation, so cached for an hour and cleared by the ingest that can change
+  // it. See lib/identityCache for why an hour is safe against a WEEKLY ingest.
+  const cached = readAccessLevel(upn)
+  if (cached.hit) return cached.value
+
   const rows = await query<{ AccessLevel: string | null }>(
     `SELECT TOP 1 AccessLevel FROM dbo.DimStaff WHERE LOWER(Email) = LOWER(@UPN) AND IsCurrent = 1`,
     { UPN: upn },
   )
-  return rows.length ? rows[0].AccessLevel ?? null : null
+  const accessLevel = rows.length ? rows[0].AccessLevel ?? null : null
+  writeAccessLevel(upn, accessLevel)
+  return accessLevel
 }
 
 export interface CallerCapabilities {
@@ -524,6 +532,10 @@ export interface CallerCapabilities {
  * Gates /cycles and /ingest (their pages, server actions, nav items, and home cards).
  */
 export async function getCallerCapabilities(upn: string): Promise<CallerCapabilities> {
+  // Same story as the access level: resolved on every navigation, cached an hour, cleared by ingest.
+  const cachedCaps = readCapabilities(upn)
+  if (cachedCaps.hit) return cachedCaps.value
+
   // Capabilities drive the app chrome (nav gating), so this runs on the FIRST authenticated render.
   // A cold connection pool / token warm-up can make that first query throw; retry a few times so the
   // nav resolves correctly without the user having to refresh. A "no row" result is NOT an error
@@ -537,11 +549,15 @@ export async function getCallerCapabilities(upn: string): Promise<CallerCapabili
       )
       const r = rows[0]
       const sysAdmin = Boolean(r?.IsSysAdmin)
-      return {
+      const caps: CallerCapabilities = {
         isSysAdmin: sysAdmin,
         canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
         canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
       }
+      // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
+      // poison the cache with a "no capabilities" answer for an hour.
+      writeCapabilities(upn, caps)
+      return caps
     } catch (e) {
       lastErr = e
       await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))

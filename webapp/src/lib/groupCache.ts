@@ -52,3 +52,8 @@ export function invalidateGroups(upn: string): void {
   const prefix = `${upn.toLowerCase()}|`
   for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k)
 }
+
+/** Everyone — called after an ingest, which is precisely what moves students between sections. */
+export function invalidateAllGroups(): void {
+  cache.clear()
+}
