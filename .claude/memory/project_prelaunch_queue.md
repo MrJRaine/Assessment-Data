@@ -1,121 +1,102 @@
 ---
 name: project_prelaunch_queue
-description: Running list of user-requested build items ahead of the ~1-week-out launch (0.5.x cycle). Work through these; each may get its own memory when tackled. Not all designed yet.
+description: Release-triaged work queue. 0.5.0 goes LIVE late Monday 2026-09-22, then 1.0 starts. User triaged every item 2026-09-18 — respect those calls; do not re-litigate or silently re-order.
 metadata: 
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-18T16:30:06.809Z
 ---
 
-**Pre-launch work queue** (captured 2026-09-17; launch ~1 week out). Order not fixed — user directs.
-Tackle the live-writing / live-warehouse ones with scope-first sign-off. Mark items done as they ship
-and keep this list current (see [[feedback_changelog_as_you_go]]).
+**Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a release;
+don't promote or defer an item without asking.
 
-1. **Writing `SCR` (Scribed)** — ✅ DONE on dev (built cabdd56, deployed + verified 2026-09-17). SCR on
-   **Conventions only** (updated from Conventions+Organization); omitted from the average (sum/count
-   over scored traits). ConventionsScore INT→VARCHAR via multi-step migration. Still to ship LIVE at
-   the 0.5.0 release (see CHANGELOG deploy list). Full spec [[project_writing_scribed_score_code]].
-2. **Dual-language assessment + course write-scoping** — SCOPED, see [[project_assessment_language_tracks]].
-   Reading+writing become language-tracked (EN/FR) via the CYCLE (no fact schema change); EN/FR toggle
-   on picker + entry rosters; J020 reading = English only; course-based WRITE scoping (course-name list
-   PENDING from user). Reuses the IPP/Adaptation split rule. Phased: (1) J020 reading carve-out now,
-   (2) language track + toggle, (3) course write-scoping when list arrives.
-3. **Revisit the Writing student-cohort page layout.** UX rework of `/students` (writing subject view);
-   specifics TBD.
-4. **Math reporting.** Cohort/reporting pages for Math (by-task proportion + by-student achievement
-   level) — the reporting side of [[project_math_assessment_model]] (entry is built, reporting is TODO).
-5. **Rename the "Students" page → "Reports".** Nav + page title + home card; the page is really the
-   reporting/cohort view.
-6. **Math task → score pull respects split-grade pacing.** A split-grade homeroom can have different
-   pacing guides per grade to align content across the split; the task set pulled for a student must
-   reflect that grade's pacing, not just grade+month. Revisit `tvf_TeacherRosterMath` task selection
-   (currently DimMathTask by GradeCode + AssessmentMonth). Design TBD.
-7. **Linked math tasks carry mastery forward.** If a task is LINKED to a later task and the student was
-   "Meeting" on the earlier one, the later task starts the cycle already showing Meeting for that
-   student. Needs a task-link model in DimMathTask + carry-forward logic in the roster read/entry.
-8. **Math data entry: red ✗ → yellow circle.** ✅ DONE on dev 2026-09-18. Final form: a HOLLOW circle,
-   bright `#ffd21f` band between `#b07d05` edges, drawn in CSS (not a glyph) so its weight is settable;
-   the check is drawn to match. Marks scaled to ~32px in the 44px cell. WCAG-compliant — see item 9.
-   Stored value and click-cycle unchanged.
-9. **Design/aesthetics pass — includes a WCAG 2.1 AA sweep.** The project IS working toward WCAG 2.1
-   AA (user, 2026-09-18), but deliberately NOT letting it block feature work: *"good to keep in mind,
-   [but] I don't want to get bogged down in it before we are working on cleaning up design
-   aesthetics."* So flag contrast/a11y issues in passing, do NOT stop to fix them, and collect them
-   here for the pass.
+---
 
-   **RESOLVED 2026-09-18 — math "not yet" ring is now COMPLIANT.** Final form: a hollow circle with a
-   bright `#ffd21f` band (5px) sandwiched between `#b07d05` edges (2px, via `box-shadow` outer +
-   inset). The EDGE carries SC 1.4.11, measured **3.38:1 on `#f5f7f9`** and **3.32:1 on `#eef6fb`**
-   (hover) — both over the 3:1 bar.
+# 0.5.0 — ships LIVE late Monday 2026-09-22
 
-   **Same technique applied to the CHECK, also signed off 2026-09-18.** Was `#2f8f4e`, which looked
-   olive for the same reason the amber looked brown — it had to be dark enough to pass alone. Now one
-   SVG path stroked twice: `#176a37` at 6 under `#35c75a` at 3.5, giving a 1.25-unit dark edge each
-   side. Curved (bows -2.0 / -2.4), no taper — a tapered filled outline was tried and looked wrong at
-   this size.
+**Monday order:**
 
-   **Watch the edge WIDTH, not just its colour.** An edge only carries 1.4.11 if it actually renders:
-   the viewBox is 24 units drawn at 1em, so at `font-size: 2.1rem` one unit is ~1.4px, and a 0.5-unit
-   edge came out ~0.7px — sub-pixel, antialiased into a blend, leaving the bright fill to carry the
-   ratio alone. Keep any contrast-bearing edge >= 1px RENDERED. A contrast checker cannot see this.
+1. **Students → Reports rename** *(user: "easy win, put that at the top of the list for Monday")*.
+   Nav + page title + home card. The page is the reporting/cohort view; the name never matched.
+2. **Re-record an identical subsequent result.** A teacher must be able to record a NEW dated result
+   whose value is IDENTICAL to the student's latest one — a genuine second data point, not a no-op.
+   The upsert procs are latest-by-date per window, so re-entering the same value likely reads as "no
+   change" and never registers. **This is a correctness bug, not a feature**: silently lost data in a
+   tool whose entire purpose is tracking change over time — same class as the math students dropped
+   on 2026-09-18 ([[feedback_never_silently_omit]]). Touches `usp_UpsertReadingAssessment`,
+   `usp_UpsertWritingAssessment`, `usp_UpsertMathAssessment`. Design TBD.
+3. **The LIVE deploy itself** — 46 SQL objects, dependency-ordered, schema MIGRATIONS separated from
+   idempotent DROP/CREATE. This release is ALSO the fix for the ~6s cold roster measured on live.
 
-   **Tooling:** a live preview of these marks (true-size cells on the real ground, curvature/weight
-   sliders, contrast + rendered-edge-px readout, generated code) is at
-   https://claude.ai/artifact/CNTzJ26x7MLzRsjUgKsHGV — reuse this pattern for the rest of the design
-   pass instead of rebuilding the container per tweak.
+**Sequencing risk, flagged 2026-09-18:** item 2 is the least-defined and most invasive thing in the
+release, and doing it Monday morning to ship Monday evening gives it no soak time. Worth deciding
+early whether it ships with 0.5.0 or immediately after in 0.5.1.
 
-   **The transferable lesson for the rest of this pass:** 1.4.11 asks for 3:1 against ADJACENT
-   colours, not against the page. So a colour too light to pass on its own can still be used as the
-   fill, provided a sufficient-contrast EDGE defines the shape. Chasing the fill colour was the wrong
-   move and could not have worked (see the failing values below); moving the burden to the edge let
-   the yellow be as bright as the design wanted AND pass.
+**Verify BEFORE the live deploy** (built on dev, never exercised by anyone):
+- The **maintenance window + ingest procedure** — the release will USE it, and it has never been run
+  end to end. Test on dev first: schedule, let it land, confirm `/enter` locks while `/ingest` and
+  `/admin/maintenance` stay usable, then clear.
+- The **writing roster** (rewritten section-first, measured at 1928ms, never opened).
 
-   Shape matters independently of colour: a FILLED disc reads as "done" and inverts the meaning — the
-   open centre is what says "not yet". Both are drawn in CSS, not glyphs, because a font character
-   has no adjustable stroke (as text the check stayed hairline beside the ring and made the green look
-   washed out; it is now an SVG path stroked twice — see above).
+---
 
-   The failing attempts, MEASURED by the user (trust these, not my hand arithmetic, which was wrong
-   twice) — kept because they show why fill-only cannot work here:
+# 1.0 — starts after 0.5.0 is live
 
-   | colour | on `#f5f7f9` (cell bg) | on `#eef6fb` (hover) | on `#ffffff` |
-   |---|---|---|---|
-   | `#c9930a` (deployed) | 2.55:1 | 2.50:1 | 2.74:1 |
-   | `#c28c00` | 2.77:1 | 2.72:1 | 2.98:1 |
+- **"Areas meeting/exceeding" report** *(user: "should make it into 1.0 if at all possible")*. Per
+  student, the COUNT of subjects (Reading / Writing / Math) currently Meeting or Exceeding — 0–3
+  areas at/above expectation. Cross-subject roll-up; overlaps the Reports rename above.
+- **Auto-pair an IPP section with its regular section** *(user: "nice to have for 1.0 but can be
+  dropped to a later release")*. PS keeps IPP students in a SEPARATE section (`MT151` / `MT151IP`).
+  Manual multi-select already handles it, so this is convenience only. Must stay OPTIONAL — not every
+  section has an IPP counterpart. Prefer a partner column on `DimCourseAssessment` over inferring
+  from the `IP` suffix (a PS naming convention, not a guarantee).
+- **Writing student-cohort page layout** — **NEEDS RE-SCOPING.** User 2026-09-18: *"I don't even
+  remember the plan for #3."* Do NOT guess at it; ask what the layout problem actually is before
+  building anything.
 
-   SC 1.4.11 (Non-text Contrast) wants **3:1**, so BOTH fail — my earlier claim that `#c28c00`
-   "clears it" was wrong. The page background is `#f5f7f9` (body `--bg`; the math grid sets no
-   background of its own and `.mtoggle` is transparent), NOT white.
+---
 
-   Two traps I fell into, worth not repeating: (a) a DARKER background does not help a mid-dark
-   foreground — it reduces the difference, so the grey ground scores WORSE than white; (b) SC 1.4.11
-   has NO thickness exemption — only the TEXT rule (1.4.3) scales with size, so the 3px stroke
-   improves perceptibility but buys no formal latitude.
+# Post-launch (after 1.0 ships)
 
-   (Superseded by the resolution above.) At the time this read: no yellow in this family reaches 3:1
-   unaided, so fixing it means the brown-amber back, or a TREATMENT change — a darker ring with a
-   pale fill, or shape carrying the state. The treatment change is what worked — as an EDGE, not a
-   fill.
-10. **Dark mode** — if it fits before launch. Full scoping in [[project_dark_mode]] (POST-1.0 wishlist,
-   but user may pull it in).
-11. **Re-record an identical subsequent result.** Data-entry sheets must let a teacher record a NEW
-    assessment on a later date whose result is IDENTICAL to the student's existing/latest one (a genuine
-    second data point, not a no-op). Today the upsert procs are latest-by-date per window; re-entering
-    the same value likely reads as "no change" / doesn't register a fresh dated result. Needs a way to
-    stamp a new dated result even when the value is unchanged (reading/writing/math). Design TBD.
-12. **QoL (POST-launch): auto-pair an IPP section with its regular section.** PowerSchool keeps IPP
-    students in a SEPARATE section from the regular programming section (course code suffix `IP`:
-    `MT151` / `MT151IP`, `ENG10` / `ENG10IP`). Course-based entry therefore shows them as two cards,
-    and today the teacher selects BOTH via the picker's multi-select to see all their students at
-    once — which works (same Kind, and the `IP` row carries the same `Language` as its partner, so
-    they land in the same language block). The QoL improvement is to detect the pairing and merge
-    them automatically. User (2026-09-18): *"a way to merge them automatically later but that's a QoL
-    item for the queue and doesn't apply to every teacher or section."* So it must stay OPTIONAL —
-    not every teacher or section has an IPP counterpart, and the manual multi-select has to keep
-    working. Likely approach: a partner column on `DimCourseAssessment` rather than inferring from
-    the `IP` suffix, since the suffix is a PS naming convention, not a guarantee.
-13. **"Areas meeting/exceeding" report.** A report page showing, per student, the COUNT of subjects
-    (out of Reading, Writing, Math) where they are currently Meeting or Exceeding expectations — i.e.
-    0–3 areas at/above expectation. Cross-subject roll-up; overlaps with Math reporting (#4) and the
-    Students→Reports rename (#5). Design TBD.
+- **Math reporting** *(user: "can be skipped for now as it's only relevant in SCoR 2")*.
+  Cohort/reporting for Math — by-task proportion + by-student achievement level. Entry is built;
+  reporting is not. Revisit when SCoR 2 approaches.
+- **Split-grade math pacing** — a split-grade class can run different pacing guides per grade, so the
+  task set must follow that grade's pacing, not just grade+month. Revisit `tvf_TeacherRosterMath`
+  task selection. Confirm against what the math team actually delivers rather than assuming.
+- **Linked math tasks carry mastery forward** — a task LINKED to a later one should start the later
+  cycle already showing Meeting. Needs a task-link model in `DimMathTask` + carry-forward logic.
+
+---
+
+# Post-1.0
+
+- **Design / aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0 since things mostly align
+  now")*. Flag a11y issues in passing; collect them here; do NOT stop to fix them.
+  - RESOLVED already: the math cell marks are AA-compliant. Hollow circle, bright `#ffd21f` band
+    between `#b07d05` edges (3.38:1 on `#f5f7f9`, 3.32:1 on hover); check is an SVG path stroked
+    twice, `#176a37` under `#35c75a`.
+  - **The transferable technique**: SC 1.4.11 wants 3:1 against ADJACENT colours, not against the
+    page — so a colour too light to pass alone works as the FILL provided a sufficient-contrast EDGE
+    defines the shape. Chasing the fill colour cannot work; measured `#c9930a` 2.55:1 and `#c28c00`
+    2.77:1, both failing.
+  - **Watch the edge WIDTH too**: an edge only carries 1.4.11 if it renders. A 0.5-unit SVG stroke
+    came out sub-pixel and antialiased away, leaving the bright fill carrying the ratio. Keep any
+    contrast-bearing edge ≥ 1px rendered. A contrast checker cannot see this.
+  - **Tooling**: live preview with true-size cells, sliders and a contrast + rendered-px readout —
+    https://claude.ai/artifact/CNTzJ26x7MLzRsjUgKsHGV — reuse this pattern instead of rebuilding the
+    container per tweak.
+- **Dark mode** *(user: "1.2 or later at this rate")*. Full scoping in [[project_dark_mode]].
+
+---
+
+# Carried over from 2026-09-18, not yet triaged
+
+- `tvf_TeacherGroups` (~1.5s) — the last untouched query; can't go section-first since enumerating
+  sections IS its job. Needs its own design pass.
+- The 8 remaining `J020` references in `tvf_TeacherRoster` — fallback scale/IPP-family resolution for
+  UNSCOPED cycles, not roster membership. Dead on today's scoped cycles. Same smell, separate call.
+- A Suspense boundary so the roster streams instead of spinner-then-swap. Live evidence suggests a
+  streamed 1–2s reads better than a spinner over the same wait.
+- Connection pre-warm / `pool.min` — DEFERRED by the user pending advice on holding connections open.
+  Measurements in [[project_perf_qol_backlog]].
