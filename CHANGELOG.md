@@ -69,7 +69,14 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   is keyed on the cycle header: `/enter/cycle/<cycleGroupId>/<subject>[/<group>]`. Progress on a card
   sums its instances, so a student assessed in both English and French counts as the two entries they
   owe. SQL: `tvf_UserAssessmentWindows` (+`CycleGroupID`, `CycleName`), `tvf_TeacherGroups` (now takes
-  `@CycleGroupID, @AssessmentType`; +`WindowIDs`).
+  `@CycleGroupID, @AssessmentType`; +`WindowIDs`). A class that falls under **two** instances of the
+  same cycle (same language, split by program scope or grade band) gets **one grid per instance, each
+  with its own Save** — the shape the math grid already uses for a split-grade class.
+- **Fixed: cycle progress counts were double.** `tvf_UserAssessmentWindows` selected the instance's
+  `ProgramScope` but never filtered on it, so an English-scope and an Early-Immersion-scope instance
+  both counted the *same* students — a teacher with 4 students read 8. All three role branches now
+  apply the scope match, and the teacher branch is course-scoped to agree with the picker (an
+  ELA-only teacher was offered a French Reading card that opened an empty list).
 - **Entry groups are course sections, and the course sets the language.** The group picker lists only
   sections of courses mapped in `DimCourseAssessment` (ELA / FLA / Math — never a gym or science
   class), grouped under an **English / French** heading. Because an FLA section is French and an ELA
