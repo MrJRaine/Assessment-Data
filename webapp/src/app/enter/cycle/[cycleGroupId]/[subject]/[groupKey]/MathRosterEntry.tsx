@@ -470,7 +470,16 @@ export default function MathRosterEntry({
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >
                                         {v === '0' ? <span className="ring" aria-hidden="true" />
-                                          : v === '1' ? <span className="check" aria-hidden="true" />
+                                          : v === '1' ? (
+                                            // Two strokes of the SAME path: a thick dark one behind,
+                                            // a thinner bright one on top. Same trick as the ring —
+                                            // the dark edge carries the contrast, so the green is
+                                            // free to be a real green instead of a muddy dark one.
+                                            <svg className="check" viewBox="0 0 24 24" aria-hidden="true">
+                                              <polyline className="edge" points="4,12.5 9.5,18.5 20,5.5" />
+                                              <polyline className="fill" points="4,12.5 9.5,18.5 20,5.5" />
+                                            </svg>
+                                          )
                                           : glyph}
                                       </button>
                                     </td>
