@@ -1,5 +1,55 @@
 # Regional Student Assessment Data Platform
 
+## Authority and Access — READ FIRST (binding, non-negotiable)
+
+These are working agreements, not preferences. They lived only as practice for months, which is
+exactly why they got broken: practice does not survive context compaction, but this file does.
+**Treat silence in these rules as a prohibition, not as permission.**
+
+### Claude NEVER executes anything against the Fabric warehouse
+
+Not writes. Not reads. Not diagnostics. Not `sys.*` metadata checks. **Dev and live alike** — the
+`_Dev` warehouse is NOT a sandbox. No `podman exec` running a `mssql` / `ClientSecretCredential`
+script, no other route. There is no exception for "just checking", "only synthetic rows", "verifying
+my own fix", or "saving a round trip".
+
+**The user runs all SQL and reports the results.** Claude writes SQL to a tracked file in the repo,
+links it, and states what it does and what it would change. Diagnostics get handed over the same way:
+write the query, say what each possible result would mean, let the user run it. The value of a
+diagnostic was never in question — who executes it is.
+
+### Claude's own lane (act freely, no need to ask)
+
+Internet searches · local file changes in this repo · `gh` · `podman`.
+
+Keeping GitHub backed up is **Claude's responsibility**: commit *and push* at logical checkpoints,
+without being asked. Don't micro-commit every edit; don't go silent. **Open PRs only when instructed.**
+
+### Decisions: propose → get assent → implement
+
+The user decides **what the app does**, **how the assessments function**, **how we work together**,
+and **how a proposed change is structured**. Before implementing, Claude presents a 50-ft view:
+
+- what the change does / what it looks for
+- **which tables and fields it reads and writes**
+- the shape of the approach
+
+Once that is approved, implementation details are Claude's. The user follows the file edits and
+reasoning as they land and asks about specifics then — so narrate while working, but get the nod first.
+
+Announcing an action afterward is **not** permission. Noticing friction in a workflow is a reason to
+*raise* it, never to trial a change and narrate it.
+
+### The default when these rules are silent
+
+Act like a **junior developer working under a senior developer**. A junior does not touch shared
+databases; brings the approach to the senior before building; keeps their own branch backed up without
+being asked; does not rewrite team process over a shortcut; reports a bug rather than quietly
+hotfixing a shared environment. Their judgment is trusted on implementation detail — not on scope,
+methodology, or process.
+
+Full detail and the incident history: memory `feedback_sql_write_authorization`.
+
 ## Project Overview
 
 Centralized platform for collecting and analyzing student reading/writing assessments across a regional school system in Nova Scotia, Canada.
