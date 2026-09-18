@@ -486,22 +486,14 @@ a { color: inherit; text-decoration: none; }
    Drawn rather than typed for the same reason as the ring: a glyph's stroke is not settable, so it
    could never be weighted to sit alongside the circle. */
 .mtoggle.yes .check { width: 1em; height: 1em; overflow: visible; }
-.mtoggle.yes .check polyline { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.mtoggle.yes .check .edge { stroke: #176a37; stroke-width: 8; }  /* carries the contrast */
-.mtoggle.yes .check .fill { stroke: #35c75a; stroke-width: 4; }  /* the colour you actually read */
-/* IPP stays TEXT, so it scales on its own line — big enough to read, small enough not to wrap. */
-.mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .95rem; letter-spacing: .02em; }
-.mtoggle.blank::after { content: "·"; color: var(--border); font-size: 1.9rem; line-height: 0; }
-.checklist { border: 1px solid var(--border); border-radius: 10px; background: var(--card); overflow: hidden; }
-.cl-gradebar { display: flex; align-items: center; gap: .6rem; padding: .45rem .8rem; background: var(--bg); border-bottom: 1px solid var(--border); font-size: .82rem; color: var(--muted); }
-.cl-gradebar .right { margin-left: auto; }
-.cl-unit { display: flex; align-items: center; justify-content: space-between; background: #e7edf1; padding: .4rem .8rem; font-size: .76rem; letter-spacing: .07em; text-transform: uppercase; color: var(--ink); font-weight: 700; border-bottom: 1px solid var(--border); }
-.cl-ctl { text-transform: none; letter-spacing: 0; font-weight: 500; }
-.cl-count { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: .72rem; color: var(--muted); margin-left: .3rem; }
-.cl-task { display: flex; align-items: center; gap: .7rem; padding: .5rem .8rem; border-bottom: 1px solid var(--border); cursor: pointer; }
-.cl-task:hover { background: var(--bg); }
-.cl-task input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); flex: none; }
-.cl-task .q { font-size: .78rem; color: var(--primary-hover); font-weight: 600; min-width: 1.8rem; }
-.cl-task.off { opacity: .5; } .cl-task.off .desc { text-decoration: line-through; }
-.cl-ans { margin-left: auto; font-size: .72rem; color: var(--ink); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: .02rem .4rem; }
-.save-result .err { color: var(--danger); }
+/* FILLED shape, not a stroked line — a stroke has one uniform width and can never taper, and the
+   tapered elbow-to-point tick is the look asked for. The dark outline still carries 1.4.11 the same
+   way the ring's edges do, so the fill can be a real green instead of the muddy #2f8f4e it had to be
+   when the colour itself had to pass. */
+.mtoggle.yes .check path {
+  fill: #35c75a;
+  stroke: #176a37;
+  stroke-width: 1.5;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 4;
+}

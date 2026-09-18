@@ -475,9 +475,16 @@ export default function MathRosterEntry({
                                             // a thinner bright one on top. Same trick as the ring —
                                             // the dark edge carries the contrast, so the green is
                                             // free to be a real green instead of a muddy dark one.
+                                            // A FILLED, closed outline rather than a stroked line: a
+                                            // stroke is one uniform width, so it can never taper.
+                                            // Traced fat at the elbow and converging to a point at
+                                            // each tip, with both arms bowed outward.
+                                            //   outer edge: left tip -> under the elbow -> top tip
+                                            //   inner edge: back down to the elbow -> left tip
+                                            // The two meet exactly at each tip, which is what makes
+                                            // the points sharp.
                                             <svg className="check" viewBox="0 0 24 24" aria-hidden="true">
-                                              <polyline className="edge" points="4,12.5 9.5,18.5 20,5.5" />
-                                              <polyline className="fill" points="4,12.5 9.5,18.5 20,5.5" />
+                                              <path d="M3.2 12.9 Q6.3 15.4 9.5 20.5 Q14.4 11.4 21 4.0 Q14.9 12.7 9.9 16.1 Q7.3 14.5 3.2 12.9 Z" />
                                             </svg>
                                           )
                                           : glyph}
