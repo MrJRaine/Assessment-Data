@@ -16,15 +16,26 @@
  *     that DimStudent version). Grades are still valid for band testing; if you
  *     want students PROMOTED (+1 grade) that is a separate DimStudent change.
  *   - Reversible: re-run with DATEADD(YEAR,-1,...) to shift back.
+ *   - 2026-09-18: the UPDATE is now GUARDED to expired rows only (EndDate < today). Dev holds a MIX
+ *     of expired dated rows AND open-ended (EndDate NULL) rows that are already current — the old
+ *     blanket UPDATE would have shifted those open-ended rows' StartDate into the future, past the
+ *     cycle window, breaking the only enrollments that still resolved. Safe to re-run now.
  ******************************************************************************/
 
 DECLARE @Today DATE = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
 
+-- GUARDED (2026-09-18): only shift rows that have actually EXPIRED. The original unguarded UPDATE
+-- moved EVERY row, which is now wrong and destructive: dev holds a MIX — some rows are open-ended
+-- (EndDate NULL, already current) and shifting those pushes their StartDate into the FUTURE, past the
+-- cycle window, breaking the only enrollments that still resolve. The guard also makes this script
+-- safe to re-run (a second run finds nothing expired instead of pushing everything another year out).
 UPDATE FactEnrollment
 SET StartDate   = DATEADD(YEAR, 1, StartDate),
-    EndDate     = DATEADD(YEAR, 1, EndDate),   -- NULL stays NULL
+    EndDate     = DATEADD(YEAR, 1, EndDate),
     ActiveFlag  = 1,
-    LastUpdated = GETDATE();
+    LastUpdated = GETDATE()
+WHERE EndDate IS NOT NULL
+  AND EndDate < @Today;
 
 -- Verify: how many rows are current now, and the new date span.
 SELECT

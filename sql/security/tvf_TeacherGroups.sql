@@ -1,40 +1,47 @@
 /*******************************************************************************
  * Function: tvf_TeacherGroups  (INLINE table-valued function)
- * Purpose: @UPN-parameterized choose-a-group resolution for the web app entry
- *          flow. Returns one row per (Scope, GroupType, GroupKey) for the given
- *          window, with student counts. Two SCOPES (a row can be in both):
- *            'Taught'    — the caller's OWN taught homerooms/sections, resolved
- *                          from FactSectionTeachers REGARDLESS of AccessLevel.
- *                          This is the dual-role fix: an Administrator/Specialist
- *                          who also teaches now gets their own classes back
- *                          instead of them vanishing into the school-wide dump.
- *                          Grade split: PP-9 -> homeroom, 10+ -> section.
- *            'Oversight' — for above-teacher roles only (Administrator /
- *                          SpecialistTeacher = their schools; RegionalAnalyst =
- *                          region-wide). Returns THREE lenses over the full P-RG
- *                          range: a Homeroom lens (every in-scope student -> their
- *                          homeroom), a Section lens (HS 10+ students -> their
- *                          sections), and a Grade lens (every student -> their
- *                          school+grade cohort). The web toggle switches lens
- *                          client-side.
- *          GroupKey: PP-9/homeroom -> stored DimStudent.GroupKey (URL-safe,
- *          school-qualified); sections -> 'SEC:'+SectionID; grade cohort ->
- *          'GRADE:'+SchoolID+':'+Grade (per-school, so the school filter carries it).
+ * Purpose: @UPN-parameterized choose-a-group resolution for the Data Entry flow.
+ *          COURSE-SCOPED (2026-09-18 rework): one row per SECTION whose course is
+ *          mapped in DimCourseAssessment AND whose mapping matches the cycle
+ *          instance being entered. One card per section.
+ *
+ *          Matching rule (window -> course):
+ *            AssessmentType 'Reading'/'Writing' -> Kind 'Literacy'
+ *            AssessmentType 'Math'              -> Kind 'Math'
+ *            AssessmentLanguage (when the cycle is language-scoped) must equal the
+ *            course Language; a 'Both' (NULL) cycle admits BOTH languages, which is
+ *            when the client groups cards under language headings and constrains
+ *            multi-select to one language.
+ *
+ *          The COURSE supplies the language — there is no EN/FR toggle. A teacher of
+ *          an FLA section enters French; an ELA section enters English. Non-literacy /
+ *          non-math sections (gym, science, homeroom) never appear.
+ *
+ *          TWO SCOPES (a row can be in both — the dual-role case; client toggles):
+ *            'Taught'    — sections the caller personally teaches (FactSectionTeachers),
+ *                          ANY AccessLevel, so a teaching admin keeps their own classes.
+ *            'Oversight' — above-teacher roles see EVERY mapped-course section they
+ *                          would normally be able to see: Administrator /
+ *                          SpecialistTeacher -> their school(s) via StaffSchoolAccess;
+ *                          RegionalAnalyst -> region-wide. (e.g. a principal sees all
+ *                          ELA / FLA / Math sections in their school.)
+ *          TeacherNames is returned for every row so the client can show WHOSE class a
+ *          card is — the point of the Oversight cards (co-taught sections list all).
+ *
  * Created: 2026-06-22
  * Modified: 2026-09-08 — homeroom GroupKey = stored DimStudent.GroupKey.
- *          2026-09-15 — REDESIGN ([[project_group_display_redesign]]): teacher rule
- *          fires for all (Scope='Taught'); above-teacher gets a multi-lens
- *          'Oversight' scope over full P-RG (was a mutually-exclusive AccessLevel
- *          dispatch with a hard grade/homeroom-vs-section split). New output
- *          column: Scope. Shared by Data Entry now + Programming (Phase 2).
- *          2026-09-15b — added the Oversight Grade lens (per-school grade cohorts)
- *          + a Grades list column (grade-span filter). SchoolID threaded into
- *          OversightStudents for the grade GroupKey.
+ *          2026-09-15 — Taught/Oversight scopes + Homeroom/Section/Grade lenses.
+ *          2026-09-18 — COURSE-SCOPED REWORK: entry groups are mapped-course SECTIONS
+ *          (the Homeroom/Section/Grade lenses are retired here — a course section IS
+ *          the group now). New columns: Language, CourseCode, TeacherNames. GroupType
+ *          is always 'Course'. Oversight keeps its normal breadth, just over mapped
+ *          course sections.
+ *          NOTE: Programming uses its OWN tvf_ProgrammingGroups — this TVF is Data
+ *          Entry only, so this rework does not touch the Programming picker.
  * Region: Canada East (PIIDPA compliant)
  *
- * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
- * (trusts @UPN; SELECT granted to the SP only). @AssessmentWindowID is VARCHAR
- * (Power-Fx/JS precision); cast inline to BIGINT. ORDER BY omitted -- caller sorts.
+ * SECURITY: trusts @UPN; SELECT granted to the SP only. @AssessmentWindowID is
+ * VARCHAR (JS precision); cast inline to BIGINT. ORDER BY omitted -- caller sorts.
  * NOTE: EnteredStudentCount covers Reading/Writing only (Math entry count TBD).
  ******************************************************************************/
 
@@ -54,181 +61,158 @@ RETURN
         FROM DimStaff d
         WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
     ),
-    WindowEffectiveDates AS (
+    -- The cycle INSTANCE being entered: subject, language scope, program scope, grade band.
+    Win AS (
         SELECT
-            w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily,
+            w.AssessmentWindowID, w.AssessmentType,
+            w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     ),
-    -- ==== TAUGHT scope: the caller's OWN taught groups, ANY AccessLevel (dual-role fix).
-    TaughtStudents AS (
+    -- Sections visible to the caller whose course is mapped AND valid for this cycle.
+    -- The course gate (Kind/Language match) is identical in all three branches.
+    VisibleSections AS (
+        -- TAUGHT: the caller's own sections, ANY AccessLevel (dual-role fix).
         SELECT
-            wed.AssessmentWindowID, s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom,
-            s.GroupKey AS HomeroomKey, sch.SchoolName,
-            sec.SectionID, sec.SectionNumber, sec.CourseName
+            CAST('Taught' AS VARCHAR(10)) AS Scope,
+            win.AssessmentWindowID, win.WindowStartDate, win.WindowEndDate,
+            win.MinGrade, win.MaxGrade, win.ProgramFamily, win.ProgramScope,
+            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            ca.Language
         FROM Caller c
-        CROSS JOIN WindowEffectiveDates wed
+        CROSS JOIN Win win
         INNER JOIN FactSectionTeachers fst
                 ON LOWER(fst.TeacherEmail) = c.Email
-               AND wed.EffectiveDate BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
+               AND win.EffectiveDate BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
         INNER JOIN DimSection sec
                 ON sec.SectionID = fst.SectionID
-               AND wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+               AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+        WHERE ((win.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+            OR (win.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+          AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)
+
+        UNION ALL
+
+        -- OVERSIGHT (Administrator / SpecialistTeacher): every mapped-course section in their school(s).
+        SELECT
+            CAST('Oversight' AS VARCHAR(10)),
+            win.AssessmentWindowID, win.WindowStartDate, win.WindowEndDate,
+            win.MinGrade, win.MaxGrade, win.ProgramFamily, win.ProgramScope,
+            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            ca.Language
+        FROM Caller c
+        CROSS JOIN Win win
+        INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
+        INNER JOIN DimSection sec
+                ON sec.SchoolID = ssa.SchoolID
+               AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
+          AND ((win.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+            OR (win.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+          AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)
+
+        UNION ALL
+
+        -- OVERSIGHT (RegionalAnalyst): every mapped-course section, region-wide.
+        SELECT
+            CAST('Oversight' AS VARCHAR(10)),
+            win.AssessmentWindowID, win.WindowStartDate, win.WindowEndDate,
+            win.MinGrade, win.MaxGrade, win.ProgramFamily, win.ProgramScope,
+            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            ca.Language
+        FROM Caller c
+        CROSS JOIN Win win
+        INNER JOIN DimSection sec
+                ON win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+        WHERE c.AccessLevel = 'RegionalAnalyst'
+          AND ((win.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+            OR (win.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+          AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)
+    ),
+    -- Whose class each section is. CONCAT (never '+') — Fabric trims a literal's space next to a
+    -- VARCHAR column. Co-taught sections list every current teacher.
+    SectionTeacherNames AS (
+        SELECT fst.SectionID, STRING_AGG(CONCAT(d.FirstName, ' ', d.LastName), ', ') AS TeacherNames
+        FROM FactSectionTeachers fst
+        INNER JOIN DimStaff d
+                ON LOWER(d.Email) = LOWER(fst.TeacherEmail) AND d.IsCurrent = 1
+        WHERE fst.IsCurrent = 1
+        GROUP BY fst.SectionID
+    ),
+    -- Students in those sections, narrowed by the cycle's own grade band + program scope (the same
+    -- gates the roster applies, so a card's count matches what the roster will actually show).
+    SectionStudents AS (
+        SELECT
+            vs.Scope, vs.AssessmentWindowID, vs.SectionID, vs.SectionNumber, vs.CourseName,
+            vs.CourseCode, vs.Language, s.StudentKey, s.Grade, sch.SchoolName
+        FROM VisibleSections vs
         INNER JOIN FactEnrollment e
-                ON e.SectionKey  = sec.SectionKey
-               AND e.StartDate  <= wed.WindowEndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= wed.WindowStartDate)
+                ON e.SectionKey  = vs.SectionKey
+               AND e.StartDate  <= vs.WindowEndDate
+               AND (e.EndDate IS NULL OR e.EndDate >= vs.WindowStartDate)
         INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
-        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
+        LEFT  JOIN DimSchool  sch  ON sch.SchoolID   = s.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
+        INNER JOIN DimGrade   wmin ON wmin.GradeCode = vs.MinGrade
+        INNER JOIN DimGrade   wmax ON wmax.GradeCode = vs.MaxGrade
         INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
         WHERE sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          AND (vs.ProgramFamily IS NULL OR dp.ProgramFamily = vs.ProgramFamily)
+          -- Cycle PROGRAM-SCOPE buckets (English / Early Immersion / Late Immersion); delimiter-guarded
+          -- LIKE, no STRING_SPLIT dependency. NULL scope = all programs.
+          AND (vs.ProgramScope IS NULL
+               OR (',' + vs.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
-    -- ==== OVERSIGHT scope: school-wide (Admin/Specialist) or region-wide (RegionalAnalyst).
-    OversightStudents AS (
-        SELECT
-            wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
-        FROM Caller c
-        CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
-        INNER JOIN DimStudent s
-                ON s.SchoolID = ssa.SchoolID
-               AND wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
-        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
-          AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-
-        UNION ALL
-
-        SELECT
-            wed.AssessmentWindowID, wed.WindowStartDate, wed.WindowEndDate, wed.EffectiveDate,
-            s.StudentKey, s.Grade, sg.GradeOrder, s.Homeroom, s.GroupKey AS HomeroomKey, sch.SchoolName, s.SchoolID
-        FROM Caller c
-        CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN DimStudent s
-                ON wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
-        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel = 'RegionalAnalyst'
-          AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-    ),
-    -- Oversight SECTION lens: HS (GradeOrder >= 10) students -> their section enrollments.
-    OversightSections AS (
-        SELECT
-            o.AssessmentWindowID, o.StudentKey, o.Grade, o.SchoolName,
-            sec.SectionID, sec.SectionNumber, sec.CourseName
-        FROM OversightStudents o
-        INNER JOIN FactEnrollment e
-                ON e.StudentKey  = o.StudentKey
-               AND o.GradeOrder >= 10
-               AND e.StartDate  <= o.WindowEndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= o.WindowStartDate)
-        INNER JOIN DimSection sec
-                ON sec.SectionKey = e.SectionKey
-               AND o.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-    ),
-    -- Group rows (carry StudentKey for counting), tagged by Scope + GroupType.
-    GroupRows AS (
-        -- TAUGHT: homeroom for <=9, section for >=10 (the caller's own classes)
-        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
-               CAST('Taught' AS VARCHAR(10))    AS Scope,
-               CASE WHEN GradeOrder <= 9  THEN CAST('Homeroom' AS VARCHAR(10))
-                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CAST('Section' AS VARCHAR(10)) END AS GroupType,
-               CASE WHEN GradeOrder <= 9  THEN HomeroomKey
-                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN 'SEC:' + SectionID END AS GroupKey,
-               CASE WHEN GradeOrder <= 9  THEN CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
-                    WHEN GradeOrder >= 10 AND SectionID IS NOT NULL THEN CONCAT(SectionNumber, ' — ', CourseName) END AS GroupLabel
-        FROM TaughtStudents
-
-        UNION ALL
-
-        -- OVERSIGHT homeroom lens: every in-scope student -> their homeroom (full P-RG)
-        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
-               CAST('Oversight' AS VARCHAR(10)), CAST('Homeroom' AS VARCHAR(10)),
-               HomeroomKey,
-               CONCAT('Homeroom', ' ', COALESCE(Homeroom, '(none)'))
-        FROM OversightStudents
-
-        UNION ALL
-
-        -- OVERSIGHT section lens: HS students -> their section(s)
-        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
-               CAST('Oversight' AS VARCHAR(10)), CAST('Section' AS VARCHAR(10)),
-               'SEC:' + SectionID,
-               CONCAT(SectionNumber, ' — ', CourseName)
-        FROM OversightSections
-
-        UNION ALL
-
-        -- OVERSIGHT grade lens: every in-scope student -> their (school, grade) cohort. Scoped per
-        -- SCHOOL so the client school filter narrows it and the 'GRADE:<SchoolID>:<Grade>' key routes
-        -- to one school's grade cohort with no extra params (respects the school filter by design).
-        SELECT AssessmentWindowID, StudentKey, Grade, SchoolName,
-               CAST('Oversight' AS VARCHAR(10)), CAST('Grade' AS VARCHAR(10)),
-               'GRADE:' + SchoolID + ':' + Grade,
-               CASE Grade WHEN 'P' THEN 'Primary' WHEN 'PP' THEN 'Pre-Primary' WHEN 'RG' THEN 'Graduating'
-                          ELSE CONCAT('Grade', ' ', Grade) END
-        FROM OversightStudents
-    ),
-    -- Grades PRESENT in each group, as a comma-delimited distinct list (e.g. 'P,1' for a split
-    -- P/1 homeroom). Lets the client grade filter match a group if ANY of its grades is selected,
-    -- so a split/combined class surfaces under each of its grades -- not just MAX(Grade). Handles
-    -- any number of grades in a split, not just two.
+    -- Grades PRESENT in each card, comma-delimited, so the client grade filter matches a section if
+    -- ANY of its grades is selected (a split class surfaces under each of its grades).
     GroupGrades AS (
-        SELECT AssessmentWindowID, Scope, GroupType, GroupKey, STRING_AGG(Grade, ',') AS Grades
-        FROM (
-            SELECT DISTINCT AssessmentWindowID, Scope, GroupType, GroupKey, Grade
-            FROM GroupRows
-            WHERE GroupKey IS NOT NULL AND Grade IS NOT NULL
-        ) d
-        GROUP BY AssessmentWindowID, Scope, GroupType, GroupKey
+        SELECT AssessmentWindowID, Scope, SectionID, STRING_AGG(Grade, ',') AS Grades
+        FROM (SELECT DISTINCT AssessmentWindowID, Scope, SectionID, Grade FROM SectionStudents WHERE Grade IS NOT NULL) d
+        GROUP BY AssessmentWindowID, Scope, SectionID
     )
     SELECT
-        CAST(gr.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
-        gr.Scope,
-        gr.GroupType,
-        gr.GroupKey,
-        gr.GroupLabel,
-        MAX(gr.SchoolName) AS SchoolName,
-        MAX(gr.Grade) AS Grade,
-        MAX(gg.Grades) AS Grades,
-        COUNT(DISTINCT gr.StudentKey) AS ApplicableStudentCount,
+        CAST(ss.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
+        ss.Scope,
+        CAST('Course' AS VARCHAR(10)) AS GroupType,   -- every entry group is now a course section
+        'SEC:' + ss.SectionID         AS GroupKey,
+        CASE WHEN MAX(ss.SectionNumber) IS NULL OR MAX(ss.SectionNumber) = ''
+             THEN MAX(ss.CourseName)
+             ELSE CONCAT(MAX(ss.CourseName), ' ', '(', MAX(ss.SectionNumber), ')') END AS GroupLabel,
+        MAX(ss.Language)   AS Language,      -- drives the client's language headings + multi-select gate
+        MAX(ss.CourseCode) AS CourseCode,
+        MAX(stn.TeacherNames) AS TeacherNames, -- shown on Oversight cards (whose class is this?)
+        MAX(ss.SchoolName) AS SchoolName,
+        MAX(ss.Grade)      AS Grade,
+        MAX(gg.Grades)     AS Grades,
+        COUNT(DISTINCT ss.StudentKey) AS ApplicableStudentCount,
         COUNT(DISTINCT CASE
-            WHEN aw.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN gr.StudentKey
-            WHEN aw.AssessmentType = 'Writing' AND faw.WritingAssessmentID IS NOT NULL THEN gr.StudentKey
+            WHEN aw.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN ss.StudentKey
+            WHEN aw.AssessmentType = 'Writing' AND faw.WritingAssessmentID IS NOT NULL THEN ss.StudentKey
         END) AS EnteredStudentCount
-    FROM GroupRows gr
-    INNER JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = gr.AssessmentWindowID
+    FROM SectionStudents ss
+    INNER JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = ss.AssessmentWindowID
+    LEFT JOIN SectionTeacherNames stn ON stn.SectionID = ss.SectionID
     LEFT JOIN FactAssessmentReading far
-           ON far.AssessmentWindowID = gr.AssessmentWindowID
-          AND far.StudentKey         = gr.StudentKey
+           ON far.AssessmentWindowID = ss.AssessmentWindowID
+          AND far.StudentKey         = ss.StudentKey
     LEFT JOIN FactAssessmentWriting faw
-           ON faw.AssessmentWindowID = gr.AssessmentWindowID
-          AND faw.StudentKey         = gr.StudentKey
+           ON faw.AssessmentWindowID = ss.AssessmentWindowID
+          AND faw.StudentKey         = ss.StudentKey
     LEFT JOIN GroupGrades gg
-           ON gg.AssessmentWindowID = gr.AssessmentWindowID
-          AND gg.Scope              = gr.Scope
-          AND gg.GroupType          = gr.GroupType
-          AND gg.GroupKey           = gr.GroupKey
-    WHERE gr.GroupKey IS NOT NULL
-    GROUP BY gr.AssessmentWindowID, gr.Scope, gr.GroupType, gr.GroupKey, gr.GroupLabel
+           ON gg.AssessmentWindowID = ss.AssessmentWindowID
+          AND gg.Scope              = ss.Scope
+          AND gg.SectionID          = ss.SectionID
+    GROUP BY ss.AssessmentWindowID, ss.Scope, ss.SectionID
 );
 GO
 

@@ -41,16 +41,24 @@ confirmed by user; do not re-decide — see [[feedback_no_unilateral_scope_decis
   subject), shown only when >1 language applies.
 - **Roster/save**: combined roster across the picked sections; each student's result routes to THEIR
   program's instance window for that language.
-- **Oversight (admin/specialist/analyst) loses BROAD entry** — they only enter if they teach a mapped
-  course; otherwise view-only. View/reports stay broad (teaches OR school access). The 3 oversight
-  branches in the entry roster TVFs effectively retire (kept for reports).
+- **Oversight KEEPS its broad scope — over mapped-course SECTIONS** (corrected 2026-09-18; the earlier
+  "oversight loses broad entry / view-only" line here was MY INFERENCE from "cut the section list to
+  mapped courses", never the user's decision — don't repeat that mistake, see
+  [[feedback_no_unilateral_scope_decisions]]). Non-teacher users see cards for **all** sections from the
+  mapped course list they would normally be able to see: a **school principal / specialist** sees every
+  ELA / FLA / Math section **in their school(s)** (via StaffSchoolAccess); a **RegionalAnalyst** sees
+  them region-wide. Teachers see only the sections they teach.
+  **Cards for above-teacher users show the section TEACHER'S NAME** so they know whose class it is
+  (FactSectionTeachers → DimStaff; a co-taught section lists all of them).
 - Chain that makes it work: teacher → FactSectionTeachers → SectionID → DimSection.CourseCode → map.
 - **The EN/FR toggle built 2026-09-17 (roster + reverted picker) is INTERIM — remove it** once course
   scoping lands.
-- **BLOCKER (2026-09-17): dev data can't test this.** DimSection on dev = 11 synthetic sections with
-  made-up codes (FRA-1-FI, MTH-K-FI, LET-K-FI, HR, SCI-7-FI…), NONE matching the real list, no English
-  LA at all. Need real-code dev sections (reseed) OR a dev-only map for the synthetic codes before the
-  scoping is verifiable. Awaiting user decision.
+- **~~BLOCKER~~ RESOLVED 2026-09-18.** Dev's DimSection has 11 synthetic sections with made-up codes
+  (FRA-1-FI, MTH-K-FI, LET-K-FI, HR, SCI-7-FI…), none matching the real list and no English LA at all.
+  User's call: the map is a **TABLE** (`DimCourseAssessment`), so **dev seeds the fake codes and live
+  seeds the real list** — identical code reads both, and courses are added/removed by row, never by a
+  code change. Dev therefore exercises French-literacy + Math scoping; the English side is verified on
+  live. Seeds: `seed_DimCourseAssessment_dev.sql` / `seed_DimCourseAssessment_live.sql`.
 
 ## FINAL MODEL (2026-09-17) — supersedes everything below. READ THIS.
 The user's binding requirement: **assessment methodology (which grades/programs/languages are

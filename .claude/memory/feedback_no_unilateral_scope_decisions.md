@@ -12,6 +12,16 @@ When proposing a build plan or stack-rank, do NOT silently park user requirement
 
 **Why:** When a user gave a requirement explicitly (in writing, in their spec), defaulting it to deferred is functionally the same as ignoring it. The user is responsible for scope decisions; my job is to surface options, not pre-decide. Repeated occurrences in this project — most recently parking demographic slicers and admin/analyst fine-grained filters from the scrStudentData MVP scope without asking, after the user had explicitly included them in the original spec. Same anti-pattern as soft-pedaling required schema refreshes as "optional" (see [[feedback_powerapps_data_source_refresh]]) — quietly downgrading explicit requirements.
 
+**NEVER record an inference in memory as the user's decision** (added 2026-09-18 after doing exactly
+that). When writing to a memory/decision record, each claim must be one of: (a) something the user
+actually said — quote or paraphrase closely; or (b) MY inference, explicitly labelled as such
+("inferred", "assumed — confirm"). A guess written as fact becomes the next session's premise and
+compounds silently. Concretely: the user said "cut the list of sections shown to them to just sections
+of courses from that list"; I recorded "**oversight loses broad entry / view-only**", which they never
+said and which is the opposite of what they wanted (non-teachers see ALL mapped-course sections they
+'d normally see — a principal sees every ELA/FLA/Math section in their school). If a rule is
+load-bearing and I'm not quoting, confirm it before it goes in memory.
+
 **How to apply:**
 - If scope looks large for a timeline: present the full scope plus a STACK-RANK question — "given the timeline, which of these would you want to defer if it comes to that?" — and wait for an answer.
 - Never present a "Proposed MVP build" with deferred items unless the user has already told me what to defer.
