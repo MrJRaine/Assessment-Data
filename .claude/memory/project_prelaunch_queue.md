@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-18T16:03:21.854Z
+  modified: 2026-09-18T16:30:06.809Z
 ---
 
 **Pre-launch work queue** (captured 2026-09-17; launch ~1 week out). Order not fixed — user directs.
@@ -34,17 +34,34 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
 7. **Linked math tasks carry mastery forward.** If a task is LINKED to a later task and the student was
    "Meeting" on the earlier one, the later task starts the cycle already showing Meeting for that
    student. Needs a task-link model in DimMathTask + carry-forward logic in the roster read/entry.
-8. **Math data entry: red ✗ → yellow circle.** ✅ DONE on dev 2026-09-18 (commit 0a4c4a1). "Not yet"
-   is now a yellow OUTLINE circle (`○`); amber darkened to `#b07d05` for contrast on white. Stored
-   value and click-cycle unchanged.
+8. **Math data entry: red ✗ → yellow circle.** ✅ DONE on dev 2026-09-18. Final form: a HOLLOW circle,
+   bright `#ffd21f` band between `#b07d05` edges, drawn in CSS (not a glyph) so its weight is settable;
+   the check is drawn to match. Marks scaled to ~32px in the 44px cell. WCAG-compliant — see item 9.
+   Stored value and click-cycle unchanged.
 9. **Design/aesthetics pass — includes a WCAG 2.1 AA sweep.** The project IS working toward WCAG 2.1
    AA (user, 2026-09-18), but deliberately NOT letting it block feature work: *"good to keep in mind,
    [but] I don't want to get bogged down in it before we are working on cleaning up design
    aesthetics."* So flag contrast/a11y issues in passing, do NOT stop to fix them, and collect them
    here for the pass.
 
-   **Known item — math "not yet" ring.** MEASURED by the user in a real contrast checker (trust these,
-   not my hand arithmetic, which was wrong twice):
+   **RESOLVED 2026-09-18 — math "not yet" ring is now COMPLIANT.** Final form: a hollow circle with a
+   bright `#ffd21f` band (5px) sandwiched between `#b07d05` edges (2px, via `box-shadow` outer +
+   inset). The EDGE carries SC 1.4.11, measured **3.38:1 on `#f5f7f9`** and **3.32:1 on `#eef6fb`**
+   (hover) — both over the 3:1 bar.
+
+   **The transferable lesson for the rest of this pass:** 1.4.11 asks for 3:1 against ADJACENT
+   colours, not against the page. So a colour too light to pass on its own can still be used as the
+   fill, provided a sufficient-contrast EDGE defines the shape. Chasing the fill colour was the wrong
+   move and could not have worked (see the failing values below); moving the burden to the edge let
+   the yellow be as bright as the design wanted AND pass.
+
+   Shape matters independently of colour: a FILLED disc reads as "done" and inverts the meaning — the
+   open centre is what says "not yet". Both are drawn in CSS, not glyphs, because a font character
+   has no adjustable stroke (the check is two borders on a rotated box; as text it stayed hairline
+   beside the ring and made the green look washed out).
+
+   The failing attempts, MEASURED by the user (trust these, not my hand arithmetic, which was wrong
+   twice) — kept because they show why fill-only cannot work here:
 
    | colour | on `#f5f7f9` (cell bg) | on `#eef6fb` (hover) | on `#ffffff` |
    |---|---|---|---|
@@ -60,10 +77,10 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
    has NO thickness exemption — only the TEXT rule (1.4.3) scales with size, so the 3px stroke
    improves perceptibility but buys no formal latitude.
 
-   Implication: no yellow in this family reaches 3:1 here. Fixing it means going back toward the
-   brown-amber the user rejected (`#b07d05`), or changing the TREATMENT — e.g. a darker ring with a
-   pale yellow fill, or letting shape rather than colour carry the state. A design decision, not a
-   hex tweak.
+   (Superseded by the resolution above.) At the time this read: no yellow in this family reaches 3:1
+   unaided, so fixing it means the brown-amber back, or a TREATMENT change — a darker ring with a
+   pale fill, or shape carrying the state. The treatment change is what worked — as an EDGE, not a
+   fill.
 10. **Dark mode** — if it fits before launch. Full scoping in [[project_dark_mode]] (POST-1.0 wishlist,
    but user may pull it in).
 11. **Re-record an identical subsequent result.** Data-entry sheets must let a teacher record a NEW
