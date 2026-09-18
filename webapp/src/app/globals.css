@@ -453,7 +453,7 @@ a { color: inherit; text-decoration: none; }
 /* font-size drives every state mark: the ✓ directly, and the disc via its em-based size. The cell is
    44px tall and the marks were ~15px in it — small to read and small to hit. 1.5rem gives ~24px,
    still comfortably inside the row. */
-.mtoggle { width: 100%; min-height: 44px; border: none; background: transparent; cursor: pointer; font-size: 1.5rem; color: var(--muted); display: grid; place-items: center; font-family: inherit; line-height: 1; }
+.mtoggle { width: 100%; min-height: 44px; border: none; background: transparent; cursor: pointer; font-size: 2.1rem; color: var(--muted); display: grid; place-items: center; font-family: inherit; line-height: 1; }
 .mtoggle:hover { background: #eef6fb; }
 /* "Not yet" — a BRIGHT yellow disc inside a dark ring.
    Drawn in CSS rather than as the '○' glyph: a font character has no adjustable stroke, so the ring
@@ -469,14 +469,24 @@ a { color: inherit; text-decoration: none; }
   /* HOLLOW on purpose: an open circle reads as "not yet / empty"; a filled disc reads as done,
      which is the opposite message. The cell shows through the middle. */
   background: transparent;
-  border: 4px solid #ffd21f;
-  /* Dark hairline on BOTH edges of the yellow band. 1.4.11 asks for 3:1 against ADJACENT colours,
-     so these edges carry the ratio (--ink is ~14:1 on the cell) and the yellow stays bright. An
-     outer ring alone would leave the inner boundary as yellow-on-cell, which fails. */
-  box-shadow: 0 0 0 1px var(--ink), inset 0 0 0 1px var(--ink);
+  border: 5px solid #ffd21f;
+  /* Dark edge on BOTH sides of the yellow band. 1.4.11 asks for 3:1 against ADJACENT colours, so
+     these edges carry the ratio (--ink is ~14:1 on the cell) and the yellow stays bright. An outer
+     ring alone would leave the inner boundary as yellow-on-cell, which fails. */
+  box-shadow: 0 0 0 2px var(--ink), inset 0 0 0 2px var(--ink);
+}
+/* The check, drawn as two borders on a rotated box so its stroke can be weighted to match the
+   ring's band. As a glyph it stayed hairline-thin next to the circle however bold it was set, and
+   the thin stroke also made the green read washed out — more ink is what makes the colour land. */
+.mtoggle.yes .check {
+  width: 0.45em; height: 0.85em;
+  border-right: 5px solid currentColor;
+  border-bottom: 5px solid currentColor;
+  transform: rotate(45deg) translate(-8%, -12%);
+  border-radius: 2px;
 }
 /* IPP stays TEXT, so it scales on its own line — big enough to read, small enough not to wrap. */
-.mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .8rem; letter-spacing: .02em; }
+.mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .95rem; letter-spacing: .02em; }
 .mtoggle.blank::after { content: "·"; color: var(--border); font-size: 1.9rem; line-height: 0; }
 .checklist { border: 1px solid var(--border); border-radius: 10px; background: var(--card); overflow: hidden; }
 .cl-gradebar { display: flex; align-items: center; gap: .6rem; padding: .45rem .8rem; background: var(--bg); border-bottom: 1px solid var(--border); font-size: .82rem; color: var(--muted); }

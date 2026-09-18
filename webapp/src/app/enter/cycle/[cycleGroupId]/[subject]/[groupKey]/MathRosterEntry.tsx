@@ -457,7 +457,10 @@ export default function MathRosterEntry({
                                   // no adjustable stroke, so the ring's weight could not be set. The
                                   // span below is a bordered circle, which also renders identically
                                   // whatever font the browser falls back to.
-                                  const glyph = v === '1' ? '✓' : v === 'ipp' ? 'IPP' : ''
+                                  // Both marks are DRAWN, not typed: a font glyph has no adjustable
+                                  // stroke, so the check could never be weighted to sit alongside
+                                  // the ring. IPP stays real text.
+                                  const glyph = v === 'ipp' ? 'IPP' : ''
                                   return (
                                     <td className="cell stu" key={s.studentKey}>
                                       <button
@@ -466,7 +469,9 @@ export default function MathRosterEntry({
                                         onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP)}
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >
-                                        {v === '0' ? <span className="ring" aria-hidden="true" /> : glyph}
+                                        {v === '0' ? <span className="ring" aria-hidden="true" />
+                                          : v === '1' ? <span className="check" aria-hidden="true" />
+                                          : glyph}
                                       </button>
                                     </td>
                                   )
