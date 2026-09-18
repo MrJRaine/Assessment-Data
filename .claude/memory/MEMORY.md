@@ -12,6 +12,7 @@
 - [File Links in Instructions](feedback_file_links_in_instructions.md) — wrap file refs in clickable markdown links.
 - [Project Email](feedback_project_email.md) — use jeffrey.raine@tcrce.ca; ignore auto-memory userEmail (personal, unrelated).
 - [No Wrap Prompts](feedback_no_wrap_prompts.md) — never suggest wrapping; only run wrap on explicit trigger.
+- [Left Off Notes Newest-First](feedback_left_off_newest_first.md) — insert each Left Off note at the TOP of the chain in docs/implementation-plan.md, NEVER append at the bottom (session-start trusts the first heading); keep .claude/ + .github/ skill mirrors in sync.
 - [Commit Cadence](feedback_commit_cadence.md) — commit proactively at logical checkpoints; push on-request / at wrap.
 - [Changelog As We Go](feedback_changelog_as_you_go.md) — update CHANGELOG.md (+ patchNotes.ts for user-visible changes) AS each change lands, not at release. Footer version = package.json.
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; user owns scope. ESPECIALLY never hardcode ASSESSMENT-METHODOLOGY rules (which grades/programs/languages assessed how) — build the config knob, let the admin decide.

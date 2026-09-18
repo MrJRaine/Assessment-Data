@@ -127,11 +127,46 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - **Year-end close-out (deferred)**: Build a scheduled procedure that closes out sections, FactSectionTeachers triples, and FactEnrollment rows when a school year ends — independent of the regular ingest. The regular merge anti-join handles this *eventually* (when next year's data lands), but that leaves Jun–Aug with stale rosters surfacing in Power Apps. Driven by `DimTerm.SchoolYearEnd`. Tackle during/after Step 8 (merge procedures), before September rollout.
 - **Ingest strategy A→B migration (pre-launch)**: MVP uses Strategy A — manual Lakehouse upload + `COPY INTO` in merge procs. Strategy B (Fabric Data Pipeline + Power Automate trigger) replaces this before September rollout — see Step 29. **Step 8 merge proc design must support both**: keep the CSV-loading step (`COPY INTO Stg_X FROM '...'`) decoupled from the merge logic itself so the Pipeline replacement is a layer-swap, not a rewrite. Decision recorded 2026-04-29.
 
+> **Left Off ordering convention: NEWEST FIRST.** Insert each new note directly BELOW this line, at the
+> TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
+> and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
+> context. (Reordered 2026-09-18 after 09-15/16/17 were appended to the bottom.)
+
+### Left Off — 2026-09-17
+- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + [[project_assessment_language_tracks]]; narrative in [[project_session_archive]].
+- **This session (dev/0.5.0)**: shipped **Writing SCR** (Conventions-only, verified on dev); built + deployed **dual-language literacy + app-level per-cycle scoping** (DimShortCycle header + scoped instances on `/cycles`, DimProgram.ScopeBucket, ProgramScope/AssessmentLanguage on windows, writing result-level language, J020→English reading); built the **course→assessment map foundation** (DimCourseAssessment + dev/live seeds).
+- **Next action**: the **course-scoped / cycle-based `/enter` rewrite** (banked) — group picker filtered to the caller's mapped-course sections (language-grouped, same-language multi-select) → combined roster with per-student instance routing on save → one card per (SCoR × subject) → remove the interim EN/FR toggle. Deploy `DimCourseAssessment.sql` + `seed_DimCourseAssessment_dev.sql` and test on dev's French/Math sections. Full design in [[project_assessment_language_tracks]].
+- **Blockers**: None (dev-data testability solved via the dev seed of synthetic course codes).
+
+### Left Off — 2026-09-16
+- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + per-feature memories; narrative in [[project_session_archive]].
+- **This session (dev/0.5.0)**: Programming makeover **complete through Phase 2** (`/programming`, window-less picker + IPP⟷Adaptations grid) + **Maintenance mode** built (banner/lock/auto-save/sysadmin page) + nav first-load caps fix. All on dev, SQL deployed to dev.
+- **Next action**: build **Writing `SCR` (Scribed)** — scope the approach first (touches the live writing path) — or continue polishing.
+- **Blockers**: None.
+
+### Left Off — 2026-09-15
+- **Note**: This plan covers the ORIGINAL warehouse/ingest build (through ~2026-04). Since then the project moved to the Phase 3b web app + feature work, tracked in **project memory**, not here. For current state read [[project_assessment_platform]] (distilled) and the per-feature memories; the running narrative is [[project_session_archive]].
+- **Current focus (not in this plan)**: Programming (IPP+Adaptations) makeover on `dev` (0.5.0-dev). Phase 0 backend + Phase 1 shared group picker (Homeroom/Section/Grade lenses) DONE + verified on dev. **Next: Phase 2** — the Programming pages (`/ipp`→`/programming`; two IPP/Adaptations rosters).
+- **Blockers**: None.
+
 ### Left Off — 2026-09-11 — 🟢 v0.4.0/v0.4.1 shipped; Programming makeover Phase 0 built on `dev`; BIG branch reconciliation + new git workflow
 - **Last completed step**: Programming (IPP+Adaptations) makeover **Phase 0 backend** — Math IPP + per-subject grade bands + parallel Adaptation seeding (`usp_MergeStudent` Step 6) + `usp_UpsertStudentAdaptation` + `tvf_StudentAdaptation` + `FactStudentAdaptation` — DONE and **validated on dev**. Also shipped to live this window: **v0.4.0** (reading prior-year starting point) and **v0.4.1** (Diff-from-Prev-Cycle first-cycle fix + version footer / What's-new popup, PR #31). Branch model reconciled: `dev` (0.5.0-dev) cut off current `main`, `feat` merged in + build-verified, `feat` + `feature/prior-year-baseline` deleted.
 - **In progress**: TD/DT Expected question PAUSED — FI P/1 homeroom mixes `TD` (French) / `DT` (English) in Expected, grade-Primary only. Deterministic benchmark join (`drb.ProgramFamily = sg.ProgramFamily`) ⟹ the `DT` grade-P students are on the **English program** (mislabeled or a mixed class). User verifying the PS ProgramCodes (data-fix vs. app-bug; warehouse only reflects a correction after re-ingest). Related bug flagged: the roster New-level **dropdown uses one scale for the whole grid** (`page.tsx` `getScaleLevels(roster[0].scaleSystem)`).
 - **Next action**: resolve TD/DT once ProgramCodes confirmed (+ consider the per-grid dropdown-scale fix); then resume the makeover — **Phase 1 shared group picker** ([[project_group_display_redesign]]) → Phase 2 rosters. Deploy makeover backend to dev/live in order: `FactStudentAdaptation.sql` → `usp_MergeStudent.sql` → `usp_UpsertStudentAdaptation.sql` → `tvf_StudentAdaptation.sql` → re-run `grant_webapp_sp.sql` (first two already on dev).
 - **Blockers**: None. NEW git workflow in effect ([[feedback_git_workflow]]): dev worktree (`Assessment-Data`) + patch worktree (`Assessment-Data-prod`, on `main`); cut `hotfix`/`critical-patch` off `main`, auto-pruned on merge; **MANDATORY `main`→`dev` back-merge after every patch** (absence of this caused the feat drift). Do NOT full-ingest to seed dev programming rows — use `reseed_programming_rows_dev.sql`.
+
+### Left Off — 2026-09-09
+- **Last completed**: (1) **`FactEnrollment.ActiveFlag` fix** — PS always fills DateLeft with the term-end so the old logic marked all 39 098 rows inactive; fixed `usp_MergeEnrollment` ("DateLeft NULL or >= today = active"), deployed live + re-merged (0→38 028 active). This ALSO fixed the HS section roster under-count (frozen SectionKey chain) — Drumlin ENG10 4→16. **PR #29 → main.** (2) **Prior-year baseline** loaded to live — `PriorYearBaseline` table + `load_prior_year_baseline.sql` from four ELA/FLA sheets (6221 rows / 5385 current-student matches).
+- **In progress**: the **prior-year baseline DISPLAY** (v0.4.0 minor). Branch `feature/prior-year-baseline` created off `main` with the baseline SQL cherry-picked on; **display not started**.
+- **Next action**: build the display — a starting-point read `COALESCE(latest prior-year FactAssessment*, PriorYearBaseline seed)` (auto-flips to facts Sept 2027) → reading-roster TVF + `data.ts` + row UI (June level + cumulative Δ via `DimReadingScale.LevelOrder`) → writing → student-detail per-cycle Δ → 0.4.0 container to live. Spec in memory `project_prior_year_baseline`. Alternatively the group-display redesign (`project_group_display_redesign`) is also open.
+- **Blockers**: none. (Also open: deploy the ActiveFlag fix to DEV; user to add teacher emails in PS for the 12 blank-email sections; confirm reading-vs-writing baseline coverage.)
+
+### Left Off — 2026-09-08
+> NOTE: this plan predates Phase 3b (web app), the production cutover, and the Short Cycles work by months. The authoritative current-state record is the memory decision file `project_assessment_platform.md` + the session archive; this Left Off captures only where the live session stopped.
+- **Last completed step**: **v0.3.0 shipped to `main`** — homeroom `/`-in-name 404 fix (materialized `DimStudent.GroupKey`) + small-group roster filter + collapsible school filter. PR #28 merged, `v0.3.0` tagged, semver image scheme started (`CHANGELOG.md`, `package.json` 0.3.0, `docs/prod-container-swap.md` updated). Live warehouse SQL deployed; `/` 404 confirmed cleared on data.tcrce.ca. `feat` reconciled to `0.4.0-dev`, pushed to origin for backup (NOT merged to main).
+- **In progress**: nothing mid-edit — clean stopping point. `feat/math-p6-entry` holds the dev work (pushed to origin for backup); `main` is the release branch.
+- **Next action**: (1) Diagnose the HS **section under-count** bug (Drumlin English 10 shows 4, should be ~15) on dev/synthetic — likely the enrollment→section join / effective-date filters, possibly the same root as the dual-role "fragmented sections". (2) Build the **secondary group-display redesign**: teacher rule (P-9 homerooms they teach + only their HS sections, incl. dual-role users) + above-teacher Homeroom/Section toggle over P-RG + grade filter atop the school filter. Specs in memory `project_section_undercapture_bug` and `project_group_display_redesign`.
+- **Blockers**: Container swap of v0.3.0 to `:0.3.0` waits on IT to place `assessment-webapp-0.3.0.tar` in `C:\temp` (not blocking dev work; the live SQL already cleared the 404).
 
 ### Left Off — 2026-09-04 (later) — 🎚️ Per-subject cycle grade bands + cycles-list polish; window→cycle wording; ASD-STE100 user guides; dev enrollment-currency fix
 - **Done today** (branch `feat/math-p6-entry`, commits `4ba2d85`→`ef07b78`, **pushed**; wrap commit on top):
@@ -595,19 +630,6 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
   4. Validate via "View as → Other user" using the same 5 impersonation users from Step 10's SQL tests.
 - **Blockers**: None.
 
-### Left Off — 2026-09-09
-- **Last completed**: (1) **`FactEnrollment.ActiveFlag` fix** — PS always fills DateLeft with the term-end so the old logic marked all 39 098 rows inactive; fixed `usp_MergeEnrollment` ("DateLeft NULL or >= today = active"), deployed live + re-merged (0→38 028 active). This ALSO fixed the HS section roster under-count (frozen SectionKey chain) — Drumlin ENG10 4→16. **PR #29 → main.** (2) **Prior-year baseline** loaded to live — `PriorYearBaseline` table + `load_prior_year_baseline.sql` from four ELA/FLA sheets (6221 rows / 5385 current-student matches).
-- **In progress**: the **prior-year baseline DISPLAY** (v0.4.0 minor). Branch `feature/prior-year-baseline` created off `main` with the baseline SQL cherry-picked on; **display not started**.
-- **Next action**: build the display — a starting-point read `COALESCE(latest prior-year FactAssessment*, PriorYearBaseline seed)` (auto-flips to facts Sept 2027) → reading-roster TVF + `data.ts` + row UI (June level + cumulative Δ via `DimReadingScale.LevelOrder`) → writing → student-detail per-cycle Δ → 0.4.0 container to live. Spec in memory `project_prior_year_baseline`. Alternatively the group-display redesign (`project_group_display_redesign`) is also open.
-- **Blockers**: none. (Also open: deploy the ActiveFlag fix to DEV; user to add teacher emails in PS for the 12 blank-email sections; confirm reading-vs-writing baseline coverage.)
-
-### Left Off — 2026-09-08
-> NOTE: this plan predates Phase 3b (web app), the production cutover, and the Short Cycles work by months. The authoritative current-state record is the memory decision file `project_assessment_platform.md` + the session archive; this Left Off captures only where the live session stopped.
-- **Last completed step**: **v0.3.0 shipped to `main`** — homeroom `/`-in-name 404 fix (materialized `DimStudent.GroupKey`) + small-group roster filter + collapsible school filter. PR #28 merged, `v0.3.0` tagged, semver image scheme started (`CHANGELOG.md`, `package.json` 0.3.0, `docs/prod-container-swap.md` updated). Live warehouse SQL deployed; `/` 404 confirmed cleared on data.tcrce.ca. `feat` reconciled to `0.4.0-dev`, pushed to origin for backup (NOT merged to main).
-- **In progress**: nothing mid-edit — clean stopping point. `feat/math-p6-entry` holds the dev work (pushed to origin for backup); `main` is the release branch.
-- **Next action**: (1) Diagnose the HS **section under-count** bug (Drumlin English 10 shows 4, should be ~15) on dev/synthetic — likely the enrollment→section join / effective-date filters, possibly the same root as the dual-role "fragmented sections". (2) Build the **secondary group-display redesign**: teacher rule (P-9 homerooms they teach + only their HS sections, incl. dual-role users) + above-teacher Homeroom/Section toggle over P-RG + grade filter atop the school filter. Specs in memory `project_section_undercapture_bug` and `project_group_display_redesign`.
-- **Blockers**: Container swap of v0.3.0 to `:0.3.0` waits on IT to place `assessment-webapp-0.3.0.tar` in `C:\temp` (not blocking dev work; the live SQL already cleared the 404).
-
 ### Left Off — 2026-04-30
 - **Last completed step**: Substantial Step 8 progress — first two merge procs deployed, validated end-to-end against synthetic data.
 - **What landed today**:
@@ -668,19 +690,4 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 - **Next action**: Drop a test CSV in `data/imports/` for me to validate format, OR start Step 8 (merge procedures). Project memory has full design notes for Step 8.
 - **Blockers**: None.
 
-### Left Off — 2026-09-15
-- **Note**: This plan covers the ORIGINAL warehouse/ingest build (through ~2026-04). Since then the project moved to the Phase 3b web app + feature work, tracked in **project memory**, not here. For current state read [[project_assessment_platform]] (distilled) and the per-feature memories; the running narrative is [[project_session_archive]].
-- **Current focus (not in this plan)**: Programming (IPP+Adaptations) makeover on `dev` (0.5.0-dev). Phase 0 backend + Phase 1 shared group picker (Homeroom/Section/Grade lenses) DONE + verified on dev. **Next: Phase 2** — the Programming pages (`/ipp`→`/programming`; two IPP/Adaptations rosters).
-- **Blockers**: None.
-
-### Left Off — 2026-09-16
-- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + per-feature memories; narrative in [[project_session_archive]].
-- **This session (dev/0.5.0)**: Programming makeover **complete through Phase 2** (`/programming`, window-less picker + IPP⟷Adaptations grid) + **Maintenance mode** built (banner/lock/auto-save/sysadmin page) + nav first-load caps fix. All on dev, SQL deployed to dev.
-- **Next action**: build **Writing `SCR` (Scribed)** — scope the approach first (touches the live writing path) — or continue polishing.
-- **Blockers**: None.
-
-### Left Off — 2026-09-17
-- **Note**: Current work is tracked in **project memory**, not this plan (which covers the original warehouse/ingest build). See [[project_assessment_platform]] + [[project_assessment_language_tracks]]; narrative in [[project_session_archive]].
-- **This session (dev/0.5.0)**: shipped **Writing SCR** (Conventions-only, verified on dev); built + deployed **dual-language literacy + app-level per-cycle scoping** (DimShortCycle header + scoped instances on `/cycles`, DimProgram.ScopeBucket, ProgramScope/AssessmentLanguage on windows, writing result-level language, J020→English reading); built the **course→assessment map foundation** (DimCourseAssessment + dev/live seeds).
-- **Next action**: the **course-scoped / cycle-based `/enter` rewrite** (banked) — group picker filtered to the caller's mapped-course sections (language-grouped, same-language multi-select) → combined roster with per-student instance routing on save → one card per (SCoR × subject) → remove the interim EN/FR toggle. Deploy `DimCourseAssessment.sql` + `seed_DimCourseAssessment_dev.sql` and test on dev's French/Math sections. Full design in [[project_assessment_language_tracks]].
-- **Blockers**: None (dev-data testability solved via the dev seed of synthetic course codes).
+*(Left Off notes are kept newest-first at the TOP of the chain — see the note above the 2026-09-17 entry.)*
