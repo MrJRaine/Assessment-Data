@@ -50,7 +50,12 @@ async function buildConfig(): Promise<sql.config> {
   if (!server || !database) {
     throw new Error('FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set')
   }
+  // Timed on its own: cold start measured 1667ms for token + connect together, and which half
+  // dominates decides the remedy (pre-warm the credential vs pre-open a connection). Guessing at
+  // that has gone badly enough today.
+  const tTok = Date.now()
   const token = await getCredential().getToken(SQL_SCOPE)
+  if (TIMING) console.log(`[sql] ${Date.now() - tTok}ms  <entra token>`)
   if (!token?.token) {
     throw new Error('Failed to acquire an Entra access token for Fabric')
   }
@@ -91,9 +96,15 @@ export function getPool(): Promise<sql.ConnectionPool> {
     // shows up once, as itself.
     const t0 = Date.now()
     poolPromise = buildConfig()
-      .then((cfg) => new sql.ConnectionPool(cfg).connect())
+      .then((cfg) => {
+        const tConn = Date.now()
+        return new sql.ConnectionPool(cfg).connect().then((p) => {
+          if (TIMING) console.log(`[sql] ${Date.now() - tConn}ms  <tds connect>`)
+          return p
+        })
+      })
       .then((p) => {
-        if (TIMING) console.log(`[sql] ${Date.now() - t0}ms  <pool connect + token>`)
+        if (TIMING) console.log(`[sql] ${Date.now() - t0}ms  <pool total>`)
         return p
       })
     poolPromise.catch(() => {
