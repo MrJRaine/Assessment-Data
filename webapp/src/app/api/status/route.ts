@@ -7,9 +7,13 @@ export const dynamic = 'force-dynamic'
 // the SERVER clock so each client can offset its own possibly-skewed laptop clock. The warehouse read
 // is cached briefly so hundreds of polling tabs hit the DB at most once per CACHE_MS.
 const CACHE_MS = 4_000
-// Ignore a window well past T (a forgotten "all clear") so the app self-heals after a swap; an
-// explicit clear lifts it immediately.
-const AUTO_EXPIRE_MS = 10 * 60_000
+
+// NOTE: there is deliberately NO auto-expire (removed 2026-09-18). A window used to lapse ~10 min
+// past T so a forgotten one would self-heal — but that could bring the app back UP in the middle of a
+// long maintenance job (e.g. deploying a batch of SQL scripts), with teachers writing against a
+// half-migrated warehouse. The window now stays until it is EXPLICITLY cleared. That's safe because
+// the sysadmin can clear from the banner, from the down overlay (which also offers sign-in, so a
+// locked-out admin can switch accounts), or directly via usp_ClearMaintenanceWindow.
 
 let cache: { at: string | null; message: string | null; fetchedAt: number } | null = null
 
@@ -25,10 +29,7 @@ export async function GET() {
     }
   }
 
-  let maintenanceAt = cache.at
-  if (maintenanceAt && Date.now() > new Date(maintenanceAt).getTime() + AUTO_EXPIRE_MS) {
-    maintenanceAt = null // auto-expired
-  }
+  const maintenanceAt = cache.at
 
   return NextResponse.json(
     {

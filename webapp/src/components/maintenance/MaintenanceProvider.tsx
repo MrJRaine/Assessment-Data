@@ -74,10 +74,12 @@ export default function MaintenanceProvider({
     setState({ stage, secondsRemaining, maintenanceAt: new Date(atMs).toISOString(), message })
   }, [])
 
-  const poll = useCallback(async () => {
+  // Returns whether the status was actually refreshed, so the caller can retry SOON on failure
+  // instead of waiting out a long (hidden-tab) interval and blowing past the warning window.
+  const poll = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch('/api/status', { cache: 'no-store' })
-      if (!res.ok) return
+      if (!res.ok) return false
       const data: { maintenanceAt: string | null; serverNow: string; message: string | null } = await res.json()
       const offsetMs = new Date(data.serverNow).getTime() - Date.now()
       windowRef.current = {
@@ -86,8 +88,10 @@ export default function MaintenanceProvider({
         offsetMs,
       }
       recompute()
+      return true
     } catch {
       /* transient — keep the last known state */
+      return false
     }
   }, [recompute])
 
@@ -99,21 +103,46 @@ export default function MaintenanceProvider({
     const tick = setInterval(() => {
       if (!stopped) recompute()
     }, 1000)
+    // A HIDDEN tab polls rarely. Safe because polling only DISCOVERS a newly-set/cleared window —
+    // once a window is known, the 1s ticker above drives every stage (lock, auto-save, overlay)
+    // locally with no network. Worst case a hidden tab learns 8 min late, which still clears the
+    // T-1 auto-save provided maintenance is scheduled >= 10 min out (the admin screen warns when
+    // it isn't). Browsers throttle background timers anyway, so this mostly stops pointless wake-ups.
+    const HIDDEN_MS = 480_000 // 8 min
+    const RETRY_MS = 30_000 // a failed poll must NOT wait out a full hidden interval
     let pollTimer: ReturnType<typeof setTimeout>
-    const schedule = () => {
+    const isHidden = () => typeof document !== 'undefined' && document.hidden
+    const schedule = (overrideDelay?: number) => {
+      clearTimeout(pollTimer)
       const s = windowRef.current.atMs == null ? null : Math.round((windowRef.current.atMs - (Date.now() + windowRef.current.offsetMs)) / 1000)
-      const delay = s != null && s <= 6 * 60 ? 4000 : 8000 // 4s when close, else 8s — pick up a newly-set window promptly
+      const visibleDelay = s != null && s <= 6 * 60 ? 4000 : 8000 // 4s when close, else 8s
+      const delay = overrideDelay ?? (isHidden() ? HIDDEN_MS : visibleDelay)
       pollTimer = setTimeout(async () => {
         if (stopped) return
-        await poll()
-        schedule()
+        const ok = await poll()
+        schedule(ok ? undefined : RETRY_MS)
       }, delay)
     }
     schedule()
+
+    // Coming back to the tab: refresh immediately so the teacher never sees a stale state (and a
+    // cleared window lifts at once), then resume the normal visible cadence.
+    const onVisibility = () => {
+      if (stopped || isHidden()) {
+        schedule() // went hidden — fall back to the slow cadence right away
+        return
+      }
+      void poll().then(() => {
+        if (!stopped) schedule()
+      })
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       stopped = true
       clearInterval(tick)
       clearTimeout(pollTimer)
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [poll, recompute])
 
@@ -142,7 +171,8 @@ export default function MaintenanceProvider({
       <MaintenanceBanner state={state} admin={admin} />
       {children}
       {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
-          grid mid auto-save). The poller keeps trying; when the window clears/expires it disappears. */}
+          grid mid auto-save). The poller keeps trying; the overlay lifts when a sysadmin EXPLICITLY
+          clears the window — there is no auto-expire, so a long maintenance job is never cut short. */}
       {state.stage === 'down' ? <MaintenanceDown message={state.message} admin={admin} authSlot={authSlot} /> : null}
     </Ctx.Provider>
   )

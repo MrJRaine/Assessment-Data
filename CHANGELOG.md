@@ -63,6 +63,19 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   sysadmin `/admin/maintenance` page, and one-click Clear + sign-in on the lockdown screen.
 
 ### Changed
+- **Maintenance mode: no more auto-expire; safer scheduling.** A scheduled window used to lapse ~10
+  minutes past its time so a forgotten one self-healed — but that could bring the app back **up
+  mid-job** (part-way through a batch of SQL deploys), letting teachers write against a half-migrated
+  warehouse. The window now persists until a sysadmin **explicitly** clears it (banner / down overlay /
+  `usp_ClearMaintenanceWindow`). Quick-picks are now **10/15/30/60 min** (5 dropped); scheduling under
+  10 minutes still works but asks for confirmation, warning that unsaved work on **background** tabs
+  may miss the automatic save.
+- **Background tabs poll far less.** Hidden tabs check for maintenance every **8 minutes** instead of
+  8 seconds (plus an immediate check when you return to the tab, and a 30s retry after a failed
+  check). Safe because the countdown, lock and auto-save all run locally once a window is known —
+  polling only discovers a new or cleared one. Cuts the idle background load on the server.
+- **DB connection pool raised 10 → 20**, so concurrent teachers aren't queued inside the app — real
+  demand reaches Fabric and the capacity-usage measurement isn't under-reported.
 - **Roster `@GroupKey` resolution is lens-agnostic** — a student resolves by homeroom key OR (HS)
   section key OR a `GRADE:<SchoolID>:<Grade>` cohort key, so oversight cards resolve correctly.
 - `/students` cohort filters now persist for the tab session.

@@ -16,10 +16,21 @@ aggro as possible." Scoped 2026-09-11.
   (both sysadmin-gated in-proc via StaffAppAccess.IsSysAdmin). `/api/status` reads it with a ~10s
   in-memory cache (poll load) and **fails OPEN** on a read error. MaintenanceAt stored UTC; the set
   proc takes a VARCHAR 'YYYY-MM-DD HH:MM:SS' and CASTs (matches the app's VARCHAR-param convention).
-- **Clearing = BOTH** auto-expire (`/api/status` ignores a window >10 min past T) AND explicit
-  cancel/all-clear (`usp_ClearMaintenanceWindow`).
-- **Sysadmin UX = "lock down in N minutes"** (quick-pick 5/10/15/30 + custom 1–240 + optional
+- **Clearing = EXPLICIT ONLY** (`usp_ClearMaintenanceWindow`, via the banner / down overlay / admin
+  page). The old ~10-min **auto-expire was REMOVED 2026-09-18** — it could bring the app back UP
+  mid-job (e.g. part-way through deploying a batch of SQL scripts), letting teachers write against a
+  half-migrated warehouse. A forgotten window now stays down, which is the safer failure: the overlay
+  carries a Clear button AND sign-in, so a locked-out sysadmin can still switch accounts and clear.
+- **Sysadmin UX = "lock down in N minutes"** (quick-pick **10/15/30/60** + custom 1–240 + optional
   message) rather than an absolute datetime picker — avoids Atlantic/DST conversion; server computes T.
+  5 min was dropped (below the safe threshold for background tabs). Scheduling **under 10 minutes** is
+  still allowed (testing needs it) but pops a **confirmation** warning that unsaved work on BACKGROUND
+  tabs may not auto-save in time — informed choice, not a hard block.
+- **Hidden tabs poll every 8 min** (not 8s), + immediate poll on becoming visible, + 30s retry after a
+  failed poll. Safe because polling only DISCOVERS a new/cleared window — once known, the local 1s
+  ticker drives every stage (lock/auto-save/overlay) with no network. This is what the ≥10-min
+  guidance protects: worst case a hidden tab learns 8 min late and still clears the T-1 auto-save.
+  (Browsers throttle background timers anyway, so the practical saving is smaller than the arithmetic.)
 - **M4 new-load redirect SIMPLIFIED:** a client full-screen "We'll be right back" overlay when stage
   = 'down' (past T), covering open tabs AND fresh loads uniformly. The spec's server-path-aware
   "redirect fresh loads at T-5" was skipped — during T-5..T fresh loads just get the banner + locked
