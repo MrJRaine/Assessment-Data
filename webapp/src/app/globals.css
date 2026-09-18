@@ -170,6 +170,11 @@ a { color: inherit; text-decoration: none; }
 
 /* buttons */
 .btn { padding: 0.5rem 0.9rem; border: 1px solid var(--primary); background: var(--primary); color: #fff; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+/* Secondary action — the ingest step BEFORE the destructive one, so it must not compete with .btn
+   for attention while still reading as a real button. */
+.btn-secondary { padding: 0.5rem 0.9rem; border: 1px solid var(--primary); background: transparent; color: var(--primary); border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+.btn-secondary:hover:not(:disabled) { background: #eaf6fb; }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-ghost { padding: 0.35rem 0.7rem; border: 1px solid var(--border); background: #fff; color: var(--ink); border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
