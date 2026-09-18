@@ -492,5 +492,5 @@ a { color: inherit; text-decoration: none; }
    Geometry (the two bows) was chosen against a live preview rather than guessed — a tapered version
    was tried first and looked wrong at 32px, and a straight-segment one read as rulered. */
 .mtoggle.yes .check path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
-.mtoggle.yes .check .edge { stroke: #176a37; stroke-width: 4.5; } /* carries the contrast */
+.mtoggle.yes .check .edge { stroke: #176a37; stroke-width: 6; } /* 1.25 units per side ~= 1.75px — see note */
 .mtoggle.yes .check .fill { stroke: #35c75a; stroke-width: 3.5; } /* the colour you actually read */
