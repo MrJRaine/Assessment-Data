@@ -155,7 +155,7 @@ RETURN
         --
         -- The INNER JOIN inside the subquery does the narrowing FIRST, so the fan-out is bounded by
         -- students-x-requested-sections (one or two each) instead of students-x-all-enrolments.
-        LEFT JOIN (
+        INNER JOIN (
             SELECT e.StudentKey, e.StartDate, e.EndDate, sec.SectionID,
                    sec.EffectiveStartDate AS SecStart, sec.EffectiveEndDate AS SecEnd
             FROM FactEnrollment e
@@ -180,37 +180,20 @@ RETURN
     -- cohort key (oversight Grade lens). Math is P-6 so the section candidate never fires, but the
     -- shape is kept identical to the Reading/Writing roster TVFs. Only the row whose key equals
     -- @GroupKey survives the final WHERE; SELECT DISTINCT collapses the fan-out.
+    -- SECTION ONLY. Data Entry is course-scoped: tvf_TeacherGroups emits exactly one key shape,
+    -- 'SEC:' + SectionID, and nothing else calls these TVFs. The homeroom and GRADE: cohort
+    -- candidates that used to sit here were dead code, and they were expensive dead code: Fabric
+    -- INLINES a CTE at every reference rather than materialising it once, so three branches meant
+    -- the ApplicableStudents tree -- which for an analyst is every student in the region -- was
+    -- evaluated THREE times per roster load. (Removed 2026-09-18; recover from git if an oversight
+    -- homeroom/grade lens is ever wanted here again.)
     StudentGroups AS (
-        -- Homeroom candidate
-        SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            Homeroom, SchoolName, HomeroomKey AS GroupKey
-        FROM ApplicableStudents
-        WHERE HomeroomKey IS NOT NULL
-          AND (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(HomeroomKey) + ',%')
-
-        UNION ALL
-
-        -- Section candidate (HS section enrollments)
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
-        -- EVERY grade, not just 10+ — Data Entry is course-scoped, so a Primary math section gets a
-        -- 'SEC:<id>' key too. The old gate left elementary/junior course cards opening empty rosters
-        -- (and math is a P-6 assessment, so that was ALL of them).
         WHERE SectionID IS NOT NULL
           AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(SectionID) + ',%')
-
-        UNION ALL
-
-        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
-        SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
-            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
-        FROM ApplicableStudents
-        WHERE SchoolID IS NOT NULL
-          AND (',' + @GroupKeys + ',') LIKE ('%,GRADE:' + RTRIM(SchoolID) + ':' + RTRIM(Grade) + ',%')
     ),
     -- Latest math result per (student, window, task). Dated history is kept, so pick the most recent.
     LatestMathPerTask AS (

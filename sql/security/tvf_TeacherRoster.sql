@@ -191,7 +191,7 @@ RETURN
         --
         -- The INNER JOIN inside the subquery does the narrowing FIRST, so the fan-out is bounded by
         -- students-x-requested-sections (one or two each) instead of students-x-all-enrolments.
-        LEFT JOIN (
+        INNER JOIN (
             SELECT e.StudentKey, e.StartDate, e.EndDate, sec.SectionID,
                    sec.EffectiveStartDate AS SecStart, sec.EffectiveEndDate AS SecEnd
             FROM FactEnrollment e
@@ -218,41 +218,20 @@ RETURN
     -- candidate row per key; only the row whose key equals @GroupKey survives the final WHERE, and
     -- SELECT DISTINCT collapses the fan-out. (Was a single CASE that gave HS students a section key
     -- only, so an HS homeroom card resolved to an empty roster.)
+    -- SECTION ONLY. Data Entry is course-scoped: tvf_TeacherGroups emits exactly one key shape,
+    -- 'SEC:' + SectionID, and nothing else calls these TVFs. The homeroom and GRADE: cohort
+    -- candidates that used to sit here were dead code, and they were expensive dead code: Fabric
+    -- INLINES a CTE at every reference rather than materialising it once, so three branches meant
+    -- the ApplicableStudents tree -- which for an analyst is every student in the region -- was
+    -- evaluated THREE times per roster load. (Removed 2026-09-18; recover from git if an oversight
+    -- homeroom/grade lens is ever wanted here again.)
     StudentGroups AS (
-        -- Homeroom candidate (any grade that carries a stored homeroom key)
-        -- Each branch filters on @GroupKeys ITSELF rather than leaving it all to the final WHERE.
-        -- Hand-written predicate pushdown: the branches that can't match the requested keys collapse
-        -- to nothing instead of materialising every candidate for every student first. This is what
-        -- keeps the plan inside the optimizer's budget (see Msg 8623 above).
-        SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
-            Homeroom, SchoolName, HomeroomKey AS GroupKey
-        FROM ApplicableStudents
-        WHERE HomeroomKey IS NOT NULL
-          AND (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(HomeroomKey) + ',%')
-
-        UNION ALL
-
-        -- Section candidate — EVERY grade, not just 10+. Data Entry is course-scoped now: the picker
-        -- hands out 'SEC:<id>' for a Primary FLA section just as much as a grade-11 one. The old
-        -- GradeOrder >= 10 gate dated from when a section meant a HIGH SCHOOL section, and left every
-        -- elementary/junior course card resolving to an EMPTY roster.
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE SectionID IS NOT NULL
           AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(SectionID) + ',%')
-
-        UNION ALL
-
-        -- Grade-cohort candidate (oversight Grade lens: all students of a school + grade)
-        SELECT
-            AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
-            Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
-        FROM ApplicableStudents
-        WHERE SchoolID IS NOT NULL
-          AND (',' + @GroupKeys + ',') LIKE ('%,GRADE:' + RTRIM(SchoolID) + ':' + RTRIM(Grade) + ',%')
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
