@@ -6,6 +6,11 @@ import { execProc } from '@/lib/db'
 import { getTeacherRoster, getTeacherRosterWriting, getWindowEndDate, getMathRoster, type WritingLanguage } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 
+// The grid's groupKey can carry SEVERAL comma-joined classes (the picker's "enter several at once"
+// mode). The scope gates below re-resolve the roster for the same set, so a combined roster admits
+// exactly the students the teacher was shown — no wider, no narrower.
+const splitKeys = (groupKey: string) => groupKey.split(',').map((k) => k.trim()).filter(Boolean)
+
 export interface SaveEntry {
   studentNumber: string
   readingScaleId: string
@@ -38,7 +43,7 @@ export async function saveReadingAssessments(
   // SCOPE GATE: the write procs trust @CallerUPN but don't enforce per-student RLS, so verify
   // each target is on THIS caller's RLS-scoped roster (via the @UPN TVF) before writing. Blocks a
   // crafted request from saving for a student outside the caller's window/group scope.
-  const allowed = new Set((await getTeacherRoster(upn, windowId, groupKey)).map((r) => r.studentNumber))
+  const allowed = new Set((await getTeacherRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
 
   const errors: SaveResult['errors'] = []
   let saved = 0
@@ -94,7 +99,7 @@ export async function saveWritingAssessments(
 
   // Scope-gate against THIS language's roster (dual-language writing): an FI grade-3+ student is
   // on both rosters, but an English-only student isn't on the French roster and vice-versa.
-  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, groupKey, language)).map((r) => r.studentNumber))
+  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)).map((r) => r.studentNumber))
 
   const errors: SaveResult['errors'] = []
   let saved = 0
@@ -149,7 +154,7 @@ export async function saveMathAssessments(
   const windowEnd = await getWindowEndDate(windowId)
   const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
 
-  const allowed = new Set((await getMathRoster(upn, windowId, groupKey)).map((r) => r.studentNumber))
+  const allowed = new Set((await getMathRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
 
   const errors: MathSaveResult['errors'] = []
   let saved = 0
@@ -209,8 +214,8 @@ export async function confirmRosterIPPs(
   // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster. Writing is
   // dual-language, so scope to the confirmed track's roster (language is ignored for Reading).
   const roster = subject === 'Writing'
-    ? await getTeacherRosterWriting(upn, windowId, groupKey, language)
-    : await getTeacherRoster(upn, windowId, groupKey)
+    ? await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)
+    : await getTeacherRoster(upn, windowId, splitKeys(groupKey))
   const allowed = new Set(roster.map((r) => r.studentKey))
 
   const errors: IppSaveResult['errors'] = []

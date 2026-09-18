@@ -32,7 +32,9 @@
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherRosterMath;
 GO
 
-CREATE FUNCTION dbo.tvf_TeacherRosterMath(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(70))
+-- @GroupKeys: a COMMA-DELIMITED list of group keys, so several same-language course sections can be
+-- entered as one combined roster. A single key is just a list of one (back-compatible).
+CREATE FUNCTION dbo.tvf_TeacherRosterMath(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKeys VARCHAR(4000))
 RETURNS TABLE
 AS
 RETURN
@@ -142,9 +144,10 @@ RETURN
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
             a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
+        -- Section context for ALL grades (was gated to 10+), so an oversight user opening a Primary
+        -- math section gets students carrying a SectionID. Fan-out collapses at SELECT DISTINCT.
         LEFT JOIN FactEnrollment e
-               ON a.GradeOrder >= 10
-              AND e.StudentKey  = a.StudentKey
+               ON e.StudentKey  = a.StudentKey
               AND e.StartDate  <= a.WindowEndDate
               AND (e.EndDate IS NULL OR e.EndDate >= a.WindowStartDate)
         LEFT JOIN DimSection sec
@@ -179,7 +182,10 @@ RETURN
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramFamily,
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
-        WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+        -- EVERY grade, not just 10+ — Data Entry is course-scoped, so a Primary math section gets a
+        -- 'SEC:<id>' key too. The old gate left elementary/junior course cards opening empty rosters
+        -- (and math is a P-6 assessment, so that was ALL of them).
+        WHERE SectionID IS NOT NULL
 
         UNION ALL
 
@@ -206,6 +212,7 @@ RETURN
         sg.StudentNumber,
         sg.FirstName,
         sg.LastName,
+        sg.GroupKey,        -- which of the selected classes this student came from (combined roster headings)
         sg.Grade,
         sg.Homeroom,
         sg.SchoolName,
@@ -246,7 +253,8 @@ RETURN
           AND ipp.Subject       = 'Math'
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
-    WHERE sg.GroupKey = @GroupKey
+    -- Match ANY key in the delimited list (guarded LIKE, no STRING_SPLIT dependency).
+    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + sg.GroupKey + ',%')
 );
 GO
 

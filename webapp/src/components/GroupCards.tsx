@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { CardLink } from '@/components/ui'
 import type { TeacherGroup } from '@/lib/data'
@@ -81,12 +82,12 @@ export default function GroupCards({
       {taught.length > 0 && (
         <section>
           <h2 className="section-heading">My classes</h2>
-          {mode === 'course' ? <ByLanguage groups={taught} card={card} /> : <div className="card-grid">{taught.map(card)}</div>}
+          {mode === 'course' ? <ByLanguage groups={taught} card={card} hrefBase={hrefBase} /> : <div className="card-grid">{taught.map(card)}</div>}
         </section>
       )}
 
       {oversight.length > 0 && (
-        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} />
+        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} hrefBase={hrefBase} />
       )}
     </>
   )
@@ -97,18 +98,130 @@ export default function GroupCards({
  * A single-language set gets no heading (nothing to distinguish). Sections whose course has no
  * language on file fall under "Other" rather than vanishing.
  */
-function ByLanguage({ groups, card }: { groups: TeacherGroup[]; card: (g: TeacherGroup) => ReactNode }) {
+function ByLanguage({
+  groups,
+  card,
+  hrefBase,
+}: {
+  groups: TeacherGroup[]
+  card: (g: TeacherGroup) => ReactNode
+  hrefBase: string
+}) {
   const langs = [...new Set(groups.map((g) => g.language ?? 'Other'))].sort()
-  if (langs.length <= 1) return <div className="card-grid">{groups.map(card)}</div>
   return (
     <>
       {langs.map((lang) => (
-        <div key={lang}>
-          <h3 className="section-subheading">{lang}</h3>
-          <div className="card-grid">{groups.filter((g) => (g.language ?? 'Other') === lang).map(card)}</div>
-        </div>
+        <LanguageBlock
+          key={lang}
+          // A single-language set still gets a block, just no heading — nothing to distinguish.
+          heading={langs.length > 1 ? lang : null}
+          groups={groups.filter((g) => (g.language ?? 'Other') === lang)}
+          card={card}
+          hrefBase={hrefBase}
+        />
       ))}
     </>
+  )
+}
+
+/**
+ * One language's course sections, with opt-in multi-select.
+ *
+ * Multi-select is scoped to a single language BLOCK by construction: a teacher with an ELA and an
+ * FLA section can't combine them, because the entry language comes from the course and one roster
+ * can only be in one language. Selecting several opens them as a combined roster — the teacher who
+ * takes three Primary FLA sections marks all of them in one pass instead of three.
+ */
+function LanguageBlock({
+  heading,
+  groups,
+  card,
+  hrefBase,
+}: {
+  heading: string | null
+  groups: TeacherGroup[]
+  card: (g: TeacherGroup) => ReactNode
+  hrefBase: string
+}) {
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+
+  // Nothing to combine with — don't offer the mode at all.
+  const canCombine = groups.length > 1
+
+  const toggle = (key: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+
+  const stop = () => {
+    setPicking(false)
+    setPicked(new Set())
+  }
+
+  // Keys travel comma-joined in the existing [groupKey] segment; the roster splits them back out.
+  const combinedHref = `${hrefBase}/${encodeURIComponent([...picked].join(','))}`
+  const total = groups.filter((g) => picked.has(g.key)).reduce((a, g) => a + g.applicableCount, 0)
+
+  return (
+    <div className="lang-block">
+      {(heading || canCombine) && (
+        <div className="lang-block-head">
+          {heading && <h3 className="section-subheading">{heading}</h3>}
+          {canCombine &&
+            (picking ? (
+              <button type="button" className="btn-ghost" onClick={stop}>
+                Cancel
+              </button>
+            ) : (
+              <button type="button" className="btn-ghost" onClick={() => setPicking(true)}>
+                Enter several at once
+              </button>
+            ))}
+        </div>
+      )}
+
+      {picking ? (
+        <>
+          <div className="card-grid">
+            {groups.map((g) => (
+              <label key={g.key} className={`pick-card${picked.has(g.key) ? ' on' : ''}`}>
+                <input type="checkbox" checked={picked.has(g.key)} onChange={() => toggle(g.key)} />
+                <span className="pick-card-body">
+                  <span className="pick-card-title">{g.label}</span>
+                  <span className="muted small">
+                    {[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ')}
+                  </span>
+                  <span className="muted small">
+                    {g.enteredCount}/{g.applicableCount} entered
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="pick-actions">
+            <button type="button" className="btn-ghost" onClick={() => setPicked(new Set(groups.map((g) => g.key)))}>
+              Select all
+            </button>
+            <button type="button" className="btn-ghost" onClick={() => setPicked(new Set())}>
+              Clear all
+            </button>
+            {picked.size > 0 ? (
+              <Link href={combinedHref} className="btn-primary">
+                Open {picked.size} {picked.size === 1 ? 'class' : 'classes'} ({total} students)
+              </Link>
+            ) : (
+              <span className="muted small">Tick the classes you want to enter together.</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="card-grid">{groups.map(card)}</div>
+      )}
+    </div>
   )
 }
 
@@ -116,11 +229,13 @@ function Oversight({
   groups,
   card,
   showHeading,
+  hrefBase,
   mode,
 }: {
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
   showHeading: boolean
+  hrefBase: string
   mode: 'lens' | 'course'
 }) {
   const byCourse = mode === 'course'
@@ -259,7 +374,7 @@ function Oversight({
       {visible.length === 0 ? (
         <p className="muted" style={{ marginTop: '1rem' }}>No {byCourse ? 'sections' : lens === 'Section' ? 'sections' : lens === 'Grade' ? 'grades' : 'homerooms'} match the current filters.</p>
       ) : byCourse ? (
-        <ByLanguage groups={visible} card={card} />
+        <ByLanguage groups={visible} card={card} hrefBase={hrefBase} />
       ) : (
         <div className="card-grid">{visible.map(card)}</div>
       )}

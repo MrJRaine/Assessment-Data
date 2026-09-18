@@ -55,12 +55,14 @@ export default async function RosterGrid({
   const { cycleGroupId: rawCycle, subject: rawSubject, groupKey: rawGroupKey } = await params
   const cycleGroupId = decodeURIComponent(rawCycle)
   const subject = decodeURIComponent(rawSubject)
-  const groupKey = decodeURIComponent(rawGroupKey)
+  // One segment can carry SEVERAL comma-joined keys — the picker's "enter several at once" mode.
+  const groupKeys = decodeURIComponent(rawGroupKey).split(',').map((k) => k.trim()).filter(Boolean)
   const upn = await getCurrentUpn()
 
   const isWriting = subject === 'Writing'
   const isMath = subject === 'Math'
 
+  let picked: TeacherGroup[] = []
   let group: TeacherGroup | null = null
   const slices: Slice[] = []
   let error: string | null = null
@@ -70,8 +72,12 @@ export default async function RosterGrid({
     // can't see resolves to nothing), supplies the display label, and names which cycle INSTANCE(S)
     // this class's students sit under — there is no windowId in the URL, because you pick a cycle.
     const groups = await getTeacherGroups(upn, cycleGroupId, subject)
-    group = groups.find((g) => g.key === groupKey) ?? null
-    const windowIds = group?.windowIds ?? []
+    // Every requested key must be one the caller can actually see; anything else is silently
+    // dropped, so a hand-typed key grants nothing.
+    picked = groupKeys.map((k) => groups.find((g) => g.key === k)).filter((g): g is TeacherGroup => !!g)
+    group = picked[0] ?? null
+    // A combined roster spans the union of its classes' instances.
+    const windowIds = [...new Set(picked.flatMap((g) => g.windowIds ?? []))]
 
     // Usually one instance. A class straddles two when the cycle splits the same language by program
     // scope or grade band, and then each instance gets its own grid and its own Save — the same
@@ -102,13 +108,13 @@ export default async function RosterGrid({
         count: 0,
       }
       if (isWriting) {
-        slice.writingRoster = await getTeacherRosterWriting(upn, windowId, groupKey, language)
+        slice.writingRoster = await getTeacherRosterWriting(upn, windowId, groupKeys, language)
         slice.count = slice.writingRoster.length
       } else if (isMath) {
-        slice.mathRoster = await getMathRoster(upn, windowId, groupKey)
+        slice.mathRoster = await getMathRoster(upn, windowId, groupKeys)
         slice.count = new Set(slice.mathRoster.map((r) => r.studentKey)).size
       } else {
-        slice.roster = await getTeacherRoster(upn, windowId, groupKey)
+        slice.roster = await getTeacherRoster(upn, windowId, groupKeys)
         const scaleSystem = slice.roster[0]?.scaleSystem ?? null
         if (scaleSystem) slice.levels = await getScaleLevels(scaleSystem)
         slice.achievementLevels = await getAchievementLevels()
@@ -133,8 +139,13 @@ export default async function RosterGrid({
           &larr; Back to groups
         </Link>
         <span className="group-label">
-          {group?.label ?? groupKey}
-          {schoolName ? ` · ${schoolName}` : ''} · {subject}
+          {/* A combined roster names every class it covers, so the teacher can see at a glance
+              which ones they're marking -- the school is dropped, since it would repeat. */}
+          {picked.length > 1
+            ? picked.map((g) => g.label).join(' + ')
+            : `${group?.label ?? groupKeys.join(', ')}${schoolName ? ` · ${schoolName}` : ''}`}
+          {' · '}
+          {subject}
           {isWriting ? ` · ${language}` : ''}
         </span>
       </div>
@@ -158,13 +169,13 @@ export default async function RosterGrid({
               </h2>
             )}
             {isWriting ? (
-              <WritingRosterEntry windowId={s.windowId} groupKey={groupKey} roster={s.writingRoster} language={language} />
+              <WritingRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} roster={s.writingRoster} language={language} />
             ) : isMath ? (
-              <MathRosterEntry windowId={s.windowId} groupKey={groupKey} rows={s.mathRoster} />
+              <MathRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} rows={s.mathRoster} />
             ) : (
               <RosterEntry
                 windowId={s.windowId}
-                groupKey={groupKey}
+                groupKey={groupKeys.join(",")}
                 roster={s.roster}
                 levels={s.levels}
                 achievementLevels={s.achievementLevels}

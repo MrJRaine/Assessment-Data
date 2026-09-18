@@ -27,7 +27,9 @@
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherRoster;
 GO
 
-CREATE FUNCTION dbo.tvf_TeacherRoster(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKey VARCHAR(70))
+-- @GroupKeys: a COMMA-DELIMITED list of group keys, so several same-language course sections can be
+-- entered as one combined roster. A single key is just a list of one (back-compatible).
+CREATE FUNCTION dbo.tvf_TeacherRoster(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKeys VARCHAR(4000))
 RETURNS TABLE
 AS
 RETURN
@@ -178,9 +180,12 @@ RETURN
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
             a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
         FROM AdminAnalystApplicable a
+        -- Section context for ALL grades (was gated to 10+). An oversight user opening a Primary
+        -- course section needs its students to carry a SectionID, or the 'SEC:' candidate below
+        -- never fires for them. Fans a student out to one row per enrollment; the StudentGroups
+        -- UNION + the final SELECT DISTINCT collapse it.
         LEFT JOIN FactEnrollment e
-               ON a.GradeOrder >= 10
-              AND e.StudentKey  = a.StudentKey
+               ON e.StudentKey  = a.StudentKey
               AND e.StartDate  <= a.WindowEndDate
               AND (e.EndDate IS NULL OR e.EndDate >= a.WindowStartDate)
         LEFT JOIN DimSection sec
@@ -212,12 +217,15 @@ RETURN
 
         UNION ALL
 
-        -- Section candidate (HS section enrollments)
+        -- Section candidate — EVERY grade, not just 10+. Data Entry is course-scoped now: the picker
+        -- hands out 'SEC:<id>' for a Primary FLA section just as much as a grade-11 one. The old
+        -- GradeOrder >= 10 gate dated from when a section meant a HIGH SCHOOL section, and left every
+        -- elementary/junior course card resolving to an EMPTY roster.
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
-        WHERE GradeOrder >= 10 AND SectionID IS NOT NULL
+        WHERE SectionID IS NOT NULL
 
         UNION ALL
 
@@ -271,6 +279,7 @@ RETURN
         sg.LastName,
         sg.Grade,
         sg.Homeroom,
+        sg.GroupKey,        -- which of the selected classes this student came from (combined roster headings)
         sg.SchoolName,
         -- Effective reading scale: the cycle's declared scale when it's language-scoped,
         -- else per-student by family -- with J020 (late immersion) always EN_Reading.
@@ -347,7 +356,10 @@ RETURN
                                           WHEN sg.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END)
     LEFT JOIN ReadingCycleRank lastR ON lastR.StudentNumber = sg.StudentNumber AND lastR.rn = 1
     LEFT JOIN ReadingCycleRank prevR ON prevR.StudentNumber = sg.StudentNumber AND prevR.rn = 2
-    WHERE sg.GroupKey = @GroupKey
+    -- Match ANY key in the delimited list. Same guarded-LIKE trick as the program-scope match, so
+    -- there's no STRING_SPLIT dependency. Group keys contain ':' and '-' but never ',', so the
+    -- delimiter is unambiguous.
+    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + sg.GroupKey + ',%')
 );
 GO
 

@@ -425,7 +425,10 @@ export default function MathRosterEntry({
                                 {cols.map((s) => {
                                   const v = cellMark(s.studentKey, t.mathTaskKey)
                                   const cls = v === '1' ? 'yes' : v === '0' ? 'no' : v === 'ipp' ? 'ipp' : 'blank'
-                                  const glyph = v === '1' ? '✓' : v === '0' ? '✗' : v === 'ipp' ? 'IPP' : ''
+                                  // "Not yet" is a yellow OUTLINE circle, not a red ✗ — these are
+                                  // short-cycle checkpoints, and a red cross reads as a mark against
+                                  // the child rather than "hasn't got there yet".
+                                  const glyph = v === '1' ? '✓' : v === '0' ? '○' : v === 'ipp' ? 'IPP' : ''
                                   return (
                                     <td className="cell stu" key={s.studentKey}>
                                       <button

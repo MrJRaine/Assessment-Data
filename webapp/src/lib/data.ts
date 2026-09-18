@@ -273,6 +273,7 @@ export interface RosterStudent {
   lastName: string
   grade: string | null
   homeroom: string | null // real homeroom name (for the roster header)
+  groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
@@ -295,7 +296,7 @@ export interface RosterStudent {
 export async function getTeacherRoster(
   upn: string,
   windowId: string,
-  groupKey: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
 ): Promise<RosterStudent[]> {
   const rows = await queryAsUser<{
     StudentKey: string
@@ -310,6 +311,7 @@ export async function getTeacherRoster(
     ExpectedMinLevel: string | null
     ExpectedMaxLevel: string | null
     Homeroom: string | null
+    GroupKey: string
     SchoolName: string | null
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
@@ -323,8 +325,8 @@ export async function getTeacherRoster(
     PrevCycleReadingLevel: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
-    { WindowID: windowId, GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKeys) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKeys: groupKeys.join(",") },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -333,6 +335,7 @@ export async function getTeacherRoster(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     scaleSystem: r.ScaleSystem ?? null,
     programFamily: r.IPPProgramFamily ?? null,
@@ -386,6 +389,7 @@ export interface WritingRosterStudent {
   lastName: string
   grade: string | null
   homeroom: string | null
+  groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
@@ -405,7 +409,7 @@ export interface WritingRosterStudent {
 export async function getTeacherRosterWriting(
   upn: string,
   windowId: string,
-  groupKey: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
   language: WritingLanguage,
 ): Promise<WritingRosterStudent[]> {
   const rows = await queryAsUser<{
@@ -421,6 +425,7 @@ export async function getTeacherRosterWriting(
     ExistingAvgScore: number | null
     ExistingAssessmentDate: Date | string | null
     Homeroom: string | null
+    GroupKey: string
     SchoolName: string | null
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
@@ -430,8 +435,8 @@ export async function getTeacherRosterWriting(
     AchievementHexColorTint: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey, @Language) ORDER BY LastName, FirstName',
-    { WindowID: windowId, GroupKey: groupKey, Language: language },
+    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKeys: groupKeys.join(","), Language: language },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -440,6 +445,7 @@ export async function getTeacherRosterWriting(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     programFamily: r.IPPProgramFamily ?? null,
     ideas: r.ExistingIdeasScore ?? null,
@@ -1050,6 +1056,7 @@ export interface MathRosterRow {
   lastName: string
   grade: string | null
   homeroom: string | null
+  groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   programFamily: string | null
   mathTaskKey: string
@@ -1069,7 +1076,7 @@ export interface MathRosterRow {
 export async function getMathRoster(
   upn: string,
   windowId: string,
-  groupKey: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
 ): Promise<MathRosterRow[]> {
   const rows = await queryAsUser<{
     StudentKey: string
@@ -1078,6 +1085,7 @@ export async function getMathRoster(
     LastName: string
     Grade: string | null
     Homeroom: string | null
+    GroupKey: string
     SchoolName: string | null
     ProgramFamily: string | null
     MathTaskKey: string
@@ -1094,8 +1102,8 @@ export async function getMathRoster(
     IPPProgramFamily: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRosterMath(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
-    { WindowID: windowId, GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_TeacherRosterMath(@UPN, @WindowID, @GroupKeys) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { WindowID: windowId, GroupKeys: groupKeys.join(",") },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -1104,6 +1112,7 @@ export async function getMathRoster(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     programFamily: r.ProgramFamily ?? null,
     mathTaskKey: String(r.MathTaskKey),
