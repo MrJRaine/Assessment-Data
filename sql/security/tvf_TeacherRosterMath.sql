@@ -153,6 +153,10 @@ RETURN
         LEFT JOIN DimSection sec
                ON sec.SectionKey = e.SectionKey
               AND a.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+              -- Only the REQUESTED sections. Without this the join fans every in-scope student out to
+              -- one row per course enrolment (it used to be capped at grade 10+), which blew the plan
+              -- up to Msg 8623 "could not produce a query plan".
+              AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
@@ -174,6 +178,7 @@ RETURN
             Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
         WHERE HomeroomKey IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(HomeroomKey) + ',%')
 
         UNION ALL
 
@@ -186,6 +191,7 @@ RETURN
         -- 'SEC:<id>' key too. The old gate left elementary/junior course cards opening empty rosters
         -- (and math is a P-6 assessment, so that was ALL of them).
         WHERE SectionID IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(SectionID) + ',%')
 
         UNION ALL
 
@@ -195,6 +201,7 @@ RETURN
             Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
         FROM ApplicableStudents
         WHERE SchoolID IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,GRADE:' + RTRIM(SchoolID) + ':' + RTRIM(Grade) + ',%')
     ),
     -- Latest math result per (student, window, task). Dated history is kept, so pick the most recent.
     LatestMathPerTask AS (
@@ -254,7 +261,7 @@ RETURN
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
     -- Match ANY key in the delimited list (guarded LIKE, no STRING_SPLIT dependency).
-    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + sg.GroupKey + ',%')
+    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(sg.GroupKey) + ',%')
 );
 GO
 

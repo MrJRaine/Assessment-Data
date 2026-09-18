@@ -191,6 +191,10 @@ RETURN
         LEFT JOIN DimSection sec
                ON sec.SectionKey = e.SectionKey
               AND a.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+              -- Only the REQUESTED sections. Without this the join fans every in-scope student out to
+              -- one row per course enrolment (it used to be capped at grade 10+), which blew the plan
+              -- up to Msg 8623 "could not produce a query plan".
+              AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
@@ -209,11 +213,16 @@ RETURN
     -- only, so an HS homeroom card resolved to an empty roster.)
     StudentGroups AS (
         -- Homeroom candidate (any grade that carries a stored homeroom key)
+        -- Each branch filters on @GroupKeys ITSELF rather than leaving it all to the final WHERE.
+        -- Hand-written predicate pushdown: the branches that can't match the requested keys collapse
+        -- to nothing instead of materialising every candidate for every student first. This is what
+        -- keeps the plan inside the optimizer's budget (see Msg 8623 above).
         SELECT
             AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName, Grade, ProgramCode, ProgramFamily,
             Homeroom, SchoolName, HomeroomKey AS GroupKey
         FROM ApplicableStudents
         WHERE HomeroomKey IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(HomeroomKey) + ',%')
 
         UNION ALL
 
@@ -226,6 +235,7 @@ RETURN
             Homeroom, SchoolName, 'SEC:' + SectionID AS GroupKey
         FROM ApplicableStudents
         WHERE SectionID IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(SectionID) + ',%')
 
         UNION ALL
 
@@ -235,6 +245,7 @@ RETURN
             Homeroom, SchoolName, 'GRADE:' + SchoolID + ':' + Grade AS GroupKey
         FROM ApplicableStudents
         WHERE SchoolID IS NOT NULL
+          AND (',' + @GroupKeys + ',') LIKE ('%,GRADE:' + RTRIM(SchoolID) + ':' + RTRIM(Grade) + ',%')
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
@@ -359,7 +370,7 @@ RETURN
     -- Match ANY key in the delimited list. Same guarded-LIKE trick as the program-scope match, so
     -- there's no STRING_SPLIT dependency. Group keys contain ':' and '-' but never ',', so the
     -- delimiter is unambiguous.
-    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + sg.GroupKey + ',%')
+    WHERE (',' + @GroupKeys + ',') LIKE ('%,' + RTRIM(sg.GroupKey) + ',%')
 );
 GO
 
