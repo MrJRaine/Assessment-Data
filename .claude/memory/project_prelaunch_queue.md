@@ -20,11 +20,30 @@ don't promote or defer an item without asking.
    Nav + page title + home card. The page is the reporting/cohort view; the name never matched.
 2. **Re-record an identical subsequent result.** A teacher must be able to record a NEW dated result
    whose value is IDENTICAL to the student's latest one — a genuine second data point, not a no-op.
-   The upsert procs are latest-by-date per window, so re-entering the same value likely reads as "no
-   change" and never registers. **This is a correctness bug, not a feature**: silently lost data in a
-   tool whose entire purpose is tracking change over time — same class as the math students dropped
-   on 2026-09-18 ([[feedback_never_silently_omit]]). Touches `usp_UpsertReadingAssessment`,
-   `usp_UpsertWritingAssessment`, `usp_UpsertMathAssessment`. Design TBD.
+   **This is a correctness bug, not a feature**: silently lost data in a tool whose entire purpose is
+   tracking change over time — same class as the math students dropped on 2026-09-18
+   ([[feedback_never_silently_omit]]).
+
+   **DESIGN (user, 2026-09-18) — a per-row checkbox, not a proc rewrite:**
+   > *"we're just adding a new assessment checkbox that will automatically populate if their score is
+   > changed, or can be manually selected, then the save just needs to grab everything with that
+   > checked."*
+
+   The grids stop INFERRING intent from `value !== committed` and read it from an explicit mark: the
+   box auto-ticks when a value changes (preserving today's behaviour for the common case) and can be
+   ticked by hand when the teacher re-assessed and got the SAME result. Save sends every ticked row.
+
+   **CHECK FIRST — this may be CLIENT-ONLY.** The facts already allow multiple dated results per
+   window ([[project_ongoing_assessment_model]]) and the upsert procs key on the assessment DATE. If
+   they already INSERT on a new date and only UPDATE within the same date, nothing server-side needs
+   to change — the bug is purely that the client never SENDS an unchanged row. Verify that before
+   touching `usp_Upsert{Reading,Writing,Math}Assessment`.
+
+   **Two open questions, do NOT assume:**
+   - **Math grain.** Reading/writing are one row per student, so one checkbox per student is obvious.
+     Math is a student x task matrix — one checkbox for the whole student, or per cell?
+   - **Label.** "New assessment" collides with [[feedback_avoid_assessment_term]] (keep "assessment"
+     out of user-facing text). The user picks the wording.
 3. **The LIVE deploy itself** — 46 SQL objects, dependency-ordered, schema MIGRATIONS separated from
    idempotent DROP/CREATE. This release is ALSO the fix for the ~6s cold roster measured on live.
 
