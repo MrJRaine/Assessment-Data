@@ -453,11 +453,15 @@ a { color: inherit; text-decoration: none; }
 .mtoggle { width: 100%; min-height: 44px; border: none; background: transparent; cursor: pointer; font-size: 1rem; color: var(--muted); display: grid; place-items: center; font-family: inherit; }
 .mtoggle:hover { background: #eef6fb; }
 .mtoggle.yes { color: #2f8f4e; font-weight: 700; }
-/* "Not yet" — amber outline circle. Darkened from a mid-yellow so it still meets contrast on white;
-   a true yellow (#e8c33a) fails against this background at this size.
+/* "Not yet" — amber outline circle.
    Drawn as a bordered box, not the '○' glyph: a font character has no adjustable stroke, so the ring
-   weight could not be set (and varies by fallback font). 3px ~= triple the glyph's hairline. */
-.mtoggle.no { color: #b07d05; font-weight: 700; }
+   weight could not be set (and varies by fallback font). 3px ~= triple the glyph's hairline.
+   Colour: #c9930a is ~2.8:1 on white. The WCAG bar for a NON-TEXT graphic is 3:1 (not the 4.5:1 that
+   applies to text), so this sits a hair under — deliberately, because the earlier #b07d05 cleared it
+   at 3.66:1 but read as brown rather than yellow. The 3px ring carries the perceptibility that the
+   colour gives up; a 1px hairline at this shade would not be acceptable. #c28c00 is the lightest
+   that still clears 3:1 if we ever want to be strict. */
+.mtoggle.no { color: #c9930a; font-weight: 700; }
 .mtoggle .ring { width: 0.85em; height: 0.85em; border: 3px solid currentColor; border-radius: 50%; box-sizing: border-box; }
 .mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .66rem; }
 .mtoggle.blank::after { content: "·"; color: var(--border); font-size: 1.3rem; }
