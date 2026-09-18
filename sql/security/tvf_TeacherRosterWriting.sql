@@ -168,21 +168,30 @@ RETURN
     AdminAnalystWithSections AS (
         SELECT
             a.AssessmentWindowID, a.StudentKey, a.StudentNumber, a.FirstName, a.LastName,
-            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, sec.SectionID
+            a.Grade, a.GradeOrder, a.Homeroom, a.HomeroomKey, a.SchoolName, a.SchoolID, a.ProgramCode, a.ProgramFamily, es.SectionID
         FROM AdminAnalystApplicable a
-        -- Section context for ALL grades (was gated to 10+), so an oversight user opening a Primary
-        -- course section gets students carrying a SectionID. Fan-out collapses at SELECT DISTINCT.
-        LEFT JOIN FactEnrollment e
-               ON e.StudentKey  = a.StudentKey
-              AND e.StartDate  <= a.WindowEndDate
-              AND (e.EndDate IS NULL OR e.EndDate >= a.WindowStartDate)
-        LEFT JOIN DimSection sec
-               ON sec.SectionKey = e.SectionKey
-              AND a.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-              -- Only the REQUESTED sections. Without this the join fans every in-scope student out to
-              -- one row per course enrolment (it used to be capped at grade 10+), which blew the plan
-              -- up to Msg 8623 "could not produce a query plan".
-              AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
+        -- Bounded to the REQUESTED sections BEFORE the fan-out, not after.
+        --
+        -- This used to be LEFT JOIN FactEnrollment then LEFT JOIN DimSection with the key filter on
+        -- the DimSection join. That does not reduce anything: a LEFT join keeps every enrolment row
+        -- and just nulls SectionID, so every in-scope student still exploded to one row per course
+        -- enrolment (the whole school for an admin, the whole region for an analyst) before we
+        -- narrowed to the class actually asked for. Plan complexity hit Msg 8623, then -- once that
+        -- was eased -- roster loads still took a minute.
+        --
+        -- The INNER JOIN inside the subquery does the narrowing FIRST, so the fan-out is bounded by
+        -- students-x-requested-sections (one or two each) instead of students-x-all-enrolments.
+        LEFT JOIN (
+            SELECT e.StudentKey, e.StartDate, e.EndDate, sec.SectionID,
+                   sec.EffectiveStartDate AS SecStart, sec.EffectiveEndDate AS SecEnd
+            FROM FactEnrollment e
+            INNER JOIN DimSection sec ON sec.SectionKey = e.SectionKey
+            WHERE (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
+        ) es
+               ON es.StudentKey = a.StudentKey
+              AND es.StartDate <= a.WindowEndDate
+              AND (es.EndDate IS NULL OR es.EndDate >= a.WindowStartDate)
+              AND a.EffectiveDate BETWEEN es.SecStart AND COALESCE(es.SecEnd, '9999-12-31')
     ),
     ApplicableStudents AS (
         SELECT AssessmentWindowID, StudentKey, StudentNumber, FirstName, LastName,
