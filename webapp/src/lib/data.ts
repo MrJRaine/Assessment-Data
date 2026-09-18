@@ -20,6 +20,8 @@ import { queryAsUser, query } from './db'
 
 export interface TeacherWindow {
   id: string // AssessmentWindowID (kept as string -- BIGINT exceeds JS Number precision)
+  cycleGroupId: string | null // the SCoR header key — /enter collapses a cycle's instances into ONE card per subject
+  cycleName: string | null // the HEADER's name ('SCoR 1'); the collapsed card's title, since instance names differ
   name: string
   assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
   status: string // Upcoming | Open | ClosesToday | Closed
@@ -44,7 +46,12 @@ export interface TeacherGroup {
   key: string // GroupKey: URL-safe homeroom key '<SchoolAbbrev>-<cleanHomeroom>' (grades <=9) or 'SEC:<sectionId>' (10+)
   label: string // display name, e.g. 'Homeroom 5/6' (real name; the key is what travels in the URL)
   scope: 'Taught' | 'Oversight' // 'Taught' = the caller's own classes (any role); 'Oversight' = above-teacher school/region view
-  groupType: 'Homeroom' | 'Section' | 'Grade' // which lens this card belongs to (the above-teacher toggle switches between them)
+  groupType: 'Homeroom' | 'Section' | 'Grade' | 'Course' // Data Entry is now 'Course' (a mapped course section); Programming still uses the lenses
+  // Course-scoped Data Entry only (Programming leaves these undefined):
+  language?: string | null // 'English' | 'French' | null — from the section's course; groups the cards + gates multi-select
+  courseCode?: string | null
+  teacherNames?: string | null // whose class this is — shown on Oversight cards (co-taught sections list all)
+  windowIds?: string[] // the cycle instance(s) this section's students fall under; the roster routes saves by it
   schoolName: string | null
   grade: string | null // MAX(grade) in the group — kept for display/back-compat
   grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
@@ -62,6 +69,8 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     ScaleSystem: string | null
     AssessmentLanguage: string | null
     ProgramScope: string | null
+    CycleGroupID: string | null
+    CycleName: string | null
     MinGrade: string
     MaxGrade: string
     StartDate: unknown
@@ -71,6 +80,8 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
+    cycleGroupId: r.CycleGroupID ?? null,
+    cycleName: r.CycleName ?? null,
     name: r.WindowName,
     assessmentType: r.AssessmentType,
     status: r.WindowStatus,
@@ -197,32 +208,55 @@ export async function getWindowEndDate(windowId: string): Promise<string | null>
   return rows.length ? toYMD(rows[0].EndDate) : null
 }
 
-/** Groups (homerooms / sections) for one window, scoped to the signed-in teacher. */
-export async function getTeacherGroups(upn: string, windowId: string): Promise<TeacherGroup[]> {
+/**
+ * Mapped-course SECTIONS for one CYCLE + SUBJECT, scoped to the signed-in user.
+ *
+ * Keyed on the cycle (not one AssessmentWindowID) because /enter shows ONE card per cycle per
+ * subject: a collapsed "Writing" card has no single instance to point at, and pointing it at the
+ * English instance would show an FLA teacher nothing. The TVF spans every instance of the cycle.
+ */
+export async function getTeacherGroups(
+  upn: string,
+  cycleGroupId: string,
+  assessmentType: string,
+): Promise<TeacherGroup[]> {
   const rows = await queryAsUser<{
     GroupKey: string
     GroupLabel: string | null
     Scope: string
     GroupType: string
+    Language: string | null
+    CourseCode: string | null
+    TeacherNames: string | null
     SchoolName: string | null
     Grade: string | null
     Grades: string | null
+    WindowIDs: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @WindowID) ORDER BY GroupKey',
-    { WindowID: windowId },
+    'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) ORDER BY GroupKey',
+    { CycleGroupID: cycleGroupId, AssessmentType: assessmentType },
   )
   return rows.map((r) => {
     const key = String(r.GroupKey)
-    // The TVF supplies the display label (real homeroom name, or section number+course);
+    // The TVF supplies the display label (the course name + section number);
     // the key is the URL-safe token and no longer encodes the label.
     return {
       key,
       label: r.GroupLabel ?? key,
       scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
-      groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
+      // Data Entry groups are course sections now; keep the old lens values mapping for safety.
+      groupType:
+        r.GroupType === 'Course' ? 'Course'
+          : r.GroupType === 'Section' ? 'Section'
+          : r.GroupType === 'Grade' ? 'Grade'
+          : 'Homeroom',
+      language: r.Language ?? null,
+      courseCode: r.CourseCode ?? null,
+      teacherNames: r.TeacherNames ?? null,
+      windowIds: (r.WindowIDs ?? '').split(',').map((w) => w.trim()).filter(Boolean),
       schoolName: r.SchoolName ?? null,
       grade: r.Grade ?? null,
       grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),

@@ -63,6 +63,19 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   sysadmin `/admin/maintenance` page, and one-click Clear + sign-in on the lockdown screen.
 
 ### Changed
+- **Data Entry: pick a CYCLE, not an instance.** `/enter` now shows **one card per cycle per subject**
+  ("SCoR 1" under Reading, Writing, Math) instead of one card per scoped instance — a cycle with 8
+  instances was 8 near-identical "SCoR 1" tiles with nothing to tell them apart. The whole entry flow
+  is keyed on the cycle header: `/enter/cycle/<cycleGroupId>/<subject>[/<group>]`. Progress on a card
+  sums its instances, so a student assessed in both English and French counts as the two entries they
+  owe. SQL: `tvf_UserAssessmentWindows` (+`CycleGroupID`, `CycleName`), `tvf_TeacherGroups` (now takes
+  `@CycleGroupID, @AssessmentType`; +`WindowIDs`).
+- **Entry groups are course sections, and the course sets the language.** The group picker lists only
+  sections of courses mapped in `DimCourseAssessment` (ELA / FLA / Math — never a gym or science
+  class), grouped under an **English / French** heading. Because an FLA section is French and an ELA
+  section is English, the writing roster's **EN/FR toggle is gone** — there is nothing to set wrong.
+  Above-teacher roles see every mapped-course section they'd normally see (a principal: all ELA, FLA
+  and Math sections in their school), each card labelled with **whose class** it is.
 - **Maintenance mode: no more auto-expire; safer scheduling.** A scheduled window used to lapse ~10
   minutes past its time so a forgotten one self-healed — but that could bring the app back **up
   mid-job** (part-way through a batch of SQL deploys), letting teachers write against a half-migrated

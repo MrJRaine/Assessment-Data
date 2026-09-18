@@ -173,7 +173,10 @@ export async function saveMathAssessments(
     }
   }
 
-  revalidatePath(`/enter/${windowId}/${groupKey}`)
+  // The roster URL is keyed on the CYCLE now (/enter/cycle/<cycleGroupId>/<subject>/<groupKey>) and
+  // the action only knows the window, so revalidate the /enter subtree rather than a path that no
+  // longer resolves — this also refreshes the cycle card's progress count on the way back out.
+  revalidatePath('/enter', 'layout')
   return { saved, errors }
 }
 

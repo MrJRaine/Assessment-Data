@@ -42,14 +42,25 @@ const GRADE_ORDER: Record<string, number> = {
 }
 const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : /^\d+$/.test(g) ? `Gr ${g}` : g)
 
+/**
+ * `mode` picks how the groups are organised:
+ *   'lens'   — Programming: Homeroom / Section / Grade views of the same students (the toggle).
+ *   'course' — Data Entry: every group IS a mapped course section, so there is nothing to toggle
+ *              between. Cards are headed by the course's LANGUAGE instead, which is how the
+ *              English/French split is expressed now that the language comes from the course
+ *              rather than a toggle. The lens filter would hide every card here (groupType is
+ *              always 'Course'), so course mode bypasses it.
+ */
 export default function GroupCards({
   groups,
   hrefBase,
   metaSuffix = 'entered',
+  mode = 'lens',
 }: {
   groups: TeacherGroup[]
   hrefBase: string
   metaSuffix?: string
+  mode?: 'lens' | 'course'
 }) {
   const taught = groups.filter((g) => g.scope === 'Taught')
   const oversight = groups.filter((g) => g.scope === 'Oversight')
@@ -57,9 +68,10 @@ export default function GroupCards({
   const card = (g: TeacherGroup) => (
     <CardLink
       key={`${g.scope}-${g.groupType}-${g.key}`}
-      href={`${hrefBase}/${g.key}`}
+      href={`${hrefBase}/${encodeURIComponent(g.key)}`}
       title={g.label}
-      desc={g.schoolName ?? undefined}
+      // Oversight cards say WHOSE class this is — the whole point of showing someone else's section.
+      desc={[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ') || undefined}
       meta={`${g.enteredCount}/${g.applicableCount} ${metaSuffix}`}
     />
   )
@@ -69,11 +81,33 @@ export default function GroupCards({
       {taught.length > 0 && (
         <section>
           <h2 className="section-heading">My classes</h2>
-          <div className="card-grid">{taught.map(card)}</div>
+          {mode === 'course' ? <ByLanguage groups={taught} card={card} /> : <div className="card-grid">{taught.map(card)}</div>}
         </section>
       )}
 
-      {oversight.length > 0 && <Oversight groups={oversight} card={card} showHeading={taught.length > 0} />}
+      {oversight.length > 0 && (
+        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} />
+      )}
+    </>
+  )
+}
+
+/**
+ * Course sections grouped under a language heading, mirroring how /enter heads its cards by subject.
+ * A single-language set gets no heading (nothing to distinguish). Sections whose course has no
+ * language on file fall under "Other" rather than vanishing.
+ */
+function ByLanguage({ groups, card }: { groups: TeacherGroup[]; card: (g: TeacherGroup) => ReactNode }) {
+  const langs = [...new Set(groups.map((g) => g.language ?? 'Other'))].sort()
+  if (langs.length <= 1) return <div className="card-grid">{groups.map(card)}</div>
+  return (
+    <>
+      {langs.map((lang) => (
+        <div key={lang}>
+          <h3 className="section-subheading">{lang}</h3>
+          <div className="card-grid">{groups.filter((g) => (g.language ?? 'Other') === lang).map(card)}</div>
+        </div>
+      ))}
     </>
   )
 }
@@ -82,13 +116,16 @@ function Oversight({
   groups,
   card,
   showHeading,
+  mode,
 }: {
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
   showHeading: boolean
+  mode: 'lens' | 'course'
 }) {
-  const hasSections = useMemo(() => groups.some((g) => g.groupType === 'Section'), [groups])
-  const hasGrades = useMemo(() => groups.some((g) => g.groupType === 'Grade'), [groups])
+  const byCourse = mode === 'course'
+  const hasSections = useMemo(() => !byCourse && groups.some((g) => g.groupType === 'Section'), [groups, byCourse])
+  const hasGrades = useMemo(() => !byCourse && groups.some((g) => g.groupType === 'Grade'), [groups, byCourse])
   const schools = useMemo(
     () => [...new Set(groups.map((g) => g.schoolName).filter((s): s is string => !!s))].sort(),
     [groups],
@@ -139,7 +176,9 @@ function Oversight({
 
   const visible = groups.filter(
     (g) =>
-      g.groupType === lens &&
+      // Course mode has no lens: every group is a course section, so lens-matching would hide
+      // everything (groupType is always 'Course'). Grade + school filters still apply.
+      (byCourse || g.groupType === lens) &&
       // Grade match: show the card if ANY grade it contains is selected (a split class surfaces
       // under each of its grades). Groups with no grade info aren't hidden by the filter. The Grade
       // lens is exempt — its filter UI is hidden, so applying it would silently drop cards.
@@ -218,7 +257,9 @@ function Oversight({
       )}
 
       {visible.length === 0 ? (
-        <p className="muted" style={{ marginTop: '1rem' }}>No {lens === 'Section' ? 'sections' : lens === 'Grade' ? 'grades' : 'homerooms'} match the current filters.</p>
+        <p className="muted" style={{ marginTop: '1rem' }}>No {byCourse ? 'sections' : lens === 'Section' ? 'sections' : lens === 'Grade' ? 'grades' : 'homerooms'} match the current filters.</p>
+      ) : byCourse ? (
+        <ByLanguage groups={visible} card={card} />
       ) : (
         <div className="card-grid">{visible.map(card)}</div>
       )}

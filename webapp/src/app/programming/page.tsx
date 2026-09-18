@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import { getProgrammingGroups, getProgrammingSummary, type TeacherGroup, type ProgrammingSummary } from '@/lib/data'
-import GroupCards from '../enter/[windowId]/GroupCards'
+import GroupCards from '@/components/GroupCards'
 import ProgrammingProgress from './ProgrammingProgress'
 
 export const dynamic = 'force-dynamic'

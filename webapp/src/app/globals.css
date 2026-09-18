@@ -119,6 +119,9 @@ a { color: inherit; text-decoration: none; }
 .window-section { margin-top: 1.75rem; }
 .window-section:first-of-type { margin-top: 1rem; }
 .section-heading { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--primary); display: inline-block; padding-right: 1.5rem; }
+/* Language heading inside a group picker section (English / French course sections). Deliberately
+   lighter than .section-heading so "My classes" still reads as the parent of the language split. */
+.section-subheading { font-size: 0.85rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 0.9rem 0 0.4rem; }
 
 /* Reading | Writing subject toggle (cohort + detail) */
 .subject-toggle { display: inline-flex; gap: 0.25rem; margin: 0.25rem 0 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }

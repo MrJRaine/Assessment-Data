@@ -43,6 +43,8 @@ RETURN
         SELECT
             w.AssessmentWindowID, w.WindowName, w.AssessmentType, w.SchoolYear,
             w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage, w.ScaleSystem,
+            w.CycleGroupID,
+            sc.DisplayName AS CycleName,   -- the HEADER's name ("SCoR 1"); the collapsed card's title
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate,
             CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
                  WHEN at.Today > w.EndDate   THEN 'Closed'
@@ -50,6 +52,7 @@ RETURN
                  ELSE 'Open' END AS WindowStatus
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
+        LEFT JOIN DimShortCycle sc ON sc.CycleGroupID = w.CycleGroupID
         WHERE w.ActiveFlag = 1
     ),
     TeacherStudents AS (
@@ -123,6 +126,8 @@ RETURN
         wed.ProgramScope,
         wed.AssessmentLanguage,
         wed.ScaleSystem,
+        wed.CycleGroupID,   -- lets /enter collapse a cycle's instances into ONE card per subject
+        wed.CycleName,      -- header name for that collapsed card (instance names differ per scope)
         wed.WindowStatus,
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
         -- "Entered" counts the fact matching the window's TYPE (Reading vs Writing), so a writing
@@ -142,6 +147,7 @@ RETURN
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
-        wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.WindowStatus
+        wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.CycleGroupID, wed.CycleName,
+        wed.WindowStatus
 );
 GO
