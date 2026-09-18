@@ -49,6 +49,22 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
    inset). The EDGE carries SC 1.4.11, measured **3.38:1 on `#f5f7f9`** and **3.32:1 on `#eef6fb`**
    (hover) — both over the 3:1 bar.
 
+   **Same technique applied to the CHECK, also signed off 2026-09-18.** Was `#2f8f4e`, which looked
+   olive for the same reason the amber looked brown — it had to be dark enough to pass alone. Now one
+   SVG path stroked twice: `#176a37` at 6 under `#35c75a` at 3.5, giving a 1.25-unit dark edge each
+   side. Curved (bows -2.0 / -2.4), no taper — a tapered filled outline was tried and looked wrong at
+   this size.
+
+   **Watch the edge WIDTH, not just its colour.** An edge only carries 1.4.11 if it actually renders:
+   the viewBox is 24 units drawn at 1em, so at `font-size: 2.1rem` one unit is ~1.4px, and a 0.5-unit
+   edge came out ~0.7px — sub-pixel, antialiased into a blend, leaving the bright fill to carry the
+   ratio alone. Keep any contrast-bearing edge >= 1px RENDERED. A contrast checker cannot see this.
+
+   **Tooling:** a live preview of these marks (true-size cells on the real ground, curvature/weight
+   sliders, contrast + rendered-edge-px readout, generated code) is at
+   https://claude.ai/artifact/CNTzJ26x7MLzRsjUgKsHGV — reuse this pattern for the rest of the design
+   pass instead of rebuilding the container per tweak.
+
    **The transferable lesson for the rest of this pass:** 1.4.11 asks for 3:1 against ADJACENT
    colours, not against the page. So a colour too light to pass on its own can still be used as the
    fill, provided a sufficient-contrast EDGE defines the shape. Chasing the fill colour was the wrong
