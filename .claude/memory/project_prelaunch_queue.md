@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-18T15:56:29.607Z
+  modified: 2026-09-18T16:03:21.854Z
 ---
 
 **Pre-launch work queue** (captured 2026-09-17; launch ~1 week out). Order not fixed — user directs.
@@ -41,10 +41,29 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
    AA (user, 2026-09-18), but deliberately NOT letting it block feature work: *"good to keep in mind,
    [but] I don't want to get bogged down in it before we are working on cleaning up design
    aesthetics."* So flag contrast/a11y issues in passing, do NOT stop to fix them, and collect them
-   here for the pass. Known so far: the math "not yet" ring is `#c9930a` ≈ 2.8:1 on white, a hair
-   under the 3:1 that SC 1.4.11 (Non-text Contrast) requires — `#c28c00` ≈ 3.0:1 clears it and looks
-   near-identical. NOTE: 1.4.11 has NO thickness exemption; only the TEXT rule (1.4.3) scales with
-   size, so a thicker stroke improves perceptibility but buys no formal latitude.
+   here for the pass.
+
+   **Known item — math "not yet" ring.** MEASURED by the user in a real contrast checker (trust these,
+   not my hand arithmetic, which was wrong twice):
+
+   | colour | on `#f5f7f9` (cell bg) | on `#eef6fb` (hover) | on `#ffffff` |
+   |---|---|---|---|
+   | `#c9930a` (deployed) | 2.55:1 | 2.50:1 | 2.74:1 |
+   | `#c28c00` | 2.77:1 | 2.72:1 | 2.98:1 |
+
+   SC 1.4.11 (Non-text Contrast) wants **3:1**, so BOTH fail — my earlier claim that `#c28c00`
+   "clears it" was wrong. The page background is `#f5f7f9` (body `--bg`; the math grid sets no
+   background of its own and `.mtoggle` is transparent), NOT white.
+
+   Two traps I fell into, worth not repeating: (a) a DARKER background does not help a mid-dark
+   foreground — it reduces the difference, so the grey ground scores WORSE than white; (b) SC 1.4.11
+   has NO thickness exemption — only the TEXT rule (1.4.3) scales with size, so the 3px stroke
+   improves perceptibility but buys no formal latitude.
+
+   Implication: no yellow in this family reaches 3:1 here. Fixing it means going back toward the
+   brown-amber the user rejected (`#b07d05`), or changing the TREATMENT — e.g. a darker ring with a
+   pale yellow fill, or letting shape rather than colour carry the state. A design decision, not a
+   hex tweak.
 10. **Dark mode** — if it fits before launch. Full scoping in [[project_dark_mode]] (POST-1.0 wishlist,
    but user may pull it in).
 11. **Re-record an identical subsequent result.** Data-entry sheets must let a teacher record a NEW
