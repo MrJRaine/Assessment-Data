@@ -1,11 +1,22 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-warehouse-sql.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"You are starting a session on the Regional Student Assessment Data Platform project. Before any other work, read .claude/skills/session-start.md and follow its procedure exactly; it is deliberately lean (one memory file, a plan excerpt, one task-matched skill); do NOT bulk-read all memory files or skills up front. The project-local skills in .claude/skills/ are not auto-discovered by the harness, so this hook substitutes for their absence.\"}}'"
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"BINDING RULES (these are re-injected on every session start AND after every context compaction, because they are exactly what compaction loses):\\n1. NEVER execute anything against the Fabric warehouse - not writes, not reads, not diagnostics, not metadata checks, dev or live, by any mechanism (no podman exec running mssql/ClientSecretCredential, no sqlcmd). The USER runs all SQL and reports results. You write SQL to a tracked file, link it, and say what it does and which tables/fields it touches. A PreToolUse hook enforces this; do not try to route around it.\\n2. Your lane, no asking needed: internet searches, local file changes in this repo, gh, podman. Keeping GitHub backed up is YOUR job - commit AND push at logical checkpoints. Open PRs only when instructed.\\n3. Decisions: PROPOSE, get assent, THEN implement. The user decides what the app does, how assessments function, how we work together, and how a change is structured - give a 50ft view naming the tables/fields it reads and writes before building. Announcing an action afterward is not permission.\\n4. When these rules are silent, act like a JUNIOR DEV under a SENIOR DEV. Treat silence as prohibition, not permission.\\nFull detail: CLAUDE.md section Authority and Access, and memory feedback_sql_write_authorization.\\n\\nIf this is a fresh session (not a compaction resume), also read .claude/skills/session-start.md and follow its procedure; it is deliberately lean - do NOT bulk-read all memory files or skills up front. The project-local skills in .claude/skills/ are not auto-discovered by the harness, so this hook substitutes for their absence.\"}}'"
           }
         ]
       }
