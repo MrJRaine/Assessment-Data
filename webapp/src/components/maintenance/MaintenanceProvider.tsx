@@ -102,7 +102,30 @@ export default function MaintenanceProvider({
   // between polls (so the lock fires on time without waiting for the next fetch).
   useEffect(() => {
     let stopped = false
-    poll()
+
+    // Yield to the PAGE's own queries before the first heartbeat. This used to fire immediately on
+    // mount, so every navigation put a status poll in the pool alongside the roster/groups/auth
+    // queries it was competing with -- and on a cold pool the heartbeat could be the call that pays
+    // for token acquisition and connect while the roster waits behind it.
+    //
+    // Deliberately SHORT rather than the full 8s cycle: until the first poll lands the client does
+    // not know a window exists, so a teacher loading a page during an ACTIVE maintenance window
+    // would see a working UI and could start entering data that is about to be locked. A few seconds
+    // covers a page's queries (~2-3s measured); several would trade a real UX risk for a marginal
+    // scheduling gain. requestIdleCallback goes as soon as the browser is actually free, with the
+    // timeout as the ceiling.
+    const FIRST_POLL_MAX_MS = 4000
+    let idleHandle: number | undefined
+    let firstPollTimer: ReturnType<typeof setTimeout> | undefined
+    const firstPoll = () => {
+      if (!stopped) void poll()
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleHandle = (window as Window & typeof globalThis).requestIdleCallback(firstPoll, { timeout: FIRST_POLL_MAX_MS })
+    } else {
+      firstPollTimer = setTimeout(firstPoll, FIRST_POLL_MAX_MS)
+    }
+
     const tick = setInterval(() => {
       if (!stopped) recompute()
     }, 1000)
@@ -145,6 +168,10 @@ export default function MaintenanceProvider({
       stopped = true
       clearInterval(tick)
       clearTimeout(pollTimer)
+      if (idleHandle !== undefined && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
+        ;(window as Window & typeof globalThis).cancelIdleCallback(idleHandle)
+      }
+      if (firstPollTimer) clearTimeout(firstPollTimer)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [poll, recompute])

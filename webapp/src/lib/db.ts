@@ -84,7 +84,18 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null
  */
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!poolPromise) {
-    poolPromise = buildConfig().then((cfg) => new sql.ConnectionPool(cfg).connect())
+    // Timed SEPARATELY, because this is awaited INSIDE each query's own timer: the first call after
+    // a restart pays Entra token acquisition + TDS connect, and that cost was being reported as the
+    // query's duration. Worse, concurrent callers all await this same promise, so ONE cold start
+    // inflated several unrelated queries at once and made them look individually slow. Now setup
+    // shows up once, as itself.
+    const t0 = Date.now()
+    poolPromise = buildConfig()
+      .then((cfg) => new sql.ConnectionPool(cfg).connect())
+      .then((p) => {
+        if (TIMING) console.log(`[sql] ${Date.now() - t0}ms  <pool connect + token>`)
+        return p
+      })
     poolPromise.catch(() => {
       poolPromise = null
     })
@@ -139,11 +150,26 @@ async function runOnPool<T>(fn: (pool: sql.ConnectionPool) => Promise<T>): Promi
  * row" is visible in `podman logs` instead of being guessed at.
  */
 const TIMING = process.env.SQL_TIMING === '1'
-// First TVF/proc/table name in the statement — enough to identify it, never any parameter values.
+
+/**
+ * Label a statement for the timing log.
+ *
+ * The first object name alone is NOT enough: two unrelated queries can open on the same table and
+ * then average together in the log as if they were one thing. That actually happened — the identity
+ * lookup and the dev impersonation list both read DimStaff, and seeing "DimStaff" stay expensive led
+ * to a wrong conclusion that the identity cache was not holding. So when the leading object repeats,
+ * a second distinguishing object is appended. Object names only — never parameter values.
+ */
 function sqlLabel(text: string): string {
-  const m = text.match(/dbo\.(\w+)/) ?? text.match(/FROM\s+(\w+)/i)
-  return m ? m[1] : text.slice(0, 40).replace(/\s+/g, ' ')
+  const objs = [...text.matchAll(/(?:dbo\.|FROM|JOIN)\s*(\w+)/gi)]
+    .map((m) => m[1])
+    .filter((n) => !/^(SELECT|TOP|DISTINCT|AS)$/i.test(n))
+  if (objs.length === 0) return text.slice(0, 40).replace(/\s+/g, ' ')
+  const head = objs[0]
+  const next = objs.find((o) => o !== head)
+  return next ? `${head}+${next}` : head
 }
+
 async function timed<T>(text: string, fn: () => Promise<T>): Promise<T> {
   if (!TIMING) return fn()
   const t0 = Date.now()
