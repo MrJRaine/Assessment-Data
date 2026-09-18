@@ -161,10 +161,12 @@ const TIMING = process.env.SQL_TIMING === '1'
  * a second distinguishing object is appended. Object names only — never parameter values.
  */
 function sqlLabel(text: string): string {
-  const objs = [...text.matchAll(/(?:dbo\.|FROM|JOIN)\s*(\w+)/gi)]
-    .map((m) => m[1])
-    .filter((n) => !/^(SELECT|TOP|DISTINCT|AS)$/i.test(n))
-  if (objs.length === 0) return text.slice(0, 40).replace(/\s+/g, ' ')
+  // Strip the schema prefix FIRST. Matching `dbo\.|FROM|JOIN` then `(\w+)` captures "dbo" out of
+  // "FROM dbo.AppMaintenance", because \w+ stops at the dot — which is exactly what it did, and
+  // every line in the log came out labelled "dbo".
+  const t = text.replace(/\bdbo\./gi, '')
+  const objs = [...t.matchAll(/(?:FROM|JOIN)\s+([A-Za-z_]\w*)/gi)].map((m) => m[1])
+  if (objs.length === 0) return t.slice(0, 40).replace(/\s+/g, ' ')
   const head = objs[0]
   const next = objs.find((o) => o !== head)
   return next ? `${head}+${next}` : head
