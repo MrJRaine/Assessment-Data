@@ -60,6 +60,13 @@ async function buildConfig(): Promise<sql.config> {
     port: 1433,
     options: { encrypt: true, trustServerCertificate: false },
     authentication: { type: 'azure-active-directory-access-token', options: { token: token.token } },
+    // Pool max raised 10 (mssql default) -> 20 deliberately (2026-09-18). The F8 capacity was bought
+    // as a high ceiling so REAL usage runs unrestricted and can be measured for the renewal SKU
+    // decision — a 10-connection pool would queue concurrent teachers in the app, so Fabric would
+    // never see true peak demand and Capacity Metrics would under-report (risking an under-buy).
+    // Keep it high enough not to throttle in-app, low enough not to provoke Fabric-side throttling.
+    // See memory project_capacity_rightsizing_intent.
+    pool: { max: 20 },
   }
 }
 

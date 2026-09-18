@@ -30,7 +30,7 @@
 - [Dev Enrollment Year Rollover](project_dev_enrollment_year_rollover.md) — dev FactEnrollment dated for one year; new calendar year → empty rosters. Fix: rollforward_enrollment_dev.sql.
 - [Fabric Stale Preview](feedback_fabric_stale_preview.md) — the table preview pane caches; verify via SQL COUNT(*).
 - [Full-Reset Truncate-All](feedback_full_reset_truncate_all.md) — resetting for usp_RunFullIngestCycle: truncate all 6 orchestrator tables, never selectively.
-- [Capacity Right-Sizing Intent](project_capacity_rightsizing_intent.md) — F8 grant-funded for MVP; model decisions as if F2 is the target.
+- [Capacity Right-Sizing Intent](project_capacity_rightsizing_intent.md) — F8 is a DELIBERATE high ceiling so real usage runs unrestricted and can be measured, then the right SKU is bought at renewal. Do NOT design as if F2 is the target (that under-measures and risks under-buying); avoid waste, never trade UX for speculative capacity savings.
 - [Podman Windows Dev Container](reference_podman_windows_dev_container.md) — publish `127.0.0.1:PORT:3000` explicitly; awdev=.env.dev :3001, awlive=.env :3000; typecheck via image build (no node/gh).
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 
@@ -89,5 +89,6 @@
 - [Pre-launch Work Queue](project_prelaunch_queue.md) — running list of user-requested 0.5.x items ahead of launch (SCR, early/late immersion reading, writing-cohort layout, Math reporting, Students→Reports rename, split-grade math pacing, linked math tasks carry-forward, math ✗→yellow circle, dark mode). Keep current as items ship.
 - [Writing Scribed Score Code (DONE dev)](project_writing_scribed_score_code.md) — "SCR" on Conventions ONLY, omitted from the average; ConventionsScore→VARCHAR. Dev 2026-09-17; live pending.
 - [Subject↔Course Dim (QoL, 1.0→likely 1.1)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
+- [Perf/Load QoL Backlog (POST-v1.1)](project_perf_qol_backlog.md) — batch the per-student save loop, cache static lookups, parallelise roster awaits, don't poll hidden tabs. Not launch-blocking. Pool max already raised 10→20.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.
 - [Maintenance Mode (BUILT dev/0.5.0)](project_maintenance_mode.md) — graceful poll-based lockout for emergency container swaps: AppMaintenance row + set/clear procs + /api/status; staged banner→lock→auto-save→down overlay; sysadmin one-click Clear (banner+overlay) + sign-in on overlay. SQL on dev. Fabric: no TINYINT; ;THROW needs BEGIN…END.
