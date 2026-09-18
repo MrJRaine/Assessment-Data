@@ -8,6 +8,11 @@
  *          SchoolAdmin+SpecialistTeacher / RegionalAnalyst), so admins/analysts
  *          get their full multi-school scope (coverage when a teacher is out).
  * Created: 2026-06-22
+ * Modified: 2026-09-18 — +CycleGroupID/CycleName so /enter collapses a cycle's instances into ONE
+ *          card per subject. Applied the instance's PROGRAM SCOPE (it was selected but never
+ *          filtered on, so an English-scope and an Early-Immersion-scope instance both counted the
+ *          SAME students and the collapsed card's total came out double), and course-scoped the
+ *          teacher branch to agree with the course-scoped group picker.
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an inline TVF (not a proc): reads should be QUERYABLE -- the app does
@@ -69,6 +74,15 @@ RETURN
                 ON e.SectionKey  = sec.SectionKey
                AND e.StartDate  <= wed.EndDate
                AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+        -- The section's COURSE has to be one we assess for this subject, and in the instance's
+        -- language. Without this a teacher whose only literacy course is ELA still got a French
+        -- Reading card (their immersion students matched it by program), which then opened an empty
+        -- group picker -- the picker is course-scoped and this count has to agree with it.
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+               AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+                 OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+               AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
         INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
@@ -77,6 +91,8 @@ RETURN
         WHERE c.AccessLevel IS NULL
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
     AdminStudents AS (
         SELECT wed.AssessmentWindowID, s.StudentKey
@@ -93,6 +109,8 @@ RETURN
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
     AnalystStudents AS (
         SELECT wed.AssessmentWindowID, s.StudentKey
@@ -107,6 +125,8 @@ RETURN
         WHERE c.AccessLevel = 'RegionalAnalyst'
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+          AND (wed.ProgramScope IS NULL
+               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
     ApplicableStudents AS (
         SELECT * FROM TeacherStudents

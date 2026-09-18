@@ -189,8 +189,6 @@ RETURN
         INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Writing'
     ),
-    -- Grades PRESENT in each card, comma-delimited, so the client grade filter matches a section if
-    -- ANY of its grades is selected (a split class surfaces under each of its grades).
     -- The cycle instance(s) this section's students actually fall under. Normally exactly ONE (the
     -- course's language pins it), but a cycle can be configured so one section straddles two — e.g. an
     -- English instance split by program scope. The roster step needs the list to route a save to the
@@ -200,6 +198,8 @@ RETURN
         FROM (SELECT DISTINCT Scope, SectionID, AssessmentWindowID FROM SectionStudents) d
         GROUP BY Scope, SectionID
     ),
+    -- Grades PRESENT in each card, comma-delimited, so the client grade filter matches a section if
+    -- ANY of its grades is selected (a split class surfaces under each of its grades).
     GroupGrades AS (
         SELECT Scope, SectionID, STRING_AGG(Grade, ',') AS Grades
         FROM (SELECT DISTINCT Scope, SectionID, Grade FROM SectionStudents WHERE Grade IS NOT NULL) d
