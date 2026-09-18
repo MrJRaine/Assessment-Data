@@ -26,8 +26,15 @@ if podman container exists awdev 2>/dev/null; then
     | grep '\[sql\]' \
     | sed -E 's/^([0-9T:.+-]+)[^ ]* \[sql\] ([0-9]+)ms +(.*)$/\1\t\2\t\3/' \
     >> "$LOG_FILE" || true
+  # De-duplicate. `podman logs` replays the CURRENT container's WHOLE buffer every time, so running
+  # this twice without a redeploy in between appends every row again -- which would quietly inflate
+  # counts and skew any distribution built from the file. Rows are (timestamp, ms, object) and the
+  # timestamp is sub-microsecond, so an exact duplicate line is always a re-read, never two real
+  # queries. Header is preserved by sorting only the body.
+  { head -1 "$LOG_FILE"; tail -n +2 "$LOG_FILE" | sort -u; } > "$LOG_FILE.tmp" && mv "$LOG_FILE.tmp" "$LOG_FILE"
+
   AFTER=$(wc -l < "$LOG_FILE")
-  echo "captured $((AFTER - BEFORE)) timing rows -> $LOG_FILE (total $((AFTER - 1)))"
+  echo "captured $((AFTER - BEFORE)) new timing rows -> $LOG_FILE (total $((AFTER - 1)))"
 fi
 
 if [ "${1:-}" = "--capture-only" ]; then
