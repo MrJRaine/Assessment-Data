@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-18T14:30:21.783Z
+  modified: 2026-09-18T15:56:29.607Z
 ---
 
 **Pre-launch work queue** (captured 2026-09-17; launch ~1 week out). Order not fixed — user directs.
@@ -37,14 +37,22 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
 8. **Math data entry: red ✗ → yellow circle.** ✅ DONE on dev 2026-09-18 (commit 0a4c4a1). "Not yet"
    is now a yellow OUTLINE circle (`○`); amber darkened to `#b07d05` for contrast on white. Stored
    value and click-cycle unchanged.
-9. **Dark mode** — if it fits before launch. Full scoping in [[project_dark_mode]] (POST-1.0 wishlist,
+9. **Design/aesthetics pass — includes a WCAG 2.1 AA sweep.** The project IS working toward WCAG 2.1
+   AA (user, 2026-09-18), but deliberately NOT letting it block feature work: *"good to keep in mind,
+   [but] I don't want to get bogged down in it before we are working on cleaning up design
+   aesthetics."* So flag contrast/a11y issues in passing, do NOT stop to fix them, and collect them
+   here for the pass. Known so far: the math "not yet" ring is `#c9930a` ≈ 2.8:1 on white, a hair
+   under the 3:1 that SC 1.4.11 (Non-text Contrast) requires — `#c28c00` ≈ 3.0:1 clears it and looks
+   near-identical. NOTE: 1.4.11 has NO thickness exemption; only the TEXT rule (1.4.3) scales with
+   size, so a thicker stroke improves perceptibility but buys no formal latitude.
+10. **Dark mode** — if it fits before launch. Full scoping in [[project_dark_mode]] (POST-1.0 wishlist,
    but user may pull it in).
-10. **Re-record an identical subsequent result.** Data-entry sheets must let a teacher record a NEW
+11. **Re-record an identical subsequent result.** Data-entry sheets must let a teacher record a NEW
     assessment on a later date whose result is IDENTICAL to the student's existing/latest one (a genuine
     second data point, not a no-op). Today the upsert procs are latest-by-date per window; re-entering
     the same value likely reads as "no change" / doesn't register a fresh dated result. Needs a way to
     stamp a new dated result even when the value is unchanged (reading/writing/math). Design TBD.
-11. **QoL (POST-launch): auto-pair an IPP section with its regular section.** PowerSchool keeps IPP
+12. **QoL (POST-launch): auto-pair an IPP section with its regular section.** PowerSchool keeps IPP
     students in a SEPARATE section from the regular programming section (course code suffix `IP`:
     `MT151` / `MT151IP`, `ENG10` / `ENG10IP`). Course-based entry therefore shows them as two cards,
     and today the teacher selects BOTH via the picker's multi-select to see all their students at
@@ -55,7 +63,7 @@ and keep this list current (see [[feedback_changelog_as_you_go]]).
     not every teacher or section has an IPP counterpart, and the manual multi-select has to keep
     working. Likely approach: a partner column on `DimCourseAssessment` rather than inferring from
     the `IP` suffix, since the suffix is a PS naming convention, not a guarantee.
-12. **"Areas meeting/exceeding" report.** A report page showing, per student, the COUNT of subjects
+13. **"Areas meeting/exceeding" report.** A report page showing, per student, the COUNT of subjects
     (out of Reading, Writing, Math) where they are currently Meeting or Exceeding expectations — i.e.
     0–3 areas at/above expectation. Cross-subject roll-up; overlaps with Math reporting (#4) and the
     Students→Reports rename (#5). Design TBD.
