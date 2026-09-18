@@ -5,6 +5,7 @@
 
 ## How I work with this user (feedback)
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over. Reads are not assumed either.
+- [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — never hand over SQL with a `<placeholder>`; substitute real values from the conversation or DECLARE them at the top. An empty result = suspect the parameters first.
 - [Licensing Gate on Every Design Decision](feedback_licensing_gate_on_design.md) — state a connector/service's license class + end-user cost at full scale in the same breath; maker-account tests prove nothing.
 - [Chat Abbreviations](feedback_abbreviations.md) — user's shorthand (e.g. PS = PowerSchool).
 - [Number Formatting](feedback_number_formatting.md) — never comma as thousands separator (reads as decimal, French education).

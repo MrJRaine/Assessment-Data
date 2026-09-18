@@ -238,10 +238,16 @@ RETURN
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
     -- Each student gets THEIR grade's tasks for the cycle's month (multi-grade homerooms
     -- therefore surface each grade's own task set against its own students).
-    INNER JOIN DimMathTask mt
-            ON mt.GradeCode       = sg.Grade
-           AND mt.AssessmentMonth = wdm.DominantMonth
-           AND mt.ActiveFlag      = 1
+    -- LEFT, not INNER (changed 2026-09-18). As an INNER JOIN this SILENTLY DROPPED any student whose
+    -- grade has no active tasks for the cycle's month: a section of 4 opened as a roster of 1, while
+    -- the picker card still said 0/4 (tvf_TeacherGroups never looks at tasks). The teacher had no way
+    -- to know three children were missing, or why. Now the student always comes back -- with NULL
+    -- task columns -- and the grid says tasks aren't configured for that grade/month. Turns an
+    -- invisible data gap into a visible one.
+    LEFT JOIN DimMathTask mt
+           ON mt.GradeCode       = sg.Grade
+          AND mt.AssessmentMonth = wdm.DominantMonth
+          AND mt.ActiveFlag      = 1
     LEFT JOIN LatestMathPerTask fam
            ON fam.StudentKey         = sg.StudentKey
           AND fam.AssessmentWindowID = sg.AssessmentWindowID

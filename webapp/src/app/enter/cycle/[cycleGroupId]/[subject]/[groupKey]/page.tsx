@@ -63,6 +63,8 @@ export default async function RosterGrid({
   const isMath = subject === 'Math'
 
   let picked: TeacherGroup[] = []
+  let unresolvedKeys: string[] = []
+  const emptyInstances: string[] = []
   let group: TeacherGroup | null = null
   const slices: Slice[] = []
   let error: string | null = null
@@ -72,9 +74,11 @@ export default async function RosterGrid({
     // can't see resolves to nothing), supplies the display label, and names which cycle INSTANCE(S)
     // this class's students sit under — there is no windowId in the URL, because you pick a cycle.
     const groups = await getTeacherGroups(upn, cycleGroupId, subject)
-    // Every requested key must be one the caller can actually see; anything else is silently
-    // dropped, so a hand-typed key grants nothing.
+    // Every requested key must be one the caller can actually see, so a hand-typed key grants
+    // nothing. But don't drop the rest in silence — if a teacher opened three classes and one
+    // resolved to nothing, they must be told, not left counting heads.
     picked = groupKeys.map((k) => groups.find((g) => g.key === k)).filter((g): g is TeacherGroup => !!g)
+    unresolvedKeys = groupKeys.filter((k) => !groups.some((g) => g.key === k))
     group = picked[0] ?? null
     // A combined roster spans the union of its classes' instances.
     const windowIds = [...new Set(picked.flatMap((g) => g.windowIds ?? []))]
@@ -121,8 +125,10 @@ export default async function RosterGrid({
         slice.count = slice.roster.length
       }
       // An instance this class matched in aggregate can still hold none of ITS students once the
-      // roster is resolved; an empty grid with a Save button would just be a trap.
+      // roster is resolved. An empty grid with a live Save button is a trap, so don't render one --
+      // but don't drop it in silence either: record it and say so underneath.
       if (slice.count > 0) slices.push(slice)
+      else if (slice.label) emptyInstances.push(slice.label)
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
@@ -150,6 +156,32 @@ export default async function RosterGrid({
         </span>
       </div>
 
+      {/* Anything this page could NOT show gets said out loud, above the grids. A teacher who picked
+          three classes and gets two must be told which one is missing and why — never left to count
+          heads and wonder. */}
+      {!error && unresolvedKeys.length > 0 && (
+        <div className="no-tasks">
+          <strong>
+            {unresolvedKeys.length === 1 ? 'One class you opened' : `${unresolvedKeys.length} classes you opened`} could
+            not be shown.
+          </strong>
+          <p>
+            {unresolvedKeys.length === 1 ? 'It is' : 'They are'} not among the classes you can enter for this cycle —
+            usually because you no longer teach {unresolvedKeys.length === 1 ? 'it' : 'them'}, or the course isn&apos;t
+            assessed in this cycle. Anything below is complete for the classes that did open.
+          </p>
+        </div>
+      )}
+      {!error && emptyInstances.length > 0 && (
+        <div className="no-tasks">
+          <strong>Part of this cycle has no students in this class.</strong>
+          <p>
+            Nobody here falls under {emptyInstances.join(' or ')}, so {emptyInstances.length === 1 ? 'that' : 'those'}{' '}
+            {emptyInstances.length === 1 ? 'section is' : 'sections are'} not shown. Everyone who can be entered is below.
+          </p>
+        </div>
+      )}
+
       {error ? (
         <ErrorNote message={error} />
       ) : !group ? (
@@ -158,7 +190,13 @@ export default async function RosterGrid({
           hint="It may have no students in the cycle's grade or program scope, or you may no longer teach it."
         />
       ) : slices.length === 0 ? (
-        <EmptyState title="No students in this group for this cycle" />
+        // Never a bare "no results" — say why THIS user sees nothing, in their terms.
+        <EmptyState
+          title={`No students to enter for ${group.label}`}
+          hint={`Everyone in this class falls outside what this cycle covers — its grade range, its programs, or ${
+            isWriting ? 'its language' : 'the language of this course'
+          }. Check the cycle's scope on the Cycles page, or pick a different class.`}
+        />
       ) : (
         slices.map((s) => (
           <section key={s.windowId} className={split ? 'window-section' : undefined}>

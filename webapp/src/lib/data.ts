@@ -1059,13 +1059,13 @@ export interface MathRosterRow {
   groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   programFamily: string | null
-  mathTaskKey: string
+  mathTaskKey: string | null // NULL when this student's grade+month has no tasks configured
   unitName: string | null
   unitOrder: number | null
-  questionNumber: string
+  questionNumber: string | null
   displayOrder: number | null
   outcomeCode: string | null
-  description: string
+  description: string | null
   answerKey: string | null
   existingResult: boolean | null // latest 0/1 (BIT), or null if never marked
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved gate
@@ -1088,13 +1088,13 @@ export async function getMathRoster(
     GroupKey: string
     SchoolName: string | null
     ProgramFamily: string | null
-    MathTaskKey: string
+    MathTaskKey: string | null
     UnitName: string | null
     UnitOrder: number | null
-    QuestionNumber: string
+    QuestionNumber: string | null
     DisplayOrder: number | null
     OutcomeCode: string | null
-    TaskDescription: string
+    TaskDescription: string | null
     AnswerKey: string | null
     ExistingResult: boolean | null
     MathIPPStatus: boolean | null
@@ -1115,13 +1115,13 @@ export async function getMathRoster(
     groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     programFamily: r.ProgramFamily ?? null,
-    mathTaskKey: String(r.MathTaskKey),
+    mathTaskKey: r.MathTaskKey == null ? null : String(r.MathTaskKey),
     unitName: r.UnitName ?? null,
     unitOrder: r.UnitOrder ?? null,
-    questionNumber: r.QuestionNumber,
+    questionNumber: r.QuestionNumber ?? null,
     displayOrder: r.DisplayOrder ?? null,
     outcomeCode: r.OutcomeCode ?? null,
-    description: r.TaskDescription,
+    description: r.TaskDescription ?? null,
     answerKey: r.AnswerKey ?? null,
     existingResult: r.ExistingResult ?? null,
     mathIPPStatus: r.MathIPPStatus ?? null,

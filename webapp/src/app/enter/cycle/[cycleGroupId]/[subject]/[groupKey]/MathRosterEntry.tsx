@@ -43,6 +43,11 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
         mathIPP: r.mathIPPStatus === true,
       })
     }
+    // A student whose grade has no tasks configured for this cycle's month comes back with NULL task
+    // columns (the roster TVF LEFT JOINs DimMathTask). They still belong on the roster -- they are
+    // simply not enterable yet -- so record the student and skip the task, leaving the grade with an
+    // empty task set, which renders as an explicit note below.
+    if (r.mathTaskKey == null) continue
     let unit = grade.units.find((u) => u.name === (r.unitName ?? ''))
     if (!unit) {
       unit = { name: r.unitName ?? '', order: r.unitOrder ?? 0, tasks: [] }
@@ -50,13 +55,13 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
     }
     if (!unit.tasks.some((t) => t.mathTaskKey === r.mathTaskKey)) {
       unit.tasks.push({
-        mathTaskKey: r.mathTaskKey,
+        mathTaskKey: r.mathTaskKey!,
         unitName: r.unitName ?? '',
         unitOrder: r.unitOrder ?? 0,
-        questionNumber: r.questionNumber,
+        questionNumber: r.questionNumber ?? "",
         displayOrder: r.displayOrder ?? 0,
         outcomeCode: r.outcomeCode,
-        description: r.description,
+        description: r.description ?? "",
         answerKey: r.answerKey,
       })
     }
@@ -73,6 +78,7 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
 function initialMarks(rows: MathRosterRow[]): Record<string, Mark> {
   const m: Record<string, Mark> = {}
   for (const r of rows) {
+    if (r.mathTaskKey == null) continue // no task configured for this grade+month; nothing to mark
     const key = rk(r.studentKey, r.mathTaskKey)
     if (r.existingResult === true) m[key] = '1'
     else if (r.existingResult === false) m[key] = '0'
@@ -348,7 +354,19 @@ export default function MathRosterEntry({
               {singleGrade && <div className="mghead-controls">{pageControls}</div>}
             </div>
 
-            {gColl ? null : editMode ? (
+            {/* No tasks configured for this grade + month. These students used to be dropped from the
+                roster entirely, so a class of 4 opened showing 1 and nothing said why. Name the gap
+                and name the students, so the teacher knows who is missing and can chase it. */}
+            {gColl ? null : g.units.length === 0 ? (
+              <div className="no-tasks">
+                <strong>No math tasks are set up for {g.label} this cycle.</strong>
+                <p>
+                  {cols.length === 1 ? 'This student' : `These ${cols.length} students`} can&apos;t be
+                  marked until tasks are loaded for {g.label}: {cols.map((s) => s.name).join(', ')}.
+                </p>
+                <p className="muted small">Ask your administrator to load the task list for this grade and month.</p>
+              </div>
+            ) : editMode ? (
               <div className="checklist">
                 <div className="cl-gradebar">
                   <span><strong>{g.units.reduce((a, u) => a + u.tasks.filter((t) => !deselected.has(t.mathTaskKey)).length, 0)}</strong> / {g.units.reduce((a, u) => a + u.tasks.length, 0)} tasks selected</span>
