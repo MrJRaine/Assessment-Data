@@ -359,12 +359,18 @@ export default function MathRosterEntry({
                 and name the students, so the teacher knows who is missing and can chase it. */}
             {gColl ? null : g.units.length === 0 ? (
               <div className="no-tasks">
-                <strong>No math tasks are set up for {g.label} this cycle.</strong>
+                <strong>Math tasks for {g.label} aren&apos;t available yet.</strong>
                 <p>
-                  {cols.length === 1 ? 'This student' : `These ${cols.length} students`} can&apos;t be
-                  marked until tasks are loaded for {g.label}: {cols.map((s) => s.name).join(', ')}.
+                  {cols.length === 1 ? 'This student is' : `These ${cols.length} students are`} in your class but
+                  can&apos;t be marked in this cycle: {cols.map((s) => s.name).join(', ')}.
                 </p>
-                <p className="muted small">Ask your administrator to load the task list for this grade and month.</p>
+                {/* Phrased as PENDING, not as a misconfiguration — the grade-1-6 task sets are still
+                    being finalised, so a teacher hitting this hasn't done anything wrong and there is
+                    nothing for them to chase. Primary is the only grade with tasks at launch. */}
+                <p className="muted small">
+                  The task list for {g.label} is still being finalised. Nothing to do here — they&apos;ll appear
+                  once it&apos;s ready.
+                </p>
               </div>
             ) : editMode ? (
               <div className="checklist">
