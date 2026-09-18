@@ -452,7 +452,12 @@ export default function MathRosterEntry({
                                   // "Not yet" is a yellow OUTLINE circle, not a red ✗ — these are
                                   // short-cycle checkpoints, and a red cross reads as a mark against
                                   // the child rather than "hasn't got there yet".
-                                  const glyph = v === '1' ? '✓' : v === '0' ? '○' : v === 'ipp' ? 'IPP' : ''
+                                  //
+                                  // Drawn in CSS rather than as the '○' glyph: a font character has
+                                  // no adjustable stroke, so the ring's weight could not be set. The
+                                  // span below is a bordered circle, which also renders identically
+                                  // whatever font the browser falls back to.
+                                  const glyph = v === '1' ? '✓' : v === 'ipp' ? 'IPP' : ''
                                   return (
                                     <td className="cell stu" key={s.studentKey}>
                                       <button
@@ -461,7 +466,7 @@ export default function MathRosterEntry({
                                         onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP)}
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >
-                                        {glyph}
+                                        {v === '0' ? <span className="ring" aria-hidden="true" /> : glyph}
                                       </button>
                                     </td>
                                   )

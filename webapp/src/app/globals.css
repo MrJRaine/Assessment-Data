@@ -454,8 +454,11 @@ a { color: inherit; text-decoration: none; }
 .mtoggle:hover { background: #eef6fb; }
 .mtoggle.yes { color: #2f8f4e; font-weight: 700; }
 /* "Not yet" — amber outline circle. Darkened from a mid-yellow so it still meets contrast on white;
-   a true yellow (#e8c33a) fails against this background at this size. */
+   a true yellow (#e8c33a) fails against this background at this size.
+   Drawn as a bordered box, not the '○' glyph: a font character has no adjustable stroke, so the ring
+   weight could not be set (and varies by fallback font). 3px ~= triple the glyph's hairline. */
 .mtoggle.no { color: #b07d05; font-weight: 700; }
+.mtoggle .ring { width: 0.85em; height: 0.85em; border: 3px solid currentColor; border-radius: 50%; box-sizing: border-box; }
 .mtoggle.ipp { color: #6b4fbb; font-weight: 700; font-size: .66rem; }
 .mtoggle.blank::after { content: "·"; color: var(--border); font-size: 1.3rem; }
 .checklist { border: 1px solid var(--border); border-radius: 10px; background: var(--card); overflow: hidden; }
