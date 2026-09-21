@@ -148,11 +148,16 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
   "response buffer threshold → 0" setting). Buffering-immune alternative: re-add the `useLinkStatus` client
   overlay on the cards as **0.5.2** (user deferred building it tonight).
 - **Queued, AWAITING user's GO before generating**: synthetic **INGEST TEST DATA** (test ingest + maintenance
-  trigger end-to-end on dev). Spec: **30 English students at EACH of grades P,1,4,5,7,8,10,11** — per grade **20
-  in straight-grade classes + 10 in a split class** (splits **P/1, 4/5, 7/8, 10/11**); every student in a **Math
-  class AND an English class**. **Repeat the full set for Early Immersion.** For **Late Immersion, ONLY the 7/8
-  split** (grades 7,8). Output = PowerSchool-format export files (students/staff/sections/enrollments/co-teachers).
-  Do NOT generate until the user says go.
+  trigger end-to-end on dev). **30 students per grade** at grades **P,1,4,5,7,8,10,11**; per grade **20 in
+  straight-grade classes + 10 in a split class** (splits **P/1, 4/5, 7/8, 10/11**); **every student in a Math
+  class**. Literacy class(es) per stream:
+    - **English stream**: an **English (ELA)** class — all grades.
+    - **Early Immersion**: a **French (FLA)** class — all grades — **plus an English (ELA)** class for grades
+      **7,8,10,11 only** (for their English writing).
+    - **Late Immersion**: ONLY the **7/8 split** (grades 7,8) — a **French (FLA)** class **plus an English (ELA)**
+      class (grade 7+ gets English).
+  Immersion kids' literacy is FRENCH-first (not English like the English stream). Output = PowerSchool-format
+  export files (students/staff/sections/enrollments/co-teachers). Do NOT generate until the user says go.
 - **Data cleanup outstanding**: the 17 live SCoR-1 reading rows entered under the old scope-less window — the
   early-immersion ones were entered in English and belong on Reading·French·Early Immersion (per-student cleanup).
 - **Blockers**: IIS buffering fix blocked on IT (out tonight).
