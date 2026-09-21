@@ -1390,3 +1390,17 @@ readings.
 - Unverified by user: writing roster (measured but never opened), maintenance exemption, ingest
   scheduling.
 - Deferred by user: connection pre-warm / `pool.min` (checking risks of holding connections open).
+
+## Session 2026-09-21 — 0.5.0 + 0.5.1 shipped live; cycle instances reconciled; hard day on the dual-language hardcode relapse
+
+**Shipped:** 0.5.0 (Math P–6, Programming makeover, dual-language + per-cycle scoping, Students→Reports, Writing SCR, self-contained reading/writing facts, maintenance mode) and 0.5.1 (roster streaming) both LIVE on data.tcrce.ca. Live SQL via staged idempotent bundles `sql/deploy/live_0.5.0/` (generator `scripts/generate_live_deploy.sh`). **PR #32 → main; v0.5.0 + v0.5.1 tags; dev synced == main @ 3bb0c98.** Two prod container swaps (0.4.1→0.5.0, 0.5.0→0.5.1), the user doing each himself over RDP.
+
+**Deploy-staging lessons (→ [[feedback_idempotent_deploy_bundles]]):** idempotency issues surfaced stage-by-stage on the user's dev runs — should've scanned up front. Guard ALTERs (`IF NOT EXISTS col`); EXEC-defer DML naming a maybe-absent column (Fabric parses the whole batch up front, guards don't stop the parse); DROP-IF-EXISTS + GO on every programmable object; excluded the 5 PS `COPY INTO` loaders (repo has the not-yet-cutover CSV; live keeps TAB). New-table CREATEs are run-once by design.
+
+**Cycle instances:** live cycles had only 3 generic (NULL-scoped) instances each → immersion showed English reading. Reconciled all 6 live SCoRs to the canonical 8 (Subject×Language×ProgramScope×Grade) via `sql/scripts/reconcile_cycle_instances.sql`, templated verbatim from the dev dump (`verify_cycle_instances.sql`). Fact-safe (re-scope existing, add missing, no deletes). 17 SCoR-1 reading rows (immersion entered English) = separate per-student cleanup.
+
+**Repeated failure (user very angry, ~2nd day running):** relapsed AGAIN into framing reading language/scale as a hardcoded per-student rule — the design is CONFIG-DRIVEN via cycle instances. Root cause: `project_assessment_language_tracks` still carried superseded hardcoding notes; deleted them so the record states only the config-driven model. Also relapsed on: unilateral decisions (the `useLinkStatus` overlay built+reverted), reporting back confirmed facts, and a stale "IT drops the tar" memory line (fixed both copies — the PROJECT LEAD does the whole RDP swap; IT not in the deploy loop).
+
+**IIS buffering (TOP of tomorrow):** 0.5.1 roster streaming works locally but IIS/ARR buffers the slow roster response on live so the loading state never flushes (dead-click only on the slow roster page). Fix = disable ARR response buffering (IT sign-off, out tonight) or add the `useLinkStatus` client overlay (buffering-immune) as 0.5.2.
+
+**Queued (awaiting user's go before generating):** synthetic ingest test data — 30 English students at EACH of grades P,1,4,5,7,8,10,11 (per grade: 20 straight-class + 10 split; splits P/1,4/5,7/8,10/11; each student in a math + an english class); repeat the full set for Early Immersion; 7/8 split only for Late Immersion. PS-format export files.
