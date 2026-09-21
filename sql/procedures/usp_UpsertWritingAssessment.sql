@@ -71,6 +71,8 @@ BEGIN
     DECLARE @Today                  DATE          = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
     DECLARE @CallerEmail            VARCHAR(255)  = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey         BIGINT;
+    DECLARE @WritingAverage         DECIMAL(4,2);   -- SCR-aware average, stamped on the fact (as-was)
+    DECLARE @ConvNum                INT;            -- numeric Conventions, or NULL when 'SCR'
     DECLARE @AssessmentWindowID_BI  BIGINT;
     DECLARE @WindowStartDate        DATE;
     DECLARE @WindowEndDate          DATE;
@@ -227,6 +229,14 @@ BEGIN
       AND AssessmentLanguage = @AssessmentLanguage
       AND AssessmentDate = @AssessmentDate;
 
+    -- Writing average, stamped on the row (as-was) so the SCR rule lives in the DATA, not only in
+    -- the read logic: Conventions='SCR' drops from BOTH numerator and denominator. Ideas/Org/Language
+    -- are validated 1-4 (always present, 3 values); Conventions is 1-4 or 'SCR'.
+    SET @ConvNum = TRY_CAST(@ConventionsScore AS INT);   -- 'SCR' -> NULL
+    SET @WritingAverage =
+        CAST(@IdeasScore + @OrganizationScore + @LanguageScore + COALESCE(@ConvNum, 0) AS DECIMAL(6,4))
+        / (3 + CASE WHEN @ConvNum IS NULL THEN 0 ELSE 1 END);
+
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN
         UPDATE FactAssessmentWriting
@@ -234,6 +244,7 @@ BEGIN
             OrganizationScore   = @OrganizationScore,
             LanguageScore       = @LanguageScore,
             ConventionsScore    = @ConventionsScore,
+            WritingAverage      = @WritingAverage,
             EnteredByStaffKey   = @CallerStaffKey,
             SubmissionTimestamp = @Now,
             LastUpdated         = @Now
@@ -243,12 +254,12 @@ BEGIN
     BEGIN
         INSERT INTO FactAssessmentWriting (
             StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
-            LanguageScore, ConventionsScore, AssessmentDate, EnteredByStaffKey,
+            LanguageScore, ConventionsScore, WritingAverage, AssessmentDate, EnteredByStaffKey,
             SubmissionTimestamp, LastUpdated
         )
         VALUES (
             @StudentKey, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasScore, @OrganizationScore,
-            @LanguageScore, @ConventionsScore, @AssessmentDate, @CallerStaffKey,
+            @LanguageScore, @ConventionsScore, @WritingAverage, @AssessmentDate, @CallerStaffKey,
             @Now, @Now
         );
     END;

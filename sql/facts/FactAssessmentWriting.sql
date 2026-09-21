@@ -25,6 +25,11 @@ CREATE TABLE FactAssessmentWriting (
     OrganizationScore       INT             NULL,
     LanguageScore           INT             NULL,
     ConventionsScore        VARCHAR(10)     NULL,       -- '1'–'4', or 'SCR' (Scribed) — omitted from the average
+    -- As-was average (2026-09-21): the SCR-aware mean stamped at insert, so the "Scribed drops from
+    -- the average" rule is captured IN the data — a self-contained value that can't be re-derived
+    -- wrong later if the rule or the read logic changes. 'SCR' Conventions drops from numerator AND
+    -- denominator; range 1.00–4.00.
+    WritingAverage          DECIMAL(4,2)    NULL,
 
     AssessmentDate          DATE            NOT NULL,
     EnteredByStaffKey       BIGINT          NOT NULL,   -- References DimStaff.StaffKey

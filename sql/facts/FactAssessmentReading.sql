@@ -14,6 +14,12 @@ CREATE TABLE FactAssessmentReading (
     AssessmentWindowID      BIGINT          NOT NULL,   -- References DimAssessmentWindow.AssessmentWindowID
     ReadingScaleID          BIGINT          NOT NULL,   -- References DimReadingScale.ReadingScaleID
     ReadingDelta            INT             NULL,       -- Difference from grade-level expectation
+    -- As-was context (2026-09-21): stamped at insert so each row is SELF-CONTAINED for analysis
+    -- (PowerBI export) and immune to later benchmark/scale edits. ReadingScaleID still carries the
+    -- key; these hold the human-readable values the delta was computed from.
+    LevelCode               VARCHAR(10)     NULL,       -- actual level as-was (DimReadingScale.LevelCode)
+    ExpectedMinLevelCode    VARCHAR(10)     NULL,       -- benchmark low bound as-was (DimReadingBenchmark)
+    ExpectedMaxLevelCode    VARCHAR(10)     NULL,       -- benchmark high bound as-was
     AssessmentDate          DATE            NOT NULL,
     EnteredByStaffKey       BIGINT          NOT NULL,   -- References DimStaff.StaffKey
     SubmissionTimestamp     DATETIME2(0)    NOT NULL,

@@ -139,6 +139,7 @@ BEGIN
     DECLARE @MaxGradeOrder          INT;
     DECLARE @ScaleSystem            VARCHAR(20);
     DECLARE @StudentLevelOrder      INT;
+    DECLARE @StudentLevelCode       VARCHAR(10);   -- actual level code, stamped on the fact (as-was)
     DECLARE @DominantMonth          INT;
     DECLARE @ExpectedMinLevel       VARCHAR(10);
     DECLARE @ExpectedMaxLevel       VARCHAR(10);
@@ -234,7 +235,8 @@ BEGIN
     -- =========================================================================
     SELECT
         @StudentLevelOrder = LevelOrder,
-        @ScaleSystem       = ScaleSystem
+        @ScaleSystem       = ScaleSystem,
+        @StudentLevelCode  = LevelCode
     FROM DimReadingScale
     WHERE ReadingScaleID = @ReadingScaleID_BI
       AND ActiveFlag = 1;
@@ -396,21 +398,26 @@ BEGIN
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN
         UPDATE FactAssessmentReading
-        SET ReadingScaleID      = @ReadingScaleID_BI,
-            ReadingDelta        = @ReadingDelta,
-            EnteredByStaffKey   = @CallerStaffKey,
-            SubmissionTimestamp = @Now,
-            LastUpdated         = @Now
+        SET ReadingScaleID       = @ReadingScaleID_BI,
+            ReadingDelta         = @ReadingDelta,
+            LevelCode            = @StudentLevelCode,
+            ExpectedMinLevelCode = @ExpectedMinLevel,
+            ExpectedMaxLevelCode = @ExpectedMaxLevel,
+            EnteredByStaffKey    = @CallerStaffKey,
+            SubmissionTimestamp  = @Now,
+            LastUpdated          = @Now
         WHERE ReadingAssessmentID = @ExistingAssessmentID;
     END
     ELSE
     BEGIN
         INSERT INTO FactAssessmentReading (
             StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta,
+            LevelCode, ExpectedMinLevelCode, ExpectedMaxLevelCode,
             AssessmentDate, EnteredByStaffKey, SubmissionTimestamp, LastUpdated
         )
         VALUES (
             @StudentKey, @AssessmentWindowID_BI, @ReadingScaleID_BI, @ReadingDelta,
+            @StudentLevelCode, @ExpectedMinLevel, @ExpectedMaxLevel,
             @AssessmentDate, @CallerStaffKey, @Now, @Now
         );
     END;
