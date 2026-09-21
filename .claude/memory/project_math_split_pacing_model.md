@@ -71,6 +71,10 @@ ingest it holds no precious volume, so it's a post-1.0 build, not a pre-deploy m
 **`MathTaskLink` — explicit predecessor→successor links within a grade.** Edge-based (`PredecessorMathTaskKey`,
 `SuccessorMathTaskKey`), which covers pairs, linear chains, and transitivity with no sequence column. Chains are
 LINEAR (user). Links are authored via the post-1.0 GUI (picks live `MathTaskKey`s — moots any TaskCode-for-linking).
+DECIDED 2026-09-21: `MathTaskLink` is **SCD Type 2 with actor audit** — chosen mainly for the audit trail
+(track WHO changes links, find where something went wrong, revert to a stable set). Each version records who
+opened it (`CreatedByStaffKey`) and who closed it (`EndedByStaffKey NULL`) — so a DELETE (closing a version
+with no successor) still captures its actor, which a single changed-by column would miss.
 
 **Behaviour (TVF/client, post-1.0).** If a student succeeded on a predecessor, the successor's SCoR opens
 **pre-filled met** and is written as a real `FactAssessmentMath` record on the teacher's FIRST save of that cycle
@@ -102,7 +106,7 @@ month; OutcomeCode frozen) over dimension SCD (which would break `DimMathTask`'s
 
 1. `DimHomeroomComposition` — CompositionKey IDENTITY PK, `CompositionGrades VARCHAR(50)` UNIQUE, `DisplayName VARCHAR(100) NULL`, LastUpdated.
 2. `MathTaskPacingException` (SCD T2) — PacingExceptionKey PK, MathTaskKey FK, CompositionKey FK, OverrideMonth INT, EffectiveStartDate/EndDate, IsCurrent, LastUpdated.
-3. `MathTaskLink` — MathTaskLinkKey PK, PredecessorMathTaskKey, SuccessorMathTaskKey, LastUpdated. **SCD? = OPEN (below).**
+3. `MathTaskLink` (SCD T2 + actor audit) — MathTaskLinkKey (version PK), PredecessorMathTaskKey, SuccessorMathTaskKey, EffectiveStartDate/EndDate, IsCurrent, `CreatedByStaffKey`, `EndedByStaffKey NULL`, LastUpdated. Natural key = the (predecessor, successor) pair.
 4. `FactAssessmentMath` ALTER ADD `CarriedFromMathTaskKey`, `CarriedFromMonth`, `OutcomeCode` (separate migration; GO after ALTER — Fabric).
 
 Post-1.0 (TVF/USP/client, no pre-deploy structure): pacing resolution, the carry-forward domino, the P-6 homeroom
@@ -110,9 +114,9 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
 
 ## OPEN (only one left)
 
-- **`MathTaskLink` SCD?** By the governing principle, link *config* history has no other home → SCD Type 2 (pair as
-  natural key + effective dates). Counter: per-record carry lineage is already frozen on the fact, so recorded
-  results are safe regardless — only the link TOPOLOGY audit needs versioning. User has NOT decided.
+- **Actor audit on `MathTaskPacingException` too?** Links got SCD T2 + `CreatedByStaffKey`/`EndedByStaffKey`
+  audit. Exceptions are also GUI-authored config; do they get the same who-changed-it columns for consistency?
+  User has NOT decided.
 
 ## Verified facts (checked in code this session — don't re-assert to the user as findings)
 
