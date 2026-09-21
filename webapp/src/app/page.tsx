@@ -58,7 +58,7 @@ export default async function Home() {
           (heading included) appears only if the caller holds at least one of these capabilities, so a
           teacher never sees an admin heading or an empty grid. */}
       {(caps.canManageCycles || caps.canRunIngest || caps.isSysAdmin) ? (
-        <section className="window-section">
+        <section className="window-section home-admin">
           <h2 className="section-heading">Admin Tools</h2>
           <div className="card-grid">
             {caps.canManageCycles ? (
