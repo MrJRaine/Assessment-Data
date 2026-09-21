@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 2132ef2f-c5ac-4703-9c69-7138263cb7d1
-  modified: 2026-09-21T13:33:36.746Z
+  modified: 2026-09-21T13:36:21.204Z
 ---
 
 When proposing a build plan or stack-rank, do NOT silently park user requirements as "deferred" / "V1.5" / "out of MVP" without explicit user confirmation. This includes cases where the work feels large or where I think I'm being helpful by trimming scope.
@@ -42,8 +42,14 @@ question (the backfill), said nothing about orders, and I wrote "I'm including t
 object" — deciding on their behalf. Their words: *"If I didn't answer a question, did you ever think
 it's because I wanted to tackle one item at a time... that is not permission for you to make a
 fucking decision on my behalf, we have been over this time and fucking time again."* If a question is
-unanswered, it stays open: proceed on what WAS decided, and either ask the open one plainly or wait —
-never fill the gap with my preference, not even a "unless you object" default.
+unanswered, it stays open: proceed on what WAS decided, and either **WAIT** for the answer or, **if
+it blocks progress, ASK AGAIN** — never fill the gap with my preference, not even a "unless you
+object" default. Asking multiple questions is fine; deciding an unanswered one is not.
+
+**A partial answer is usually an ACCIDENTAL EARLY SEND, not a deliberate silence** (user, 2026-09-21):
+when separating multi-question answers with line breaks it is easy to hit Enter instead of
+Shift+Enter and send half a reply. So when a multi-part answer comes back incomplete, DON'T read
+meaning into the missing parts — just re-surface the unanswered ones and let them finish.
 
 **Worse than either failure alone: I then used the misread fact to OVERRIDE the consent I had
 imagined.** The plan I proposed included a safeguard; I dropped it on the strength of a remark the
