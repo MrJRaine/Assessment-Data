@@ -138,12 +138,16 @@ BEGIN
     ALTER TABLE dbo.FactAssessmentWriting ADD ConventionsScoreTmp VARCHAR(10) NULL;
 END;
 GO
+-- Dynamic SQL: the UPDATE names ConventionsScoreTmp, which does not exist on an already-converted
+-- warehouse. A plain statement would fail to PARSE there (Fabric parses the whole batch up front,
+-- guard or not — the catalog-check-in-same-batch gotcha). EXEC defers parsing to run time, so when the
+-- guard is false the statement is never parsed. Same reason applied to the copy-back below.
 IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
    AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScore' AND system_type_id = 56)
 BEGIN
-    UPDATE dbo.FactAssessmentWriting
-       SET ConventionsScoreTmp = CAST(ConventionsScore AS VARCHAR(10))
-     WHERE ConventionsScore IS NOT NULL;
+    EXEC('UPDATE dbo.FactAssessmentWriting
+             SET ConventionsScoreTmp = CAST(ConventionsScore AS VARCHAR(10))
+           WHERE ConventionsScore IS NOT NULL;');
 END;
 GO
 
@@ -164,9 +168,9 @@ GO
 -- 3) copy back and drop the temp — only while the temp is still present.
 IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
 BEGIN
-    UPDATE dbo.FactAssessmentWriting
-       SET ConventionsScore = ConventionsScoreTmp
-     WHERE ConventionsScoreTmp IS NOT NULL;
+    EXEC('UPDATE dbo.FactAssessmentWriting
+             SET ConventionsScore = ConventionsScoreTmp
+           WHERE ConventionsScoreTmp IS NOT NULL;');
 END;
 GO
 IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
