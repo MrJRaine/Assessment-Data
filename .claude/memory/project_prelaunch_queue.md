@@ -25,7 +25,9 @@ writing as-was context, verified on dev — 4 files run, live at deploy).
 **STILL GATING THE LIVE DEPLOY:** (a) the **math outcome/opportunity framework** below — UNDECIDED,
 user said its framework must be set before the 0.5.0 live SQL deploy; (b) the **ordered live deploy
 list** — now ~46 + 4 (the self-contained-facts migrations/procs). Plus a dev dry-run of the
-maintenance+ingest procedure, and a UI check of New Data.
+maintenance+ingest procedure. **New Data checkbox UI-tested & verified 2026-09-21 ✅.**
+Also NEW (user 2026-09-21): **upload more math tasks to DimMathTask before 0.5.0 live** — ties into
+the outcome-framework decision below (each task carries an OutcomeCode).
 
 **NEW pre-deploy design item — math outcomes have SUBSEQUENT OPPORTUNITIES to be met (user 2026-09-21):**
 a student not-yet on an outcome in one cycle gets another chance in a later cycle; the framework for
@@ -33,8 +35,11 @@ tracking "same outcome, multiple opportunities, met-ever" must be at least scaff
 SQL deploy. Current state: `DimMathTask.OutcomeCode` (nullable string) + `FactAssessmentMath` dated
 history already make "met outcome X in any opportunity this year" ANSWERABLE. Open question (asked,
 NOT yet answered): what schema, if any, is the minimum framework — a `DimMathOutcome` dimension,
-enforce OutcomeCode non-null, a carry-forward hook, or nothing schema-side. RESOLVE before finalizing
-the deploy list.
+enforce OutcomeCode non-null, a carry-forward hook, or nothing schema-side.
+**PARKED 2026-09-21 by user:** deferred until we talk through upcoming feature sets that may change
+how we want to store data — do NOT decide or write schema for this until that discussion happens.
+Note: the task UPLOAD does NOT depend on this (OutcomeCode already exists + is loaded by
+usp_LoadMathTasks); loading sheets now creates no re-work if the framework changes later.
 
 1. **Students → Reports rename** — ✅ DONE 2026-09-21 (see above).
 2. **Re-record an identical subsequent result.** A teacher must be able to record a NEW dated result
