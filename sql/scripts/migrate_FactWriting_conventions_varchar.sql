@@ -18,26 +18,52 @@
  * Language stay INT. Safe on an empty table too (the UPDATEs just touch 0 rows).
  ******************************************************************************/
 
--- 1) temp VARCHAR column, seeded from the existing INT.
-ALTER TABLE FactAssessmentWriting ADD ConventionsScoreTmp VARCHAR(10) NULL;
+-- IDEMPOTENT: every batch is guarded so the swap runs ONLY while ConventionsScore is still INT
+-- (system_type_id 56). Once it is VARCHAR (167) every guard is false and the whole script no-ops —
+-- safe to re-run, and safe on a dev warehouse that already converted. int=56, varchar=167 are fixed.
+
+-- 1) temp VARCHAR column, seeded from the existing INT — only while conversion is pending.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScore' AND system_type_id = 56)
+   AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentWriting ADD ConventionsScoreTmp VARCHAR(10) NULL;
+END;
 GO
-UPDATE FactAssessmentWriting
-   SET ConventionsScoreTmp = CAST(ConventionsScore AS VARCHAR(10))
- WHERE ConventionsScore IS NOT NULL;
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScore' AND system_type_id = 56)
+BEGIN
+    UPDATE dbo.FactAssessmentWriting
+       SET ConventionsScoreTmp = CAST(ConventionsScore AS VARCHAR(10))
+     WHERE ConventionsScore IS NOT NULL;
+END;
 GO
 
--- 2) drop the INT column, re-add it as VARCHAR (same name).
-ALTER TABLE FactAssessmentWriting DROP COLUMN ConventionsScore;
+-- 2) drop the INT column, re-add it as VARCHAR (same name) — only while the INT still exists + tmp is staged.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScore' AND system_type_id = 56)
+   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentWriting DROP COLUMN ConventionsScore;
+END;
 GO
-ALTER TABLE FactAssessmentWriting ADD ConventionsScore VARCHAR(10) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScore')
+   AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentWriting ADD ConventionsScore VARCHAR(10) NULL;
+END;
 GO
 
--- 3) copy back and drop the temp.
-UPDATE FactAssessmentWriting
-   SET ConventionsScore = ConventionsScoreTmp
- WHERE ConventionsScoreTmp IS NOT NULL;
+-- 3) copy back and drop the temp — only while the temp is still present.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+BEGIN
+    UPDATE dbo.FactAssessmentWriting
+       SET ConventionsScore = ConventionsScoreTmp
+     WHERE ConventionsScoreTmp IS NOT NULL;
+END;
 GO
-ALTER TABLE FactAssessmentWriting DROP COLUMN ConventionsScoreTmp;
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'ConventionsScoreTmp')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentWriting DROP COLUMN ConventionsScoreTmp;
+END;
 GO
 
 -- verify (dev/synthetic — safe to display): distinct conventions values now include codes.

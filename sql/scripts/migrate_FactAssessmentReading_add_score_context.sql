@@ -32,10 +32,13 @@
  * backfill UPDATE is safe to re-run (it re-writes the same values).
  ******************************************************************************/
 
-ALTER TABLE FactAssessmentReading
-    ADD LevelCode            VARCHAR(10) NULL,
-        ExpectedMinLevelCode VARCHAR(10) NULL,
-        ExpectedMaxLevelCode VARCHAR(10) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentReading') AND name = 'LevelCode')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentReading
+        ADD LevelCode            VARCHAR(10) NULL,
+            ExpectedMinLevelCode VARCHAR(10) NULL,
+            ExpectedMaxLevelCode VARCHAR(10) NULL;
+END;
 GO
 
 -- Window dominant month, computed once per window (same lever the proc + read TVFs use).

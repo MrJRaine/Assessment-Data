@@ -17,8 +17,10 @@
  * backfill UPDATE is safe to re-run (it re-writes the same values).
  ******************************************************************************/
 
-ALTER TABLE FactAssessmentWriting
-    ADD WritingAverage DECIMAL(4,2) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'WritingAverage')
+BEGIN
+    ALTER TABLE dbo.FactAssessmentWriting ADD WritingAverage DECIMAL(4,2) NULL;
+END;
 GO
 
 -- Backfill from the stored trait scores, exactly as usp_UpsertWritingAssessment now computes it:
