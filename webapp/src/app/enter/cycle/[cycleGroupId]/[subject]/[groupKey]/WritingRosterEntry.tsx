@@ -88,9 +88,18 @@ export default function WritingRosterEntry({
   const [result, setResult] = useState<SaveSummary | null>(null)
   const sg = useSmallGroup(roster)
 
-  const changedKeys = roster.map((s) => s.studentKey).filter((k) => !eqSet(sel[k], base[k]))
+  // "New Data" — which rows Save acts on. Auto-checked when the row's scores differ from the
+  // committed set (today's behaviour); a MANUAL toggle overrides so a teacher can re-record an
+  // IDENTICAL result on a new day. Save still requires all four traits: a checked-but-incomplete row
+  // is flagged, not sent (unchanged from before).
+  const [evidenceManual, setEvidenceManual] = useState<Record<string, boolean>>({})
+  const isChecked = (k: string) => evidenceManual[k] ?? !eqSet(sel[k], base[k])
+  function toggleEvidence(k: string) {
+    setEvidenceManual((m) => ({ ...m, [k]: !isChecked(k) }))
+  }
+  const checkedKeys = roster.map((s) => s.studentKey).filter((k) => isChecked(k))
   const ippKeys = Object.keys(ippSel)
-  const dirtyCount = changedKeys.length + ippKeys.length
+  const dirtyCount = checkedKeys.length + ippKeys.length
 
   // Maintenance lock: writing's onSave already sends COMPLETE rows only, so the T-1 auto-save saves
   // finished rows and flags partial ones (never a partial-row failure).
@@ -100,6 +109,12 @@ export default function WritingRosterEntry({
     // Only Conventions is ever set to 'SCR' (the SCR option is Conventions-only); the assertion
     // reconciles the computed-key write with ScoreSet's precise field types.
     setSel((p) => ({ ...p, [sk]: { ...p[sk], [trait]: val } as ScoreSet }))
+    // Editing a score hands the checkbox back to auto (differs-from-committed).
+    setEvidenceManual((m) => {
+      const n = { ...m }
+      delete n[sk]
+      return n
+    })
   }
   function chooseIPP(studentKey: string, value: boolean) {
     setIppSel((prev) => {
@@ -113,8 +128,8 @@ export default function WritingRosterEntry({
   function onSave() {
     // A writing result needs ALL FOUR traits set (Conventions counts 'SCR' as set); incomplete rows
     // are flagged, not sent. Conventions goes as a string ('1'-'4' or 'SCR'); the proc validates it.
-    const ready = changedKeys.filter((k) => isComplete(sel[k]))
-    const incomplete = changedKeys.filter((k) => !isComplete(sel[k]))
+    const ready = checkedKeys.filter((k) => isComplete(sel[k]))
+    const incomplete = checkedKeys.filter((k) => !isComplete(sel[k]))
     const writingEntries: WritingEntry[] = ready.map((k) => ({
       studentNumber: numByKey.get(k)!,
       ideas: sel[k].ideas!,
@@ -148,6 +163,12 @@ export default function WritingRosterEntry({
         for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) next[k] = { ...sel[k] }
         return next
       })
+      // Un-check saved rows (baseline == sel now, so auto-check is false; drop any manual override).
+      setEvidenceManual((prev) => {
+        const next = { ...prev }
+        for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
+        return next
+      })
       const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
       setIppSel((prev) => {
         const next = { ...prev }
@@ -172,6 +193,9 @@ export default function WritingRosterEntry({
             <th>Avg</th>
             <th>Achievement</th>
             <th>IPP</th>
+            <th>
+              New<br />Data
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -180,7 +204,7 @@ export default function WritingRosterEntry({
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true
             const ippStaged = s.studentKey in ippSel
-            const dirty = !eqSet(cur, base[s.studentKey]) || ippStaged
+            const dirty = isChecked(s.studentKey) || ippStaged
             const avg = avgOf(cur)
             // IPP students + unresolved gates carry no achievement band (mirrors the reading grid).
             const band = isIPP || needsConfirm ? null : writingBand(avg)
@@ -243,6 +267,21 @@ export default function WritingRosterEntry({
                     <span className="muted">Not IPP</span>
                   ) : (
                     <span className="muted">—</span>
+                  )}
+                </td>
+                {/* New Data — log this row as a new dated result. Auto-ticks when the scores change;
+                    tick by hand to record a re-assessment whose result is unchanged. */}
+                <td style={{ textAlign: 'center' }}>
+                  {needsConfirm ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={isChecked(s.studentKey)}
+                      disabled={pending || inputsLocked || (eqSet(cur, base[s.studentKey]) && !isComplete(cur))}
+                      onChange={() => toggleEvidence(s.studentKey)}
+                      aria-label={`New data for ${s.lastName}, ${s.firstName}`}
+                    />
                   )}
                 </td>
               </tr>

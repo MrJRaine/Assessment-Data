@@ -99,9 +99,19 @@ export default function RosterEntry({
   }
   const sg = useSmallGroup(roster, defaultHiddenKeys)
 
-  const changedLevelKeys = roster.map((s) => s.studentKey).filter((k) => sel[k] && sel[k] !== baseline[k])
+  // "New Data" — which rows Save sends. Auto-checked when the level differs from the committed
+  // value (today's behaviour, unchanged for the common case); a MANUAL toggle overrides, so a teacher
+  // can log a re-assessment whose result is IDENTICAL to the last one (the dropdown can't re-fire on
+  // the same value). A new dated result is what the upsert proc records — same value, new day = a
+  // genuine second data point. Save sends every checked row.
+  const [evidenceManual, setEvidenceManual] = useState<Record<string, boolean>>({})
+  const isChecked = (k: string) => evidenceManual[k] ?? (!!sel[k] && sel[k] !== baseline[k])
+  function toggleEvidence(k: string) {
+    setEvidenceManual((m) => ({ ...m, [k]: !isChecked(k) }))
+  }
+  const checkedKeys = roster.map((s) => s.studentKey).filter((k) => isChecked(k) && !!sel[k])
   const ippKeys = Object.keys(ippSel)
-  const dirtyCount = changedLevelKeys.length + ippKeys.length
+  const dirtyCount = checkedKeys.length + ippKeys.length
 
   // Maintenance lock: reading saves are cell-independent, so the T-1 auto-save is safe.
   const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
@@ -116,7 +126,7 @@ export default function RosterEntry({
   }
 
   function onSave() {
-    const levelEntries = changedLevelKeys.map((k) => ({ studentNumber: numByKey.get(k)!, readingScaleId: sel[k] }))
+    const levelEntries = checkedKeys.map((k) => ({ studentNumber: numByKey.get(k)!, readingScaleId: sel[k] }))
     const missingPf = ippKeys.filter((k) => !pfByKey.get(k))
     const ippEntries: IppEntry[] = ippKeys
       .map((k) => (pfByKey.get(k) ? { studentKey: k, programFamily: pfByKey.get(k)!, isIPP: ippSel[k] } : null))
@@ -140,7 +150,14 @@ export default function RosterEntry({
       const erroredNums = new Set(levelRes.errors.map((e) => e.studentNumber))
       setBaseline((prev) => {
         const next = { ...prev }
-        for (const k of changedLevelKeys) if (!erroredNums.has(numByKey.get(k)!)) next[k] = sel[k]
+        for (const k of checkedKeys) if (!erroredNums.has(numByKey.get(k)!)) next[k] = sel[k]
+        return next
+      })
+      // Un-check saved rows: once baseline == sel, the auto-check is false; drop any manual override
+      // too, so a saved "same-value" evidence row doesn't stay ticked.
+      setEvidenceManual((prev) => {
+        const next = { ...prev }
+        for (const k of checkedKeys) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
         return next
       })
       // Clear staged IPPs that saved (keep errored / missing-PF ones staged).
@@ -183,6 +200,9 @@ export default function RosterEntry({
               Diff from<br />Prev Cycle
             </th>
             <th>New level</th>
+            <th>
+              New<br />Data
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -191,7 +211,7 @@ export default function RosterEntry({
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true
             const ippStaged = s.studentKey in ippSel
-            const dirty = selId !== (baseline[s.studentKey] ?? '') || ippStaged
+            const dirty = isChecked(s.studentKey) || ippStaged
             // IPP students and unresolved gates carry no achievement colour/delta (mirrors the app).
             const suppress = isIPP || needsConfirm
             const order = selId ? orderById.get(selId) ?? null : null
@@ -272,7 +292,16 @@ export default function RosterEntry({
                     <select
                       value={selId}
                       disabled={pending || inputsLocked || levels.length === 0}
-                      onChange={(e) => setSel((p) => ({ ...p, [s.studentKey]: e.target.value }))}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setSel((p) => ({ ...p, [s.studentKey]: v }))
+                        // Changing the value hands the checkbox back to auto (differs-from-committed).
+                        setEvidenceManual((m) => {
+                          const n = { ...m }
+                          delete n[s.studentKey]
+                          return n
+                        })
+                      }}
                     >
                       <option value="">—</option>
                       {levels.map((l) => (
@@ -281,6 +310,21 @@ export default function RosterEntry({
                         </option>
                       ))}
                     </select>
+                  )}
+                </td>
+                {/* New Data — log this row as a new dated result. Auto-ticks on a value change;
+                    tick by hand to record a re-assessment whose result is unchanged. */}
+                <td style={{ textAlign: 'center' }}>
+                  {needsConfirm ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={isChecked(s.studentKey)}
+                      disabled={pending || inputsLocked || !sel[s.studentKey]}
+                      onChange={() => toggleEvidence(s.studentKey)}
+                      aria-label={`New data for ${s.lastName}, ${s.firstName}`}
+                    />
                   )}
                 </td>
               </tr>
