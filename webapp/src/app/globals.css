@@ -125,8 +125,9 @@ a { color: inherit; text-decoration: none; }
    its own cards sit tight UNDER the heading so they read as one group (was floating mid-page). The
    .section-heading's own 0.5rem bottom margin is overridden here too, or "below" never got tight. */
 .home-admin { margin-top: 4.5rem; }
-.home-admin .section-heading { margin-bottom: 0.1rem; }
-.home-admin .card-grid { margin-top: 0.3rem; }
+/* Text->line gap matches line->cards gap (both 0.25rem) so the underline sits evenly between them. */
+.home-admin .section-heading { margin-bottom: 0; padding-bottom: 0.25rem; }
+.home-admin .card-grid { margin-top: 0.25rem; }
 .section-heading { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--primary); display: inline-block; padding-right: 1.5rem; }
 /* Language heading inside a group picker section (English / French course sections). Deliberately
    lighter than .section-heading so "My classes" still reads as the parent of the language split. */
