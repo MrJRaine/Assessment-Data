@@ -22,8 +22,10 @@ lossy/baked-in). Leaning store-the-week per the user's self-containment preferen
 FactAssessment rows work). If we store week, the resolution below becomes effectiveWeek → window rather
 than effectiveMonth → dominant month.
 
-**Multiple units per SCoR** (confirmed against the user's SCoR-1 sheet). So `UnitOrder`/`DisplayOrder`
-are within-cycle display sorts only — NEVER keys.
+**Multiple units per SCoR** (confirmed against the user's SCoR-1 sheet). Two distinct display sorts,
+verified in MathRosterEntry.tsx: **`UnitOrder`** orders the UNITS within the SCoR window
+(`g.units.sort(a.order - b.order)`), and **`DisplayOrder`** orders the TASKS within a unit
+(`u.tasks.sort(a.displayOrder - b.displayOrder)`). Both are display-only — NEVER keys.
 
 **The model — default + exceptions (deviations only):**
 - The task keeps its **default month** right on `DimMathTask`, exactly as today ("contained like it is now").
