@@ -156,8 +156,14 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
       **7,8,10,11 only** (for their English writing).
     - **Late Immersion**: ONLY the **7/8 split** (grades 7,8) — a **French (FLA)** class **plus an English (ELA)**
       class (grade 7+ gets English).
-  Immersion kids' literacy is FRENCH-first (not English like the English stream). Output = PowerSchool-format
-  export files (students/staff/sections/enrollments/co-teachers). Do NOT generate until the user says go.
+  Immersion kids' literacy is FRENCH-first (not English like the English stream).
+  **Teachers** (adjust existing / add as needed): **Elementary (P,1,4,5)** = ONE teacher per class-configuration
+  (each straight class + each split), teaching ALL subjects (math + literacy) to that group. **Jr High (7,8)** =
+  one teacher for ALL English (ELA), another for ALL French (FLA). **Sr High (10,11)** = same (one ELA teacher,
+  one FLA teacher). **OPEN — math at 7,8,10,11**: app math is P-6 only, so those grades have no math cycle;
+  confirm whether they still get a math section and who teaches it (separate math teacher, or fold into a
+  language teacher). Output = PowerSchool-format export files (students/staff/sections/enrollments/co-teachers).
+  Do NOT generate until the user says go.
 - **Data cleanup outstanding**: the 17 live SCoR-1 reading rows entered under the old scope-less window — the
   early-immersion ones were entered in English and belong on Reading·French·Early Immersion (per-student cleanup).
 - **Blockers**: IIS buffering fix blocked on IT (out tonight).
