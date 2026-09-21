@@ -34,6 +34,7 @@ CREATE TABLE DimCourseAssessment (
     LastUpdated   DATETIME2(0)  NOT NULL
 );
 
+GO
 
 /* ========== sql/scripts/seed_DimCourseAssessment_live.sql ========== */
 /*******************************************************************************
@@ -126,6 +127,7 @@ INSERT INTO DimCourseAssessment (CourseCode, Language, Kind, ActiveFlag, Notes, 
 
 SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessment GROUP BY Language, Kind ORDER BY Kind, Language;
 
+GO
 
 /* ========== sql/dimensions/DimShortCycle.sql ========== */
 /*******************************************************************************
@@ -157,6 +159,7 @@ CREATE TABLE DimShortCycle (
     LastUpdated    DATETIME2(0)  NOT NULL
 );
 
+GO
 
 /* ========== sql/scripts/backfill_DimShortCycle_headers.sql ========== */
 /*******************************************************************************
@@ -195,7 +198,6 @@ GO
 SELECT (SELECT COUNT(*) FROM DimShortCycle) AS Headers,
        (SELECT COUNT(DISTINCT CycleGroupID) FROM DimAssessmentWindow) AS DistinctCycleGroups;
 GO
-
 
 /* ========== sql/dimensions/DimMathComprehensionBand.sql ========== */
 /*******************************************************************************
@@ -237,6 +239,7 @@ CREATE TABLE DimMathComprehensionBand (
     LastUpdated     DATETIME2(0)    NOT NULL
 );
 
+GO
 
 /* ========== sql/scripts/seed_DimMathComprehensionBand.sql ========== */
 /*******************************************************************************
@@ -260,6 +263,7 @@ VALUES
     (3, 'Meeting',    '#3a9b57', 3, CAST(1 AS BIT), GETDATE()),   -- 0.75 <= avg <  0.90
     (4, 'In-depth',   '#0092c9', 4, CAST(1 AS BIT), GETDATE());   -- avg >= 0.90
 
+GO
 
 /* ========== sql/dimensions/DimMathTask.sql ========== */
 /*******************************************************************************
@@ -315,6 +319,7 @@ CREATE TABLE DimMathTask (
     LastUpdated         DATETIME2(0)    NOT NULL
 );
 
+GO
 
 /* ========== sql/staging/Stg_MathTask.sql ========== */
 /*******************************************************************************
@@ -348,6 +353,7 @@ CREATE TABLE Stg_MathTask (
     ActiveFlag          VARCHAR(50)     NULL
 );
 
+GO
 
 /* ========== sql/facts/FactAssessmentMath.sql ========== */
 /*******************************************************************************
@@ -399,6 +405,7 @@ CREATE TABLE FactAssessmentMath (
     LastUpdated         DATETIME2(0)    NOT NULL    -- Set on insert / bit correction
 );
 
+GO
 
 /* ========== sql/facts/FactStudentAdaptation.sql ========== */
 /*******************************************************************************
@@ -467,6 +474,7 @@ CREATE TABLE FactStudentAdaptation (
     LastUpdated         DATETIME2(0)    NOT NULL
 );
 
+GO
 
 /* ========== sql/security/AppMaintenance.sql ========== */
 /*******************************************************************************
@@ -508,5 +516,4 @@ GO
 -- Web app connects as the service principal; grant SELECT to it alone.
 GRANT SELECT ON dbo.AppMaintenance TO [StudentDataAssessment];
 GO
-
 

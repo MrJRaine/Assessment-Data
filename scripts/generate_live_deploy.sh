@@ -3,15 +3,18 @@
 # Faithful concatenation of tracked sql/ sources (no transcription). Run from repo root.
 # Output: sql/deploy/live_0.5.0/NN_*.sql  — run each stage IN ORDER, in the Fabric editor.
 #
-# Live is at 0.4.1, so this is INCREMENTAL: only 0.5.0-new tables + 0.5.0 migrations,
-# then ALL programmable objects redeployed (DROP/CREATE, safer parity), then grants.
-# DEV FIRST (runbook §3): run these against Assessment_Warehouse_Dev to shake out ordering
-# before live. The Load*Staging (COPY INTO) procs are isolated (stage 03a) — a big paste
-# has silently skipped them before.
+# Live is at 0.4.1, so this is INCREMENTAL: 0.5.0 migrations, then 0.5.0-new tables, then ALL
+# programmable objects redeployed (DROP/CREATE, safer parity), then grants. DEV FIRST (runbook §3).
+#
+# DELIBERATELY EXCLUDED — the 5 PowerSchool COPY INTO loaders (usp_Load{Students,Staff,Section,
+# Enrollment,CoTeacher}Staging): the repo has the not-yet-deployed CSV-cutover version; LIVE still
+# runs the TAB format, so redeploying them would break live ingest. They are NOT part of 0.5.0.
+# (They also lack GO terminators — a separate source cleanup.) usp_LoadMathTasks IS new + safe → included.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT=sql/deploy/live_0.5.0
 mkdir -p "$OUT"
+rm -f "$OUT"/*.sql
 
 emit () {  # $1=outfile  $2=title  $3..=source files
   local out="$OUT/$1"; local title="$2"; shift 2
@@ -23,13 +26,17 @@ emit () {  # $1=outfile  $2=title  $3..=source files
     echo; } > "$out"
   for f in "$@"; do
     if [[ ! -f "$f" ]]; then echo "!! MISSING: $f" >&2; echo "/* !! MISSING SOURCE: $f */" >> "$out"; continue; fi
-    { echo "/* ========== $f ========== */"; cat "$f"; echo; echo; } >> "$out"
+    { echo "/* ========== $f ========== */"; cat "$f"; } >> "$out"
+    # Ensure the file's batch is terminated: add a GO only if it doesn't already end with one.
+    local last; last=$(grep -vE '^[[:space:]]*$' "$f" | tail -n1 | tr -d '[:space:]' | tr '[:lower:]' '[:upper:]')
+    if [[ "$last" != "GO" ]]; then printf '\nGO\n' >> "$out"; fi
+    echo >> "$out"
   done
   echo "wrote $out ($(grep -c . "$out") non-empty lines)"
 }
 
-# --- 01: migrations that change EXISTING live tables (0.5.0 only; run once) ---
-emit 01_migrations.sql "STAGE 01 — schema migrations on existing live tables (RUN ONCE)" \
+# --- 01: migrations that change EXISTING live tables (0.5.0 only; idempotent-guarded) ---
+emit 01_migrations.sql "STAGE 01 — schema migrations on existing live tables (idempotent)" \
   sql/scripts/migrate_DimProgram_add_ScopeBucket.sql \
   sql/scripts/migrate_DimAssessmentWindow_add_AssessmentLanguage.sql \
   sql/scripts/migrate_DimAssessmentWindow_add_CycleGroupID.sql \
@@ -52,17 +59,9 @@ emit 02_new_tables.sql "STAGE 02 — tables new in 0.5.0 (+ seeds/backfills)" \
   sql/facts/FactStudentAdaptation.sql \
   sql/security/AppMaintenance.sql
 
-# --- 03a: COPY INTO load-staging procs (isolated — big-paste silent-skip risk) ---
-emit 03a_load_procs.sql "STAGE 03a — COPY INTO load-staging procs (run alone; verify each applied)" \
-  sql/procedures/usp_LoadStudentsStaging.sql \
-  sql/procedures/usp_LoadStaffStaging.sql \
-  sql/procedures/usp_LoadSectionStaging.sql \
-  sql/procedures/usp_LoadEnrollmentStaging.sql \
-  sql/procedures/usp_LoadCoTeacherStaging.sql \
-  sql/procedures/usp_LoadMathTasks.sql
-
-# --- 03b: procedures (DROP/CREATE parity), excluding the COPY INTO loaders in 03a ---
-emit 03b_procedures.sql "STAGE 03b — procedures (DROP/CREATE; full parity)" \
+# --- 03: procedures (DROP/CREATE parity). Excludes the 5 PS loaders; includes usp_LoadMathTasks. ---
+emit 03_procedures.sql "STAGE 03 — procedures (DROP/CREATE; full parity)" \
+  sql/procedures/usp_LoadMathTasks.sql \
   sql/procedures/usp_MergeStudent.sql \
   sql/procedures/usp_MergeStaff.sql \
   sql/procedures/usp_MergeSection.sql \
@@ -85,8 +84,8 @@ emit 03b_procedures.sql "STAGE 03b — procedures (DROP/CREATE; full parity)" \
   sql/procedures/usp_SetMaintenanceWindow.sql \
   sql/procedures/usp_ClearMaintenanceWindow.sql
 
-# --- 03c: views (DROP/CREATE parity) ---
-emit 03c_views.sql "STAGE 03c — views (DROP/CREATE; full parity)" \
+# --- 04: views (DROP/CREATE parity) ---
+emit 04_views.sql "STAGE 04 — views (DROP/CREATE; full parity)" \
   sql/security/vw_TeacherStudents.sql \
   sql/security/vw_SchoolStudents.sql \
   sql/security/vw_RegionalData.sql \
@@ -100,8 +99,8 @@ emit 03c_views.sql "STAGE 03c — views (DROP/CREATE; full parity)" \
   sql/security/vw_DimReadingScale.sql \
   sql/security/vw_StudentReadingStartingPoint.sql
 
-# --- 03d: table-valued functions (DROP/CREATE parity) ---
-emit 03d_tvfs.sql "STAGE 03d — table-valued functions (DROP/CREATE; full parity)" \
+# --- 05: table-valued functions (DROP/CREATE parity) ---
+emit 05_tvfs.sql "STAGE 05 — table-valued functions (DROP/CREATE; full parity)" \
   sql/security/tvf_UserAssessmentWindows.sql \
   sql/security/tvf_TeacherGroups.sql \
   sql/security/tvf_TeacherRoster.sql \
@@ -116,8 +115,8 @@ emit 03d_tvfs.sql "STAGE 03d — table-valued functions (DROP/CREATE; full parit
   sql/security/tvf_ProgrammingGroups.sql \
   sql/security/tvf_ProgrammingRoster.sql
 
-# --- 04: master grant (re-grant after every proc/TVF/view redeploy) ---
-emit 04_grants.sql "STAGE 04 — master grant (run last)" \
+# --- 06: master grant (run last) ---
+emit 06_grants.sql "STAGE 06 — master grant (run last)" \
   sql/security/grant_webapp_sp.sql
 
 echo "---- done. review $OUT/ ----"
