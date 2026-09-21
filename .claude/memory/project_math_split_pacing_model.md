@@ -104,19 +104,20 @@ month; OutcomeCode frozen) over dimension SCD (which would break `DimMathTask`'s
 
 ## Pre-deploy structural footprint (additive; the "get it right before volume" batch)
 
-1. `DimHomeroomComposition` — CompositionKey IDENTITY PK, `CompositionGrades VARCHAR(50)` UNIQUE, `DisplayName VARCHAR(100) NULL`, LastUpdated.
-2. `MathTaskPacingException` (SCD T2) — PacingExceptionKey PK, MathTaskKey FK, CompositionKey FK, OverrideMonth INT, EffectiveStartDate/EndDate, IsCurrent, LastUpdated.
+1. `DimHomeroomComposition` — CompositionKey IDENTITY PK, `CompositionGrades VARCHAR(50)` UNIQUE, `DisplayName VARCHAR(100) NULL`, `CreatedByStaffKey NULL` (null = ingest-discovered, set = GUI-authored), LastUpdated.
+2. `MathTaskPacingException` (SCD T2) — PacingExceptionKey PK, MathTaskKey FK, CompositionKey FK, OverrideMonth INT, EffectiveStartDate/EndDate, IsCurrent, `CreatedByStaffKey`, `EndedByStaffKey NULL`, LastUpdated.
 3. `MathTaskLink` (SCD T2 + actor audit) — MathTaskLinkKey (version PK), PredecessorMathTaskKey, SuccessorMathTaskKey, EffectiveStartDate/EndDate, IsCurrent, `CreatedByStaffKey`, `EndedByStaffKey NULL`, LastUpdated. Natural key = the (predecessor, successor) pair.
 4. `FactAssessmentMath` ALTER ADD `CarriedFromMathTaskKey`, `CarriedFromMonth`, `OutcomeCode` (separate migration; GO after ALTER — Fabric).
 
 Post-1.0 (TVF/USP/client, no pre-deploy structure): pacing resolution, the carry-forward domino, the P-6 homeroom
 re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
 
-## OPEN (only one left)
+## OPEN — none; footprint locked
 
-- **Actor audit on `MathTaskPacingException` too?** Links got SCD T2 + `CreatedByStaffKey`/`EndedByStaffKey`
-  audit. Exceptions are also GUI-authored config; do they get the same who-changed-it columns for consistency?
-  User has NOT decided.
+All user-authored tables carry actor tracking per the app-wide rule [[project_user_authored_is_auditable]]
+(user 2026-09-21: "anything user-authored in the app should be trackable"). Post-1.0 companion, NOT pre-deploy:
+a task-edit **audit-log** table for `DimMathTask` (Type 1, can't SCD without breaking the key), arriving with the
+leadership GUI. Also flagged for soon: operational audit logs (maintenance / ingest / cycles).
 
 ## Verified facts (checked in code this session — don't re-assert to the user as findings)
 
