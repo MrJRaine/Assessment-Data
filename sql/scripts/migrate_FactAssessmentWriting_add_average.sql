@@ -9,13 +9,9 @@
  * Created: 2026-09-21
  * Region:  Canada East (PIIDPA compliant)
  *
- * WHEN TO RUN:
- *   - DEV: yes — the table already exists (with test rows) and lacks the column.
- *   - LIVE: run the ALTER only if FactAssessmentWriting ALREADY EXISTS on live
- *     WITHOUT this column. If 0.5.0 creates FactAssessmentWriting FRESH on live
- *     (the CREATE now includes WritingAverage), SKIP the ALTER and run only the
- *     backfill UPDATE below — it no-ops on an empty table. (Confirm the live
- *     state before the deploy.)
+ * Run on:  DEV and LIVE (same script). FactAssessmentWriting is already live
+ *          (confirmed 2026-09-21), so this is a real ALTER + backfill of
+ *          production rows, exactly like the reading migration.
  *
  * RUN ONCE per environment: the ALTER errors if the column already exists. The
  * backfill UPDATE is safe to re-run (it re-writes the same values).
