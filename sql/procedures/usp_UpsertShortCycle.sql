@@ -9,15 +9,20 @@
  * Created: 2026-08-27
  * Region: Canada East (PIIDPA compliant)
  *
- * Model (per management change 2026-08-27):
- *   - A cycle is REGION-WIDE: ProgramFamily = NULL (all programs) and
- *     ScaleSystem = NULL. The reading scale/benchmark for each student is
- *     resolved from the student's PROGRAM + GRADE at scoring/read time (not
- *     from the cycle), so one cycle serves English and French Immersion alike.
+ * Model (2026-08-27; app-level scope 2026-09-17):
+ *   - A cycle can be SCOPED from the /cycles page along three axes (all optional):
+ *       @MinGrade/@MaxGrade  grade band (default whole-population 'PP'..'12'),
+ *       @ProgramScope        comma-delimited bucket set {English, Early Immersion, Late Immersion}
+ *                            (NULL = all; non-immersion folds into English via DimProgram.ScopeBucket),
+ *       @AssessmentLanguage  'English'|'French'|NULL(Both).
+ *     e.g. "Immersion grades 3-6, writing, French only" = @ProgramScope='Early Immersion,Late Immersion',
+ *     @MinGrade='3', @MaxGrade='6', @AssessmentLanguage='French'. NULL on an axis = no scope
+ *     there. A language-scoped READING cycle also fixes ScaleSystem (EN_Reading/FR_Reading).
+ *     Membership still follows the track rule (usp_MergeStudent Step 6); the scope narrows it.
+ *     The writing RESULT carries its own AssessmentLanguage (storage/backfill/reporting); this
+ *     scopes the CYCLE. See project_assessment_language_tracks.
  *   - This proc writes ONE subject-row per call. A multi-subject cycle is several
  *     rows sharing a @CycleGroupID (the app calls this once per selected subject).
- *   - MinGrade/MaxGrade optionally narrow the cycle to a grade band; default is
- *     whole-population ('PP'..'12').
  *   - SchoolYear is derived from StartDate (Sep–Aug academic year).
  *
  * Authorization: enforced at the app layer (the Manage-Short-Cycles screen is
@@ -33,6 +38,7 @@
  *   51034  @MinGrade above @MaxGrade
  *   51035  @BenchmarkMonth not in 1–12
  *   51036  @AssessmentWindowID supplied for edit but not found
+ *   51037  @AssessmentLanguage not in ('English','French',NULL)
  ******************************************************************************/
 
 DROP PROCEDURE IF EXISTS dbo.usp_UpsertShortCycle;
@@ -44,6 +50,8 @@ CREATE PROCEDURE dbo.usp_UpsertShortCycle
     @EndDate            DATE,
     @MinGrade           VARCHAR(10)  = 'PP',         -- whole-population default
     @MaxGrade           VARCHAR(10)  = '12',
+    @ProgramScope       VARCHAR(100) = NULL,         -- comma-delimited bucket set from {English, Early Immersion, Late Immersion}; NULL = all. e.g. 'English,Late Immersion'
+    @AssessmentLanguage VARCHAR(10)  = NULL,         -- 'English' | 'French' language scope (literacy); NULL = Both (toggle/per-student)
     @BenchmarkMonth     INT          = NULL,         -- 1-12: explicit reading benchmark month (NULL = dominant-month fallback); reading only
     @CycleGroupID       VARCHAR(36)  = NULL,         -- groups the per-subject rows of one multi-subject cycle (app-generated GUID)
     @ActiveFlag         BIT          = 1,            -- 0 to deactivate/hide a cycle
@@ -87,8 +95,26 @@ BEGIN
         ;THROW 51035, 'usp_UpsertShortCycle: @BenchmarkMonth must be 1-12 (or NULL for dominant-month fallback).', 1;
     END;
 
+    IF @AssessmentLanguage IS NOT NULL AND @AssessmentLanguage NOT IN ('English', 'French')
+    BEGIN
+        ;THROW 51037, 'usp_UpsertShortCycle: @AssessmentLanguage must be ''English'', ''French'', or NULL (Both).', 1;
+    END;
+
+    -- @ProgramScope is a comma-delimited bucket set (validated by the /cycles UI; app-gated proc).
+    -- Empty string normalises to NULL (= all programs).
+    IF @ProgramScope IS NOT NULL AND LTRIM(RTRIM(@ProgramScope)) = '' SET @ProgramScope = NULL;
+
     -- Benchmark month is reading-specific; ignore it for Writing/Math cycles.
     IF @AssessmentType <> 'Reading' SET @BenchmarkMonth = NULL;
+
+    -- Language scope is literacy-only; Math is single-track (no language).
+    IF @AssessmentType = 'Math' SET @AssessmentLanguage = NULL;
+
+    -- A language-scoped READING cycle fixes the scale; Writing/Math/Both carry no cycle scale.
+    DECLARE @ScaleSystem VARCHAR(20) =
+        CASE WHEN @AssessmentType = 'Reading' AND @AssessmentLanguage = 'English' THEN 'EN_Reading'
+             WHEN @AssessmentType = 'Reading' AND @AssessmentLanguage = 'French'  THEN 'FR_Reading'
+             ELSE NULL END;
 
     -- ---- Derive academic school year from the start date (Sep–Aug) ---------
     DECLARE @Y INT = YEAR(@StartDate), @M INT = MONTH(@StartDate);
@@ -103,12 +129,12 @@ BEGIN
         -- ---- CREATE -------------------------------------------------------
         INSERT INTO DimAssessmentWindow (
             WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-            MinGrade, MaxGrade, ProgramFamily, ScaleSystem, BenchmarkMonth, CycleGroupID, ActiveFlag,
+            MinGrade, MaxGrade, ProgramFamily, ProgramScope, ScaleSystem, AssessmentLanguage, BenchmarkMonth, CycleGroupID, ActiveFlag,
             CreatedDate, CreatedBy, LastUpdated
         )
         VALUES (
             @CycleName, @AssessmentType, @SchoolYear, @StartDate, @EndDate,
-            @MinGrade, @MaxGrade, NULL, NULL, @BenchmarkMonth, @CycleGroupID, @ActiveFlag,
+            @MinGrade, @MaxGrade, NULL, @ProgramScope, @ScaleSystem, @AssessmentLanguage, @BenchmarkMonth, @CycleGroupID, @ActiveFlag,
             @Now, @CallerUPN, @Now
         );
 
@@ -138,8 +164,10 @@ BEGIN
             EndDate        = @EndDate,
             MinGrade       = @MinGrade,
             MaxGrade       = @MaxGrade,
-            ProgramFamily  = NULL,      -- region-wide: never scope by program
-            ScaleSystem    = NULL,      -- scale resolved per student, not on the cycle
+            ProgramFamily  = NULL,               -- legacy single-family column, unused by new cycles
+            ProgramScope   = @ProgramScope,      -- bucket set (NULL = all programs)
+            ScaleSystem    = @ScaleSystem,       -- reading scale of a language-scoped cycle (else NULL)
+            AssessmentLanguage = @AssessmentLanguage,  -- 'English'/'French' scope, or NULL (Both)
             BenchmarkMonth = @BenchmarkMonth,
             CycleGroupID   = @CycleGroupID,
             ActiveFlag     = @ActiveFlag,

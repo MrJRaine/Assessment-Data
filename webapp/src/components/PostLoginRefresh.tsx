@@ -4,55 +4,87 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 /**
- * One-time post-login refresh.
+ * Keeps the capability-gated nav (Cycles / Ingest / Maintenance, resolved from StaffAppAccess in
+ * AppShell) correct on first load. The root layout only re-renders on a FULL document load, so two
+ * first-hit races can leave the nav showing only the basic items:
+ *   1. entra login race — the session cookie isn't fully readable on the OAuth landing render.
+ *   2. caps-query transient — a cold connection pool / token warm-up makes the caps read throw.
  *
- * The root layout (header/nav) only re-renders on a FULL document load, so the capability-gated
- * nav items (Cycles / Ingest, resolved from StaffAppAccess in AppShell) can lag the session that
- * was just established — e.g. a cookie/render race on the OAuth landing, or capabilities that
- * became effective around login time. After the first authenticated render in this browser
- * session we force ONE router.refresh(), which re-runs the server layout and re-resolves
- * capabilities so the nav is correct without a manual reload.
- *
- * Guarded by sessionStorage so it fires at most once per login, and cleared on sign-out so the
- * next login refreshes again. Renders nothing.
+ * Fixes, both bounded + guarded (no refresh loops), rendering nothing:
+ *   - `enablePostLogin` (entra): ONE refresh after the first authenticated render this session.
+ *   - `capsError` (both modes): AppShell couldn't read caps this render → refresh a few times until
+ *     it can. A "no row" result is NOT capsError, so a genuinely-no-caps user never loops.
  */
-const FLAG = 'postLoginRefreshed'
+const POST_LOGIN_FLAG = 'postLoginRefreshed'
+const CAPS_RETRY_KEY = 'capsRetryCount'
+const CAPS_RETRY_MAX = 3
 
-export default function PostLoginRefresh({ authed }: { authed: boolean }) {
+export default function PostLoginRefresh({
+  authed,
+  capsError,
+  enablePostLogin,
+}: {
+  authed: boolean
+  capsError: boolean
+  enablePostLogin: boolean
+}) {
   const router = useRouter()
-  const ran = useRef(false)
+  const ranPostLogin = useRef(false)
 
+  // 1) One-time post-login refresh (entra login race).
   useEffect(() => {
+    if (!enablePostLogin) return
     if (!authed) {
-      // Signed out (or never signed in): reset so the NEXT login triggers a refresh again.
       try {
-        sessionStorage.removeItem(FLAG)
+        sessionStorage.removeItem(POST_LOGIN_FLAG)
       } catch {
-        /* sessionStorage blocked (private mode) — nothing to reset */
+        /* private mode — nothing to reset */
       }
-      ran.current = false
+      ranPostLogin.current = false
       return
     }
-
-    if (ran.current) return
-
+    if (ranPostLogin.current) return
     let already = false
     try {
-      already = sessionStorage.getItem(FLAG) === '1'
+      already = sessionStorage.getItem(POST_LOGIN_FLAG) === '1'
     } catch {
-      // sessionStorage unavailable — skip the optimization rather than refresh-loop.
-      return
+      return // sessionStorage unavailable — skip rather than risk a loop
     }
     if (already) return
-
-    ran.current = true
+    ranPostLogin.current = true
     try {
-      sessionStorage.setItem(FLAG, '1')
+      sessionStorage.setItem(POST_LOGIN_FLAG, '1')
     } catch {
-      /* unreachable: getItem above already succeeded */
+      /* unreachable: getItem above succeeded */
     }
     router.refresh()
-  }, [authed, router])
+  }, [authed, enablePostLogin, router])
+
+  // 2) Bounded caps-error retry (both modes). Reset the counter whenever caps resolve cleanly.
+  useEffect(() => {
+    if (!capsError) {
+      try {
+        sessionStorage.removeItem(CAPS_RETRY_KEY)
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+    let count = 0
+    try {
+      count = Number(sessionStorage.getItem(CAPS_RETRY_KEY) || '0')
+    } catch {
+      return // no sessionStorage — don't risk an unbounded loop
+    }
+    if (count >= CAPS_RETRY_MAX) return
+    try {
+      sessionStorage.setItem(CAPS_RETRY_KEY, String(count + 1))
+    } catch {
+      return
+    }
+    const t = setTimeout(() => router.refresh(), 500)
+    return () => clearTimeout(t)
+  }, [capsError, router])
 
   return null
 }

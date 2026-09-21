@@ -70,6 +70,9 @@
  *   it after any operation that resets IDENTITY values on a dim table.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_RunFullIngestCycle;
+GO
+
 CREATE PROCEDURE usp_RunFullIngestCycle
     @EffectiveDate    DATE = NULL,
     @SkipCoTeachers   BIT  = 0

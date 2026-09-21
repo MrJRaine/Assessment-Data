@@ -1,6 +1,12 @@
 import type { NextConfig } from 'next'
+import { readFileSync } from 'node:fs'
+
+// Single source of truth for the app version = webapp/package.json. Exposed to the browser so the
+// footer always shows the ACTUAL running version (no drift vs. the patch-notes list).
+const appVersion = (JSON.parse(readFileSync('./package.json', 'utf8')) as { version: string }).version
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_APP_VERSION: appVersion },
   // 'standalone' emits a minimal self-contained server (server.js + traced node_modules)
   // so the container image stays small. See Dockerfile runner stage.
   output: 'standalone',
@@ -28,6 +34,17 @@ const nextConfig: NextConfig = {
           { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
         ],
       },
+    ]
+  },
+  // The Student Data page was renamed to "Reports" and its route moved /students -> /reports
+  // (2026-09-21). Keep the old path working so existing bookmarks / any Teams-embedded links don't
+  // 404. permanent:true (308) preserves the request method and tells browsers/crawlers it's final.
+  // These run BEFORE middleware, so an unauthenticated hit on /students redirects to /reports and
+  // is then auth-gated there.
+  async redirects() {
+    return [
+      { source: '/students', destination: '/reports', permanent: true },
+      { source: '/students/:path*', destination: '/reports/:path*', permanent: true },
     ]
   },
 }

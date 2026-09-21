@@ -1,0 +1,359 @@
+'use client'
+
+import { useState, useTransition } from 'react'
+import { saveReadingAssessments, confirmRosterIPPs, type SaveResult, type IppEntry } from './actions'
+import type { RosterStudent, ScaleLevel, AchievementBand } from '@/lib/data'
+import { SmallGroupFilter, useSmallGroup } from './smallGroup'
+import { useEntryLock } from '@/components/maintenance/useEntryLock'
+
+// ReadingDelta from a level's order vs the expected [min,max] range -- mirrors the server
+// formula in usp_UpsertReadingAssessment so the live (pre-save) value matches what Save stores.
+function computeDelta(order: number | null, minOrder: number | null, maxOrder: number | null): number | null {
+  if (order == null || minOrder == null || maxOrder == null) return null
+  if (order >= minOrder && order <= maxOrder) return 0
+  if (order < minOrder) return order - minOrder
+  return order - maxOrder
+}
+
+// IPP "type" label shown on the confirm prompt. The teacher already knows the student is on an
+// IPP; this confirms WHICH type. Reading + Writing both roll up to "Literacy"; Math stands alone.
+function ippTypeLabel(subject: string): string {
+  return subject === 'Math' ? 'Math IPP' : 'Literacy IPP'
+}
+
+// Match a delta to an achievement band (same bounds logic as DimAchievementLevel / the TVF join).
+function matchBand(delta: number | null, bands: AchievementBand[]): AchievementBand | null {
+  if (delta == null) return null
+  for (const b of bands) {
+    const lo =
+      b.lowerBound == null ||
+      (b.lowerOp === '>=' && delta >= b.lowerBound) ||
+      (b.lowerOp === '>' && delta > b.lowerBound) ||
+      (b.lowerOp === '=' && delta === b.lowerBound)
+    const hi =
+      b.upperBound == null ||
+      (b.upperOp === '<=' && delta <= b.upperBound) ||
+      (b.upperOp === '<' && delta < b.upperBound) ||
+      (b.upperOp === '=' && delta === b.upperBound)
+    if (lo && hi) return b
+  }
+  return null
+}
+
+// Signed, colour-coded delta (green gain / red loss). Shared by Since-June + Diff-from-Prev-Cycle.
+function DeltaCell({ value }: { value: number | null }) {
+  if (value == null) return <span className="muted">—</span>
+  const color = value > 0 ? '#137333' : value < 0 ? '#a50e0e' : 'inherit'
+  return <strong style={{ color }}>{value > 0 ? `+${value}` : value}</strong>
+}
+
+type SaveSummary = { saved: number; errors: { label: string; message: string }[] }
+
+export default function RosterEntry({
+  windowId,
+  groupKey,
+  roster,
+  levels,
+  achievementLevels,
+}: {
+  windowId: string
+  groupKey: string
+  roster: RosterStudent[]
+  levels: ScaleLevel[]
+  achievementLevels: AchievementBand[]
+}) {
+  const codeToId = new Map(levels.map((l) => [l.levelCode, l.readingScaleId] as const))
+  const idToCode = new Map(levels.map((l) => [l.readingScaleId, l.levelCode] as const))
+  const orderById = new Map(levels.map((l) => [l.readingScaleId, l.levelOrder] as const))
+  const orderByCode = new Map(levels.map((l) => [l.levelCode, l.levelOrder] as const))
+  const numByKey = new Map(roster.map((s) => [s.studentKey, s.studentNumber] as const))
+  const nameByKey = new Map(roster.map((s) => [s.studentKey, `${s.lastName}, ${s.firstName}`] as const))
+  const nameByNum = new Map(roster.map((s) => [s.studentNumber, `${s.lastName}, ${s.firstName}`] as const))
+  const pfByKey = new Map(roster.map((s) => [s.studentKey, s.programFamily] as const))
+
+  const baselineFromProps: Record<string, string> = {}
+  for (const s of roster) baselineFromProps[s.studentKey] = s.currentLevel ? codeToId.get(s.currentLevel) ?? '' : ''
+
+  const [baseline, setBaseline] = useState(baselineFromProps)
+  const [sel, setSel] = useState(baselineFromProps)
+  // Staged IPP confirmations: studentKey -> chosen value. Committed on Save (not per click), so
+  // the screen never freezes mid-click; clicking the chosen value again un-stages it.
+  const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
+  const [pending, startTransition] = useTransition()
+  const [result, setResult] = useState<SaveSummary | null>(null)
+  // Grades 7-8 are assessed only until a student reaches the expected (Grade-6 June) level, so
+  // default-hide any 7/8 student whose most recent reading is already Meeting/Exceeding (delta >= 0).
+  // Non-IPP, benchmark-resolved only; they stay listed in the Students picker to re-show.
+  const defaultHiddenKeys = new Set<string>()
+  for (const s of roster) {
+    if ((s.grade === '7' || s.grade === '8') && s.ippStatus !== true && !s.ippNeedsConfirmation) {
+      // Most recent reading = latest this-year entry, falling back to the Prev June anchor when a
+      // student hasn't been assessed yet this year.
+      const recent = s.lastLevel ?? s.juneLevel
+      const lo = recent ? orderByCode.get(recent) ?? null : null
+      const mn = s.expectedMin ? orderByCode.get(s.expectedMin) ?? null : null
+      const mx = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
+      const d = computeDelta(lo, mn, mx)
+      if (d != null && d >= 0) defaultHiddenKeys.add(s.studentKey)
+    }
+  }
+  const sg = useSmallGroup(roster, defaultHiddenKeys)
+
+  // "New Data" — which rows Save sends. Auto-checked when the level differs from the committed
+  // value (today's behaviour, unchanged for the common case); a MANUAL toggle overrides, so a teacher
+  // can log a re-assessment whose result is IDENTICAL to the last one (the dropdown can't re-fire on
+  // the same value). A new dated result is what the upsert proc records — same value, new day = a
+  // genuine second data point. Save sends every checked row.
+  const [evidenceManual, setEvidenceManual] = useState<Record<string, boolean>>({})
+  const isChecked = (k: string) => evidenceManual[k] ?? (!!sel[k] && sel[k] !== baseline[k])
+  function toggleEvidence(k: string) {
+    setEvidenceManual((m) => ({ ...m, [k]: !isChecked(k) }))
+  }
+  const checkedKeys = roster.map((s) => s.studentKey).filter((k) => isChecked(k) && !!sel[k])
+  const ippKeys = Object.keys(ippSel)
+  const dirtyCount = checkedKeys.length + ippKeys.length
+
+  // Maintenance lock: reading saves are cell-independent, so the T-1 auto-save is safe.
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
+
+  function chooseIPP(studentKey: string, value: boolean) {
+    setIppSel((prev) => {
+      const next = { ...prev }
+      if (next[studentKey] === value) delete next[studentKey] // re-click the same choice -> un-stage
+      else next[studentKey] = value
+      return next
+    })
+  }
+
+  function onSave() {
+    const levelEntries = checkedKeys.map((k) => ({ studentNumber: numByKey.get(k)!, readingScaleId: sel[k] }))
+    const missingPf = ippKeys.filter((k) => !pfByKey.get(k))
+    const ippEntries: IppEntry[] = ippKeys
+      .map((k) => (pfByKey.get(k) ? { studentKey: k, programFamily: pfByKey.get(k)!, isIPP: ippSel[k] } : null))
+      .filter((e): e is IppEntry => e !== null)
+
+    startTransition(async () => {
+      const levelRes: SaveResult = levelEntries.length
+        ? await saveReadingAssessments(windowId, groupKey, levelEntries)
+        : { saved: 0, errors: [] }
+      const ippRes = ippEntries.length
+        ? await confirmRosterIPPs(windowId, groupKey, ippEntries)
+        : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
+
+      const errs: SaveSummary['errors'] = []
+      for (const e of levelRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
+      for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
+      for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRoster.' })
+      setResult({ saved: levelRes.saved + ippRes.saved, errors: errs })
+
+      // Clear saved level baselines (skip errored).
+      const erroredNums = new Set(levelRes.errors.map((e) => e.studentNumber))
+      setBaseline((prev) => {
+        const next = { ...prev }
+        for (const k of checkedKeys) if (!erroredNums.has(numByKey.get(k)!)) next[k] = sel[k]
+        return next
+      })
+      // Un-check saved rows: once baseline == sel, the auto-check is false; drop any manual override
+      // too, so a saved "same-value" evidence row doesn't stay ticked.
+      setEvidenceManual((prev) => {
+        const next = { ...prev }
+        for (const k of checkedKeys) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
+        return next
+      })
+      // Clear staged IPPs that saved (keep errored / missing-PF ones staged).
+      const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
+      setIppSel((prev) => {
+        const next = { ...prev }
+        for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
+        return next
+      })
+      markSaved() // at T-5 the next save is what locks input
+      // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
+      // recompute instantly from that — no server re-fetch (which was the ~5s lag).
+    })
+  }
+
+  return (
+    <>
+      <SmallGroupFilter
+        sg={sg}
+        note={
+          defaultHiddenKeys.size > 0
+            ? '*Note: Students who previously met expectations are automatically hidden at the start of the cycle — open the list to show them.'
+            : undefined
+        }
+      />
+      <table className="grid">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Grade</th>
+            <th>
+              Prev<br />June
+            </th>
+            <th>
+              Since<br />June
+            </th>
+            <th>Expected</th>
+            <th>Current</th>
+            <th>
+              Diff from<br />Prev Cycle
+            </th>
+            <th>New level</th>
+            <th>
+              New<br />Data
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {roster.filter(sg.isShown).map((s) => {
+            const selId = sel[s.studentKey] ?? ''
+            const needsConfirm = s.ippNeedsConfirmation
+            const isIPP = s.ippStatus === true
+            const ippStaged = s.studentKey in ippSel
+            const dirty = isChecked(s.studentKey) || ippStaged
+            // IPP students and unresolved gates carry no achievement colour/delta (mirrors the app).
+            const suppress = isIPP || needsConfirm
+            const order = selId ? orderById.get(selId) ?? null : null
+            const minOrder = s.expectedMin ? orderByCode.get(s.expectedMin) ?? null : null
+            const maxOrder = s.expectedMax ? orderByCode.get(s.expectedMax) ?? null : null
+            const delta = suppress ? null : computeDelta(order, minOrder, maxOrder)
+            const band = matchBand(delta, achievementLevels)
+            // Committed level (baseline; updates the instant Save succeeds — optimistic, no
+            // server re-fetch) drives Current + the Since-June / Diff deltas. Falls back to the
+            // last recorded level (any cycle) when there's no current-window entry yet.
+            const committedId = baseline[s.studentKey] ?? ''
+            const committedCode = committedId ? idToCode.get(committedId) ?? null : s.currentLevel ?? null
+            const committedOrder =
+              (committedId ? orderById.get(committedId) ?? null : null) ??
+              (s.lastLevel ? orderByCode.get(s.lastLevel) ?? null : null)
+            const juneOrder = s.juneLevel ? orderByCode.get(s.juneLevel) ?? null : null
+            // "Previous cycle" for the point-to-point diff is the immediately-preceding in-year
+            // cycle; for the FIRST cycle of the year there is none, so it falls back to the
+            // prior-year anchor (Prev June) — the same starting point Since June measures from.
+            // Net effect: on cycle 1, Diff from Prev Cycle == Since June (only one cycle so far).
+            const prevOrder = (s.prevLevel ? orderByCode.get(s.prevLevel) ?? null : null) ?? juneOrder
+            const sinceJune = committedOrder != null && juneOrder != null ? committedOrder - juneOrder : null
+            const diffPrevCycle = committedOrder != null && prevOrder != null ? committedOrder - prevOrder : null
+            return (
+              <tr
+                key={s.studentKey}
+                className={dirty ? 'row-dirty' : undefined}
+                style={band ? { background: band.hexColorTint } : undefined}
+              >
+                <td>
+                  {s.lastName}, {s.firstName}
+                </td>
+                <td>{s.grade ?? '—'}</td>
+                {/* Prev June — prior-year starting level (anchor) */}
+                <td>{s.juneLevel ?? <span className="muted">—</span>}</td>
+                {/* Since June — committed level vs the June anchor */}
+                <td>
+                  <DeltaCell value={sinceJune} />
+                </td>
+                <td className="muted">
+                  {needsConfirm ? (
+                    <span className="ipp-confirm">Confirm IPP</span>
+                  ) : isIPP ? (
+                    // IPP students follow an individualized plan — the standard-curriculum
+                    // benchmark range doesn't apply, so show "IPP" instead of an expectation.
+                    <span className="ipp-badge">IPP</span>
+                  ) : s.expectedMin && s.expectedMax ? (
+                    s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td>{committedCode ?? <span className="muted">—</span>}</td>
+                {/* Diff from Prev Cycle — committed level vs the cycle before it */}
+                <td>{isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={diffPrevCycle} />}</td>
+                <td>
+                  {needsConfirm ? (
+                    // IPP needs confirmation before a level can be entered, so the Yes/No confirm
+                    // control lives here (the dedicated IPP column was dropped to save width).
+                    // Staged — committed with Save, not on click.
+                    <span className="ipp-seg">
+                      <button
+                        className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
+                        disabled={pending || inputsLocked}
+                        onClick={() => chooseIPP(s.studentKey, true)}
+                      >
+                        Yes ({ippTypeLabel('Reading')})
+                      </button>
+                      <button
+                        className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
+                        disabled={pending || inputsLocked}
+                        onClick={() => chooseIPP(s.studentKey, false)}
+                      >
+                        No
+                      </button>
+                    </span>
+                  ) : (
+                    <select
+                      value={selId}
+                      disabled={pending || inputsLocked || levels.length === 0}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setSel((p) => ({ ...p, [s.studentKey]: v }))
+                        // Changing the value hands the checkbox back to auto (differs-from-committed).
+                        setEvidenceManual((m) => {
+                          const n = { ...m }
+                          delete n[s.studentKey]
+                          return n
+                        })
+                      }}
+                    >
+                      <option value="">—</option>
+                      {levels.map((l) => (
+                        <option key={l.readingScaleId} value={l.readingScaleId}>
+                          {l.levelCode}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </td>
+                {/* New Data — log this row as a new dated result. Auto-ticks on a value change;
+                    tick by hand to record a re-assessment whose result is unchanged. */}
+                <td style={{ textAlign: 'center' }}>
+                  {needsConfirm ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <input
+                      type="checkbox"
+                      checked={isChecked(s.studentKey)}
+                      disabled={pending || inputsLocked || !sel[s.studentKey]}
+                      onChange={() => toggleEvidence(s.studentKey)}
+                      aria-label={`New data for ${s.lastName}, ${s.firstName}`}
+                    />
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+
+      <div className="actions">
+        <button className="btn" onClick={onSave} disabled={pending || dirtyCount === 0}>
+          {pending ? 'Saving…' : dirtyCount ? `Save ${dirtyCount} change(s)` : 'Save'}
+        </button>
+        {result ? (
+          <span className="save-result">
+            Saved {result.saved}
+            {result.errors.length ? ` · ${result.errors.length} failed` : ''}
+          </span>
+        ) : null}
+      </div>
+
+      {result?.errors.length ? (
+        <ul className="save-errors">
+          {result.errors.map((e, i) => (
+            <li key={i}>
+              {e.label}: {e.message}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  )
+}

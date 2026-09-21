@@ -39,6 +39,10 @@ Fabric Warehouse is NOT standard SQL Server. It rejects many common T-SQL constr
 | `VARCHAR(n)` | Use instead of NVARCHAR; supports Unicode via UTF-8 collation |
 | `VARCHAR(MAX)` | Supported for large text (e.g. audit message columns) |
 
+**NOT supported — `TINYINT`** (confirmed 2026-09-16): `CREATE TABLE` with a `TINYINT` column fails `Msg 24574 Level 16 'The data type 'tinyint' ... is not supported in this edition of SQL Server.'` — and the failed CREATE cascades ("Invalid object name" on the following INSERT/GRANT). Use **`INT`** even for a tiny single-row key/flag. (Fabric's type surface is narrow; when unsure, prefer `INT` / `BIGINT` / `BIT` / `VARCHAR` / `DATETIME2`.)
+
+**`+` string concat TRIMS a literal's trailing/edge space next to a real VARCHAR column** (confirmed 2026-09-17): `'Grade ' + s.Grade` yields `Grade1`, `'Homeroom ' + s.Homeroom` yields `HomeroomPA` — the literal's space adjacent to a stored VARCHAR column is dropped (literal `+` literal is fine, which masks it in quick tests). Also affects a separator literal between two columns (`a + ' — ' + b`). **Fix: use `CONCAT(...)`** with the space as its own argument — `CONCAT('Grade', ' ', s.Grade)` → `Grade 1`. Bit us on the group-picker card labels (`tvf_TeacherGroups` / `tvf_ProgrammingGroups`). Build any label that joins a literal to a column with `CONCAT`, not `+`.
+
 ---
 
 ## CREATE TABLE — Minimal Valid Pattern
@@ -310,3 +314,57 @@ This bit `usp_UpsertShortCycle` — every validation THROW errored Msg 102, the 
 **DQ orphan / IsCurrent checks examine ALL SCD versions, not just `IsCurrent=1`.** A merge fix that only *closes* a bad row (IsCurrent=0) does NOT clear the orphan — the closed row still trips the check. To clear existing bad rows after a merge fix, TRUNCATE the affected table (or reset) before re-ingesting.
 
 **Staff data reality:** staff carry stale `CanChangeSchool` / `HomeSchoolID` to CLOSED schools plus the `0000` district marker → filter `StaffSchoolAccess` + `FactStaffAssignment` to `DimSchool.ActiveFlag = 1`. Two PS Group numbers can map to the same RoleCode at one school → `GROUP BY (Email, School, Role)` to avoid duplicate current `FactStaffAssignment` rows (the "2 current rows" IsCurrent violation).
+
+## Discovered 2026-09-09 (baseline load + enrollment diagnostics)
+
+**`LIKE` is CASE-SENSITIVE.** The default warehouse collation is `Latin1_General_100_BIN2_UTF8` (binary) — so `WHERE CourseName LIKE '%English%'` does NOT match `ENGLISH 10`, and returns zero rows silently. Wrap both sides in `UPPER()` (`UPPER(CourseName) LIKE '%ENGLISH%'`) or match the stored case exactly. Bit us on a diagnostic that came back empty; also prefer the unambiguous key (`SchoolID`) over `LIKE` on names.
+
+**No aggregate over a subquery (Msg 130).** `SUM(CASE WHEN EXISTS (SELECT ...) THEN 1 ELSE 0 END)` fails with `Msg 130 'Cannot perform an aggregate function on an expression containing an aggregate or a subquery.'` Compute the per-row flag in a CTE/derived table first, then aggregate the plain column:
+```sql
+WITH Flagged AS (
+    SELECT x.id, CASE WHEN EXISTS (SELECT 1 FROM Other o WHERE o.id = x.id) THEN 1 ELSE 0 END AS Hit
+    FROM X x
+)
+SELECT SUM(Hit) FROM Flagged;   -- SUM over a plain column is fine
+```
+Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine — it's specifically an aggregate *wrapping* a subquery that's rejected.
+
+**`COPY INTO` FROM path is a STORAGE PATH, not a URL — use literal spaces, not `%20`.** Fabric does not URL-decode the `abfss://…` path, so `.../ELA%20Reading.csv` is looked up literally (a file named `ELA%20Reading.csv`) and matches nothing → silent 0-row load. Use the real space: `.../ELA Reading.csv`. (OneLake paths support spaces.) Same silent-0-row failure class as a non-matching glob — always `SELECT COUNT(*) FROM Stg_*` after a `COPY INTO`.
+
+**`TRY_CAST` and `FULL OUTER JOIN` are supported** (used in `load_prior_year_baseline.sql` to type StudentNumber and stitch reading↔writing per student).
+
+17. **Fabric INLINES a CTE at EVERY reference — it does not materialise it once.** This is the single
+    most expensive Fabric behaviour found so far. A CTE referenced three times has its whole subtree
+    executed three times. `tvf_TeacherRoster` had `StudentGroups` referencing `ApplicableStudents`
+    three times (homeroom / section / grade candidates), and underneath that sat a branch enumerating
+    every student in the region — so one roster load ran that scan **three times**. Symptom: a query
+    that is "obviously" cheap takes seconds; removing a *reference* (not adding an index) fixes it.
+    **Rule: count how many times each CTE is referenced. Treat every reference as a re-execution.**
+    (2026-09-18)
+
+18. **A `@parameter` prevents the optimizer pruning branches it could otherwise eliminate.** Role-branched
+    TVFs written as `WHERE c.AccessLevel = 'RegionalAnalyst'` / `IS NULL` / `IN (...)` look like only one
+    branch can match — but because the caller arrives as `@UPN`, Fabric cannot know which at plan time
+    and plans for all of them. A plain classroom teacher was paying for the analyst's region-wide scan
+    on every roster load. **Fix: invert so the query starts from the SMALL known thing (the section
+    asked for) and expresses role as a PREDICATE on those few rows, instead of pre-building a per-role
+    universe and filtering down.** Measured 5127ms → 2731ms on an 11-section warehouse, where the scan
+    itself was nearly free — i.e. the win was plan shape, and it grows with real data. (2026-09-18)
+
+19. **`Msg 8623: The query processor ran out of internal resources and could not produce a query plan.`**
+    Not a data-volume error — a plan-COMPLEXITY error, and it fires before any rows are read. Triggered
+    by an unbounded fan-out join feeding several UNION ALL branches. Two things that caused it here:
+    a `LEFT JOIN` whose predicate was meant to filter (it does not — a LEFT join keeps every row and
+    just nulls the columns, so the "filter" only reduces work *downstream*), and redundant predicates
+    left on top of predicates that already settled the same thing. **Simplify the query; do not add
+    more predicates to it.** Push filters into the branch that produces the rows, or delete the branch.
+    (2026-09-18)
+
+20. **Cold-start cost is ~1.8s and it hides inside the first query's timing.** Entra token acquisition
+    ~330ms + TDS connect ~1497ms. If connection setup is awaited inside whatever times the query, the
+    first query reports both — and because concurrent callers await the same pool promise, a single
+    cold start inflates several unrelated queries at once and makes them look individually slow. Time
+    pool acquisition SEPARATELY before drawing any conclusion about a "slow query". The handshake
+    itself is not tunable; it can only be moved off the request path (warm at startup) or kept open
+    (`pool.min` — note `tarn` defaults to `min: 0` and `idleTimeoutMillis: 30000`, so a pool left idle
+    30s empties and the next request pays the full 1.8s again). (2026-09-18)

@@ -56,7 +56,11 @@ Open `docs/implementation-plan.md` and:
 2. **Uncheck** any steps marked done prematurely (if "run" wasn't completed, don't mark "write and run" as done)
 3. **Re-read the DESCRIPTION of every step that's currently in-flight or got touched this session.** Checkboxes are not enough. If the approach, tooling, status notes, or sub-bullets inside a step's description are stale (e.g. they still cite a deprecated workflow, an old memory, or a previous design decision that's since been reversed), rewrite the description to match current reality. Add a parenthetical `**Status (YYYY-MM-DD)**:` line inside the step if useful so future readers can see the latest state without reading every Left Off note. **Failure mode to actively avoid**: keeping the checkbox empty while the description drifts further out of date with every session. If a step's description still references a deprecated approach from > 1 week ago and the work has moved on, treat that as a missed maintenance — fix it now.
 4. **Update the Progress Summary table** at the top of the Notes section if any step checkboxes changed. Mismatches between checkboxes and the table mean someone is reading stale numbers.
-5. **Add a Left Off note** at the bottom of the Notes section in this exact format:
+5. **Add a Left Off note** at the **TOP of the Left Off chain** — directly below the ordering-convention
+   blockquote and ABOVE the previous most-recent note. **NEVER append at the bottom.** `session-start`
+   reads the FIRST `### Left Off` heading and trusts it to be the newest; a bottom-appended note
+   silently feeds the next session stale context (this happened for 09-15/16/17 — the chain was
+   reordered 2026-09-18 and this instruction corrected; it used to say "at the bottom"). Format:
 
 ```
 ### Left Off — [DATE]

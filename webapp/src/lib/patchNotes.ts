@@ -1,19 +1,62 @@
 // Teacher-facing release notes for the in-app "What's new" popup (opened from the version footer).
 //
-// SINGLE SOURCE for the footer: APP_VERSION is the newest entry's version, and every release adds
-// its entry at the TOP of PATCH_NOTES — so the footer version always matches the running build and
-// the popup always has notes for it. Keep this in sync with CHANGELOG.md + webapp/package.json at
-// each release, but write these lines for TEACHERS: plain language, no developer jargon, and avoid
-// the word "assessment" (the app's user-facing copy rule). Newest first.
+// The footer VERSION comes from webapp/package.json (via NEXT_PUBLIC_APP_VERSION) so it always matches
+// the running build. This file is the teacher-facing note list the popup shows — the current minor
+// line PLUS the previous one (so a reader sees changes back through the last minor, e.g. 0.5.x shows
+// 0.5.x + all 0.4.x). Add an entry when a user-VISIBLE change ships; keep it in sync with CHANGELOG.md
+// (the full developer history) — and write these for TEACHERS: plain language, no developer jargon,
+// avoid the word "assessment". Newest first.
 
 export interface PatchNote {
   version: string
-  date: string // ISO date the version shipped
+  date: string // ISO date the version shipped (for dev entries, the date last touched)
   kind: 'feature' | 'fix'
   summary: string
 }
 
 export const PATCH_NOTES: PatchNote[] = [
+  {
+    version: '0.5.0',
+    date: '2026-09-21',
+    kind: 'feature',
+    summary:
+      'The “Students” area is now “Reports” — the same cohort view and per-student history, renamed to match what it’s for. Old links to the Students page still work.',
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
+      'Writing entry: Conventions can now be marked “Scribed” when someone else physically wrote for the student — scribed conventions are left out of the writing average.',
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
+      'The “IPPs” area is now “Programming” — confirm both Individual Program Plans and Adaptations for each student by subject (Reading, Writing, Math), with a colour cue showing how much is left to confirm.',
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
+      'Math Short Cycles for Primary–grade 6: record can-do / not-yet for each task, with by-task and by-student summaries.',
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
+      'Choosing a class is easier — pick by homeroom, by course section, or by a whole grade, with school and grade filters.',
+  },
+  {
+    version: '0.5.0',
+    date: '2026-09-17',
+    kind: 'feature',
+    summary:
+      'A heads-up banner now appears ahead of scheduled maintenance so you have time to save your work before the app briefly restarts.',
+  },
   {
     version: '0.4.1',
     date: '2026-09-11',
@@ -37,17 +80,24 @@ export const PATCH_NOTES: PatchNote[] = [
   },
 ]
 
-// "0.4.1" -> "0.4"
-function minorOf(version: string): string {
-  const parts = version.split('.')
-  return `${parts[0]}.${parts[1]}`
+// The running build's version — from package.json (NEXT_PUBLIC_APP_VERSION), so the footer never
+// drifts from the actual build. Falls back to the newest note if the env isn't set.
+export const APP_VERSION: string = process.env.NEXT_PUBLIC_APP_VERSION ?? PATCH_NOTES[0]?.version ?? '0.0.0'
+
+// Numeric key for a minor line: "0.5.0-dev" -> 5, "0.4.1" -> 4 (major*1000 + minor).
+function minorKey(version: string): number {
+  const [maj, min] = version.split('.')
+  return Number(maj) * 1000 + Number(min)
 }
 
-// The running build's version = the newest note (releases always add their entry on top).
-export const APP_VERSION: string = PATCH_NOTES[0].version
-export const CURRENT_MINOR: string = minorOf(APP_VERSION)
-
-// Notes for the current minor line only — the .0 plus any hotfixes (e.g. every 0.4.x entry).
-export function currentMinorNotes(): PatchNote[] {
-  return PATCH_NOTES.filter((n) => minorOf(n.version) === CURRENT_MINOR)
+// Notes for the CURRENT minor line plus the PREVIOUS one — so the popup shows changes back through
+// the last minor (e.g. on 0.5.x it lists every 0.5.x AND 0.4.x note).
+export function recentNotes(): PatchNote[] {
+  const cur = minorKey(APP_VERSION)
+  const below = PATCH_NOTES.map((n) => minorKey(n.version)).filter((k) => k < cur)
+  const prev = below.length ? Math.max(...below) : cur
+  return PATCH_NOTES.filter((n) => {
+    const k = minorKey(n.version)
+    return k === cur || k === prev
+  })
 }

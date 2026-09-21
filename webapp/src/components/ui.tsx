@@ -69,7 +69,14 @@ export function CardLink({
   meta?: string
 }) {
   return (
-    <Link href={href} className="card card-link">
+    // prefetch={false}: every page these cards link to is force-dynamic, so a prefetch is NOT a cheap
+    // cache warm -- Next renders the whole page server-side, warehouse queries included, just because
+    // a card scrolled into view or was hovered. Measured: navigating from the picker ran
+    // tvf_TeacherGroups AND tvf_TeacherRosterMath twice, while the same URL typed into the address bar
+    // ran each once. At ~200 teachers browsing a picker full of class cards that is a lot of real
+    // query load for pages nobody opens. loading.tsx already gives instant feedback on click, so the
+    // perceived speed we lose is close to nil.
+    <Link href={href} prefetch={false} className="card card-link">
       <div className="card-title">{title}</div>
       {desc ? <div className="card-desc">{desc}</div> : null}
       {meta ? <div className="muted">{meta}</div> : null}

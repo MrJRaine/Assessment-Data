@@ -1,5 +1,7 @@
 import 'server-only'
 import { queryAsUser, query } from './db'
+import { readGroups, writeGroups } from './groupCache'
+import { readAccessLevel, writeAccessLevel, readCapabilities, writeCapabilities } from './identityCache'
 
 /**
  * Secured data-access layer (SERVER-ONLY).
@@ -20,10 +22,16 @@ import { queryAsUser, query } from './db'
 
 export interface TeacherWindow {
   id: string // AssessmentWindowID (kept as string -- BIGINT exceeds JS Number precision)
+  cycleGroupId: string | null // the SCoR header key — /enter collapses a cycle's instances into ONE card per subject
+  cycleName: string | null // the HEADER's name ('SCoR 1'); the collapsed card's title, since instance names differ
   name: string
   assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
   status: string // Upcoming | Open | ClosesToday | Closed
   scaleSystem: string | null
+  language: string | null // 'English' | 'French' | null (Both) — distinguishes same-name instances
+  programScope: string[] // {English, Early Immersion, Late Immersion}; [] = all programs
+  minGrade: string
+  maxGrade: string
   startDate: string // 'YYYY-MM-DD' (window opens on the 1st of its month)
   endDate: string // 'YYYY-MM-DD' (window closes on the last day of its month)
   applicableCount: number
@@ -39,8 +47,16 @@ function toYMD(v: unknown): string {
 export interface TeacherGroup {
   key: string // GroupKey: URL-safe homeroom key '<SchoolAbbrev>-<cleanHomeroom>' (grades <=9) or 'SEC:<sectionId>' (10+)
   label: string // display name, e.g. 'Homeroom 5/6' (real name; the key is what travels in the URL)
+  scope: 'Taught' | 'Oversight' // 'Taught' = the caller's own classes (any role); 'Oversight' = above-teacher school/region view
+  groupType: 'Homeroom' | 'Section' | 'Grade' | 'Course' // Data Entry is now 'Course' (a mapped course section); Programming still uses the lenses
+  // Course-scoped Data Entry only (Programming leaves these undefined):
+  language?: string | null // 'English' | 'French' | null — from the section's course; groups the cards + gates multi-select
+  courseCode?: string | null
+  teacherNames?: string | null // whose class this is — shown on Oversight cards (co-taught sections list all)
+  windowIds?: string[] // the cycle instance(s) this section's students fall under; the roster routes saves by it
   schoolName: string | null
-  grade: string | null
+  grade: string | null // MAX(grade) in the group — kept for display/back-compat
+  grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
   applicableCount: number
   enteredCount: number
 }
@@ -53,6 +69,12 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     AssessmentType: string
     WindowStatus: string
     ScaleSystem: string | null
+    AssessmentLanguage: string | null
+    ProgramScope: string | null
+    CycleGroupID: string | null
+    CycleName: string | null
+    MinGrade: string
+    MaxGrade: string
     StartDate: unknown
     EndDate: unknown
     ApplicableStudentCount: number
@@ -60,10 +82,16 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
+    cycleGroupId: r.CycleGroupID ?? null,
+    cycleName: r.CycleName ?? null,
     name: r.WindowName,
     assessmentType: r.AssessmentType,
     status: r.WindowStatus,
     scaleSystem: r.ScaleSystem,
+    language: r.AssessmentLanguage ?? null,
+    programScope: r.ProgramScope ? r.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+    minGrade: r.MinGrade,
+    maxGrade: r.MaxGrade,
     startDate: toYMD(r.StartDate),
     endDate: toYMD(r.EndDate),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
@@ -71,96 +99,101 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
   }))
 }
 
-export interface ShortCycleRow {
+// One scoped assessment INSTANCE within a cycle: a DimAssessmentWindow row (subject x language x
+// program-scope x grade band). Many can share a cycle header (CycleGroupID).
+export interface ShortCycleInstance {
+  id: string // AssessmentWindowID (string -- BIGINT precision)
   subject: string // 'Reading' | 'Writing' | 'Math'
-  id: string // that subject's AssessmentWindowID (string -- BIGINT precision)
+  language: string | null // 'English' | 'French' | null (Both); ignored for Math
+  programScope: string[] // buckets {English, Early Immersion, Late Immersion}; [] = all programs
+  minGrade: string
+  maxGrade: string
+  benchmarkMonth: number | null // reading only; null = dominant-month fallback
   active: boolean
 }
 
+// A cycle = a DimShortCycle HEADER (distinct key + name + dates) plus its instances.
 export interface ShortCycle {
-  groupId: string | null // CycleGroupID; null for legacy single windows (each its own cycle)
-  key: string // stable grouping key for React (groupId ?? 'win:<id>')
-  name: string
-  subjects: string[] // subjects the cycle currently covers (active rows)
+  cycleGroupId: string // the header's distinct key (instances tie to this)
+  displayName: string
   schoolYear: string
-  status: string // Upcoming | Open | ClosesToday | Closed (rows share dates -> same status)
+  status: string // Upcoming | Open | ClosesToday | Closed (from header dates)
   startDate: string // 'YYYY-MM-DD'
   endDate: string
-  minGrade: string
-  maxGrade: string
-  benchmarkMonth: number | null // 1-12, from the reading row; null = dominant-month fallback
-  active: boolean // any row active
-  rows: ShortCycleRow[] // every per-subject row (for edit reconciliation)
+  active: boolean // header active
+  instances: ShortCycleInstance[]
 }
 
 /**
- * All Short Cycles of Response, grouped for the admin screen. A cycle is one or more per-subject
- * DimAssessmentWindow rows sharing a CycleGroupID (multi-subject); legacy rows with no group id are
- * treated as their own single-subject cycle. Config, not per-user PII, so a plain SP query is fine
- * (mirrors getWindowEndDate). Status is date-derived in Atlantic time to match the entry gate.
+ * All Short Cycles of Response for the admin screen: each DimShortCycle HEADER (distinct key + name +
+ * dates) with its scoped instance windows (DimAssessmentWindow, tied by CycleGroupID). An empty header
+ * (no instances yet) is included so it can be picked in the instance builder. Config, not per-user PII,
+ * so a plain SP query is fine. Status is date-derived in Atlantic time to match the entry gate.
  */
 export async function getShortCycles(): Promise<ShortCycle[]> {
-  const rows = await query<{
-    AssessmentWindowID: string
-    WindowName: string
-    AssessmentType: string
-    SchoolYear: string
+  const headers = await query<{
+    CycleGroupID: string
+    DisplayName: string
     StartDate: unknown
     EndDate: unknown
-    MinGrade: string
-    MaxGrade: string
-    BenchmarkMonth: number | null
-    CycleGroupID: string | null
+    SchoolYear: string
     ActiveFlag: boolean
     Status: string
   }>(`
-    SELECT
-      CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
-      WindowName, AssessmentType, SchoolYear, StartDate, EndDate,
-      MinGrade, MaxGrade, BenchmarkMonth, CycleGroupID, ActiveFlag,
+    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) = EndDate   THEN 'ClosesToday'
         ELSE 'Open'
       END AS Status
-    FROM DimAssessmentWindow
-    ORDER BY StartDate DESC, WindowName, AssessmentType`)
+    FROM DimShortCycle
+    ORDER BY StartDate DESC, DisplayName`)
 
-  // Group per-subject rows into cycles by CycleGroupID (ungrouped rows stand alone).
-  const groups = new Map<string, typeof rows>()
-  for (const r of rows) {
-    const key = r.CycleGroupID ?? `win:${r.AssessmentWindowID}`
-    const g = groups.get(key)
-    if (g) g.push(r)
-    else groups.set(key, [r] as typeof rows)
+  const wins = await query<{
+    AssessmentWindowID: string
+    CycleGroupID: string | null
+    AssessmentType: string
+    MinGrade: string
+    MaxGrade: string
+    BenchmarkMonth: number | null
+    ProgramScope: string | null
+    AssessmentLanguage: string | null
+    ActiveFlag: boolean
+  }>(`
+    SELECT CAST(AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID, CycleGroupID, AssessmentType,
+           MinGrade, MaxGrade, BenchmarkMonth, ProgramScope, AssessmentLanguage, ActiveFlag
+    FROM DimAssessmentWindow`)
+
+  // Instances grouped by their header key.
+  const byGroup = new Map<string, ShortCycleInstance[]>()
+  for (const w of wins) {
+    if (!w.CycleGroupID) continue
+    const inst: ShortCycleInstance = {
+      id: String(w.AssessmentWindowID),
+      subject: w.AssessmentType,
+      language: w.AssessmentLanguage ?? null,
+      programScope: w.ProgramScope ? w.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      minGrade: w.MinGrade,
+      maxGrade: w.MaxGrade,
+      benchmarkMonth: w.BenchmarkMonth == null ? null : Number(w.BenchmarkMonth),
+      active: Boolean(w.ActiveFlag),
+    }
+    const arr = byGroup.get(w.CycleGroupID)
+    if (arr) arr.push(inst)
+    else byGroup.set(w.CycleGroupID, [inst])
   }
 
-  const cycles: ShortCycle[] = []
-  for (const [key, grp] of groups) {
-    const first = grp[0]
-    const activeRows = grp.filter((r) => r.ActiveFlag)
-    const subjectRows = activeRows.length ? activeRows : grp
-    const subjects = [...new Set(subjectRows.map((r) => r.AssessmentType))]
-    const readingRow = grp.find((r) => r.AssessmentType === 'Reading' && r.ActiveFlag)
-      ?? grp.find((r) => r.AssessmentType === 'Reading')
-    cycles.push({
-      groupId: first.CycleGroupID ?? null,
-      key,
-      name: first.WindowName,
-      subjects,
-      schoolYear: first.SchoolYear,
-      status: first.Status,
-      startDate: toYMD(first.StartDate),
-      endDate: toYMD(first.EndDate),
-      minGrade: first.MinGrade,
-      maxGrade: first.MaxGrade,
-      benchmarkMonth: readingRow?.BenchmarkMonth == null ? null : Number(readingRow.BenchmarkMonth),
-      active: grp.some((r) => r.ActiveFlag),
-      rows: grp.map((r) => ({ subject: r.AssessmentType, id: String(r.AssessmentWindowID), active: Boolean(r.ActiveFlag) })),
-    })
-  }
-  return cycles.sort((a, b) => b.startDate.localeCompare(a.startDate) || a.name.localeCompare(b.name))
+  return headers.map((h) => ({
+    cycleGroupId: h.CycleGroupID,
+    displayName: h.DisplayName,
+    schoolYear: h.SchoolYear,
+    status: h.Status,
+    startDate: toYMD(h.StartDate),
+    endDate: toYMD(h.EndDate),
+    active: Boolean(h.ActiveFlag),
+    instances: byGroup.get(h.CycleGroupID) ?? [],
+  }))
 }
 
 /**
@@ -177,33 +210,69 @@ export async function getWindowEndDate(windowId: string): Promise<string | null>
   return rows.length ? toYMD(rows[0].EndDate) : null
 }
 
-/** Groups (homerooms / sections) for one window, scoped to the signed-in teacher. */
-export async function getTeacherGroups(upn: string, windowId: string): Promise<TeacherGroup[]> {
+/**
+ * Mapped-course SECTIONS for one CYCLE + SUBJECT, scoped to the signed-in user.
+ *
+ * Keyed on the cycle (not one AssessmentWindowID) because /enter shows ONE card per cycle per
+ * subject: a collapsed "Writing" card has no single instance to point at, and pointing it at the
+ * English instance would show an FLA teacher nothing. The TVF spans every instance of the cycle.
+ */
+export async function getTeacherGroups(
+  upn: string,
+  cycleGroupId: string,
+  assessmentType: string,
+): Promise<TeacherGroup[]> {
+  // The picker and the roster page both need these rows, seconds apart, and the TVF costs 1.4-2.2s.
+  // Cached for 30s per (user, cycle, subject) and invalidated on save — see lib/groupCache.
+  const cached = readGroups(upn, cycleGroupId, assessmentType)
+  if (cached) return cached
+
   const rows = await queryAsUser<{
     GroupKey: string
     GroupLabel: string | null
+    Scope: string
+    GroupType: string
+    Language: string | null
+    CourseCode: string | null
+    TeacherNames: string | null
     SchoolName: string | null
     Grade: string | null
+    Grades: string | null
+    WindowIDs: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @WindowID) ORDER BY GroupKey',
-    { WindowID: windowId },
+    'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) ORDER BY GroupKey',
+    { CycleGroupID: cycleGroupId, AssessmentType: assessmentType },
   )
-  return rows.map((r) => {
+  const groups: TeacherGroup[] = rows.map((r) => {
     const key = String(r.GroupKey)
-    // The TVF supplies the display label (real homeroom name, or section number+course);
+    // The TVF supplies the display label (the course name + section number);
     // the key is the URL-safe token and no longer encodes the label.
     return {
       key,
       label: r.GroupLabel ?? key,
+      scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
+      // Data Entry groups are course sections now; keep the old lens values mapping for safety.
+      groupType:
+        r.GroupType === 'Course' ? 'Course'
+          : r.GroupType === 'Section' ? 'Section'
+          : r.GroupType === 'Grade' ? 'Grade'
+          : 'Homeroom',
+      language: r.Language ?? null,
+      courseCode: r.CourseCode ?? null,
+      teacherNames: r.TeacherNames ?? null,
+      windowIds: (r.WindowIDs ?? '').split(',').map((w) => w.trim()).filter(Boolean),
       schoolName: r.SchoolName ?? null,
       grade: r.Grade ?? null,
+      grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
       applicableCount: Number(r.ApplicableStudentCount ?? 0),
       enteredCount: Number(r.EnteredStudentCount ?? 0),
     }
   })
+  writeGroups(upn, cycleGroupId, assessmentType, groups)
+  return groups
 }
 
 export interface RosterStudent {
@@ -213,6 +282,7 @@ export interface RosterStudent {
   lastName: string
   grade: string | null
   homeroom: string | null // real homeroom name (for the roster header)
+  groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
@@ -235,7 +305,7 @@ export interface RosterStudent {
 export async function getTeacherRoster(
   upn: string,
   windowId: string,
-  groupKey: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
 ): Promise<RosterStudent[]> {
   const rows = await queryAsUser<{
     StudentKey: string
@@ -250,6 +320,7 @@ export async function getTeacherRoster(
     ExpectedMinLevel: string | null
     ExpectedMaxLevel: string | null
     Homeroom: string | null
+    GroupKey: string
     SchoolName: string | null
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
@@ -263,8 +334,8 @@ export async function getTeacherRoster(
     PrevCycleReadingLevel: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
-    { WindowID: windowId, GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WindowID, @GroupKeys) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKeys: groupKeys.join(",") },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -273,6 +344,7 @@ export async function getTeacherRoster(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     scaleSystem: r.ScaleSystem ?? null,
     programFamily: r.IPPProgramFamily ?? null,
@@ -304,6 +376,21 @@ export async function getWindowAssessmentType(windowId: string): Promise<string 
   return rows.length ? rows[0].AssessmentType : null
 }
 
+// A cycle's language scope: 'English'/'French' FIXES the language (no toggle); null = Both
+// (writing shows the EN/FR toggle). Set on /cycles.
+export async function getWindowLanguage(windowId: string): Promise<WritingLanguage | null> {
+  const rows = await query<{ AssessmentLanguage: string | null }>(
+    'SELECT AssessmentLanguage FROM DimAssessmentWindow WHERE AssessmentWindowID = CAST(@WID AS BIGINT)',
+    { WID: windowId },
+  )
+  const v = rows.length ? rows[0].AssessmentLanguage : null
+  return v === 'English' || v === 'French' ? v : null
+}
+
+// Writing is dual-language: a French-Immersion grade-3+ student is assessed in BOTH English and
+// French. The EN/FR toggle picks which track's roster + scores you see and enter.
+export type WritingLanguage = 'English' | 'French'
+
 export interface WritingRosterStudent {
   studentKey: string
   studentNumber: string
@@ -311,12 +398,13 @@ export interface WritingRosterStudent {
   lastName: string
   grade: string | null
   homeroom: string | null
+  groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
   organization: number | null
   language: number | null
-  conventions: number | null
+  conventions: string | null // '1'–'4' or 'SCR' (Scribed) — Conventions can be scribed
   avgScore: number | null
   assessmentDate: string | null
   ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
@@ -330,7 +418,8 @@ export interface WritingRosterStudent {
 export async function getTeacherRosterWriting(
   upn: string,
   windowId: string,
-  groupKey: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
+  language: WritingLanguage,
 ): Promise<WritingRosterStudent[]> {
   const rows = await queryAsUser<{
     StudentKey: string
@@ -341,10 +430,11 @@ export async function getTeacherRosterWriting(
     ExistingIdeasScore: number | null
     ExistingOrganizationScore: number | null
     ExistingLanguageScore: number | null
-    ExistingConventionsScore: number | null
+    ExistingConventionsScore: string | null // VARCHAR: '1'–'4' or 'SCR'
     ExistingAvgScore: number | null
     ExistingAssessmentDate: Date | string | null
     Homeroom: string | null
+    GroupKey: string
     SchoolName: string | null
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
@@ -354,8 +444,8 @@ export async function getTeacherRosterWriting(
     AchievementHexColorTint: string | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKey) ORDER BY LastName, FirstName',
-    { WindowID: windowId, GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language) ORDER BY LastName, FirstName',
+    { WindowID: windowId, GroupKeys: groupKeys.join(","), Language: language },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -364,6 +454,7 @@ export async function getTeacherRosterWriting(
     lastName: r.LastName,
     grade: r.Grade ?? null,
     homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
     schoolName: r.SchoolName ?? null,
     programFamily: r.IPPProgramFamily ?? null,
     ideas: r.ExistingIdeasScore ?? null,
@@ -414,11 +505,18 @@ export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]>
  * actions (e.g. ingest upload/trigger) server-side, mirroring the proc role checks.
  */
 export async function getCallerAccessLevel(upn: string): Promise<string | null> {
+  // Resolved on every navigation, so cached for an hour and cleared by the ingest that can change
+  // it. See lib/identityCache for why an hour is safe against a WEEKLY ingest.
+  const cached = readAccessLevel(upn)
+  if (cached.hit) return cached.value
+
   const rows = await query<{ AccessLevel: string | null }>(
     `SELECT TOP 1 AccessLevel FROM dbo.DimStaff WHERE LOWER(Email) = LOWER(@UPN) AND IsCurrent = 1`,
     { UPN: upn },
   )
-  return rows.length ? rows[0].AccessLevel ?? null : null
+  const accessLevel = rows.length ? rows[0].AccessLevel ?? null : null
+  writeAccessLevel(upn, accessLevel)
+  return accessLevel
 }
 
 export interface CallerCapabilities {
@@ -433,17 +531,65 @@ export interface CallerCapabilities {
  * a staff email with no row here has NO admin capabilities. IsSysAdmin implies every capability.
  * Gates /cycles and /ingest (their pages, server actions, nav items, and home cards).
  */
-export async function getCallerCapabilities(upn: string): Promise<CallerCapabilities> {
-  const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
-    `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
-    { UPN: upn },
+export async function getCallerCapabilities(
+  upn: string,
+  opts: { fresh?: boolean } = {},
+): Promise<CallerCapabilities> {
+  // Cached an hour (resolved on every navigation) and cleared by the ingest that can change it.
+  //
+  // `fresh: true` SKIPS the cache. The split that makes the TTL safe: rendering the nav reads the
+  // cache, but anything that AUTHORIZES a privileged action re-checks live. So the worst a stale
+  // entry can do is leave a menu item visible for an hour — it can never grant an action after the
+  // capability was removed. Those actions are rare, so the extra round trip costs nothing.
+  if (!opts.fresh) {
+    const cachedCaps = readCapabilities(upn)
+    if (cachedCaps.hit) return cachedCaps.value
+  }
+
+  // Capabilities drive the app chrome (nav gating), so this runs on the FIRST authenticated render.
+  // A cold connection pool / token warm-up can make that first query throw; retry a few times so the
+  // nav resolves correctly without the user having to refresh. A "no row" result is NOT an error
+  // (that user simply has no admin capabilities) — only a thrown query retries.
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
+        { UPN: upn },
+      )
+      const r = rows[0]
+      const sysAdmin = Boolean(r?.IsSysAdmin)
+      const caps: CallerCapabilities = {
+        isSysAdmin: sysAdmin,
+        canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
+        canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+      }
+      // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
+      // poison the cache with a "no capabilities" answer for an hour.
+      writeCapabilities(upn, caps)
+      return caps
+    } catch (e) {
+      lastErr = e
+      await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
+    }
+  }
+  throw lastErr
+}
+
+// Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
+// surfaced by /api/status to the client poller. MaintenanceAt is UTC.
+export interface MaintenanceWindow {
+  maintenanceAt: string | null // ISO-8601 UTC, or null = no window
+  message: string | null
+}
+export async function getMaintenanceWindow(): Promise<MaintenanceWindow> {
+  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null }>(
+    'SELECT MaintenanceAt, Message FROM dbo.AppMaintenance WHERE Id = 1',
   )
-  const r = rows[0]
-  const sysAdmin = Boolean(r?.IsSysAdmin)
+  const at = rows[0]?.MaintenanceAt ?? null
   return {
-    isSysAdmin: sysAdmin,
-    canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
-    canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+    maintenanceAt: at == null ? null : at instanceof Date ? at.toISOString() : new Date(at).toISOString(),
+    message: rows[0]?.Message ?? null,
   }
 }
 
@@ -698,7 +844,7 @@ export interface WritingHistoryRow {
   ideas: number | null
   organization: number | null
   language: number | null
-  conventions: number | null
+  conventions: string | null // '1'–'4' or 'SCR' (Scribed)
   avgScore: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -721,7 +867,7 @@ export async function getStudentHistoryWriting(upn: string, studentKey: string):
     ideas: r.IdeasScore == null ? null : Number(r.IdeasScore),
     organization: r.OrganizationScore == null ? null : Number(r.OrganizationScore),
     language: r.LanguageScore == null ? null : Number(r.LanguageScore),
-    conventions: r.ConventionsScore == null ? null : Number(r.ConventionsScore),
+    conventions: r.ConventionsScore == null ? null : String(r.ConventionsScore),
     avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
@@ -742,7 +888,7 @@ export interface IPPRow {
 }
 
 /**
- * Reading-IPP rows in the signed-in user's scope, for the bulk IPP-management screen (/ipp).
+ * Reading-IPP rows in the signed-in user's scope, for the bulk IPP-management screen (/programming).
  * Reading only for the pilot (mirrors scrIPP's Subject='Reading' filter); Writing/Math join later.
  */
 export async function getStudentIPPList(upn: string): Promise<IPPRow[]> {
@@ -772,6 +918,120 @@ export async function getStudentIPPList(upn: string): Promise<IPPRow[]> {
     subject: r.Subject,
     programFamily: r.IPPProgramFamily,
     isIPP: toBool(r.IsIPP),
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Programming (IPP + Adaptations) — window-less group picker + group roster.
+// tvf_ProgrammingGroups mirrors tvf_TeacherGroups' shape (so GroupCards renders it),
+// but over FLAGGED students only, with the "needs confirmation" count in enteredCount.
+// ---------------------------------------------------------------------------
+export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]> {
+  const rows = await queryAsUser<{
+    GroupKey: string
+    GroupLabel: string | null
+    Scope: string
+    GroupType: string
+    SchoolName: string | null
+    Grade: string | null
+    Grades: string | null
+    ApplicableStudentCount: number
+    NeedsConfirmCount: number
+  }>(upn, 'SELECT * FROM dbo.tvf_ProgrammingGroups(@UPN) ORDER BY GroupKey')
+  return rows.map((r) => ({
+    key: String(r.GroupKey),
+    label: r.GroupLabel ?? String(r.GroupKey),
+    scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
+    groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
+    schoolName: r.SchoolName ?? null,
+    grade: r.Grade ?? null,
+    grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
+    applicableCount: Number(r.ApplicableStudentCount ?? 0),
+    enteredCount: Number(r.NeedsConfirmCount ?? 0), // reuses the slot: shown as "N need confirmation"
+  }))
+}
+
+// Scope-wide Programming confirmation summary (for the picker landing). CELL-level: each
+// (student, subject, family) record is one "detail" being confirmed — total = records that exist,
+// confirmed = records with a set value (not NULL). Reuses the existing @UPN role-scoped reads.
+export interface ProgrammingSummary {
+  ipp: { confirmed: number; total: number }
+  adaptation: { confirmed: number; total: number }
+}
+function cellLevel(sets: boolean[]): { confirmed: number; total: number } {
+  return { confirmed: sets.filter(Boolean).length, total: sets.length }
+}
+export async function getProgrammingSummary(upn: string): Promise<ProgrammingSummary> {
+  const [ippRows, adapRows] = await Promise.all([
+    queryAsUser<{ IsIPP: boolean | number | null }>(upn, 'SELECT IsIPP FROM dbo.tvf_StudentIPP(@UPN)'),
+    queryAsUser<{ HasAdaptation: boolean | number | null }>(
+      upn,
+      'SELECT HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
+    ),
+  ])
+  return {
+    ipp: cellLevel(ippRows.map((r) => r.IsIPP != null)),
+    adaptation: cellLevel(adapRows.map((r) => r.HasAdaptation != null)),
+  }
+}
+
+// One row per (student, subject, programFamily) present in EITHER fact for the chosen group.
+// The client pivots these into the IPP and Adaptations grids (subjects as columns), and the
+// English+FrenchImmersion pair on a literacy subject drives the FI grade-3+ 4-way cell.
+export interface ProgrammingRosterRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  studentProgramFamily: string | null // the student's OWN program (English / French Immersion)
+  subject: string // 'Reading' | 'Writing' | 'Math'
+  programFamily: string // the fact row's ProgramFamily
+  ippExists: boolean // an IPP row exists for this (student, subject, family)
+  adaptationExists: boolean // an Adaptation row exists for this (student, subject, family)
+  isIPP: boolean | null // meaningful only when ippExists; null = unconfirmed
+  hasAdaptation: boolean | null // meaningful only when adaptationExists; null = unresolved
+}
+
+export async function getProgrammingRoster(upn: string, groupKey: string): Promise<ProgrammingRosterRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    Homeroom: string | null
+    SchoolName: string | null
+    StudentProgramFamily: string | null
+    Subject: string
+    ProgramFamily: string
+    IPPExists: boolean | number
+    AdaptationExists: boolean | number
+    IsIPP: boolean | number | null
+    HasAdaptation: boolean | number | null
+  }>(
+    upn,
+    `SELECT * FROM dbo.tvf_ProgrammingRoster(@UPN, @GroupKey)
+     ORDER BY LastName, FirstName, Subject, ProgramFamily`,
+    { GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
+    studentProgramFamily: r.StudentProgramFamily ?? null,
+    subject: r.Subject,
+    programFamily: r.ProgramFamily,
+    ippExists: Boolean(toBool(r.IPPExists)),
+    adaptationExists: Boolean(toBool(r.AdaptationExists)),
+    isIPP: toBool(r.IsIPP),
+    hasAdaptation: toBool(r.HasAdaptation),
   }))
 }
 
@@ -815,5 +1075,91 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
     upperOp: r.UpperOp ?? null,
     hexColor: r.HexColor,
     hexColorTint: r.HexColorTint,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Math roster (P-6 Math). One row per (student x applicable task) from
+// tvf_TeacherRosterMath; the client grid structures these into the student x
+// task matrix (grouped by grade + unit). See project_math_assessment_model.
+// ---------------------------------------------------------------------------
+export interface MathRosterRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  groupKey: string // which selected class this student came from (combined-roster headings)
+  schoolName: string | null
+  programFamily: string | null
+  mathTaskKey: string | null // NULL when this student's grade+month has no tasks configured
+  unitName: string | null
+  unitOrder: number | null
+  questionNumber: string | null
+  displayOrder: number | null
+  outcomeCode: string | null
+  description: string | null
+  answerKey: string | null
+  existingResult: boolean | null // latest 0/1 (BIT), or null if never marked
+  mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved gate
+  mathIPPNeedsConfirmation: boolean
+  ippProgramFamily: string | null
+}
+
+export async function getMathRoster(
+  upn: string,
+  windowId: string,
+  groupKeys: string[], // one or MORE classes — same-language sections can be entered as one roster
+): Promise<MathRosterRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    Homeroom: string | null
+    GroupKey: string
+    SchoolName: string | null
+    ProgramFamily: string | null
+    MathTaskKey: string | null
+    UnitName: string | null
+    UnitOrder: number | null
+    QuestionNumber: string | null
+    DisplayOrder: number | null
+    OutcomeCode: string | null
+    TaskDescription: string | null
+    AnswerKey: string | null
+    ExistingResult: boolean | null
+    MathIPPStatus: boolean | null
+    MathIPPNeedsConfirmation: boolean | null
+    IPPProgramFamily: string | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_TeacherRosterMath(@UPN, @WindowID, @GroupKeys) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { WindowID: windowId, GroupKeys: groupKeys.join(",") },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    groupKey: String(r.GroupKey),
+    schoolName: r.SchoolName ?? null,
+    programFamily: r.ProgramFamily ?? null,
+    mathTaskKey: r.MathTaskKey == null ? null : String(r.MathTaskKey),
+    unitName: r.UnitName ?? null,
+    unitOrder: r.UnitOrder ?? null,
+    questionNumber: r.QuestionNumber ?? null,
+    displayOrder: r.DisplayOrder ?? null,
+    outcomeCode: r.OutcomeCode ?? null,
+    description: r.TaskDescription ?? null,
+    answerKey: r.AnswerKey ?? null,
+    existingResult: r.ExistingResult ?? null,
+    mathIPPStatus: r.MathIPPStatus ?? null,
+    mathIPPNeedsConfirmation: Boolean(r.MathIPPNeedsConfirmation),
+    ippProgramFamily: r.IPPProgramFamily ?? null,
   }))
 }

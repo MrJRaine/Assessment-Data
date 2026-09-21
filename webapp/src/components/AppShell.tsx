@@ -1,9 +1,11 @@
 import { cookies } from 'next/headers'
+import Link from 'next/link'
 import Nav from './Nav'
 import AuthArea from './AuthArea'
 import PostLoginRefresh from './PostLoginRefresh'
 import DevImpersonationBar from './DevImpersonationBar'
 import VersionFooter from './VersionFooter'
+import MaintenanceProvider from './maintenance/MaintenanceProvider'
 import { getCurrentUpn, DEV_IMPERSONATE_COOKIE } from '@/lib/auth'
 import { getCallerCapabilities, getImpersonationTargets, type ImpersonationTarget } from '@/lib/data'
 
@@ -16,13 +18,20 @@ export default async function AppShell({ children }: { children: React.ReactNode
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   let authed = false
   let currentUpn: string | null = null
+  let capsError = false
   try {
     const upn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
     authed = true
     currentUpn = upn
-    caps = await getCallerCapabilities(upn)
+    // Resolve caps in its OWN try so a transient caps-query failure can't flip the user to signed-out
+    // (which would also hide the non-gated nav). getCallerCapabilities already retries a cold pool;
+    // if it still fails, flag it so the client does a bounded refresh rather than stranding the nav.
+    try {
+      caps = await getCallerCapabilities(upn)
+    } catch {
+      capsError = true
+    }
   } catch {
-    caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
     authed = false
     currentUpn = null
   }
@@ -50,8 +59,8 @@ export default async function AppShell({ children }: { children: React.ReactNode
 
   return (
     <>
-      {/* Above the header so it sits outside the app chrome -- keeps the header-and-below area
-          clean for how-to-doc screenshots (crop this bar out and the shot looks like production). */}
+      {/* Above the header AND outside MaintenanceProvider so the maintenance overlay never covers it
+          -- keeps how-to-doc shots clean AND lets a dev tester re-impersonate during a lockdown. */}
       {devMode && (
         <DevImpersonationBar
           current={currentUpn}
@@ -60,21 +69,25 @@ export default async function AppShell({ children }: { children: React.ReactNode
           targets={impersonationTargets}
         />
       )}
+      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
       <header className="header">
-        <div className="brand">
+        {/* The brand lockup is the way home — standard convention, and the only home affordance now
+            that the landing page has no nav entry of its own. */}
+        <Link href="/" className="brand" aria-label="Short Cycles of Response — home">
           {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">Short Cycles of Response</span>
-        </div>
-        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} />
+        </Link>
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
         </div>
       </header>
       <main className="container">{children}</main>
       <VersionFooter />
-      {entraMode && <PostLoginRefresh authed={authed} />}
+      <PostLoginRefresh authed={authed} capsError={capsError} enablePostLogin={entraMode} />
+      </MaintenanceProvider>
     </>
   )
 }

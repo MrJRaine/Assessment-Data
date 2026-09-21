@@ -87,6 +87,7 @@ BEGIN
     DECLARE @PersonsClosedChanged     INT = 0;
     DECLARE @PersonsSameDayUpdated    INT = 0;   -- DimStaff rows updated IN PLACE (same-day correction)
     DECLARE @PersonsSameDayRevived    INT = 0;   -- DimStaff rows re-opened IN PLACE on same-day return
+    DECLARE @PersonsReturnClosed      INT = 0;   -- stale ActiveFlag=0 markers closed on a MULTI-DAY return
     DECLARE @PersonsClosedMissing     INT = 0;
     DECLARE @PersonsInsertedActive    INT = 0;   -- NEW + CHANGED + RETURNING combined
     DECLARE @PersonsInsertedInactive  INT = 0;   -- Deactivation inserts (== ClosedMissing)
@@ -339,7 +340,12 @@ BEGIN
     WHERE d.IsCurrent = 0
       AND d.EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate)
       AND d.ActiveFlag = 1
-      AND w.Email IS NULL;
+      AND w.Email IS NULL
+      -- Guard: only create the marker when the email has NO current row. Without this,
+      -- 4c's "EndDate = yesterday" predicate RE-matches an active row that was closed on an
+      -- EARLIER same-day ingest (its EndDate is still yesterday), so a repeat ingest on the
+      -- day after a teacher was deactivated stacks a DUPLICATE current marker each time.
+      AND NOT EXISTS (SELECT 1 FROM DimStaff c WHERE c.Email = d.Email AND c.IsCurrent = 1);
 
     SET @PersonsInsertedInactive = @@ROWCOUNT;
 
@@ -368,9 +374,32 @@ BEGIN
 
     SET @PersonsSameDayRevived = @@ROWCOUNT;
 
+    -- 4c-prime2. MULTI-DAY RETURN: the email is back in this import but currently sits on
+    --     a deactivation marker (ActiveFlag=0, IsCurrent=1) created on a PRIOR day. Close it
+    --     so 4d inserts a single fresh active row. Without this, 4d's guard (NOT EXISTS a
+    --     current ACTIVE row) passes while the inactive marker stays current -> two IsCurrent=1
+    --     rows for the email, and a later absence stacks a second marker. Targets only
+    --     multi-day markers (EffectiveStartDate < today); the same-day 0-day marker is revived
+    --     in place by 4c-prime above. Also self-heals an already-stacked pair on the next
+    --     ingest where the person is present (closes both; 4d re-opens one).
+    UPDATE d
+    SET EffectiveEndDate = CASE WHEN d.EffectiveStartDate > DATEADD(DAY, -1, @EffectiveDate)
+                                THEN d.EffectiveStartDate ELSE DATEADD(DAY, -1, @EffectiveDate) END,
+        IsCurrent        = 0,
+        LastUpdated      = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Wrk_StaffPersons w
+            ON w.Email = d.Email
+    WHERE d.IsCurrent = 1
+      AND d.ActiveFlag = 0
+      AND d.EffectiveStartDate < @EffectiveDate;
+
+    SET @PersonsReturnClosed = @@ROWCOUNT;
+
     -- 4d. Insert active versions for everything in Wrk that lacks a current
     --     active row. Covers NEW (no rows at all) + CHANGED (just closed in
-    --     4a) + RETURNING (only inactive history exists, now back).
+    --     4a) + RETURNING (marker just closed in 4c-prime2, or only inactive
+    --     history exists, now back).
     INSERT INTO DimStaff (
         Email, FirstName, LastName, Title, HomeSchoolID, CanChangeSchool,
         IsDistrictLevel, ActiveFlag, AccessLevel,
@@ -606,6 +635,7 @@ BEGIN
                 CAST(@PersonsClosedChanged    AS VARCHAR(20)), ' versioned (closed) | ',
                 CAST(@PersonsSameDayUpdated   AS VARCHAR(20)), ' same-day in-place | ',
                 CAST(@PersonsSameDayRevived   AS VARCHAR(20)), ' same-day revived | ',
+                CAST(@PersonsReturnClosed     AS VARCHAR(20)), ' return-markers closed | ',
                 CAST(@PersonsInsertedInactive AS VARCHAR(20)), ' deactivated | ',
                 CAST(@PersonsTouched          AS VARCHAR(20)), ' touched | ',
                 CAST(@AccessLevelUpdated      AS VARCHAR(20)), ' access-level updated || ',

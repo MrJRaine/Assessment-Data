@@ -50,7 +50,12 @@ async function buildConfig(): Promise<sql.config> {
   if (!server || !database) {
     throw new Error('FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set')
   }
+  // Timed on its own: cold start measured 1667ms for token + connect together, and which half
+  // dominates decides the remedy (pre-warm the credential vs pre-open a connection). Guessing at
+  // that has gone badly enough today.
+  const tTok = Date.now()
   const token = await getCredential().getToken(SQL_SCOPE)
+  if (TIMING) console.log(`[sql] ${Date.now() - tTok}ms  <entra token>`)
   if (!token?.token) {
     throw new Error('Failed to acquire an Entra access token for Fabric')
   }
@@ -60,6 +65,13 @@ async function buildConfig(): Promise<sql.config> {
     port: 1433,
     options: { encrypt: true, trustServerCertificate: false },
     authentication: { type: 'azure-active-directory-access-token', options: { token: token.token } },
+    // Pool max raised 10 (mssql default) -> 20 deliberately (2026-09-18). The F8 capacity was bought
+    // as a high ceiling so REAL usage runs unrestricted and can be measured for the renewal SKU
+    // decision — a 10-connection pool would queue concurrent teachers in the app, so Fabric would
+    // never see true peak demand and Capacity Metrics would under-report (risking an under-buy).
+    // Keep it high enough not to throttle in-app, low enough not to provoke Fabric-side throttling.
+    // See memory project_capacity_rightsizing_intent.
+    pool: { max: 20 },
   }
 }
 
@@ -77,7 +89,24 @@ let poolPromise: Promise<sql.ConnectionPool> | null = null
  */
 export function getPool(): Promise<sql.ConnectionPool> {
   if (!poolPromise) {
-    poolPromise = buildConfig().then((cfg) => new sql.ConnectionPool(cfg).connect())
+    // Timed SEPARATELY, because this is awaited INSIDE each query's own timer: the first call after
+    // a restart pays Entra token acquisition + TDS connect, and that cost was being reported as the
+    // query's duration. Worse, concurrent callers all await this same promise, so ONE cold start
+    // inflated several unrelated queries at once and made them look individually slow. Now setup
+    // shows up once, as itself.
+    const t0 = Date.now()
+    poolPromise = buildConfig()
+      .then((cfg) => {
+        const tConn = Date.now()
+        return new sql.ConnectionPool(cfg).connect().then((p) => {
+          if (TIMING) console.log(`[sql] ${Date.now() - tConn}ms  <tds connect>`)
+          return p
+        })
+      })
+      .then((p) => {
+        if (TIMING) console.log(`[sql] ${Date.now() - t0}ms  <pool total>`)
+        return p
+      })
     poolPromise.catch(() => {
       poolPromise = null
     })
@@ -125,18 +154,57 @@ async function runOnPool<T>(fn: (pool: sql.ConnectionPool) => Promise<T>): Promi
 }
 
 /** Run a query that takes no per-user filtering (e.g. reference/lookup reads). */
+/**
+ * Per-query timing, on when SQL_TIMING=1 (dev diagnostics only — off in prod, no PII in the label).
+ * A page can issue several queries IN SERIES, so a slow page is not necessarily a slow query; this
+ * prints one line per query so the split between "one expensive query" and "four cheap ones in a
+ * row" is visible in `podman logs` instead of being guessed at.
+ */
+const TIMING = process.env.SQL_TIMING === '1'
+
+/**
+ * Label a statement for the timing log.
+ *
+ * The first object name alone is NOT enough: two unrelated queries can open on the same table and
+ * then average together in the log as if they were one thing. That actually happened — the identity
+ * lookup and the dev impersonation list both read DimStaff, and seeing "DimStaff" stay expensive led
+ * to a wrong conclusion that the identity cache was not holding. So when the leading object repeats,
+ * a second distinguishing object is appended. Object names only — never parameter values.
+ */
+function sqlLabel(text: string): string {
+  // Strip the schema prefix FIRST. Matching `dbo\.|FROM|JOIN` then `(\w+)` captures "dbo" out of
+  // "FROM dbo.AppMaintenance", because \w+ stops at the dot — which is exactly what it did, and
+  // every line in the log came out labelled "dbo".
+  const t = text.replace(/\bdbo\./gi, '')
+  const objs = [...t.matchAll(/(?:FROM|JOIN)\s+([A-Za-z_]\w*)/gi)].map((m) => m[1])
+  if (objs.length === 0) return t.slice(0, 40).replace(/\s+/g, ' ')
+  const head = objs[0]
+  const next = objs.find((o) => o !== head)
+  return next ? `${head}+${next}` : head
+}
+
+async function timed<T>(text: string, fn: () => Promise<T>): Promise<T> {
+  if (!TIMING) return fn()
+  const t0 = Date.now()
+  try {
+    return await fn()
+  } finally {
+    console.log(`[sql] ${Date.now() - t0}ms  ${sqlLabel(text)}`)
+  }
+}
+
 export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  return runOnPool(async (pool) => {
+  return timed(text, () => runOnPool(async (pool) => {
     const request = pool.request()
     for (const [name, value] of Object.entries(params)) {
       request.input(name, value)
     }
     const result = await request.query<T>(text)
     return result.recordset
-  })
+  }))
 }
 
 /**
@@ -152,7 +220,7 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
   text: string,
   params: Record<string, unknown> = {},
 ): Promise<T[]> {
-  return runOnPool(async (pool) => {
+  return timed(text, () => runOnPool(async (pool) => {
     const request = pool.request()
     request.input('UPN', sql.VarChar(256), upn)
     for (const [name, value] of Object.entries(params)) {
@@ -160,7 +228,7 @@ export async function queryAsUser<T extends Record<string, unknown> = Record<str
     }
     const result = await request.query<T>(text)
     return result.recordset
-  })
+  }))
 }
 
 /**

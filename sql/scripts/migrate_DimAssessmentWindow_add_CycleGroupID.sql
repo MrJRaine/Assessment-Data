@@ -17,4 +17,8 @@
  * against the pre-ALTER catalog). The proc/reads that use it deploy after.
  ******************************************************************************/
 
-ALTER TABLE DimAssessmentWindow ADD CycleGroupID VARCHAR(36) NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.DimAssessmentWindow') AND name = 'CycleGroupID')
+BEGIN
+    ALTER TABLE dbo.DimAssessmentWindow ADD CycleGroupID VARCHAR(36) NULL;
+END;
+GO

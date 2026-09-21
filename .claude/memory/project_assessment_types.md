@@ -36,9 +36,12 @@ Rejected the multi-type-per-window design because:
 |---|---|---|
 | `Reading` | `FactAssessmentReading.ReadingScaleID` + `ReadingDelta` | `DimReadingScale` + `DimReadingBenchmark` |
 | `Writing` | `FactAssessmentWriting.IdeasScore` / `OrganizationScore` / `LanguageScore` / `ConventionsScore` (1-4 each) | None — scores stored directly |
-| `Math` | **TBD** — not yet designed | **TBD** — not yet seeded |
+| `Math` | `FactAssessmentMath.Result` (BIT — 1 can-do / 0 cannot, per task) | `DimMathTask` (bilingual task bank) + `DimMathComprehensionBand` — see [[project_math_assessment_model]] |
 
-**Math is post-MVP.** Phase 5+ work. When Math arrives, design decisions needed:
+**Math was PULLED INTO 1.0 (2026-09-02)** — no longer post-MVP. The design decisions
+below are now RESOLVED (task-based binary mastery; `FactAssessmentMath`; bilingual
+`DimMathTask`; single scale, program = display-language only) — see
+[[project_math_assessment_model]]. Historical open-questions list:
 - Scoring instrument (rubric? numeric score? level-based scale?).
 - New fact table `FactAssessmentMath` or extend an existing one.
 - Whether Math gets a `ScaleSystem` value (`'EN_Math'` / `'FR_Math'`) — likely yes if it's level-based, no if it's numeric/rubric.

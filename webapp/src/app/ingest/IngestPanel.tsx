@@ -1,7 +1,15 @@
 'use client'
 
 import { useRef, useState, useTransition } from 'react'
-import { uploadIngestFile, runIngestCycle, type UploadResult, type RunResult } from './actions'
+import {
+  uploadIngestFile,
+  runIngestCycle,
+  scheduleIngestMaintenance,
+  type UploadResult,
+  type RunResult,
+  type NoticeResult,
+} from './actions'
+import { INGEST_NOTICE_MINUTES } from './constants'
 
 const TOPICS: { topic: string; label: string }[] = [
   { topic: 'students', label: 'Students' },
@@ -33,6 +41,17 @@ export default function IngestPanel() {
     const fd = new FormData()
     fd.append('file', file)
     uploadIngestFile(topic, fd).then((res) => setRow(topic, { status: res }))
+  }
+
+  // No countdown here on purpose: this schedules the SAME maintenance window as /admin/maintenance,
+  // so the app-wide banner already shows the time and a live (mm:ss) on every page, this one
+  // included. A second clock beside it would just be another thing to keep in sync.
+  const [notice, setNotice] = useState<NoticeResult | null>(null)
+  const [scheduling, startSchedule] = useTransition()
+
+  function schedule() {
+    setNotice(null)
+    startSchedule(async () => setNotice(await scheduleIngestMaintenance()))
   }
 
   function run() {
@@ -99,6 +118,24 @@ export default function IngestPanel() {
           <input type="checkbox" checked={skipCo} onChange={(e) => setSkipCo(e.target.checked)} />
           Skip co-teachers (no section-teachers file this cycle)
         </label>
+        {/* Step 1 — warn teachers. An ingest moves students between sections, and the save path
+            scope-checks against the roster, so a teacher saving mid-ingest loses the entry to a
+            message that sounds like their fault. The staged banner -> lock -> auto-save flushes
+            their work first. See docs/ingest-runbook.md. */}
+        <div className="actions">
+          <button className="btn-secondary" onClick={schedule} disabled={scheduling || running}>
+            {scheduling ? 'Scheduling…' : `Schedule maintenance (${INGEST_NOTICE_MINUTES} min)`}
+          </button>
+          {notice?.ok ? (
+            <span className="ingest-ok">Scheduled — see the banner for the time and countdown.</span>
+          ) : notice ? (
+            <span className="ingest-err">{notice.error}</span>
+          ) : null}
+        </div>
+
+        {/* Step 2 — the run itself. Deliberately NOT gated on the window: it may have been set by
+            hand or from the Maintenance page, and blocking on state this component cannot see would
+            be worse than letting the admin read the banner and judge. */}
         <div className="actions">
           <button className="btn" onClick={run} disabled={running}>
             {running ? 'Running ingest cycle…' : 'Run ingest cycle'}

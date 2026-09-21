@@ -75,6 +75,9 @@
  *   ISO date format used (YYYY-MM-DD via CONVERT style 23) for portability.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_YearEndCloseOut;
+GO
+
 CREATE PROCEDURE usp_YearEndCloseOut
     @ClosingSchoolYearEnd INT  = NULL,
     @EffectiveDate        DATE = NULL

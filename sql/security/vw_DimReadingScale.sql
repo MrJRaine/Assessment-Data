@@ -16,6 +16,9 @@
  * No RLS — DimReadingScale is global reference data; all callers see all levels.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_DimReadingScale;
+GO
+
 CREATE VIEW vw_DimReadingScale AS
 SELECT
     CAST(ReadingScaleID AS VARCHAR(20)) AS ReadingScaleID,

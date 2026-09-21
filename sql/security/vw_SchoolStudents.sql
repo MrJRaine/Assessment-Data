@@ -45,6 +45,9 @@
  * Connection-identity caveat: same as vw_TeacherStudents header.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_SchoolStudents;
+GO
+
 CREATE VIEW vw_SchoolStudents
 AS
 SELECT

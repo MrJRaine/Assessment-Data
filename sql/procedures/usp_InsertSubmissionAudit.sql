@@ -64,6 +64,9 @@
  *   - All NOT NULL columns on FactSubmissionAudit are required parameters
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_InsertSubmissionAudit;
+GO
+
 CREATE PROCEDURE usp_InsertSubmissionAudit
     @RecordType   VARCHAR(50),
     @Source       VARCHAR(50),
