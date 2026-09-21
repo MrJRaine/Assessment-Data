@@ -56,4 +56,20 @@ cycles" = reproduce the dev instance set per live cycle instead of hand-rebuildi
 J020 (late immersion) has no French reading benchmarks yet, so it reads English — but that too is expressed
 by ProgramScope (J020 is in the Late Immersion bucket), not by hardcoding its program code.
 
+## FUTURE — dual-track reading cleanup (user flagged 2026-09-21; harmless now, fix before dual-track reading)
+Reading is captured per result via `FactAssessmentReading.ReadingScaleID → DimReadingScale.ScaleSystem`
+(EN_Reading/FR_Reading — the scale IS the language) + the instance's `AssessmentWindowID`. BUT the ROSTER
+resolves the scale from the **window** (`COALESCE(window.ScaleSystem, per-student family fallback)`), **not
+from the SECTION's course language.** So a student in BOTH an ELA and an FLA section sees the SAME reading
+scale in both (whatever the window/family gives), even though the group-select page bins them into the
+correct section by course language. Writing already routes by the section's language; reading does not.
+- **Today it's cosmetic** — reading is effectively single-language per student, so the duplicate/same-scale
+  view causes no wrong data.
+- **To make reading dual-track:** route the reading result to the instance matching the SECTION'S course
+  language (the way writing does), so an ELA section → `EN_Reading` and an FLA section → `FR_Reading`, and a
+  student's English and French reading split into the two instances' windows. Reading already has NO grain
+  collision (two windows), so this is roster-routing work, not a fact-schema change.
+- Possible companion (see [[project_math_split_pacing_model]] self-containment ethos): freeze `ScaleSystem`
+  directly on `FactAssessmentReading` for clean export, rather than resolving via ReadingScaleID.
+
 Related: [[project_prelaunch_queue]], [[project_reading_scale_design]].
