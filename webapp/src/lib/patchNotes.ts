@@ -16,42 +16,42 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-21',
     kind: 'feature',
     summary:
       'The “Students” area is now “Reports” — the same cohort view and per-student history, renamed to match what it’s for. Old links to the Students page still work.',
   },
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-17',
     kind: 'feature',
     summary:
       'Writing entry: Conventions can now be marked “Scribed” when someone else physically wrote for the student — scribed conventions are left out of the writing average.',
   },
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-17',
     kind: 'feature',
     summary:
       'The “IPPs” area is now “Programming” — confirm both Individual Program Plans and Adaptations for each student by subject (Reading, Writing, Math), with a colour cue showing how much is left to confirm.',
   },
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-17',
     kind: 'feature',
     summary:
       'Math Short Cycles for Primary–grade 6: record can-do / not-yet for each task, with by-task and by-student summaries.',
   },
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-17',
     kind: 'feature',
     summary:
       'Choosing a class is easier — pick by homeroom, by course section, or by a whole grade, with school and grade filters.',
   },
   {
-    version: '0.5.0-dev',
+    version: '0.5.0',
     date: '2026-09-17',
     kind: 'feature',
     summary:
