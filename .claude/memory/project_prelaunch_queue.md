@@ -22,12 +22,17 @@ with a new Maintenance card) + brand logo links home; the **New Data** re-record
 **reading + writing** (math excluded — task-based, doesn't map); **self-contained facts** (reading +
 writing as-was context, verified on dev — 4 files run, live at deploy).
 
-**STILL GATING THE LIVE DEPLOY:** (a) the **math outcome/opportunity framework** below — UNDECIDED,
-user said its framework must be set before the 0.5.0 live SQL deploy; (b) the **ordered live deploy
-list** — now ~46 + 4 (the self-contained-facts migrations/procs). Plus a dev dry-run of the
-maintenance+ingest procedure. **New Data checkbox UI-tested & verified 2026-09-21 ✅.**
-Also NEW (user 2026-09-21): **upload more math tasks to DimMathTask before 0.5.0 live** — ties into
-the outcome-framework decision below (each task carries an OutcomeCode).
+**DEPLOY STATE 2026-09-21 (late session):** A **server maintenance window** is forcing an accelerated
+deploy — current LIVE has no maintenance mode, so the maintenance-capable container must go out now.
+- (a) **Math outcome/opportunity framework — CLOSED** by the split-pacing + carry-forward design
+  ([[project_math_split_pacing_model]]); user: "that's all the math stuff we just decided on." Met-ever
+  answerable from OutcomeCode + dated facts; OutcomeCode now frozen on the fact. No `DimMathOutcome`/non-null.
+- (b) **Ordered live deploy list** — the USER is giving specific deployment instructions; do NOT assemble
+  it unilaterally. ~46 + 4 (self-contained facts) + up to 4 new math DDL (if included this deploy — user's call).
+- **Math tasks upload — DEFERRED** (no time before the window; not deploy-blocking).
+- **Maintenance/ingest dry-run — can't truly test (no real files).** Plan: deploy anyway, do NOT run on
+  live until proven on dev. Claude to generate **dummy-data ingest files** for a fleshed-out dev sample
+  (better screenshots for instructions/PR + to exercise ingest on dev). New Data checkbox verified ✅.
 
 **NEW pre-deploy design item — math outcomes have SUBSEQUENT OPPORTUNITIES to be met (user 2026-09-21):**
 a student not-yet on an outcome in one cycle gets another chance in a later cycle; the framework for
