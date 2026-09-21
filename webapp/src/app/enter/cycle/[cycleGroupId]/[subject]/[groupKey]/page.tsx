@@ -1,5 +1,6 @@
+import { Suspense } from 'react'
 import Link from 'next/link'
-import { EmptyState, ErrorNote } from '@/components/ui'
+import { EmptyState, ErrorNote, Loading } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import {
   getTeacherGroups,
@@ -47,12 +48,54 @@ function instanceLabel(i: ShortCycleInstance): string {
   return `${scope} · ${band}`
 }
 
+function BackLink({ rawCycle, rawSubject }: { rawCycle: string; rawSubject: string }) {
+  return (
+    <Link href={`/enter/cycle/${rawCycle}/${rawSubject}`} className="back-link">
+      &larr; Back to groups
+    </Link>
+  )
+}
+
+// Shown INSTANTLY on navigation while the roster's warehouse queries run. Keeps the Back link in place
+// (so a teacher can bail mid-load) and gives the click immediate feedback.
+function RosterLoading({ rawCycle, rawSubject }: { rawCycle: string; rawSubject: string }) {
+  return (
+    <>
+      <div className="back-row">
+        <BackLink rawCycle={rawCycle} rawSubject={rawSubject} />
+      </div>
+      <Loading label="Loading roster…" />
+    </>
+  )
+}
+
+// The page renders its shell (the Back link) and a Suspense boundary IMMEDIATELY, then STREAMS the
+// roster in when its queries resolve. These cards are force-dynamic and not prefetched, so loading.tsx
+// doesn't fire on click; an in-page Suspense boundary means the server flushes the shell + the
+// "Loading roster…" fallback right away (fast first byte) instead of holding the whole response until
+// every roster query finishes — so the click never looks dead, and the roster fills in a beat later.
 export default async function RosterGrid({
   params,
 }: {
   params: Promise<{ cycleGroupId: string; subject: string; groupKey: string }>
 }) {
   const { cycleGroupId: rawCycle, subject: rawSubject, groupKey: rawGroupKey } = await params
+  return (
+    <Suspense fallback={<RosterLoading rawCycle={rawCycle} rawSubject={rawSubject} />}>
+      <RosterBody rawCycle={rawCycle} rawSubject={rawSubject} rawGroupKey={rawGroupKey} />
+    </Suspense>
+  )
+}
+
+async function RosterBody({
+  rawCycle,
+  rawSubject,
+  rawGroupKey,
+}: {
+  rawCycle: string
+  rawSubject: string
+  rawGroupKey: string
+}) {
   const cycleGroupId = decodeURIComponent(rawCycle)
   const subject = decodeURIComponent(rawSubject)
   // One segment can carry SEVERAL comma-joined keys — the picker's "enter several at once" mode.
@@ -141,9 +184,7 @@ export default async function RosterGrid({
   return (
     <>
       <div className="back-row">
-        <Link href={`/enter/cycle/${rawCycle}/${rawSubject}`} className="back-link">
-          &larr; Back to groups
-        </Link>
+        <BackLink rawCycle={rawCycle} rawSubject={rawSubject} />
         <span className="group-label">
           {/* A combined roster names every class it covers, so the teacher can see at a glance
               which ones they're marking -- the school is dropped, since it would repeat. */}

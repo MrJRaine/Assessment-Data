@@ -11,6 +11,19 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.5.1] — 2026-09-21
+
+### Fixed
+- **Opening a roster no longer looks like a dead click.** The group cards link to `force-dynamic`
+  pages that are deliberately *not* prefetched (prefetching warmed the warehouse queries on every
+  hover/scroll across ~200 teachers). The catch that shipped with that: without a prefetch, Next
+  doesn't render `loading.tsx` on click, and the roster page `await`ed **every** roster query before
+  returning any markup — so a click hung for a few seconds and then dropped the whole page in at once,
+  training multi-clicks. The roster route now renders its shell (the Back link) + a “Loading roster…”
+  fallback from an in-page `<Suspense>` boundary **immediately** and **streams** the roster in when its
+  queries resolve, so the click gives instant feedback. No warehouse SQL — web-only
+  (`enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx`). Ships as `assessment-webapp:0.5.1`.
+
 ## [0.5.0] — 2026-09-21
 
 Released to live 2026-09-21 (warehouse SQL + `assessment-webapp:0.5.0` container swap). Headline:
