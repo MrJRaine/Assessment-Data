@@ -121,10 +121,12 @@ a { color: inherit; text-decoration: none; }
 /* assessment-type sections on the window-select screen */
 .window-section { margin-top: 1.75rem; }
 .window-section:first-of-type { margin-top: 1rem; }
-/* Home "Admin Tools" section: extra gap ABOVE the heading so it separates from the general cards,
-   and its own cards pulled up UNDER the heading so they read as belonging to it (was floating). */
-.home-admin { margin-top: 3rem; }
-.home-admin .card-grid { margin-top: 0.6rem; }
+/* Home "Admin Tools" section: a big gap ABOVE the heading separates it from the general cards, and
+   its own cards sit tight UNDER the heading so they read as one group (was floating mid-page). The
+   .section-heading's own 0.5rem bottom margin is overridden here too, or "below" never got tight. */
+.home-admin { margin-top: 4.5rem; }
+.home-admin .section-heading { margin-bottom: 0.1rem; }
+.home-admin .card-grid { margin-top: 0.3rem; }
 .section-heading { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--primary); display: inline-block; padding-right: 1.5rem; }
 /* Language heading inside a group picker section (English / French course sections). Deliberately
    lighter than .section-heading so "My classes" still reads as the parent of the language split. */
