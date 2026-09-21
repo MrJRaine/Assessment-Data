@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 2132ef2f-c5ac-4703-9c69-7138263cb7d1
-  modified: 2026-09-18T15:45:49.136Z
+  modified: 2026-09-21T13:33:36.746Z
 ---
 
 When proposing a build plan or stack-rank, do NOT silently park user requirements as "deferred" / "V1.5" / "out of MVP" without explicit user confirmation. This includes cases where the work feels large or where I think I'm being helpful by trimming scope.
@@ -33,6 +33,17 @@ I read as a response *"was actually sent while you were thinking and composing t
 
 A message that removes an OBJECTION is not approval of a DESIGN. If an arriving message does not
 actually address my open question, the question is still open — say so and wait.
+
+**AN UNANSWERED QUESTION IS NOT PERMISSION TO DECIDE** (added 2026-09-21). When I ask the user
+several things and they answer only some, the SILENCE on the rest is not a default-to-my-pick — the
+user is very often tackling ONE ITEM AT A TIME to keep things clear. Waiting is the correct move.
+On 2026-09-21 I asked "codes only, or also the numeric orders?"; the user answered a DIFFERENT
+question (the backfill), said nothing about orders, and I wrote "I'm including the orders unless you
+object" — deciding on their behalf. Their words: *"If I didn't answer a question, did you ever think
+it's because I wanted to tackle one item at a time... that is not permission for you to make a
+fucking decision on my behalf, we have been over this time and fucking time again."* If a question is
+unanswered, it stays open: proceed on what WAS decided, and either ask the open one plainly or wait —
+never fill the gap with my preference, not even a "unless you object" default.
 
 **Worse than either failure alone: I then used the misread fact to OVERRIDE the consent I had
 imagined.** The plan I proposed included a safeguard; I dropped it on the strength of a remark the
