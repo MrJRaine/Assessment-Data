@@ -39,11 +39,19 @@ don't promote or defer an item without asking.
    to change — the bug is purely that the client never SENDS an unchanged row. Verify that before
    touching `usp_Upsert{Reading,Writing,Math}Assessment`.
 
-   **Two open questions, do NOT assume:**
-   - **Math grain.** Reading/writing are one row per student, so one checkbox per student is obvious.
-     Math is a student x task matrix — one checkbox for the whole student, or per cell?
-   - **Label.** "New assessment" collides with [[feedback_avoid_assessment_term]] (keep "assessment"
-     out of user-facing text). The user picks the wording.
+   **DECIDED 2026-09-21:**
+   - **Math grain = ONE checkbox PER STUDENT** (not per cell). Ticking it re-records all of that
+     student's currently-marked task cells as of today (a fresh dated snapshot).
+   - **Label = "New Evidence"** (user's wording; dodges "assessment", matches evidence-of-learning
+     language).
+   - **CONFIRMED CLIENT-ONLY 2026-09-21**: all three procs are grained on
+     (Student × Window × [Task] × AssessmentDate) and INSERT a new row for a new date, UPDATE-in-place
+     for a same-date correction. The warehouse already records an identical-value re-record on a new
+     day; the ONLY bug is that the grids send just `value !== committed` rows. No SQL, no deploy.
+   - **The change**: each row gets a "New Evidence" checkbox that AUTO-ticks on a value change
+     (unchanged behaviour for the common case) and can be ticked by hand to force-send an unchanged
+     value; Save sends every ticked row. Files: `RosterEntry.tsx`, `WritingRosterEntry.tsx`,
+     `MathRosterEntry.tsx`.
 3. **The LIVE deploy itself** — 46 SQL objects, dependency-ordered, schema MIGRATIONS separated from
    idempotent DROP/CREATE. This release is ALSO the fix for the ~6s cold roster measured on live.
 
