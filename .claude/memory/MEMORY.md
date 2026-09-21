@@ -20,6 +20,7 @@
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; user owns scope. ESPECIALLY never hardcode ASSESSMENT-METHODOLOGY rules (which grades/programs/languages assessed how) — build the config knob, let the admin decide.
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
 - [Troubleshooting Method](feedback_troubleshooting_method.md) — gather facts before pinning a cause; one diagnostic at a time; wait for promised results.
+- [Don't Report Back Confirmed Facts](feedback_dont_report_back_confirmed_facts.md) — when the user states a fact, take it as given; verify quietly for the exact reference but don't narrate that their statement was confirmed, and never call it "good news."
 - [Loading States](feedback_loading_states.md) — show a loading indicator through the WHOLE async save→refresh (gate on isPending).
 - [Select all / Clear all Labels](feedback_select_clear_all_labels.md) — EXACT labels "Select all" / "Clear all" app-wide.
 - [Never Silently Omit](feedback_never_silently_omit.md) — UX drives adoption; anything filtered, dropped or unavailable must SAY SO, name who/what is affected, and say what to do. A silent omission is a defect even when the filter is correct.
