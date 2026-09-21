@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import Link from 'next/link'
 import Nav from './Nav'
 import AuthArea from './AuthArea'
 import PostLoginRefresh from './PostLoginRefresh'
@@ -70,12 +71,14 @@ export default async function AppShell({ children }: { children: React.ReactNode
       )}
       <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
       <header className="header">
-        <div className="brand">
+        {/* The brand lockup is the way home — standard convention, and the only home affordance now
+            that the landing page has no nav entry of its own. */}
+        <Link href="/" className="brand" aria-label="Short Cycles of Response — home">
           {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">Short Cycles of Response</span>
-        </div>
+        </Link>
         <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
