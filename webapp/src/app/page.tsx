@@ -35,16 +35,16 @@ export default async function Home() {
       <PageHeader title="Short Cycles of Response" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
-          href="/reports"
-          title="Reports"
-          desc="Browse your students with summary charts, then open any student for their full results history and progress trend."
-          cta="View & analyze"
-        />
-        <CardLink
           href="/enter"
           title="Data Entry"
           desc="Record assessment results for a class during an open cycle. The roster grid lets you enter a whole class at once."
           cta="Enter Data"
+        />
+        <CardLink
+          href="/reports"
+          title="Reports"
+          desc="Browse your students with summary charts, then open any student for their full results history and progress trend."
+          cta="View & analyze"
         />
         <CardLink
           href="/programming"
@@ -52,23 +52,42 @@ export default async function Home() {
           desc="Record each student's Individual Program Plans and Adaptations by subject, so results are interpreted correctly."
           cta="Open Programming"
         />
-        {caps.canManageCycles ? (
-          <CardLink
-            href="/cycles"
-            title="Short Cycles"
-            desc="Create and manage the Short Cycles of Response — the assessment date ranges teachers enter results into. Regional analysts only."
-            cta="Manage cycles"
-          />
-        ) : null}
-        {caps.canRunIngest ? (
-          <CardLink
-            href="/ingest"
-            title="Ingest"
-            desc="Upload the latest PowerSchool exports and run the ingestion cycle. Regional analysts only."
-            cta="Run ingest"
-          />
-        ) : null}
       </div>
+
+      {/* Administration — cycle setup, PowerSchool ingest, and maintenance windows. The whole section
+          (heading included) appears only if the caller holds at least one of these capabilities, so a
+          teacher never sees an admin heading or an empty grid. */}
+      {(caps.canManageCycles || caps.canRunIngest || caps.isSysAdmin) ? (
+        <section className="window-section">
+          <h2 className="section-heading">Administration</h2>
+          <div className="card-grid">
+            {caps.canManageCycles ? (
+              <CardLink
+                href="/cycles"
+                title="Short Cycles"
+                desc="Create and manage the Short Cycles of Response — the date ranges teachers enter results into. Regional analysts only."
+                cta="Manage cycles"
+              />
+            ) : null}
+            {caps.canRunIngest ? (
+              <CardLink
+                href="/ingest"
+                title="Ingest"
+                desc="Upload the latest PowerSchool exports and run the ingestion cycle. Regional analysts only."
+                cta="Run ingest"
+              />
+            ) : null}
+            {caps.isSysAdmin ? (
+              <CardLink
+                href="/admin/maintenance"
+                title="Maintenance"
+                desc="Schedule or clear a maintenance window before a deploy or data refresh — teachers' work is saved before the app pauses. System administrators only."
+                cta="Open maintenance"
+              />
+            ) : null}
+          </div>
+        </section>
+      ) : null}
       {r ? (
         <div className="status-strip muted">
           Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
