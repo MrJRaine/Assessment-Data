@@ -28,4 +28,9 @@ pointing at the CHANGELOG's per-release SQL list.
 **First release under the scheme: v0.3.0** — homeroom `/`-in-name 404 fix (materialized
 `DimStudent.GroupKey`) + small-group roster filter + collapsible school filter. Live warehouse
 SQL deployed and the `/` 404 confirmed cleared on data.tcrce.ca 2026-09-08; container swap to
-`:0.3.0` is the remaining step (IT drops the tar in `C:\temp`). See [[project_assessment_platform]].
+`:0.3.0` is the remaining step.
+
+**DEPLOY ACTOR (do NOT get this wrong again — this line was corrected 2026-09-21 after it stale-repeated
+the old claim): the PROJECT LEAD does the ENTIRE container swap himself over Windows Remote Desktop —
+copies the tar to `C:\temp` on the prod host and runs the swap. IT is NOT in the deploy loop at all.**
+See [[project_assessment_platform]] (§ prod deploy access) and `docs/prod-container-swap.md`.
