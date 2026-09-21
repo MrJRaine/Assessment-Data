@@ -128,7 +128,7 @@ a { color: inherit; text-decoration: none; }
 /* Match the text->line gap to the line->cards gap. line-height:1 is the key — the default 1.5
    adds ~0.27rem of leading BELOW the glyphs, so padding-bottom alone never controlled the visible
    gap (it stayed ~0.5rem while line->cards shrank). With the leading gone, both sides are ~0.3rem. */
-.home-admin .section-heading { line-height: 1; margin-bottom: 0; padding-bottom: 0.3rem; }
+.home-admin .section-heading { line-height: 1.2; margin-bottom: 0; padding-bottom: 0.2rem; }
 .home-admin .card-grid { margin-top: 0.3rem; }
 .section-heading { font-size: 1.1rem; font-weight: 700; color: var(--ink); margin: 0 0 0.5rem; padding-bottom: 0.4rem; border-bottom: 2px solid var(--primary); display: inline-block; padding-right: 1.5rem; }
 /* Language heading inside a group picker section (English / French course sections). Deliberately
