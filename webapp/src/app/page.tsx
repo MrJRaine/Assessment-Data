@@ -24,7 +24,8 @@ export default async function Home() {
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   try {
     const upn = await getCurrentUpn()
-    welcome = `Welcome back, ${friendlyName(upn)}`
+    // First name only for the welcome line (friendlyName gives "Jeffrey Raine" -> "Jeffrey").
+    welcome = `Welcome back, ${friendlyName(upn).split(' ')[0]}`
     caps = await getCallerCapabilities(upn)
   } catch {
     welcome = undefined
