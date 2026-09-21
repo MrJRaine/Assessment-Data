@@ -16,8 +16,27 @@ don't promote or defer an item without asking.
 
 **Monday order:**
 
-1. **Students → Reports rename** *(user: "easy win, put that at the top of the list for Monday")*.
-   Nav + page title + home card. The page is the reporting/cohort view; the name never matched.
+**DONE 2026-09-21:** Students→Reports rename (route `/students`→`/reports` + redirect); home reorg
+(Data Entry/Reports swap + an "Admin Tools" section gated to canManageCycles/canRunIngest/isSysAdmin,
+with a new Maintenance card) + brand logo links home; the **New Data** re-record checkbox on
+**reading + writing** (math excluded — task-based, doesn't map); **self-contained facts** (reading +
+writing as-was context, verified on dev — 4 files run, live at deploy).
+
+**STILL GATING THE LIVE DEPLOY:** (a) the **math outcome/opportunity framework** below — UNDECIDED,
+user said its framework must be set before the 0.5.0 live SQL deploy; (b) the **ordered live deploy
+list** — now ~46 + 4 (the self-contained-facts migrations/procs). Plus a dev dry-run of the
+maintenance+ingest procedure, and a UI check of New Data.
+
+**NEW pre-deploy design item — math outcomes have SUBSEQUENT OPPORTUNITIES to be met (user 2026-09-21):**
+a student not-yet on an outcome in one cycle gets another chance in a later cycle; the framework for
+tracking "same outcome, multiple opportunities, met-ever" must be at least scaffolded before the live
+SQL deploy. Current state: `DimMathTask.OutcomeCode` (nullable string) + `FactAssessmentMath` dated
+history already make "met outcome X in any opportunity this year" ANSWERABLE. Open question (asked,
+NOT yet answered): what schema, if any, is the minimum framework — a `DimMathOutcome` dimension,
+enforce OutcomeCode non-null, a carry-forward hook, or nothing schema-side. RESOLVE before finalizing
+the deploy list.
+
+1. **Students → Reports rename** — ✅ DONE 2026-09-21 (see above).
 2. **Re-record an identical subsequent result.** A teacher must be able to record a NEW dated result
    whose value is IDENTICAL to the student's latest one — a genuine second data point, not a no-op.
    **This is a correctness bug, not a feature**: silently lost data in a tool whose entire purpose is
