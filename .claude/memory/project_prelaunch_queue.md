@@ -167,7 +167,9 @@ early whether it ships with 0.5.0 or immediately after in 0.5.1.
   sections IS its job. Needs its own design pass.
 - The 8 remaining `J020` references in `tvf_TeacherRoster` — fallback scale/IPP-family resolution for
   UNSCOPED cycles, not roster membership. Dead on today's scoped cycles. Same smell, separate call.
-- A Suspense boundary so the roster streams instead of spinner-then-swap. Live evidence suggests a
-  streamed 1–2s reads better than a spinner over the same wait.
+- ✅ DONE (0.5.1, 2026-09-21) — roster now streams via an in-page `<Suspense>`: the shell (Back link) +
+  "Loading roster…" flush immediately, roster streams in. Fixes the "dead click then whole page at once"
+  from the prefetch={false} decision (loading.tsx doesn't fire on non-prefetched dynamic nav). Committed;
+  container `assessment-webapp:0.5.1` built + tar at `C:\Git-Repos\`. PROD SWAP of 0.5.1 pending user.
 - Connection pre-warm / `pool.min` — DEFERRED by the user pending advice on holding connections open.
   Measurements in [[project_perf_qol_backlog]].
