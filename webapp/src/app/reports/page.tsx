@@ -33,12 +33,12 @@ export default async function StudentsPage({
 
   return (
     <>
-      <PageHeader title="Student Data" subtitle="Cohort — filter, view distribution, and drill down to the student level" />
+      <PageHeader title="Reports" subtitle="Cohort — filter, view distribution, and drill down to the student level" />
       <div className="subject-toggle">
-        <Link href="/students" className={!isWriting ? 'toggle-on' : 'toggle'}>
+        <Link href="/reports" className={!isWriting ? 'toggle-on' : 'toggle'}>
           Reading
         </Link>
-        <Link href="/students?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
+        <Link href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
           Writing
         </Link>
       </div>

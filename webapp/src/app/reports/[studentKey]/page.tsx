@@ -53,7 +53,7 @@ export default async function StudentDetailPage({
       <>
         <PageHeader title="Student detail" />
         <p>
-          <Link href="/students" className="back-link">&larr; Back to students</Link>
+          <Link href="/reports" className="back-link">&larr; Back to Reports</Link>
         </p>
         <div className="notice notice-empty">
           <div className="notice-title">Student not in your scope</div>

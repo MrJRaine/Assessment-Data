@@ -63,6 +63,10 @@ makeover**, a redesigned **group picker**, and **maintenance mode**.
   sysadmin `/admin/maintenance` page, and one-click Clear + sign-in on the lockdown screen.
 
 ### Changed
+- **"Students" page renamed to "Reports"** (2026-09-21). Nav label, home-card title, and page header
+  all read **Reports**; the route moved `/students` → `/reports` with a permanent redirect from the
+  old path (bookmarks/embedded links still resolve). Home-card copy reworded off "assessment" per the
+  user-facing wording rule. Same cohort view and per-student history underneath — label/route only.
 - **Data Entry: pick a CYCLE, not an instance.** `/enter` now shows **one card per cycle per subject**
   ("SCoR 1" under Reading, Writing, Math) instead of one card per scoped instance — a cycle with 8
   instances was 8 near-identical "SCoR 1" tiles with nothing to tell them apart. The whole entry flow

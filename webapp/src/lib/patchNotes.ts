@@ -17,6 +17,13 @@ export interface PatchNote {
 export const PATCH_NOTES: PatchNote[] = [
   {
     version: '0.5.0-dev',
+    date: '2026-09-21',
+    kind: 'feature',
+    summary:
+      'The “Students” area is now “Reports” — the same cohort view and per-student history, renamed to match what it’s for. Old links to the Students page still work.',
+  },
+  {
+    version: '0.5.0-dev',
     date: '2026-09-17',
     kind: 'feature',
     summary:

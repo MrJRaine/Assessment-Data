@@ -101,7 +101,7 @@ export default function StudentDetailView({
     setCurrentKey(key)
     // Keep the URL in sync (preserve the subject query) without a Next route navigation.
     const suffix = subject === 'Writing' ? '?subject=writing' : ''
-    window.history.replaceState(null, '', `/students/${key}${suffix}`)
+    window.history.replaceState(null, '', `/reports/${key}${suffix}`)
   }
 
   if (!current) return null
@@ -127,7 +127,7 @@ export default function StudentDetailView({
     <>
       <PageHeader title={current.fullName} />
       <div className="detail-nav">
-        <Link href={`/students${isWriting ? '?subject=writing' : ''}`} className="back-link">&larr; Back to students</Link>
+        <Link href={`/reports${isWriting ? '?subject=writing' : ''}`} className="back-link">&larr; Back to Reports</Link>
         <span className="detail-counter muted">Student {idx + 1} of {navList.length}</span>
         <span className="detail-paging">
           <button className="btn-ghost" disabled={!prev} onClick={() => prev && go(prev.studentKey)}>&larr; Prev</button>
@@ -136,8 +136,8 @@ export default function StudentDetailView({
       </div>
 
       <div className="subject-toggle">
-        <Link href={`/students/${currentKey}`} className={!isWriting ? 'toggle-on' : ''}>Reading</Link>
-        <Link href={`/students/${currentKey}?subject=writing`} className={isWriting ? 'toggle-on' : ''}>Writing</Link>
+        <Link href={`/reports/${currentKey}`} className={!isWriting ? 'toggle-on' : ''}>Reading</Link>
+        <Link href={`/reports/${currentKey}?subject=writing`} className={isWriting ? 'toggle-on' : ''}>Writing</Link>
       </div>
 
       <div className="meta-strip">{meta.join('   ·   ')}</div>

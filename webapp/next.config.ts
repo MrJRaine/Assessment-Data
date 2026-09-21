@@ -36,6 +36,17 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  // The Student Data page was renamed to "Reports" and its route moved /students -> /reports
+  // (2026-09-21). Keep the old path working so existing bookmarks / any Teams-embedded links don't
+  // 404. permanent:true (308) preserves the request method and tells browsers/crawlers it's final.
+  // These run BEFORE middleware, so an unauthenticated hit on /students redirects to /reports and
+  // is then auth-gated there.
+  async redirects() {
+    return [
+      { source: '/students', destination: '/reports', permanent: true },
+      { source: '/students/:path*', destination: '/reports/:path*', permanent: true },
+    ]
+  },
 }
 
 export default nextConfig

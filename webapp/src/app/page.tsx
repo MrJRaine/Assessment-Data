@@ -35,9 +35,9 @@ export default async function Home() {
       <PageHeader title="Short Cycles of Response" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
-          href="/students"
-          title="Student Data"
-          desc="Browse your students with summary charts, then open any student for their full assessment history and progress trend."
+          href="/reports"
+          title="Reports"
+          desc="Browse your students with summary charts, then open any student for their full results history and progress trend."
           cta="View & analyze"
         />
         <CardLink
