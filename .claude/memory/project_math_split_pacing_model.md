@@ -13,14 +13,12 @@ the **homeroom composition**: a grade-2 task is tackled in SCoR 2 for a straight
 until SCoR 3 in a 2/3 split. PowerSchool carries NO split-grade flag — the only signal is the set of
 grades present in the homeroom section.
 
-**Pacing is authored in WEEKS of the school year** (user 2026-09-21); we translate week → month → SCoR to
-line tasks up with the cycle benchmark. So the *source* grain is the school-year week; month and SCoR are
-both downstream derivations via the calendar. SCoR is always derived — do NOT store placement as a SCoR
-slot. OPEN storage-grain decision (see below): store the WEEK (source-faithful/self-contained, derive
-month & SCoR at read time via DimCalendar/window) vs keep translating to a stored MONTH (simpler, but
-lossy/baked-in). Leaning store-the-week per the user's self-containment preference (cf. the self-contained
-FactAssessment rows work). If we store week, the resolution below becomes effectiveWeek → window rather
-than effectiveMonth → dominant month.
+**Placement grain = MONTH. Established, confirmed design — NOT under discussion.** Tasks are binned by
+month (`DimMathTask.AssessmentMonth`) to coincide with the benchmark; SCoR is derived by matching that
+month to the cycle's dominant month. Pacing guides are *authored* in school-year weeks and translated to
+month to match the benchmark — that translation is the EXISTING design, not a reason to re-store by week.
+(Claude wrongly proposed storing weeks 2026-09-21; user corrected it — month binning is settled fact and
+matches the current schema.) SCoR is always derived; never store placement as a SCoR slot.
 
 **Multiple units per SCoR** (confirmed against the user's SCoR-1 sheet). Two distinct display sorts,
 verified in MathRosterEntry.tsx: **`UnitOrder`** orders the UNITS within the SCoR window
@@ -58,9 +56,6 @@ task in its default cycle or an exception cycle — an exception changes *which 
 *which task it is*.
 
 **OPEN (not yet decided):**
-- **Placement storage grain — WEEK vs MONTH.** Guides authored in school-year weeks; store the week
-  (source-faithful, derive month/SCoR via calendar) or keep translating to a stored month (simpler,
-  lossy). Leaning week. Whichever we pick, the exception override is the SAME grain.
 - **`TaskCode`** — a stable, immutable business code carried on the seed sheet so a sheet RELOAD matches by
   it, not by the mutable composite `(grade,month,unit,question)` the loader uses today. Protects reload once
   the GUI can edit attributes. Cheap to add now; user has NOT decided add-now vs defer-to-GUI.
