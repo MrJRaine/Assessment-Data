@@ -64,6 +64,9 @@
  *   endpoint connection setup).
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_TeacherStudents;
+GO
+
 CREATE VIEW vw_TeacherStudents
 AS
 SELECT
@@ -156,6 +159,9 @@ GO
  * Connection-identity caveat: same as vw_TeacherStudents header.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_SchoolStudents;
+GO
+
 CREATE VIEW vw_SchoolStudents
 AS
 SELECT
@@ -226,6 +232,9 @@ GO
  *
  * Connection-identity caveat: same as vw_TeacherStudents header.
  ******************************************************************************/
+
+DROP VIEW IF EXISTS vw_RegionalData;
+GO
 
 CREATE VIEW vw_RegionalData
 AS
@@ -320,6 +329,9 @@ GO
  *   - "Today" is computed in Atlantic time per the project time-zone
  *     convention (project_timezone_convention memory).
  ******************************************************************************/
+
+DROP VIEW IF EXISTS vw_UserAssessmentWindows;
+GO
 
 CREATE VIEW vw_UserAssessmentWindows AS
 WITH AtlanticToday AS (
@@ -522,6 +534,9 @@ GO
  *     be assessed anyway.
  *   - Identity / time zone: same conventions as vw_UserAssessmentWindows.
  ******************************************************************************/
+
+DROP VIEW IF EXISTS vw_TeacherGroups;
+GO
 
 CREATE VIEW vw_TeacherGroups AS
 WITH AtlanticToday AS (
@@ -750,6 +765,9 @@ GO
  * Identity / time zone: same conventions as vw_UserAssessmentWindows /
  * vw_TeacherGroups.
  ******************************************************************************/
+
+DROP VIEW IF EXISTS vw_TeacherRoster;
+GO
 
 CREATE VIEW vw_TeacherRoster AS
 WITH AtlanticToday AS (
@@ -1534,6 +1552,9 @@ GO
  * See project_powerapps_bigint_precision memory for the full pattern.
  * No RLS — DimReadingScale is global reference data; all callers see all levels.
  ******************************************************************************/
+
+DROP VIEW IF EXISTS vw_DimReadingScale;
+GO
 
 CREATE VIEW vw_DimReadingScale AS
 SELECT

@@ -37,6 +37,9 @@
  * vw_TeacherGroups.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_TeacherRoster;
+GO
+
 CREATE VIEW vw_TeacherRoster AS
 WITH AtlanticToday AS (
     SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today

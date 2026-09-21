@@ -36,6 +36,9 @@
  * Connection-identity caveat: same as vw_TeacherStudents header.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_RegionalData;
+GO
+
 CREATE VIEW vw_RegionalData
 AS
 SELECT

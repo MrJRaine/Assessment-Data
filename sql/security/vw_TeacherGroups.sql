@@ -62,6 +62,9 @@
  *   - Identity / time zone: same conventions as vw_UserAssessmentWindows.
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_TeacherGroups;
+GO
+
 CREATE VIEW vw_TeacherGroups AS
 WITH AtlanticToday AS (
     SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today

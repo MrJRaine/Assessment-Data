@@ -55,6 +55,9 @@
  *     convention (project_timezone_convention memory).
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_UserAssessmentWindows;
+GO
+
 CREATE VIEW vw_UserAssessmentWindows AS
 WITH AtlanticToday AS (
     SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today

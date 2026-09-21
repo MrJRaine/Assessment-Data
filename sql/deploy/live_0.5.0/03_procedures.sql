@@ -3332,6 +3332,9 @@ GO
  *   it after any operation that resets IDENTITY values on a dim table.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_RunFullIngestCycle;
+GO
+
 CREATE PROCEDURE usp_RunFullIngestCycle
     @EffectiveDate    DATE = NULL,
     @SkipCoTeachers   BIT  = 0
@@ -3592,6 +3595,9 @@ GO
  *   Semester 2 (TermCode 2): June 30 of SchoolYearEnd
  *   ISO date format used (YYYY-MM-DD via CONVERT style 23) for portability.
  ******************************************************************************/
+
+DROP PROCEDURE IF EXISTS usp_YearEndCloseOut;
+GO
 
 CREATE PROCEDURE usp_YearEndCloseOut
     @ClosingSchoolYearEnd INT  = NULL,
@@ -3904,6 +3910,9 @@ GO
  *     fabric-warehouse-sql skill item 15)
  *   - All NOT NULL columns on FactSubmissionAudit are required parameters
  ******************************************************************************/
+
+DROP PROCEDURE IF EXISTS usp_InsertSubmissionAudit;
+GO
 
 CREATE PROCEDURE usp_InsertSubmissionAudit
     @RecordType   VARCHAR(50),

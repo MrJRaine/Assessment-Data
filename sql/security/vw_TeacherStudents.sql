@@ -57,6 +57,9 @@
  *   endpoint connection setup).
  ******************************************************************************/
 
+DROP VIEW IF EXISTS vw_TeacherStudents;
+GO
+
 CREATE VIEW vw_TeacherStudents
 AS
 SELECT
