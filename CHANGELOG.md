@@ -19,12 +19,11 @@ already deployed to live as it was fixed (noted per item); the container ships a
 `assessment-webapp:0.6.0`.
 
 ### Changed
-- **App renamed to “The SCoR Hub.”** Header lockup, home page header, browser tab title, and the
-  maintenance overlay now read *The SCoR Hub*. The `/cycles` feature — the *Short Cycles of Response* —
-  keeps its name; only the **app** was renamed. Web-only (`AppShell.tsx`, `page.tsx`, `layout.tsx`,
+- App name → **The SCoR Hub** (header, home header, tab title, maintenance overlay). `/cycles` — the
+  Short Cycles of Response — keeps its name. Web-only (`AppShell.tsx`, `page.tsx`, `layout.tsx`,
   `maintenance/MaintenanceProvider.tsx`).
-- **Programming loading text** no longer says “Loading IPP cells” — the grid covers IPP **and**
-  Adaptations, so it now reads “Loading cells…”. Web-only (`programming/loading.tsx`).
+- Programming loading text “Loading IPP cells” → “Loading cells…” (grid covers IPP + Adaptations).
+  Web-only (`programming/loading.tsx`).
 
 ### Added
 - **French answer key in Math Short Cycles.** For a French-Immersion section, the answer key now
