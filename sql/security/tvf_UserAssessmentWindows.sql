@@ -13,6 +13,13 @@
  *          filtered on, so an English-scope and an Early-Immersion-scope instance both counted the
  *          SAME students and the collapsed card's total came out double), and course-scoped the
  *          teacher branch to agree with the course-scoped group picker.
+ *          2026-09-22 — COURSE-SCOPED the ADMIN + ANALYST branches too (2026-09-18 did only the
+ *          teacher branch). They counted straight off DimStudent by grade+scope, so an oversight
+ *          user's /enter card overcounted (students with no literacy section) and mis-read as
+ *          English-only. Now they resolve through mapped-course sections, language-matched to the
+ *          instance, exactly like tvf_TeacherGroups — the card equals the sum of the group cards for
+ *          every role. Also changed EnteredStudentCount to "a result on ANY instance of the cycle"
+ *          (CycleEntered) so a result on a sibling-language window still counts (matches the picker).
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an inline TVF (not a proc): reads should be QUERYABLE -- the app does
@@ -94,14 +101,29 @@ RETURN
           AND (wed.ProgramScope IS NULL
                OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
+    -- Oversight (Admin/SpecialistTeacher) — COURSE-SCOPED like the teacher branch: only students in
+    -- MAPPED-COURSE sections (ELA/FLA/Math) in their school(s), language-matched to the instance. The
+    -- old version counted straight off DimStudent by grade+scope, which overcounted students with no
+    -- literacy section and mis-split immersion by language (the /enter card disagreed with the group
+    -- picker for oversight users). Mirrors tvf_TeacherGroups' Oversight-Admin path.
     AdminStudents AS (
         SELECT wed.AssessmentWindowID, s.StudentKey
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
-        INNER JOIN DimStudent s
-                ON s.SchoolID = ssa.SchoolID
-               AND wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimSection sec
+                ON sec.SchoolID = ssa.SchoolID
+               AND wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+               AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+                 OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+               AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
+        INNER JOIN FactEnrollment e
+                ON e.SectionKey  = sec.SectionKey
+               AND e.StartDate  <= wed.EndDate
+               AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -112,12 +134,24 @@ RETURN
           AND (wed.ProgramScope IS NULL
                OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
+    -- Oversight (RegionalAnalyst) — COURSE-SCOPED, region-wide: every mapped-course section, same
+    -- language/kind match. Mirrors tvf_TeacherGroups' Oversight-Analyst path.
     AnalystStudents AS (
         SELECT wed.AssessmentWindowID, s.StudentKey
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN DimStudent s
-                ON wed.EffectiveDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimSection sec
+                ON wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+        INNER JOIN DimCourseAssessment ca
+                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
+               AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
+                 OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
+               AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
+        INNER JOIN FactEnrollment e
+                ON e.SectionKey  = sec.SectionKey
+               AND e.StartDate  <= wed.EndDate
+               AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
@@ -132,6 +166,21 @@ RETURN
         SELECT * FROM TeacherStudents
         UNION ALL SELECT * FROM AdminStudents
         UNION ALL SELECT * FROM AnalystStudents
+    ),
+    -- "Entered" = a result on ANY instance of the same cycle+subject, not just this one window. A
+    -- student's result can sit on a sibling-language instance (e.g. immersion reading entered on the
+    -- English window before the French instance existed); the collapsed /enter card and the group
+    -- picker both treat that as entered, so this must too. Keyed by CycleGroupID + AssessmentType.
+    CycleEntered AS (
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        FROM DimAssessmentWindow w2
+        INNER JOIN FactAssessmentReading f ON f.AssessmentWindowID = w2.AssessmentWindowID
+        WHERE w2.AssessmentType = 'Reading' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
+        UNION
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        FROM DimAssessmentWindow w2
+        INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = w2.AssessmentWindowID
+        WHERE w2.AssessmentType = 'Writing' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
     )
     SELECT
         CAST(wed.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
@@ -150,24 +199,23 @@ RETURN
         wed.CycleName,      -- header name for that collapsed card (instance names differ per scope)
         wed.WindowStatus,
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
-        -- "Entered" counts the fact matching the window's TYPE (Reading vs Writing), so a writing
-        -- window reflects writing entries (it used to only count FactAssessmentReading -> always 0).
-        COUNT(DISTINCT CASE
-            WHEN wed.AssessmentType = 'Reading' AND far.ReadingAssessmentID IS NOT NULL THEN a.StudentKey
-            WHEN wed.AssessmentType = 'Writing' AND faw.WritingAssessmentID IS NOT NULL THEN a.StudentKey
-        END) AS EnteredStudentCount
+        -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
+        -- so a result on a sibling-language instance still counts and the card matches the group picker.
+        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
-    LEFT JOIN FactAssessmentReading far
-           ON far.AssessmentWindowID = wed.AssessmentWindowID
-          AND far.StudentKey         = a.StudentKey
-    LEFT JOIN FactAssessmentWriting faw
-           ON faw.AssessmentWindowID = wed.AssessmentWindowID
-          AND faw.StudentKey         = a.StudentKey
+    LEFT JOIN CycleEntered ce
+           ON ce.CycleGroupID   = wed.CycleGroupID
+          AND ce.AssessmentType = wed.AssessmentType
+          AND ce.StudentKey     = a.StudentKey
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
         wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.CycleGroupID, wed.CycleName,
         wed.WindowStatus
 );
+GO
+
+-- Re-grant here so a standalone redeploy (DROP+CREATE) never leaves the web-app SP without SELECT.
+GRANT SELECT ON [dbo].[tvf_UserAssessmentWindows] TO [StudentDataAssessment];
 GO
