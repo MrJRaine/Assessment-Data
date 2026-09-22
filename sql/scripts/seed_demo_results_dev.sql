@@ -6,7 +6,7 @@
  *          (Reading + Writing + Math, half of each class).
  *
  *          Values are drawn on a BELL CURVE (approx-normal via an Irwin-Hall sum
- *          of 4 uniforms, std ~0.577) around a per-subject expected TARGET:
+ *          of 3 uniforms, std ~0.5) around a per-subject expected TARGET:
  *            - Reading : centre = the DECIMAL AVERAGE of the grade/month benchmark
  *                        ExpectedMin & ExpectedMax level-orders, + offset, then
  *                        ROUND-HALF-TO-EVEN, clamped to the scale. ReadingDelta is
@@ -16,6 +16,12 @@
  *            - Math    : a per-student mastery RATE centred on 0.65, + offset,
  *                        clamped; each task then marked 1 with that probability, so a
  *                        class averages ~65% while individual students spread.
+ *
+ *          RANDOMNESS is SEEDED per student via HASHBYTES(StudentKey + salt), NOT
+ *          NEWID(). Fabric hoists a NEWID() CROSS APPLY to a single per-query value
+ *          (which flattened every student in a class to the same level); a hash of
+ *          a per-row column can't be folded, so it varies per student AND is
+ *          reproducible on re-run. Different salts give independent draws.
  *
  *          JUNE uses each student's grade MINUS 1 (a current Gr-4 was Gr-3 last June)
  *          and month 6; current GRADE P is EXCLUDED from June (not enrolled then).
@@ -29,12 +35,19 @@
  *          FactAssessmentWriting, FactAssessmentMath.
  *
  * SAFE:    DEV-ONLY (aborts if DB_NAME() is not the _Dev warehouse). IDEMPOTENT:
- *          June facts are delete+reinsert on the June windows (only this script
- *          writes there); SC1 facts are additive via NOT EXISTS, so re-running adds
- *          nothing and NEVER overwrites a teacher's real entry. Seeded rows are
- *          stamped with a single seed StaffKey.
+ *          a re-run first DELETES this script's own prior rows (matched by the seed
+ *          StaffKey) across the June + SC1 cycles, then regenerates them — so fixing
+ *          the values and re-running fully refreshes them. Real teacher entries (any
+ *          OTHER StaffKey) are never touched, and SC1 inserts still skip a student who
+ *          already has a real entry. Seeded values are reproducible per student.
  *
  * Created: 2026-09-22 · Region: Canada East (PIIDPA compliant) · SYNTHETIC dev data only.
+ *
+ * ---- Per-row bell draw, keyed by a hash so it varies per student ----
+ * One HASHBYTES('SHA2_256', <key>+<salt>) yields 32 bytes; three disjoint 8-byte
+ * windows give three uniforms in [0,1); their sum minus 1.5 is ~N(0, 0.5^2). The hash
+ * is computed once per row in a CROSS APPLY hb(h); the sum is re-derived from hb.h
+ * (same bytes => same value each time it's referenced).
  ******************************************************************************/
 
 ------------------------------------------------------------------------------
@@ -60,11 +73,9 @@ FROM dbo.DimShortCycle
 WHERE ActiveFlag = 1
 ORDER BY StartDate ASC, CycleGroupID;
 
--- A date inside the SC1 window for the SC1 AssessmentDate.
 SELECT @SC1Date = DATEADD(DAY, 3, StartDate)
 FROM dbo.DimShortCycle WHERE CycleGroupID = @SC1CGID;
 
--- One staff key to stamp seeded rows (prefer a RegionalAnalyst; else any current staff).
 SELECT TOP 1 @SeedStaff = StaffKey
 FROM dbo.DimStaff
 WHERE IsCurrent = 1 AND ActiveFlag = 1
@@ -75,10 +86,10 @@ BEGIN
     ;THROW 50001, 'Could not resolve SC1 cycle or a seed staff key — is dev seeded with a Short Cycle and staff?', 1;
 END;
 
--- Spread factors: Irwin-Hall(4) has std ~0.577, so multiply to reach the target sigma.
-DECLARE @ReadSpread  DECIMAL(9,4) = 2.60;  -- ~1.5 reading levels
-DECLARE @WriteSpread DECIMAL(9,4) = 1.55;  -- ~0.9 achievement points
-DECLARE @MathSpread  DECIMAL(9,4) = 0.26;  -- ~0.15 mastery rate
+-- Spread factors: Irwin-Hall(3) has std ~0.5, so multiply to reach the target sigma.
+DECLARE @ReadSpread  DECIMAL(9,4) = 3.00;  -- ~1.5 reading levels
+DECLARE @WriteSpread DECIMAL(9,4) = 1.80;  -- ~0.9 achievement points
+DECLARE @MathSpread  DECIMAL(9,4) = 0.30;  -- ~0.15 mastery rate
 
 ------------------------------------------------------------------------------
 -- 2. Create the prior-year "June 2026" SCoR by COPYING SC1's Reading + Writing
@@ -97,7 +108,7 @@ INSERT INTO dbo.DimAssessmentWindow
 SELECT
     'June 2026 (prior year)', w.AssessmentType, '2025-2026', '2026-06-01', '2026-06-30',
     w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.ScaleSystem, w.AssessmentLanguage,
-    CASE WHEN w.AssessmentType = 'Reading' THEN 6 ELSE NULL END,   -- June benchmark month for reading
+    CASE WHEN w.AssessmentType = 'Reading' THEN 6 ELSE NULL END,
     @JuneCGID, 1, GETDATE(), 'seed_demo_results_dev', GETDATE()
 FROM dbo.DimAssessmentWindow w
 WHERE w.CycleGroupID = @SC1CGID
@@ -112,14 +123,25 @@ WHERE w.CycleGroupID = @SC1CGID
   );
 
 -- ============================================================================
--- 3a. READING — JUNE (grade-1 rollback, month 6, grade P excluded)
---     z = Irwin-Hall(4) - 2.0  (mean 0, std ~0.577); centre = decimal benchmark avg.
+-- 3. Idempotent re-seed: remove ONLY previously-seeded rows (this seed StaffKey)
+--    across the June + SC1 cycles so a re-run fully regenerates them. Real teacher
+--    entries (any OTHER StaffKey) are left untouched.
 -- ============================================================================
-DELETE fr
-FROM dbo.FactAssessmentReading fr
-JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = fr.AssessmentWindowID
-WHERE w.CycleGroupID = @JuneCGID;
+DELETE f FROM dbo.FactAssessmentReading f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
 
+DELETE f FROM dbo.FactAssessmentWriting f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
+
+DELETE f FROM dbo.FactAssessmentMath f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
+
+-- ============================================================================
+-- 3a. READING — JUNE (grade-1 rollback, month 6, grade P excluded)
+-- ============================================================================
 ;WITH RB AS (
     SELECT b.ScaleSystem, b.GradeCode, b.AssessmentMonth,
            b.ExpectedMinLevel, b.ExpectedMaxLevel,
@@ -143,7 +165,7 @@ SELECT
 FROM dbo.DimStudent s
 JOIN dbo.DimProgram p  ON p.ProgramCode = s.ProgramCode
 JOIN dbo.DimGrade  cg  ON cg.GradeCode = s.Grade
-JOIN dbo.DimGrade  pg  ON pg.GradeOrder = cg.GradeOrder - 1               -- rolled-back grade (no prev for P)
+JOIN dbo.DimGrade  pg  ON pg.GradeOrder = cg.GradeOrder - 1
 JOIN dbo.DimAssessmentWindow w
       ON w.CycleGroupID = @JuneCGID AND w.AssessmentType = 'Reading'
      AND (',' + w.ProgramScope + ',') LIKE ('%,' + p.ScopeBucket + ',%')
@@ -151,9 +173,10 @@ JOIN dbo.DimGrade wmin ON wmin.GradeCode = w.MinGrade
 JOIN dbo.DimGrade wmax ON wmax.GradeCode = w.MaxGrade
 JOIN RB rb ON rb.ScaleSystem = w.ScaleSystem AND rb.GradeCode = pg.GradeCode AND rb.AssessmentMonth = 6
 JOIN SM sm ON sm.ScaleSystem = w.ScaleSystem
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)
-                    +((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) g(z)
-CROSS APPLY (VALUES ( rb.AvgOrd + g.z * @ReadSpread )) r(raw)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), s.StudentKey) + 'rjun') )) hb(h)
+CROSS APPLY (VALUES ( rb.AvgOrd + ( (((CONVERT(BIGINT,SUBSTRING(hb.h,1,8))%100000)+100000)%100000)/100000.0
+                                  + (((CONVERT(BIGINT,SUBSTRING(hb.h,9,8))%100000)+100000)%100000)/100000.0
+                                  + (((CONVERT(BIGINT,SUBSTRING(hb.h,17,8))%100000)+100000)%100000)/100000.0 - 1.5 ) * @ReadSpread )) r(raw)
 CROSS APPLY (VALUES ( FLOOR(r.raw) )) f(n0)
 CROSS APPLY (VALUES ( CASE WHEN r.raw - f.n0 < 0.5 THEN f.n0
                            WHEN r.raw - f.n0 > 0.5 THEN f.n0 + 1
@@ -204,9 +227,10 @@ JOIN dbo.DimGrade wmax ON wmax.GradeCode = w.MaxGrade
 JOIN RB rb ON rb.ScaleSystem = w.ScaleSystem AND rb.GradeCode = h.Grade
           AND rb.AssessmentMonth = COALESCE(w.BenchmarkMonth, MONTH(w.StartDate))
 JOIN SM sm ON sm.ScaleSystem = w.ScaleSystem
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)
-                    +((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) g(z)
-CROSS APPLY (VALUES ( rb.AvgOrd + g.z * @ReadSpread )) r(raw)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'rsc1') )) hb(h2)
+CROSS APPLY (VALUES ( rb.AvgOrd + ( (((CONVERT(BIGINT,SUBSTRING(hb.h2,1,8))%100000)+100000)%100000)/100000.0
+                                  + (((CONVERT(BIGINT,SUBSTRING(hb.h2,9,8))%100000)+100000)%100000)/100000.0
+                                  + (((CONVERT(BIGINT,SUBSTRING(hb.h2,17,8))%100000)+100000)%100000)/100000.0 - 1.5 ) * @ReadSpread )) r(raw)
 CROSS APPLY (VALUES ( FLOOR(r.raw) )) f(n0)
 CROSS APPLY (VALUES ( CASE WHEN r.raw - f.n0 < 0.5 THEN f.n0
                            WHEN r.raw - f.n0 > 0.5 THEN f.n0 + 1
@@ -219,14 +243,9 @@ WHERE h.HalfBucket = 1
                   WHERE fr.StudentKey = h.StudentKey AND fr.AssessmentWindowID = w.AssessmentWindowID);
 
 -- ============================================================================
--- 3c. WRITING — JUNE (grade P excluded). Each trait = ONE bell draw around level 2,
---     clamped 1..4. One row per writing instance => per-language grain falls out.
+-- 3c. WRITING — JUNE (grade P excluded), then SC1 (half). Each trait = one seeded
+--     bell draw around level 2, clamped 1..4. One row per writing instance.
 -- ============================================================================
-DELETE fw
-FROM dbo.FactAssessmentWriting fw
-JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = fw.AssessmentWindowID
-WHERE w.CycleGroupID = @JuneCGID;
-
 INSERT INTO dbo.FactAssessmentWriting
     (StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
      LanguageScore, ConventionsScore, WritingAverage, AssessmentDate, EnteredByStaffKey,
@@ -244,14 +263,14 @@ JOIN dbo.DimAssessmentWindow w
      AND (',' + w.ProgramScope + ',') LIKE ('%,' + p.ScopeBucket + ',%')
 JOIN dbo.DimGrade wmin ON wmin.GradeCode = w.MinGrade
 JOIN dbo.DimGrade wmax ON wmax.GradeCode = w.MaxGrade
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zi(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zi.z*@WriteSpread < 1 THEN 1 WHEN 2 + zi.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zi.z*@WriteSpread, 0) END) )) ti(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zo(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zo.z*@WriteSpread < 1 THEN 1 WHEN 2 + zo.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zo.z*@WriteSpread, 0) END) )) torg(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zl(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zl.z*@WriteSpread < 1 THEN 1 WHEN 2 + zl.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zl.z*@WriteSpread, 0) END) )) tl(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zc(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zc.z*@WriteSpread < 1 THEN 1 WHEN 2 + zc.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zc.z*@WriteSpread, 0) END) )) tc(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), s.StudentKey) + 'wji') )) hi(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) ti(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), s.StudentKey) + 'wjo') )) ho(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) torg(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), s.StudentKey) + 'wjl') )) hl(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) tl(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), s.StudentKey) + 'wjc') )) hc(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) tc(v)
 WHERE s.IsCurrent = 1 AND s.Grade <> 'P'
   AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder;
 
@@ -280,14 +299,14 @@ JOIN dbo.DimAssessmentWindow w
      AND (',' + w.ProgramScope + ',') LIKE ('%,' + p.ScopeBucket + ',%')
 JOIN dbo.DimGrade wmin ON wmin.GradeCode = w.MinGrade
 JOIN dbo.DimGrade wmax ON wmax.GradeCode = w.MaxGrade
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zi(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zi.z*@WriteSpread < 1 THEN 1 WHEN 2 + zi.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zi.z*@WriteSpread, 0) END) )) ti(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zo(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zo.z*@WriteSpread < 1 THEN 1 WHEN 2 + zo.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zo.z*@WriteSpread, 0) END) )) torg(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zl(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zl.z*@WriteSpread < 1 THEN 1 WHEN 2 + zl.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zl.z*@WriteSpread, 0) END) )) tl(v)
-CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zc(z)
-CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zc.z*@WriteSpread < 1 THEN 1 WHEN 2 + zc.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zc.z*@WriteSpread, 0) END) )) tc(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'wsi') )) hi(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hi.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hi.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) ti(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'wso') )) ho(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(ho.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(ho.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) torg(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'wsl') )) hl(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hl.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hl.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) tl(v)
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'wsc') )) hc(h)
+CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread < 1 THEN 1 WHEN 2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + ((((CONVERT(BIGINT,SUBSTRING(hc.h,1,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,9,8))%100000)+100000)%100000)/100000.0+(((CONVERT(BIGINT,SUBSTRING(hc.h,17,8))%100000)+100000)%100000)/100000.0-1.5)*@WriteSpread, 0) END) )) tc(v)
 WHERE h.HalfBucket = 1
   AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
   AND NOT EXISTS (SELECT 1 FROM dbo.FactAssessmentWriting fw
@@ -296,7 +315,8 @@ WHERE h.HalfBucket = 1
 
 -- ============================================================================
 -- 3d. MATH — SHORT CYCLE 1 ONLY (half of each homeroom). Per-student mastery rate
---     ~N(0.65), then each task Bernoulli(rate) => class ~65%, students spread.
+--     ~N(0.65) seeded by StudentKey; each task then 1 with prob = rate, seeded by
+--     (StudentKey, MathTaskKey) so a student's per-task pattern varies but is stable.
 -- ============================================================================
 ;WITH Half AS (
     SELECT s.StudentKey, s.Grade, s.ProgramCode,
@@ -316,8 +336,10 @@ MStud AS (
     JOIN dbo.DimGrade wmin ON wmin.GradeCode = w.MinGrade
     JOIN dbo.DimGrade wmax ON wmax.GradeCode = w.MaxGrade
     JOIN dbo.DimGrade cg   ON cg.GradeCode = h.Grade
-    CROSS APPLY (VALUES ( 0.65 + (((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)
-                                 +((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0) * @MathSpread )) rate(v)
+    CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), h.StudentKey) + 'mrate') )) hb(h)
+    CROSS APPLY (VALUES ( 0.65 + ( (((CONVERT(BIGINT,SUBSTRING(hb.h,1,8))%100000)+100000)%100000)/100000.0
+                                 + (((CONVERT(BIGINT,SUBSTRING(hb.h,9,8))%100000)+100000)%100000)/100000.0
+                                 + (((CONVERT(BIGINT,SUBSTRING(hb.h,17,8))%100000)+100000)%100000)/100000.0 - 1.5 ) * @MathSpread )) rate(v)
     WHERE h.HalfBucket = 1
       AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
 )
@@ -326,7 +348,8 @@ INSERT INTO dbo.FactAssessmentMath
      EnteredByStaffKey, SubmissionTimestamp, LastUpdated)
 SELECT
     ms.StudentKey, w.AssessmentWindowID, mt.MathTaskKey,
-    CASE WHEN ((ABS(CHECKSUM(NEWID()))%10000)/10000.0) < ms.Rate THEN CONVERT(BIT,1) ELSE CONVERT(BIT,0) END,
+    CASE WHEN (((CONVERT(BIGINT,SUBSTRING(bt.h,1,8))%100000)+100000)%100000)/100000.0 < ms.Rate
+         THEN CONVERT(BIT,1) ELSE CONVERT(BIT,0) END,
     @SC1Date, @SeedStaff, SYSUTCDATETIME(), SYSUTCDATETIME()
 FROM MStud ms
 JOIN dbo.DimAssessmentWindow w ON w.CycleGroupID = @SC1CGID AND w.AssessmentType = 'Math'
@@ -334,6 +357,7 @@ JOIN dbo.DimMathTask mt
       ON mt.GradeCode = ms.Grade
      AND mt.AssessmentMonth = COALESCE(w.BenchmarkMonth, MONTH(w.StartDate))
      AND mt.ActiveFlag = 1
+CROSS APPLY (VALUES ( HASHBYTES('SHA2_256', CONVERT(VARCHAR(20), ms.StudentKey) + ':' + CONVERT(VARCHAR(20), mt.MathTaskKey) + 'mt') )) bt(h)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.FactAssessmentMath fm
                   WHERE fm.StudentKey = ms.StudentKey
                     AND fm.AssessmentWindowID = w.AssessmentWindowID
