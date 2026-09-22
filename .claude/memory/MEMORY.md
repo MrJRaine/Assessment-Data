@@ -5,6 +5,7 @@
 
 ## How I work with this user (feedback)
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over. Reads are not assumed either.
+- [RLS Review: Verify Every Role Branch](feedback_rls_review_verify_per_role.md) — check each role's scoping against the documented design (DimRole/StaffSchoolAccess) across the WHOLE surface; a region-wide branch is a red flag; never assert an access claim unverified or double down when challenged. (RegionalAnalyst region-wide bug, fixed 2026-09-22.)
 - [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — never hand over SQL with a `<placeholder>`; substitute real values from the conversation or DECLARE them at the top. An empty result = suspect the parameters first.
 - [Licensing Gate on Every Design Decision](feedback_licensing_gate_on_design.md) — state a connector/service's license class + end-user cost at full scale in the same breath; maker-account tests prove nothing.
 - [Chat Abbreviations](feedback_abbreviations.md) — user's shorthand (e.g. PS = PowerSchool).

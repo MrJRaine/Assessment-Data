@@ -57,15 +57,12 @@ RETURN
           )
           -- caller scope gate (mirrors tvf_StudentIPP's OR-across-EXISTS)
           AND (
+                -- RegionalAnalyst scoped by StaffSchoolAccess like Admin/Specialist (their
+                -- CanChangeSchool buildings); NO region-wide branch.
                 EXISTS (
-                    SELECT 1 FROM DimStaff staff
-                    WHERE LOWER(staff.Email) = LOWER(@UPN) AND staff.IsCurrent = 1
-                      AND staff.AccessLevel = 'RegionalAnalyst'
-                )
-             OR EXISTS (
                     SELECT 1 FROM StaffSchoolAccess ssa
                     WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
-                      AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher')
+                      AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
                 )
              OR EXISTS (
                     SELECT 1

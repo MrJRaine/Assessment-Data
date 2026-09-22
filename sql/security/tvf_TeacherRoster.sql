@@ -90,8 +90,9 @@ RETURN
         FROM RequestedSections rs
         CROSS JOIN Caller c
         CROSS JOIN WindowEffectiveDates wed
-        WHERE c.AccessLevel = 'RegionalAnalyst'              -- region-wide, no further check
-           OR (c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
+        -- RegionalAnalyst scoped by StaffSchoolAccess like Admin/Specialist (their CanChangeSchool
+        -- buildings); NO region-wide branch. A region-wide analyst simply has every building listed.
+        WHERE (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
                AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
                            WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = rs.SchoolID))
            OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
