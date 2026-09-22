@@ -1,8 +1,8 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.4.0` → `0.4.1` on 2026-09-11
-(a mid-day hotfix; container swap only, no live-warehouse SQL).
+running Podman container for a new one. Most recent cutover: `0.5.1` → `0.6.0` on 2026-09-22
+(The SCoR Hub rename + French math answer key; live-warehouse SQL: `sql/security/tvf_TeacherRosterMath.sql`).
 
 ## Environment facts
 

@@ -46,7 +46,8 @@ CREATE TABLE DimMathTask (
     OutcomeCode         VARCHAR(20)     NULL,       -- NS grade-level outcome, e.g. 'N02.01'; NULL when the task maps to none
     TaskDescriptionEN   VARCHAR(500)    NOT NULL,   -- English task text (shown to English-program teachers)
     TaskDescriptionFR   VARCHAR(500)    NULL,       -- French task text (shown to FI teachers); NULL until seeded
-    AnswerKey           VARCHAR(200)    NULL,       -- expected answer — shown to the teacher as a marking reference
+    AnswerKey           VARCHAR(500)    NULL,       -- expected answer (EN) — shown to the teacher as a marking reference
+    AnswerKeyFR         VARCHAR(500)    NULL,       -- expected answer (FR) — shown with the French task text
     ActiveFlag          BIT             NOT NULL,   -- 1 = current; 0 = retired by a curriculum revision
     LastUpdated         DATETIME2(0)    NOT NULL
 );

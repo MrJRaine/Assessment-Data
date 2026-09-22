@@ -16,6 +16,20 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.6.0',
+    date: '2026-09-22',
+    kind: 'feature',
+    summary:
+      'The app is now called The SCoR Hub. Everything works the same — only the name in the header changed. (Your Short Cycles of Response are still Short Cycles.)',
+  },
+  {
+    version: '0.6.0',
+    date: '2026-09-22',
+    kind: 'feature',
+    summary:
+      'Math Short Cycles: French-Immersion classes now show the French answer key next to the French task text.',
+  },
+  {
     version: '0.5.0',
     date: '2026-09-21',
     kind: 'feature',
