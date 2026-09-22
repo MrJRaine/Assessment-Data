@@ -9,13 +9,15 @@
  * WHY: RegionalAnalyst was built region-wide everywhere, contradicting the
  *      DimRole / StaffSchoolAccess design (board scope via CanChangeSchool).
  *
- * *** LIVE PREREQUISITE -- READ BEFORE RUNNING ON LIVE ***
- *   The instant this deploys, any RegionalAnalyst whose CanChangeSchool does NOT
- *   list their buildings drops to ZERO student access. Before running on live:
- *     1. Ensure each RegionalAnalyst's CanChangeSchool lists every building they
- *        should see (a superintendent = all buildings).
- *     2. Rebuild StaffSchoolAccess (a staff ingest runs usp_MergeStaff Step 6).
- *     3. THEN run this bundle.
+ * *** LIVE PRE-CHECK -- READ BEFORE RUNNING ON LIVE ***
+ *   The RegionalAnalyst branch now READS StaffSchoolAccess, which is already built
+ *   from each analyst's CanChangeSchool at the last staff ingest. So if your current
+ *   analysts' CanChangeSchool already lists their buildings, StaffSchoolAccess already
+ *   holds their rows -- just run this bundle; nothing else is needed.
+ *   You ONLY need to rebuild StaffSchoolAccess (a staff ingest runs usp_MergeStaff
+ *   Step 6) if you CHANGE an analyst's CanChangeSchool, so the edit lands before this
+ *   RLS takes effect. An analyst whose CanChangeSchool lists no student-bearing
+ *   building would see nothing -- so after deploy, verify one analyst still sees data.
  *   On DEV, grant_dev_projectlead_access.sql seeds the project lead's ssa rows.
  *
  * EXCLUDED as dead code (never in the live web-app path): the legacy Power-App
