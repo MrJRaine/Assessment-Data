@@ -12,7 +12,7 @@
  * Column order MUST match the seed CSV header:
  *   GradeCode, AssessmentMonth, UnitName, UnitOrder, QuestionNumber,
  *   DisplayOrder, OutcomeCode, TaskDescriptionEN, TaskDescriptionFR,
- *   AnswerKey, ActiveFlag
+ *   AnswerKey, AnswerKeyFR, ActiveFlag
  ******************************************************************************/
 
 CREATE TABLE Stg_MathTask (
@@ -26,5 +26,6 @@ CREATE TABLE Stg_MathTask (
     TaskDescriptionEN   VARCHAR(1000)   NULL,
     TaskDescriptionFR   VARCHAR(1000)   NULL,
     AnswerKey           VARCHAR(500)    NULL,
+    AnswerKeyFR         VARCHAR(500)    NULL,
     ActiveFlag          VARCHAR(50)     NULL
 );

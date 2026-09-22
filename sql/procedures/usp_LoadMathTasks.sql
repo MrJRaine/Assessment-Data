@@ -62,6 +62,7 @@ BEGIN
         TaskDescriptionEN = s.TaskDescriptionEN,
         TaskDescriptionFR = NULLIF(s.TaskDescriptionFR, ''),
         AnswerKey         = NULLIF(s.AnswerKey, ''),
+        AnswerKeyFR       = NULLIF(s.AnswerKeyFR, ''),
         ActiveFlag        = CAST(ISNULL(TRY_CAST(s.ActiveFlag AS INT), 1) AS BIT),
         LastUpdated       = GETDATE()
     FROM DimMathTask d
@@ -82,7 +83,7 @@ BEGIN
     INSERT INTO DimMathTask (
         GradeCode, AssessmentMonth, UnitName, UnitOrder, QuestionNumber,
         DisplayOrder, OutcomeCode, TaskDescriptionEN, TaskDescriptionFR,
-        AnswerKey, ActiveFlag, LastUpdated
+        AnswerKey, AnswerKeyFR, ActiveFlag, LastUpdated
     )
     SELECT
         s.GradeCode,
@@ -95,6 +96,7 @@ BEGIN
         s.TaskDescriptionEN,
         NULLIF(s.TaskDescriptionFR, ''),
         NULLIF(s.AnswerKey, ''),
+        NULLIF(s.AnswerKeyFR, ''),
         CAST(ISNULL(TRY_CAST(s.ActiveFlag AS INT), 1) AS BIT),
         GETDATE()
     FROM Stg_MathTask s
