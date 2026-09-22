@@ -1,81 +1,89 @@
 /*******************************************************************************
- * Script: diag_reading_instance_counts.sql   (READ-ONLY — config + aggregate counts)
- * Purpose: Diagnose why the /enter Reading card only counts English students and
- *          not the immersion (French) reading instance. The card sums
- *          ApplicableStudentCount across a cycle's reading instances; if the sum
- *          is English-only, the French reading instance is contributing 0. This
- *          shows WHERE it's lost, without pinning a cause first.
+ * Script: diag_reading_instance_counts.sql   (READ-ONLY — config + AGGREGATE counts, no row PII)
+ * Purpose: Pin down why the /enter Reading card for a REGIONAL ANALYST on LIVE
+ *          counts only the English reading instance (card showed "2/3707"), while
+ *          the group screen (tvf_TeacherGroups) clearly finds the French/immersion
+ *          reading sections and their entries. The two TVFs apply the SAME grade +
+ *          program-family + program-scope filters, so one of those filters is
+ *          silently zeroing the French reading instance in the analyst COUNT path.
  *
- * How to read the three result sets:
- *   A) INSTANCES (config, no PII): every active Reading/Writing instance per
- *      cycle. If there is NO 'Reading' row with AssessmentLanguage='French' for
- *      the cycle in question -> the instance doesn't exist (cause 1); fix the
- *      cycle config, not code.
- *   B) COUNTS (aggregate): tvf_UserAssessmentWindows for @UPN, reading+writing.
- *      Compare the French READING row's ApplicableStudentCount to the French
- *      WRITING row's. The TVF filters reading and writing IDENTICALLY, so:
- *        - French writing > 0 but French reading = 0 -> reading-specific data
- *          (French reading instance missing / wrong grade band / inactive).
- *        - Both French rows = 0 -> the shared cause: this caller has no FLA
- *          students in scope (causes 2/3/4).
- *   C) TEACHER COURSE COVERAGE (teacher branch only): the literacy languages the
- *      caller can actually enter, via their sections -> DimCourseAssessment. If
- *      'French' is absent here, the caller teaches no FLA section, so the French
- *      reading instance legitimately counts 0 for them (cause 4), or the FLA
- *      course isn't mapped (cause 3).
+ * SAFE ON LIVE: every result set is COUNT/config only — no student rows returned.
  *
- * SET @UPN to the account that shows the bug. Default is a known dev FLA teacher
- * from the current synthetic set; change it to whoever you were signed in as.
- * Run on DEV. Region: Canada East (PIIDPA compliant).
+ * SET @UPN to your regional-analyst account. Run on LIVE (that's where the bug is).
+ *
+ * Read the results:
+ *   A) INSTANCES (config): the cycle's Reading/Writing instances + their
+ *      ProgramScope / ProgramFamily / grade band / language. Confirms the French
+ *      reading instance exists and shows its exact scope/family values.
+ *   B) ANALYST COUNTS: tvf_UserAssessmentWindows for @UPN, reading rows. If the
+ *      'French' reading row is absent or ApplicableStudentCount = 0 while English
+ *      is large -> confirmed: the analyst path drops the French instance.
+ *   D) STAGED PROBE (the smoking gun): for EACH active Reading instance, region-wide
+ *      current-student counts under the analyst filters applied one at a time:
+ *        InGradeBand -> +Family -> +Scope. Compare the French row to the English row:
+ *        - French +Scope = 0 but +Family > 0  -> the SCOPE match is the culprit
+ *          (ProgramScope string vs DimProgram.ScopeBucket mismatch, or ScopeBucket NULL).
+ *        - French +Family = 0 but InGradeBand > 0 -> the instance's ProgramFamily is set
+ *          and excludes immersion (should be NULL for a scope-driven instance).
+ *        - French InGradeBand = 0 -> grade band excludes them / no early-immersion in P-8.
+ *        NoDimProgram flags students whose ProgramCode isn't seeded in DimProgram
+ *        (an INNER JOIN to DimProgram would drop them in BOTH TVFs).
+ *
+ * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
-DECLARE @UPN VARCHAR(255) = 'classroom.teacher1@tcrce.ca';   -- <- change to the account showing the bug
+DECLARE @UPN VARCHAR(255) = 'jeffrey.raine@tcrce.ca';   -- <- your regional-analyst account (change if different)
 
--- ===== A) INSTANCES per cycle (config only, no PII) =====
+-- ===== A) INSTANCES per cycle (config only) =====
 SELECT
-    h.DisplayName                AS Cycle,
-    w.AssessmentType,
-    w.AssessmentLanguage,        -- 'English' | 'French' | NULL(Both)
-    w.ProgramScope,
-    w.MinGrade, w.MaxGrade,
-    w.ScaleSystem,
-    w.ActiveFlag,
-    w.AssessmentWindowID
+    h.DisplayName AS Cycle,
+    w.AssessmentType, w.AssessmentLanguage, w.ProgramScope, w.ProgramFamily,
+    w.MinGrade, w.MaxGrade, w.ScaleSystem, w.ActiveFlag, w.AssessmentWindowID
 FROM DimAssessmentWindow w
 INNER JOIN DimShortCycle h ON h.CycleGroupID = w.CycleGroupID
 WHERE w.AssessmentType IN ('Reading', 'Writing')
 ORDER BY h.DisplayName, w.AssessmentType, w.AssessmentLanguage, w.MinGrade;
 
--- ===== B) COUNTS from the TVF for @UPN (aggregate) =====
+-- ===== B) ANALYST COUNTS from the TVF for @UPN (aggregate) =====
 SELECT
-    CycleName,
-    AssessmentType,
-    AssessmentLanguage,
-    ProgramScope,
-    MinGrade, MaxGrade,
-    WindowStatus,
-    ApplicableStudentCount,
-    EnteredStudentCount,
-    AssessmentWindowID
+    CycleName, AssessmentType, AssessmentLanguage, ProgramScope, MinGrade, MaxGrade,
+    WindowStatus, ApplicableStudentCount, EnteredStudentCount, AssessmentWindowID
 FROM dbo.tvf_UserAssessmentWindows(@UPN)
-WHERE AssessmentType IN ('Reading', 'Writing')
-ORDER BY CycleName, AssessmentType, AssessmentLanguage, MinGrade;
+WHERE AssessmentType = 'Reading'
+ORDER BY AssessmentLanguage, MinGrade;
 
--- ===== C) TEACHER COURSE-LANGUAGE COVERAGE for @UPN (teacher branch only) =====
--- The literacy languages this caller can enter, via their current sections. If
--- 'French'/'Literacy' is missing, they teach no FLA section (or FLA isn't mapped).
-SELECT DISTINCT
-    sec.CourseCode,
-    ca.Language,
-    ca.Kind
-FROM DimStaff st
-INNER JOIN FactSectionTeachers fst
-        ON LOWER(fst.TeacherEmail) = LOWER(@UPN)
-       AND CAST(GETDATE() AS DATE) BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
-INNER JOIN DimSection sec
-        ON sec.SectionID = fst.SectionID
-       AND CAST(GETDATE() AS DATE) BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-LEFT JOIN DimCourseAssessment ca
-        ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
-WHERE LOWER(st.Email) = LOWER(@UPN) AND st.IsCurrent = 1
-ORDER BY ca.Kind, ca.Language, sec.CourseCode;
+-- ===== D) STAGED PROBE: region-wide analyst-basis counts per Reading instance =====
+-- Reproduces the AnalystStudents filters (grade band, then +family, then +scope) so we can
+-- see WHICH filter drops the immersion students. LEFT JOIN DimProgram so students with an
+-- unseeded ProgramCode are visible (NoDimProgram) rather than silently dropped.
+WITH Atl AS (
+    SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
+)
+SELECT
+    w.AssessmentWindowID,
+    w.AssessmentLanguage,
+    w.ProgramScope,
+    w.ProgramFamily,
+    w.MinGrade, w.MaxGrade,
+    COUNT(DISTINCT CASE WHEN sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
+                        THEN s.StudentKey END) AS InGradeBand,
+    COUNT(DISTINCT CASE WHEN sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
+                          AND (w.ProgramFamily IS NULL OR dp.ProgramFamily = w.ProgramFamily)
+                        THEN s.StudentKey END) AS PlusFamily,
+    COUNT(DISTINCT CASE WHEN sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
+                          AND (w.ProgramFamily IS NULL OR dp.ProgramFamily = w.ProgramFamily)
+                          AND (w.ProgramScope IS NULL
+                               OR (',' + w.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
+                        THEN s.StudentKey END) AS PlusScope,
+    SUM(CASE WHEN dp.ProgramCode IS NULL THEN 1 ELSE 0 END) AS NoDimProgram
+FROM DimAssessmentWindow w
+CROSS JOIN Atl
+INNER JOIN DimStudent s
+        ON Atl.Today BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31')
+LEFT JOIN DimProgram dp ON dp.ProgramCode = s.ProgramCode
+LEFT JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+LEFT JOIN DimGrade   wmin ON wmin.GradeCode = w.MinGrade
+LEFT JOIN DimGrade   wmax ON wmax.GradeCode = w.MaxGrade
+WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
+GROUP BY w.AssessmentWindowID, w.AssessmentLanguage, w.ProgramScope, w.ProgramFamily, w.MinGrade, w.MaxGrade
+ORDER BY w.AssessmentLanguage, w.MinGrade;
