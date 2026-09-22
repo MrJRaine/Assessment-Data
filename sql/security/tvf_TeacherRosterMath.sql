@@ -170,7 +170,10 @@ RETURN
         CASE WHEN sg.ProgramFamily = 'French Immersion'
              THEN COALESCE(mt.TaskDescriptionFR, mt.TaskDescriptionEN)
              ELSE mt.TaskDescriptionEN END AS TaskDescription,
-        mt.AnswerKey,
+        -- Answer key follows the task's language (the FR answer key shows with the FR task text).
+        CASE WHEN sg.ProgramFamily = 'French Immersion'
+             THEN COALESCE(mt.AnswerKeyFR, mt.AnswerKey)
+             ELSE mt.AnswerKey END AS AnswerKey,
         fam.Result            AS ExistingResult,          -- BIT: latest 0/1, or NULL if never marked
         fam.AssessmentDate    AS ExistingAssessmentDate,
         ipp.IsIPP             AS MathIPPStatus,           -- 1 = math IPP, 0 = not, NULL = unresolved gate
