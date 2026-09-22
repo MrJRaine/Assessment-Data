@@ -131,6 +131,18 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-09-22 — 🟢 0.6.0 "The SCoR Hub" SHIPPED LIVE; demo dev data seeded
+- **Last completed**: **0.6.0 LIVE** on data.tcrce.ca — "The SCoR Hub" rename, French math answer key
+  (`tvf_TeacherRosterMath`), **RegionalAnalyst RLS scoped by `StaffSchoolAccess`** (security fix, 13 TVFs),
+  reading cycle-card count fix, 14 immersion results migrated, math task bank `AnswerKeyFR`. Release git:
+  dev→main squash `46a6098` + tag `v0.6.0` + main→dev back-merge. Three local containers on 0.6.0
+  (awlive :3000 / awdev :3001 / **awdev-impersonation :3002** new; impersonation on `dev-impersonation`).
+- **In progress**: none blocking. Demo dev data seeded (`sql/scripts/seed_demo_results_dev.sql` — prior-year
+  June + partial SC1, per-student hash-seeded bell curves, DEV-only, idempotent).
+- **Next action**: user has "homework" queued for tonight (TBD). Otherwise the near-term open item is the
+  **maintenance + ingest end-to-end dry-run on dev**. Full queue: [[project_prelaunch_queue]].
+- **Blockers**: None.
+
 ### Left Off — 2026-09-21 — 🟢 0.5.0 + 0.5.1 SHIPPED LIVE; cycle instances reconciled
 - **Last completed**: **0.5.0** (Math P–6, Programming makeover, dual-language literacy + per-cycle scoping,
   Students→Reports, Writing SCR, self-contained reading/writing facts, maintenance mode) AND **0.5.1** (roster

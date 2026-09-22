@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-10T18:20:29.995Z
+  modified: 2026-09-22T20:51:55.449Z
 ---
 
 **Math pulled into the 1.0 rollout (2026-09-02)** on a condensed timeline — no
@@ -18,6 +18,12 @@ Two derived layers (from the curriculum exemplar's Term-1 format — the authori
 one; the sheet's Term 2/3 were half-revised, ignore them):
 - **By task:** proportion correct (`SUM/#students`) → colour heatmap `>80 / 65-80 / 50-64 / <50` (class-weakness spotlight).
 - **By student, per unit:** average of their 0/1 over the unit → **4-tier Achievement Level** (UI label; table stays `DimMathComprehensionBand`): Emerging `<0.50` · Developing `0.50–<0.75` · Meeting `0.75–<0.90` · In-depth `≥0.90`; **"Incomplete"** when `<80%` of the unit's tasks are scored. IPP handling per unit: **all-IPP** → plain IPP flag; **no IPP** → normal level; **mix of IPP-omitted + assessed** → the calculated level gets a **purple ring** (the IPP colour) to flag it as partly assessed.
+
+**NO re-record / "New Evidence" checkbox for math — SETTLED, do not re-open.** Reading & Writing have
+a per-row box to re-record an IDENTICAL level/score as a genuine new dated data point; math does NOT.
+Math is binary, so the only meaningful change is **no → yes** (not-yet → can-do), which the cell edit
+already captures — there is no identical-value re-record case, and math teachers have far more to
+evaluate. `MathRosterEntry.tsx` intentionally has no such checkbox. (See [[project_prelaunch_queue]].)
 
 **Cadence:** Math rides the SAME region-wide **Short Cycles** as Reading/Writing —
 NO separate term cadence (the exemplar's Term 1/2/3 split was just spreadsheet

@@ -22,6 +22,7 @@
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
 - [Troubleshooting Method](feedback_troubleshooting_method.md) — gather facts before pinning a cause; one diagnostic at a time; wait for promised results.
 - [Don't Report Back Confirmed Facts](feedback_dont_report_back_confirmed_facts.md) — when the user states a fact, take it as given; verify quietly for the exact reference but don't narrate that their statement was confirmed, and never call it "good news."
+- [Keep Memories Current](feedback_keep_memories_current.md) — update/DELETE a memory at its source the moment its item ships or reverses; record provenance; one source of truth; prune running lists. Stale notes are what cause repetitive re-litigation — "it's stale" is a defect I made, not an excuse.
 - [Idempotent Deploy Bundles](feedback_idempotent_deploy_bundles.md) — before handing over a bundled SQL deploy, scan sources so every object is idempotent (DROP-IF-EXISTS + GO, guarded ALTERs, EXEC-wrapped column DML); don't surface these one failed dev run at a time. New-table CREATEs are the intentional run-once exception.
 - [Loading States](feedback_loading_states.md) — show a loading indicator through the WHOLE async save→refresh (gate on isPending).
 - [Select all / Clear all Labels](feedback_select_clear_all_labels.md) — EXACT labels "Select all" / "Clear all" app-wide.
@@ -37,7 +38,7 @@
 - [Fabric Stale Preview](feedback_fabric_stale_preview.md) — the table preview pane caches; verify via SQL COUNT(*).
 - [Full-Reset Truncate-All](feedback_full_reset_truncate_all.md) — resetting for usp_RunFullIngestCycle: truncate all 6 orchestrator tables, never selectively.
 - [Capacity Right-Sizing Intent](project_capacity_rightsizing_intent.md) — F8 is a DELIBERATE high ceiling so real usage runs unrestricted and can be measured, then the right SKU is bought at renewal. Do NOT design as if F2 is the target (that under-measures and risks under-buying); avoid waste, never trade UX for speculative capacity savings.
-- [Podman Windows Dev Container](reference_podman_windows_dev_container.md) — publish `127.0.0.1:PORT:3000` explicitly; awdev=.env.dev :3001, awlive=.env :3000; typecheck via image build (no node/gh).
+- [Podman Windows Dev Container](reference_podman_windows_dev_container.md) — publish `127.0.0.1:PORT:3000` explicitly; THREE containers: awlive=.env :3000, awdev=.env.dev :3001, awdev-impersonation :3002 (`-imp` image from dev-impersonation branch, `-e AUTH_MODE=dev`); typecheck via image build (no node/gh).
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 
 ## Architecture / infrastructure
@@ -94,7 +95,7 @@
 
 ## Backlog / wishlist (NOT built)
 - [Assessment Language Tracks + Course Write-Scoping (DESIGN)](project_assessment_language_tracks.md) — dual-language EN/FR reading+writing via the CYCLE (no fact schema change); EN/FR toggle on picker+rosters; course-based WRITE scoping (list pending); J020 reading = English only. Reuses the IPP/Adaptation split rule.
-- [Pre-launch Work Queue](project_prelaunch_queue.md) — running list of user-requested 0.5.x items ahead of launch (SCR, early/late immersion reading, writing-cohort layout, Math reporting, Students→Reports rename, split-grade math pacing, linked math tasks carry-forward, math ✗→yellow circle, dark mode). Keep current as items ship.
+- [Release Work Queue](project_prelaunch_queue.md) — triaged queue, LIVE through 0.6.0 (2026-09-22). OPEN near-term: maintenance/ingest dev dry-run. Forward: 1.0 (areas meeting/exceeding report, IPP auto-pair, writing-cohort re-scope) → post-launch (math reporting, split-grade pacing, linked-task carry-forward) → post-1.0 (a11y sweep, dark mode). Prune as items ship.
 - [Writing Scribed Score Code (DONE dev)](project_writing_scribed_score_code.md) — "SCR" on Conventions ONLY, omitted from the average; ConventionsScore→VARCHAR. Dev 2026-09-17; live pending.
 - [Subject↔Course Dim (QoL, 1.0→likely 1.1)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Perf/Load QoL Backlog (POST-v1.1)](project_perf_qol_backlog.md) — batch the per-student save loop, cache static lookups, parallelise roster awaits, don't poll hidden tabs. Not launch-blocking. Pool max already raised 10→20.
