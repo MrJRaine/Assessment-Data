@@ -2,8 +2,8 @@
  * Script: deploy_dev_cutover_loaders.sql   (DEV warehouse ONLY)
  * Purpose: Bring the DEV staging loaders up to the LIVE "cutover" format so dev
  *          mirrors production. Live already runs the PowerSchool sqlReport CSV
- *          loaders (comma-delimited, FIELDQUOTE, FIRSTROW=2, Students*/Staff*/
- *          Sections*/Enrollments*/Co-Teachers* filenames); dev still ran the old
+ *          loaders (comma-delimited, FIELDQUOTE, FIRSTROW=2, Students*, Staff*,
+ *          Sections*, Enrollments*, Co-Teachers* filenames); dev still ran the old
  *          direct-extract TAB loaders. This replaces the five dev load procs with
  *          the CSV format, pointed at the DEV lakehouse.
  *
@@ -20,7 +20,7 @@
  *   first statement in its batch). Re-runnable.
  *
  * PAIRS WITH: data/imports/_generate_ingest_testset.ps1 -Format Cutover, which
- *   emits Students*/Staff*/Sections*/Enrollments*/Co-Teachers* .csv files matching
+ *   emits Students*, Staff*, Sections*, Enrollments*, Co-Teachers* .csv files matching
  *   the wildcards below. Upload those to the DEV lakehouse Files/imports/{topic}/.
  *
  * Region: Canada East (PIIDPA compliant)
