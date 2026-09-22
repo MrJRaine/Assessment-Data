@@ -34,12 +34,16 @@
  *          copied from SC1's Reading/Writing instances), FactAssessmentReading,
  *          FactAssessmentWriting, FactAssessmentMath.
  *
- * SAFE:    DEV-ONLY (aborts if DB_NAME() is not the _Dev warehouse). IDEMPOTENT:
- *          a re-run first DELETES this script's own prior rows (matched by the seed
- *          StaffKey) across the June + SC1 cycles, then regenerates them — so fixing
- *          the values and re-running fully refreshes them. Real teacher entries (any
- *          OTHER StaffKey) are never touched, and SC1 inserts still skip a student who
- *          already has a real entry. Seeded values are reproducible per student.
+ * SAFE:    DEV-ONLY (aborts if DB_NAME() is not the _Dev warehouse). IDEMPOTENT +
+ *          reproducible (values are hash-seeded, so a re-run reproduces the SAME
+ *          numbers). Re-run cleanup: the JUNE cycle is script-created, so it is fully
+ *          cleared each run (scrubbing any stray rows a prior mis-run parked there);
+ *          SC1 is a live cycle, so only THIS script's own rows (seed StaffKey) are
+ *          removed there — real teacher entries (any OTHER StaffKey) are untouched,
+ *          and SC1 inserts still skip a student who already has a real entry.
+ *          NOTE: a re-run regenerates ALL THREE subjects — because the values are
+ *          deterministic it reproduces them identically, but it is not a per-subject
+ *          refresh.
  *
  * Created: 2026-09-22 · Region: Canada East (PIIDPA compliant) · SYNTHETIC dev data only.
  *
@@ -125,21 +129,32 @@ WHERE w.CycleGroupID = @SC1CGID
   );
 
 -- ============================================================================
--- 3. Idempotent re-seed: remove ONLY previously-seeded rows (this seed StaffKey)
---    across the June + SC1 cycles so a re-run fully regenerates them. Real teacher
---    entries (any OTHER StaffKey) are left untouched.
+-- 3. Idempotent re-seed.
+--    JUNE cycle is entirely script-created (no teacher ever enters into a prior-year
+--    demo cycle), so CLEAR IT FULLY each run — this also scrubs any stray rows a prior
+--    mis-run may have parked there (e.g. grade-P rows that must NOT have June data).
+--    SC1 is a live cycle, so remove ONLY this script's own seeded rows there (matched
+--    by the seed StaffKey); real teacher entries (any OTHER StaffKey) are untouched.
 -- ============================================================================
 DELETE f FROM dbo.FactAssessmentReading f
 JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
-WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
-
+WHERE w.CycleGroupID = @JuneCGID;
 DELETE f FROM dbo.FactAssessmentWriting f
 JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
-WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
-
+WHERE w.CycleGroupID = @JuneCGID;
 DELETE f FROM dbo.FactAssessmentMath f
 JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
-WHERE w.CycleGroupID IN (@JuneCGID, @SC1CGID) AND f.EnteredByStaffKey = @SeedStaff;
+WHERE w.CycleGroupID = @JuneCGID;
+
+DELETE f FROM dbo.FactAssessmentReading f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID = @SC1CGID AND f.EnteredByStaffKey = @SeedStaff;
+DELETE f FROM dbo.FactAssessmentWriting f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID = @SC1CGID AND f.EnteredByStaffKey = @SeedStaff;
+DELETE f FROM dbo.FactAssessmentMath f
+JOIN dbo.DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+WHERE w.CycleGroupID = @SC1CGID AND f.EnteredByStaffKey = @SeedStaff;
 
 -- ============================================================================
 -- 3a. READING — JUNE (grade-1 rollback, month 6, grade P excluded)
