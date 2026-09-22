@@ -5,26 +5,43 @@ import { useRouter } from 'next/navigation'
 import { setImpersonation, clearImpersonation } from './dev/impersonate-actions'
 import type { ImpersonationTarget } from '@/lib/data'
 
+const COLLAPSE_COOKIE = 'impersonate_bar_collapsed'
+
 /**
- * DEV-ONLY impersonation bar. Lets a developer run the app as any synthetic teacher/admin/analyst
- * while making how-to docs, without editing DEV_FAKE_UPN and restarting the container. Only
- * rendered in dev mode (see AppShell); the server actions and getCurrentUpn are both hard-gated to
- * dev, so this is inert on the entra/live path.
+ * Impersonation bar. A sysadmin (or any dev-mode user) can run the app as any staff member — for
+ * making how-to docs or supporting a user. COLLAPSIBLE: collapsing hides it to a tiny corner dot and
+ * persists (cookie), so it stays out of screenshots across navigations until expanded again.
+ * Rendered only when the caller may impersonate (see AppShell); the server actions AND getCurrentUpn
+ * are both gated to a real sysadmin, so this is inert for anyone else.
  */
 export default function DevImpersonationBar({
   current,
-  defaultUpn,
+  realUpn,
   impersonating,
   targets,
+  initialCollapsed,
 }: {
   current: string | null
-  defaultUpn: string | null
+  realUpn: string | null
   impersonating: boolean
   targets: ImpersonationTarget[]
+  initialCollapsed: boolean
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [custom, setCustom] = useState('')
+  const [collapsed, setCollapsed] = useState(initialCollapsed)
+
+  // Persist collapse to a cookie so AppShell renders the right state server-side next navigation
+  // (no flash) and it survives page loads — the point is clean, bar-free screenshots.
+  function persistCollapsed(next: boolean) {
+    setCollapsed(next)
+    try {
+      document.cookie = `${COLLAPSE_COOKIE}=${next ? '1' : '0'}; path=/; max-age=${60 * 60 * 24 * 90}; samesite=lax`
+    } catch {
+      /* cookies blocked — state still applies for this view */
+    }
+  }
 
   function apply(upn: string) {
     const clean = upn.trim()
@@ -43,15 +60,29 @@ export default function DevImpersonationBar({
     })
   }
 
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className={`dev-impersonate-fab${impersonating ? ' is-impersonating' : ''}`}
+        onClick={() => persistCollapsed(false)}
+        aria-label={impersonating ? `Impersonating ${current} — show bar` : 'Show impersonation bar'}
+        title={impersonating ? `Impersonating ${current}` : 'Impersonation'}
+      >
+        {impersonating ? '●' : '○'}
+      </button>
+    )
+  }
+
   return (
     <div className="dev-impersonate">
-      <span className="dev-impersonate-tag">DEV</span>
+      <span className="dev-impersonate-tag">VIEW AS</span>
       <span className="dev-impersonate-label">
         Viewing as <strong>{current ?? '—'}</strong>
         {impersonating ? (
           <span className="dev-impersonate-badge">impersonating</span>
         ) : (
-          <span className="muted"> (default)</span>
+          <span className="muted"> (you)</span>
         )}
       </span>
 
@@ -98,7 +129,7 @@ export default function DevImpersonationBar({
 
       {impersonating && (
         <button type="button" className="btn-ghost" onClick={reset} disabled={pending}>
-          Reset to default{defaultUpn ? ` (${defaultUpn})` : ''}
+          Stop{realUpn ? ` (back to ${realUpn})` : ''}
         </button>
       )}
 
@@ -108,6 +139,16 @@ export default function DevImpersonationBar({
           Switching…
         </span>
       )}
+
+      <button
+        type="button"
+        className="dev-impersonate-collapse"
+        onClick={() => persistCollapsed(true)}
+        aria-label="Hide impersonation bar (keeps it out of screenshots)"
+        title="Hide — stays hidden until you click the corner dot"
+      >
+        Hide ✕
+      </button>
     </div>
   )
 }

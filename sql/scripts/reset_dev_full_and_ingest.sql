@@ -41,3 +41,13 @@ TRUNCATE TABLE FactStudentAdaptation;
 TRUNCATE TABLE FactSubmissionAudit;
 
 EXEC usp_RunFullIngestCycle;
+
+-- The export files date every enrollment to a fixed school year, which EXPIRES -- so rosters resolve
+-- to nothing today and /enter shows "No cycles" for EVERYONE. Roll expired enrollments forward a year
+-- so they're current. Guarded to expired rows only => safe + idempotent (mirrors rollforward_enrollment_dev.sql).
+DECLARE @Today DATE = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
+UPDATE FactEnrollment
+SET StartDate   = DATEADD(YEAR, 1, StartDate),
+    EndDate     = DATEADD(YEAR, 1, EndDate),
+    LastUpdated = GETDATE()
+WHERE EndDate IS NOT NULL AND EndDate < @Today;

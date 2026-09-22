@@ -379,6 +379,24 @@ a { color: inherit; text-decoration: none; }
 .dev-impersonate-custom { display: flex; align-items: center; gap: 0.35rem; }
 .dev-impersonate-pending { display: flex; align-items: center; gap: 0.4rem; color: #7a5900; }
 .dev-impersonate .spinner { border-top-color: #c8860a; }
+/* "Hide" pushes to the far right of the bar. */
+.dev-impersonate-collapse {
+  margin-left: auto; background: transparent; border: 1px solid #e0c169; color: #7a5900;
+  border-radius: 4px; padding: 0.15rem 0.5rem; font-size: 0.78rem; cursor: pointer; font-family: inherit;
+}
+.dev-impersonate-collapse:hover { background: #fff; }
+/* Collapsed state: a tiny, low-profile corner dot so the bar stays OUT of screenshots. Click to
+   expand. Filled amber while actively impersonating so you don't forget you're someone else. */
+.dev-impersonate-fab {
+  position: fixed; left: 8px; bottom: 8px; z-index: 1001;
+  width: 16px; height: 16px; padding: 0; line-height: 14px; text-align: center;
+  border-radius: 50%; border: 1px solid #e0c169; background: rgba(255, 255, 255, 0.55);
+  color: #c8860a; font-size: 10px; cursor: pointer; opacity: 0.45; transition: opacity 0.15s;
+}
+.dev-impersonate-fab:hover { opacity: 1; }
+.dev-impersonate-fab.is-impersonating {
+  background: #c8860a; color: #fff; opacity: 0.85; border-color: #c8860a;
+}
 
 /* Small-group filter (grade chips + student picker) — ported with the group-key patch */
 .filter-label { font-size: .72rem; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin: 0 0 .4rem; }

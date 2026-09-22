@@ -6,7 +6,8 @@ import PostLoginRefresh from './PostLoginRefresh'
 import DevImpersonationBar from './DevImpersonationBar'
 import VersionFooter from './VersionFooter'
 import MaintenanceProvider from './maintenance/MaintenanceProvider'
-import { getCurrentUpn, DEV_IMPERSONATE_COOKIE } from '@/lib/auth'
+import { getCurrentUpn, getRealUpn, isSysAdmin, impersonationEnabled, IMPERSONATE_BAR_COLLAPSED_COOKIE } from '@/lib/auth'
+import { authMode } from '@/lib/authMode'
 import { getCallerCapabilities, getImpersonationTargets, type ImpersonationTarget } from '@/lib/data'
 
 // App chrome: brand + primary nav + identity widget, wrapping each page's content.
@@ -37,36 +38,46 @@ export default async function AppShell({ children }: { children: React.ReactNode
   }
 
   // Only meaningful in entra mode (dev has a fixed DEV_FAKE_UPN — nothing to refresh for).
-  const entraMode = (process.env.AUTH_MODE ?? 'dev') === 'entra'
+  const entraMode = authMode() === 'entra'
 
-  // Dev-only impersonation bar: switch the effective UPN to any synthetic teacher/admin for
-  // making how-to docs. Never rendered in entra/live mode.
-  const devMode = !entraMode
+  // Impersonation bar: switch the EFFECTIVE UPN to any staff member to view the app as them (how-to
+  // docs, support). Available in dev always, and in entra mode only when ALLOW_IMPERSONATION is set
+  // AND the REAL signed-in user is a sysadmin — gated on the REAL identity so a sysadmin who is
+  // currently impersonating a teacher still gets the bar to switch back.
+  const realUpn = await getRealUpn().catch(() => null)
+  let canImpersonate = false
+  if (impersonationEnabled()) {
+    canImpersonate = authMode() === 'dev' ? true : Boolean(realUpn && (await isSysAdmin(realUpn)))
+  }
+  const impersonating = Boolean(
+    realUpn && currentUpn && realUpn.toLowerCase() !== currentUpn.toLowerCase(),
+  )
   let impersonationTargets: ImpersonationTarget[] = []
-  let impersonating = false
-  if (devMode) {
-    try {
-      impersonating = Boolean((await cookies()).get(DEV_IMPERSONATE_COOKIE)?.value?.trim())
-    } catch {
-      impersonating = false
-    }
+  let barCollapsed = false
+  if (canImpersonate) {
     try {
       impersonationTargets = await getImpersonationTargets()
     } catch {
-      impersonationTargets = [] // synthetic warehouse unreachable — free-text UPN still works
+      impersonationTargets = [] // warehouse unreachable — free-text UPN still works
+    }
+    try {
+      barCollapsed = (await cookies()).get(IMPERSONATE_BAR_COLLAPSED_COOKIE)?.value === '1'
+    } catch {
+      barCollapsed = false
     }
   }
 
   return (
     <>
       {/* Above the header AND outside MaintenanceProvider so the maintenance overlay never covers it
-          -- keeps how-to-doc shots clean AND lets a dev tester re-impersonate during a lockdown. */}
-      {devMode && (
+          -- keeps how-to-doc shots clean AND lets a sysadmin re-impersonate during a lockdown. */}
+      {canImpersonate && (
         <DevImpersonationBar
           current={currentUpn}
-          defaultUpn={process.env.DEV_FAKE_UPN ?? null}
+          realUpn={realUpn}
           impersonating={impersonating}
           targets={impersonationTargets}
+          initialCollapsed={barCollapsed}
         />
       )}
       <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
