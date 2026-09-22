@@ -160,7 +160,7 @@ CROSS APPLY (VALUES ( CASE WHEN r.raw - f.n0 < 0.5 THEN f.n0
                            ELSE f.n0 + (CONVERT(INT, f.n0) % 2) END )) rd(rord)   -- round half to EVEN
 CROSS APPLY (VALUES ( CASE WHEN rd.rord < 0 THEN 0 WHEN rd.rord > sm.MaxLvlOrd THEN sm.MaxLvlOrd ELSE rd.rord END )) o(ord)
 JOIN dbo.DimReadingScale sc ON sc.ScaleSystem = w.ScaleSystem AND sc.LevelOrder = o.ord
-WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1 AND s.Grade <> 'P'
+WHERE s.IsCurrent = 1 AND s.Grade <> 'P'
   AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder;
 
 -- ============================================================================
@@ -181,7 +181,7 @@ Half AS (
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
-    WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1
+    WHERE s.IsCurrent = 1
 )
 INSERT INTO dbo.FactAssessmentReading
     (StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, LevelCode,
@@ -252,7 +252,7 @@ CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NE
 CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zl.z*@WriteSpread < 1 THEN 1 WHEN 2 + zl.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zl.z*@WriteSpread, 0) END) )) tl(v)
 CROSS APPLY (VALUES ( ((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)+((ABS(CHECKSUM(NEWID()))%10000)/10000.0)-2.0 )) zc(z)
 CROSS APPLY (VALUES ( CONVERT(INT, CASE WHEN 2 + zc.z*@WriteSpread < 1 THEN 1 WHEN 2 + zc.z*@WriteSpread > 4 THEN 4 ELSE ROUND(2 + zc.z*@WriteSpread, 0) END) )) tc(v)
-WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1 AND s.Grade <> 'P'
+WHERE s.IsCurrent = 1 AND s.Grade <> 'P'
   AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder;
 
 -- WRITING — SHORT CYCLE 1 (half of each homeroom)
@@ -261,7 +261,7 @@ WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1 AND s.Grade <> 'P'
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
-    WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1
+    WHERE s.IsCurrent = 1
 )
 INSERT INTO dbo.FactAssessmentWriting
     (StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
@@ -303,7 +303,7 @@ WHERE h.HalfBucket = 1
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
-    WHERE s.IsCurrent = 1 AND s.ActiveFlag = 1
+    WHERE s.IsCurrent = 1
 ),
 MStud AS (
     SELECT h.StudentKey, h.Grade,
