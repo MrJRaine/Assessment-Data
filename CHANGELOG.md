@@ -13,14 +13,12 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [0.6.0] — 2026-09-22
 
-Rebrand to **The SCoR Hub** (SR management's chosen product name), the **French answer key** in Math
-Short Cycles, and the security + data fixes that landed through the session. Some SQL below was
-already deployed to live as it was fixed (noted per item); the container ships as
-`assessment-webapp:0.6.0`.
+The **French answer key** in Math Short Cycles, plus the security + data fixes that landed through the
+session. Some SQL below was already deployed to live as it was fixed (noted per item); the container
+ships as `assessment-webapp:0.6.0`.
 
 ### Changed
-- App name → **The SCoR Hub** (header, home header, tab title, maintenance overlay). `/cycles` — the
-  Short Cycles of Response — keeps its name. Web-only (`AppShell.tsx`, `page.tsx`, `layout.tsx`,
+- Placeholder headers replaced. Web-only (`AppShell.tsx`, `page.tsx`, `layout.tsx`,
   `maintenance/MaintenanceProvider.tsx`).
 - Programming loading text “Loading IPP cells” → “Loading cells…” (grid covers IPP + Adaptations).
   Web-only (`programming/loading.tsx`).
