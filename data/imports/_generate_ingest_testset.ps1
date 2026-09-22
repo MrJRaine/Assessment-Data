@@ -18,8 +18,13 @@
 #   - sqlReport (Co-Teachers):
 #       comma-delimited, CRLF, UTF-8 no BOM, double-quote qualifier on comma values,
 #       filename AssessmentDataCoTeacherExport.csv
-#   The committed .csv COPY INTO loaders in sql/procedures/ are the NOT-YET-DEPLOYED
-#   cutover format; when dev cuts over, flip $DELIM/$EXT/$LINEEND below and rename.
+#   -Format selects which shape to emit:
+#     Legacy  (default) = the above dev format (TAB / .text / CR, AssessmentData* names).
+#     Cutover           = live sqlReport format (comma / .csv / CRLF, Students*/Staff*/
+#                         Sections*/Enrollments*/Co-Teachers* names) — matches the deployed
+#                         LIVE loaders and the dev CSV loaders from deploy_dev_cutover_loaders.sql.
+#   Synthetic field values are kept free of commas/quotes so comma-join needs no escaping;
+#   each topic folder is cleared before writing so exactly one file per topic remains.
 #
 # POPULATION (per grade per stream = 30 students: 20 straight + 10 split):
 #   English         : grades P,1,4,5,7,8,10,11              (240)
@@ -49,15 +54,31 @@
 #       in git to restore the edge-case coverage when needed.
 # =============================================================================
 
+param(
+    [ValidateSet('Legacy','Cutover')]
+    [string]$Format = 'Legacy'   # Legacy = dev TAB/.text (default); Cutover = live CSV/.csv Students* shape
+)
+
 $ErrorActionPreference = "Stop"
 
 $basePath  = "c:\Git-Repos\Assessment-Data\data\imports"
 $sqlPath   = "c:\Git-Repos\Assessment-Data\sql\scripts\seed_DimCourseAssessment_dev_testset.sql"
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# --- format knobs (flip to the CSV cutover format when dev deploys the new loaders) ---
-$DELIM = "`t"          # legacy TAB for the 4 direct extracts
-$EXT   = "text"        # legacy extension
+# --- format knobs (driven by -Format) ---
+if ($Format -eq 'Cutover') {
+    $DELIM = ','                                    # live sqlReport CSV
+    $EXT   = 'csv'
+    $fnStudents = 'StudentsExport.csv';   $fnStaff = 'StaffExport.csv'
+    $fnSections = 'SectionsExport.csv';   $fnEnroll = 'EnrollmentsExport.csv'
+    $fnCoTeach  = 'Co-TeachersExport.csv'           # must start with 'Co-Teachers' for the live wildcard
+} else {
+    $DELIM = "`t"                                   # legacy TAB
+    $EXT   = 'text'
+    $fnStudents = 'AssessmentDataStudentsExport.text';   $fnStaff = 'AssessmentDataStaffExport.text'
+    $fnSections = 'AssessmentDataSectionExport.text';    $fnEnroll = 'AssessmentDataEnrollmentsExport.text'
+    $fnCoTeach  = 'AssessmentDataCoTeacherExport.csv'
+}
 
 # --- fixed values ---
 $ELEM = '0716'; $JR = '0079'; $SR = '1178'
@@ -67,6 +88,9 @@ $DENR = '09/02/2025'; $DLEFT = '06/30/2026'
 foreach ($topic in @("students","staff","sections","section-teachers","enrollments")) {
     $folder = Join-Path $basePath $topic
     if (-not (Test-Path $folder)) { New-Item -ItemType Directory -Path $folder | Out-Null }
+    # Clear any prior export files so only the current-format file is present (the
+    # loaders union everything matching their wildcard — stale files would duplicate).
+    Get-ChildItem -Path $folder -File | Where-Object { $_.Extension -in '.text','.csv' } | Remove-Item -Force
 }
 
 function Write-FileWithCR   { param($Path,$Lines) [System.IO.File]::WriteAllText($Path, ($Lines -join "`r"),   $utf8NoBom) }
@@ -265,11 +289,13 @@ $sectionHeader   = @('ID','SchoolID','TermID','Course_Number','Section_Number','
 $enrollHeader    = @('[1]Student_Number','SectionID','DateEnrolled','DateLeft','ID') -join $DELIM
 $coTeacherHeader = 'School,TermID,Course,Section,Teacher,Email,Role,SectionID'
 
-Write-FileWithCR   -Path "$basePath\students\AssessmentDataStudentsExport.$EXT"       -Lines (@($studentHeader) + $studentRows)
-Write-FileWithCR   -Path "$basePath\staff\AssessmentDataStaffExport.$EXT"             -Lines (@($staffHeader)   + $staffRows)
-Write-FileWithCR   -Path "$basePath\sections\AssessmentDataSectionExport.$EXT"        -Lines (@($sectionHeader) + $sectionRows)
-Write-FileWithCR   -Path "$basePath\enrollments\AssessmentDataEnrollmentsExport.$EXT" -Lines (@($enrollHeader)  + $enrollRows)
-Write-FileWithCRLF -Path "$basePath\section-teachers\AssessmentDataCoTeacherExport.csv" -Lines (@($coTeacherHeader) + $coTeacherRows)
+# Direct extracts: CR-only in Legacy, CRLF in Cutover. Co-Teachers always CRLF.
+$writeDirect = if ($Format -eq 'Cutover') { 'Write-FileWithCRLF' } else { 'Write-FileWithCR' }
+& $writeDirect -Path "$basePath\students\$fnStudents"        -Lines (@($studentHeader) + $studentRows)
+& $writeDirect -Path "$basePath\staff\$fnStaff"             -Lines (@($staffHeader)   + $staffRows)
+& $writeDirect -Path "$basePath\sections\$fnSections"       -Lines (@($sectionHeader) + $sectionRows)
+& $writeDirect -Path "$basePath\enrollments\$fnEnroll"      -Lines (@($enrollHeader)  + $enrollRows)
+Write-FileWithCRLF -Path "$basePath\section-teachers\$fnCoTeach" -Lines (@($coTeacherHeader) + $coTeacherRows)
 
 # -----------------------------------------------------------------------------
 # Companion: DimCourseAssessment dev seed for the new synthetic course codes
@@ -305,7 +331,7 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------------
-"Generated ingest test set:"
+"Generated ingest test set [Format=$Format]:"
 "  students     : {0} rows" -f $studentRows.Count
 "  staff        : {0} rows ({1} teachers + itinerant x3 + 3 principals + 1 regional analyst)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
 "  sections     : {0} rows" -f $sectionRows.Count
