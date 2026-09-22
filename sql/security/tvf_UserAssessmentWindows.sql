@@ -101,11 +101,11 @@ RETURN
           AND (wed.ProgramScope IS NULL
                OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
-    -- Oversight (Admin/SpecialistTeacher) — COURSE-SCOPED like the teacher branch: only students in
-    -- MAPPED-COURSE sections (ELA/FLA/Math) in their school(s), language-matched to the instance. The
-    -- old version counted straight off DimStudent by grade+scope, which overcounted students with no
-    -- literacy section and mis-split immersion by language (the /enter card disagreed with the group
-    -- picker for oversight users). Mirrors tvf_TeacherGroups' Oversight-Admin path.
+    -- Oversight (Administrator / SpecialistTeacher / RegionalAnalyst) — COURSE-SCOPED and
+    -- SCHOOL-SCOPED: only students in MAPPED-COURSE sections (ELA/FLA/Math) in the schools the caller
+    -- covers via StaffSchoolAccess (= their CanChangeSchool buildings), language-matched to the
+    -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
+    -- simply has every building in their list. Mirrors tvf_TeacherGroups' Oversight path.
     AdminStudents AS (
         SELECT wed.AssessmentWindowID, s.StudentKey
         FROM Caller c
@@ -128,35 +128,7 @@ RETURN
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
         INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
-          AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-          AND (wed.ProgramScope IS NULL
-               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
-    ),
-    -- Oversight (RegionalAnalyst) — COURSE-SCOPED, region-wide: every mapped-course section, same
-    -- language/kind match. Mirrors tvf_TeacherGroups' Oversight-Analyst path.
-    AnalystStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey
-        FROM Caller c
-        CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN DimSection sec
-                ON wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-        INNER JOIN DimCourseAssessment ca
-                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
-               AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
-                 OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
-               AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
-        INNER JOIN FactEnrollment e
-                ON e.SectionKey  = sec.SectionKey
-               AND e.StartDate  <= wed.EndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
-        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel = 'RegionalAnalyst'
+        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
           AND (wed.ProgramScope IS NULL
@@ -165,7 +137,6 @@ RETURN
     ApplicableStudents AS (
         SELECT * FROM TeacherStudents
         UNION ALL SELECT * FROM AdminStudents
-        UNION ALL SELECT * FROM AnalystStudents
     ),
     -- "Entered" = a result on ANY instance of the same cycle+subject, not just this one window. A
     -- student's result can sit on a sibling-language instance (e.g. immersion reading entered on the

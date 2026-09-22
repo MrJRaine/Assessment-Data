@@ -70,20 +70,15 @@ RETURN
                 ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
         INNER JOIN FlaggedStudents f ON f.StudentKey = e.StudentKey
     ),
-    -- ==== OVERSIGHT scope: flagged students school-wide (Admin/Specialist) or region-wide (Analyst).
+    -- ==== OVERSIGHT scope: flagged students in the schools the caller covers via StaffSchoolAccess
+    -- (= their CanChangeSchool buildings). All oversight roles gated the same way; NO region-wide
+    -- analyst branch (a region-wide analyst simply has every building in their list).
     OversightStudents AS (
         SELECT f.StudentKey, f.Grade, f.GradeOrder, f.Homeroom, f.HomeroomKey, f.SchoolID, f.SchoolName, f.NeedsIPP
         FROM Caller c
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
         INNER JOIN FlaggedStudents f ON f.SchoolID = ssa.SchoolID
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
-
-        UNION
-
-        SELECT f.StudentKey, f.Grade, f.GradeOrder, f.Homeroom, f.HomeroomKey, f.SchoolID, f.SchoolName, f.NeedsIPP
-        FROM Caller c
-        CROSS JOIN FlaggedStudents f
-        WHERE c.AccessLevel = 'RegionalAnalyst'
+        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
     ),
     -- Oversight SECTION lens: HS (GradeOrder >= 10) flagged students -> their current section enrollments.
     OversightSections AS (

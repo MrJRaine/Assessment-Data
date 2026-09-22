@@ -83,17 +83,14 @@ RETURN
     WHERE s.EnrollStatus IN (0, -1)
       AND (@StudentKey IS NULL OR s.StudentKey = CAST(@StudentKey AS BIGINT))
       AND (
+            -- RegionalAnalyst is scoped by StaffSchoolAccess like Admin/SpecialistTeacher (the
+            -- buildings in their CanChangeSchool) -- NO region-wide branch. A region-wide analyst
+            -- simply has every building in their list.
             EXISTS (
-                SELECT 1 FROM DimStaff staff
-                WHERE LOWER(staff.Email) = LOWER(@UPN)
-                  AND staff.IsCurrent    = 1
-                  AND staff.AccessLevel  = 'RegionalAnalyst'
-            )
-            OR EXISTS (
                 SELECT 1 FROM StaffSchoolAccess ssa
                 WHERE LOWER(ssa.Email) = LOWER(@UPN)
                   AND ssa.SchoolID     = s.SchoolID
-                  AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher')
+                  AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
             )
             OR EXISTS (
                 SELECT 1

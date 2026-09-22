@@ -104,7 +104,8 @@ RETURN
 
         UNION
 
-        -- OVERSIGHT (Administrator / SpecialistTeacher): mapped-course sections in their school(s).
+        -- OVERSIGHT (Administrator / SpecialistTeacher / RegionalAnalyst): mapped-course sections in
+        -- the schools they cover via StaffSchoolAccess.
         SELECT DISTINCT
             CAST('Oversight' AS VARCHAR(10)),
             sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
@@ -117,25 +118,10 @@ RETURN
                AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
         INNER JOIN DimCourseAssessment ca
                 ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher')
-          AND ((@AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
-            OR (@AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
-          AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)
-
-        UNION
-
-        -- OVERSIGHT (RegionalAnalyst): every mapped-course section, region-wide.
-        SELECT DISTINCT
-            CAST('Oversight' AS VARCHAR(10)),
-            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
-            ca.Language
-        FROM Caller c
-        CROSS JOIN Wins win
-        INNER JOIN DimSection sec
-                ON win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-        INNER JOIN DimCourseAssessment ca
-                ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
-        WHERE c.AccessLevel = 'RegionalAnalyst'
+        -- All oversight roles (Administrator / SpecialistTeacher / RegionalAnalyst) are scoped to the
+        -- schools in their StaffSchoolAccess (= their CanChangeSchool buildings). NO region-wide
+        -- analyst branch; a region-wide analyst simply has every building in their list.
+        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
           AND ((@AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
             OR (@AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
           AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)

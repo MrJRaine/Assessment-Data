@@ -36,6 +36,19 @@ IF NOT EXISTS (SELECT 1 FROM DimStaff WHERE LOWER(Email) = LOWER(@Email) AND IsC
         CAST(GETDATE() AS DATE), NULL, 1, GETDATE()
     );
 
+-- ===== 1b) Analyst SCHOOL SCOPE: StaffSchoolAccess rows (analyst RLS is now StaffSchoolAccess-gated) =====
+-- The RegionalAnalyst branch of every RLS TVF/view now requires the student's school to be in the
+-- caller's StaffSchoolAccess (their CanChangeSchool buildings) -- there is no region-wide branch.
+-- The ingest builds these rows; a manual DimStaff insert does not, so add them here. All active
+-- schools => this account sees everything (a true region-wide analyst = every building listed).
+DELETE FROM StaffSchoolAccess WHERE LOWER(Email) = LOWER(@Email);
+INSERT INTO StaffSchoolAccess (StaffKey, Email, SchoolID, AccessLevel, LastRebuilt)
+SELECT d.StaffKey, LOWER(@Email), sch.SchoolID, 'RegionalAnalyst', GETDATE()
+FROM DimStaff d
+CROSS JOIN DimSchool sch
+WHERE LOWER(d.Email) = LOWER(@Email) AND d.IsCurrent = 1
+  AND sch.ActiveFlag = 1;
+
 -- ===== 2) Sysadmin: StaffAppAccess super-user (email-keyed; DELETE + INSERT = idempotent) =====
 DELETE FROM StaffAppAccess WHERE LOWER(Email) = LOWER(@Email);
 INSERT INTO StaffAppAccess (Email, IsSysAdmin, CanManageCycles, CanRunIngest, LastUpdated)
@@ -47,3 +60,6 @@ FROM DimStaff WHERE LOWER(Email) = LOWER(@Email) AND IsCurrent = 1;
 
 SELECT 'StaffAppAccess' AS Source, Email, IsSysAdmin, CanManageCycles, CanRunIngest
 FROM StaffAppAccess WHERE LOWER(Email) = LOWER(@Email);
+
+SELECT 'StaffSchoolAccess' AS Source, COUNT(*) AS Schools
+FROM StaffSchoolAccess WHERE LOWER(Email) = LOWER(@Email);
