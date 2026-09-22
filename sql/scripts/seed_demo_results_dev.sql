@@ -67,10 +67,12 @@ DECLARE @SeedStaff BIGINT;
 DECLARE @JuneDate  DATE = '2026-06-15';
 DECLARE @SC1Date   DATE;
 
--- SC1 = the earliest active Short Cycle (cycle 1 of the year).
+-- SC1 = the earliest active Short Cycle (cycle 1 of the year), EXCLUDING the prior-year
+-- June demo cycle this script creates (its 2026-06-01 start would otherwise sort first
+-- and steal @SC1CGID on a re-run, sending the "SC1" inserts at the June windows).
 SELECT TOP 1 @SC1CGID = CycleGroupID
 FROM dbo.DimShortCycle
-WHERE ActiveFlag = 1
+WHERE ActiveFlag = 1 AND CycleGroupID <> @JuneCGID
 ORDER BY StartDate ASC, CycleGroupID;
 
 SELECT @SC1Date = DATEADD(DAY, 3, StartDate)
