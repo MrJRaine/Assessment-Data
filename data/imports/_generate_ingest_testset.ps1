@@ -265,6 +265,9 @@ for ($a = 0; $a -lt $adminSchools.Count; $a++) {
 # Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over the 3 test schools)
 $staffId++
 $staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $ELEM, $ELEM, "$ELEM;$JR;$SR", '41', $staffId) -join $DELIM
+# Project lead's own account, as a region-wide RegionalAnalyst, so they can sign in and test on dev as themselves.
+$staffId++
+$staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, "$ELEM;$JR;$SR", '41', $staffId) -join $DELIM
 
 # -----------------------------------------------------------------------------
 # Co-Teachers (sqlReport: comma-delimited, CRLF, quote the "Last, First" name)
@@ -333,7 +336,7 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 "Generated ingest test set [Format=$Format]:"
 "  students     : {0} rows" -f $studentRows.Count
-"  staff        : {0} rows ({1} teachers + itinerant x3 + 3 principals + 1 regional analyst)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
+"  staff        : {0} rows ({1} teachers + itinerant x3 + 3 principals + 2 regional analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
 "  sections     : {0} rows" -f $sectionRows.Count
 "  enrollments  : {0} rows" -f $enrollRows.Count
 "  co-teachers  : {0} rows" -f $coTeacherRows.Count
