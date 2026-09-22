@@ -52,6 +52,16 @@ in, so they fall into the English reading instance (or the fallback CASE) and sh
 build the correctly-scoped instances on live to match dev — never touch a "rule."** "Better way to migrate
 cycles" = reproduce the dev instance set per live cycle instead of hand-rebuilding each on /cycles.
 
+**RESOLVED 2026-09-22.** Live reconciled to the canonical 8 (`reconcile_cycle_instances.sql`). The SCoR-1
+reading results immersion students had entered on the old generic (now Reading·English·English) window were
+repointed to Reading·French·Early Immersion — `migrate_mislocated_immersion_reading.sql` (all 14 were
+already `FR_Reading`, so a clean window repoint; 3 English results on that window were correct, left alone).
+Also fixed the `/enter` oversight COUNT: the ADMIN + ANALYST branches of `tvf_UserAssessmentWindows` counted
+straight off DimStudent by grade+scope (the 2026-09-18 rework course-scoped only the TEACHER branch), so an
+oversight user's card overcounted (students with no literacy section) and read English-only. Now all three
+branches resolve through mapped-course sections language-matched to the instance (like `tvf_TeacherGroups`),
+and `EnteredStudentCount` counts a result on ANY instance of the cycle. Card == sum of the group cards.
+
 ## The one genuinely-structural fact
 J020 (late immersion) has no French reading benchmarks yet, so it reads English — but that too is expressed
 by ProgramScope (J020 is in the Late Immersion bucket), not by hardcoding its program code.
