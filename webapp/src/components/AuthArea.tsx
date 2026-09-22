@@ -1,5 +1,6 @@
 import { auth, signIn, signOut } from '@/auth'
-import { getCurrentUpn } from '@/lib/auth'
+import { getCurrentUpn, getRealUpn } from '@/lib/auth'
+import { clearImpersonation } from './dev/impersonate-actions'
 
 // Header identity widget. Reflects AUTH_MODE so it works before Entra is wired:
 //  - dev:   shows the EFFECTIVE UPN (the dev-impersonation override if set, else DEV_FAKE_UPN),
@@ -36,7 +37,14 @@ export default async function AuthArea() {
         className="authform"
         action={async () => {
           'use server'
-          await signOut()
+          // While impersonating, "Sign out" REVERTS to the real Entra user (stops impersonating);
+          // only when NOT impersonating does it end the real session. Re-checked at submit time.
+          const [real, eff] = await Promise.all([getRealUpn(), getCurrentUpn()])
+          if (real && eff && real.toLowerCase() !== eff.toLowerCase()) {
+            await clearImpersonation()
+          } else {
+            await signOut()
+          }
         }}
       >
         <span className="muted">{display}</span>
