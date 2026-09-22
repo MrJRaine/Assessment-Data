@@ -40,6 +40,8 @@
 #   Junior High (7,8)   : one ELA teacher + one FLA teacher for the whole tier.
 #   Senior High (10,11) : one ELA teacher + one FLA teacher for the whole tier.
 #   Plus one regional itinerant (multi-school grain) co-teaching one section per tier.
+#   Plus one school administrator per school (Administrator RLS) and one regional
+#   analyst dummy (RegionalAnalyst, multi-school) for RLS/login testing.
 #
 # Re-run anytime: powershell -File data/imports/_generate_ingest_testset.ps1
 # NOTE: this REPLACES the small 21-row edge-case set from _generate_test_dummies.ps1
@@ -228,6 +230,18 @@ foreach ($sch in @($ELEM,$JR,$SR)) {
     $staffRows += @($itinEmail, 'Sky', 'Rivard', 'APSEA Itinerant', '', $sch, $canChange, '32', $staffId) -join $DELIM
 }
 
+# School administrators — one per school (Group 33 = Principal/VP -> Administrator; school-level RLS)
+$adminNames = @(@('Reed','Marchand'), @('Quinn','Delacroix'), @('Sol','Beaumont'))
+$adminSchools = @($ELEM, $JR, $SR)
+for ($a = 0; $a -lt $adminSchools.Count; $a++) {
+    $staffId++
+    $sch = $adminSchools[$a]
+    $staffRows += @("principal.$sch@tcrce.ca", $adminNames[$a][0], $adminNames[$a][1], 'Principal', $sch, $sch, '', '33', $staffId) -join $DELIM
+}
+# Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over the 3 test schools)
+$staffId++
+$staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $ELEM, $ELEM, "$ELEM;$JR;$SR", '41', $staffId) -join $DELIM
+
 # -----------------------------------------------------------------------------
 # Co-Teachers (sqlReport: comma-delimited, CRLF, quote the "Last, First" name)
 # Itinerant supports one section per tier.
@@ -293,7 +307,7 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 "Generated ingest test set:"
 "  students     : {0} rows" -f $studentRows.Count
-"  staff        : {0} rows ({1} people + itinerant x3)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
+"  staff        : {0} rows ({1} teachers + itinerant x3 + 3 principals + 1 regional analyst)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
 "  sections     : {0} rows" -f $sectionRows.Count
 "  enrollments  : {0} rows" -f $enrollRows.Count
 "  co-teachers  : {0} rows" -f $coTeacherRows.Count
