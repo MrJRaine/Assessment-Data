@@ -11,6 +11,45 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.0] — 2026-09-22
+
+The **French answer key** in Math Short Cycles, plus the security + data fixes that landed through the
+session. Some SQL below was already deployed to live as it was fixed (noted per item); the container
+ships as `assessment-webapp:0.6.0`.
+
+### Changed
+- Placeholder headers replaced. Web-only (`AppShell.tsx`, `page.tsx`, `layout.tsx`,
+  `maintenance/MaintenanceProvider.tsx`).
+- Programming loading text “Loading IPP cells” → “Loading cells…” (grid covers IPP + Adaptations).
+  Web-only (`programming/loading.tsx`).
+
+### Added
+- **French answer key in Math Short Cycles.** For a French-Immersion section, the answer key now
+  follows the task’s language: the FR answer key shows beside the FR task text
+  (`COALESCE(AnswerKeyFR, AnswerKey)`), matching the existing task-description switch.
+  **SQL to deploy with this release:** `sql/security/tvf_TeacherRosterMath.sql` (live + dev).
+- **`AnswerKeyFR` on the math task bank** + `AnswerKey` widened to `VARCHAR(500)`. Lets the math team
+  supply a separate French answer key per task. SQL already applied live + dev this session
+  (`DimMathTask.sql`, `Stg_MathTask.sql`, `usp_LoadMathTasks.sql`,
+  `sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql`).
+
+### Fixed
+- **RegionalAnalyst access is now scoped by building, not region-wide (security).** The RegionalAnalyst
+  role was reading across **every** school in all 13 user-scoped TVFs, contradicting the documented
+  design — it must be gated by the analyst’s `StaffSchoolAccess` (their `CanChangeSchool` buildings),
+  exactly like an Admin. Folded RegionalAnalyst into the `StaffSchoolAccess`-gated branch across all 13
+  TVFs. **Already deployed live + dev** this session (`sql/scripts/deploy_analyst_rls_scoping.sql`).
+- **Reading cycle cards counted English only.** The assessment-type cards on the data-entry picker
+  counted just the English reading instance instead of all language instances of a cycle. Corrected the
+  admin/analyst branches to be course-scoped and count entered-any-instance. **Already deployed live +
+  dev** (`sql/security/tvf_UserAssessmentWindows.sql`).
+- **14 immersion reading results** were sitting in the wrong assessment window; migrated to the
+  French · Early-Immersion window. Data fix, applied live this session.
+
+### Removed
+- **Dev-only sysadmin impersonation** was stripped from `main` entirely (it never belonged on live).
+  The full feature is preserved on the `dev-impersonation` branch for dev/awdev testing only.
+
 ## [0.5.1] — 2026-09-21
 
 ### Fixed

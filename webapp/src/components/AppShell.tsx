@@ -18,23 +18,23 @@ export default async function AppShell({ children }: { children: React.ReactNode
   // visitor (entra mode) has no UPN -> default to no capabilities.
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
   let authed = false
-  let currentUpn: string | null = null
   let capsError = false
+  // Hoisted to function scope so the impersonation bar below can compare the EFFECTIVE UPN against
+  // the real one (null when unauthenticated on the public landing).
+  let currentUpn: string | null = null
   try {
-    const upn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
+    currentUpn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
     authed = true
-    currentUpn = upn
     // Resolve caps in its OWN try so a transient caps-query failure can't flip the user to signed-out
     // (which would also hide the non-gated nav). getCallerCapabilities already retries a cold pool;
     // if it still fails, flag it so the client does a bounded refresh rather than stranding the nav.
     try {
-      caps = await getCallerCapabilities(upn)
+      caps = await getCallerCapabilities(currentUpn)
     } catch {
       capsError = true
     }
   } catch {
     authed = false
-    currentUpn = null
   }
 
   // Only meaningful in entra mode (dev has a fixed DEV_FAKE_UPN — nothing to refresh for).
@@ -84,11 +84,11 @@ export default async function AppShell({ children }: { children: React.ReactNode
       <header className="header">
         {/* The brand lockup is the way home — standard convention, and the only home affordance now
             that the landing page has no nav entry of its own. */}
-        <Link href="/" className="brand" aria-label="Short Cycles of Response — home">
+        <Link href="/" className="brand" aria-label="The SCoR Hub — home">
           {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
-          <span className="brand-app">Short Cycles of Response</span>
+          <span className="brand-app">The SCoR Hub</span>
         </Link>
         <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
         <div className="auth">

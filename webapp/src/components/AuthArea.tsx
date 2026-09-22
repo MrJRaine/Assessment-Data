@@ -13,7 +13,7 @@ export default async function AuthArea() {
   if (mode === 'dev') {
     let upn = process.env.DEV_FAKE_UPN ?? 'dev user'
     try {
-      upn = await getCurrentUpn() // honours the dev-impersonation cookie
+      upn = await getCurrentUpn()
     } catch {
       /* misconfigured dev mode — fall back to the env value */
     }
