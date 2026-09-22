@@ -24,7 +24,7 @@
  ******************************************************************************/
 
 EXEC usp_LoadMathTasks
-    @SourceUri = 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/mathtasks/*';
+    @SourceUri = 'abfss://a1b49041-0855-46de-8aca-86762132eefb@onelake.dfs.fabric.microsoft.com/b3819971-8ef8-448b-b0b3-58a6fc7985ef/Files/imports/mathtasks/MathTasks_*';
 
 -- The proc returns TasksInserted / TasksUpdated / TasksRetired. Quick sanity check after:
 SELECT GradeCode, AssessmentMonth, COUNT(*) AS Tasks, SUM(CAST(ActiveFlag AS INT)) AS ActiveTasks
