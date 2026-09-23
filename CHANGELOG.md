@@ -14,6 +14,16 @@ with `0.3.0`, so earlier detail is approximate.
 ## [0.6.2] — 2026-09-23
 
 ### Changed
+- **Maintenance heartbeat: stop polling idle non-entry tabs.** The maintenance-window poller runs
+  app-wide (root layout), so every backgrounded tab — Reports, the group picker, home, admin — woke
+  every 8 min to hit `/api/status`, re-opening a TLS connection each time (the idle-keepalive reap
+  pulse IT saw in the HTTP.sys error log). A hidden tab only needs the heartbeat to guarantee its
+  **T-1 auto-save**, which only exists on data-entry grids. Entry grids now report unsaved work up to
+  the provider (`useEntryLock` → `registerUnsavedEntry`); a **hidden tab with no unsaved entry work
+  stops polling entirely** and re-polls immediately on refocus (`visibilitychange`). Visible tabs
+  (any page) are unchanged and still show the banner; a hidden entry tab holding unsaved work keeps
+  its heartbeat so auto-save is never missed. Web-only
+  (`components/maintenance/MaintenanceProvider.tsx`, `useEntryLock.ts`).
 - **Perf: cache the static reference lookups.** The reading-scale levels (`DimReadingScale`) and the
   achievement bands (`DimAchievementLevel`) were queried on **every** reading roster and every Reports
   load, serially — yet they're seeded once and only change on a deploy. Now cached per-process

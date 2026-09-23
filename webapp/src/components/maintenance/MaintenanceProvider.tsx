@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, useTransition } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { usePathname } from 'next/navigation'
 import { clearMaintenance } from '@/app/admin/maintenance/actions'
 
@@ -37,8 +37,21 @@ export interface MaintenanceState {
 
 const Ctx = createContext<MaintenanceState>({ stage: 'none', secondsRemaining: null, maintenanceAt: null, message: null })
 
+// Separate controls channel: entry grids register that they hold UNSAVED work, so the provider can
+// keep the background heartbeat alive for exactly those tabs (see the poll scheduler below). Kept off
+// the state context so a dirty flip never re-renders ordinary useMaintenance() consumers.
+export interface MaintenanceControls {
+  // Call while an entry grid has unsaved changes; returns a release fn to call when it saves/unmounts.
+  registerUnsavedEntry: () => () => void
+}
+const ControlsCtx = createContext<MaintenanceControls>({ registerUnsavedEntry: () => () => {} })
+
 export function useMaintenance(): MaintenanceState {
   return useContext(Ctx)
+}
+
+export function useMaintenanceControls(): MaintenanceControls {
+  return useContext(ControlsCtx)
 }
 
 export default function MaintenanceProvider({
@@ -64,6 +77,24 @@ export default function MaintenanceProvider({
     maintenanceAt: null,
     message: null,
   })
+
+  // How many entry grids in THIS tab currently hold unsaved work, and a handle to re-run the poll
+  // scheduler when that count changes (set inside the poll effect). Refs, not state: the scheduler
+  // reads them imperatively and a change must not re-render the app.
+  const dirtyEntryCountRef = useRef(0)
+  const rescheduleRef = useRef<() => void>(() => {})
+
+  const registerUnsavedEntry = useCallback((): (() => void) => {
+    dirtyEntryCountRef.current += 1
+    rescheduleRef.current() // a newly-dirty tab may need the background heartbeat started
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      dirtyEntryCountRef.current = Math.max(0, dirtyEntryCountRef.current - 1)
+      rescheduleRef.current() // last unsaved work saved/gone — the heartbeat can stop if hidden
+    }
+  }, [])
 
   const recompute = useCallback(() => {
     const { atMs, message, offsetMs } = windowRef.current
@@ -140,6 +171,12 @@ export default function MaintenanceProvider({
     const isHidden = () => typeof document !== 'undefined' && document.hidden
     const schedule = (overrideDelay?: number) => {
       clearTimeout(pollTimer)
+      // A HIDDEN tab with no unsaved entry work has nothing to auto-save and shows no banner anyone
+      // can see, so stop polling entirely — onVisibility re-polls the instant it's focused again.
+      // Only a hidden tab still holding UNSAVED entry work keeps the heartbeat, so its T-1 auto-save
+      // is guaranteed to fire. This is what stops backgrounded non-entry tabs from waking every 8 min
+      // to re-open a socket (the idle-keepalive reap pulse in HTTPERR).
+      if (isHidden() && dirtyEntryCountRef.current === 0) return
       const s = windowRef.current.atMs == null ? null : Math.round((windowRef.current.atMs - (Date.now() + windowRef.current.offsetMs)) / 1000)
       const visibleDelay = s != null && s <= 6 * 60 ? 4000 : 8000 // 4s when close, else 8s
       const delay = overrideDelay ?? (isHidden() ? HIDDEN_MS : visibleDelay)
@@ -148,6 +185,10 @@ export default function MaintenanceProvider({
         const ok = await poll()
         schedule(ok ? undefined : RETRY_MS)
       }, delay)
+    }
+    // Let registerUnsavedEntry re-run the scheduler when the unsaved-work count crosses in/out of 0.
+    rescheduleRef.current = () => {
+      if (!stopped) schedule()
     }
     schedule()
 
@@ -166,6 +207,7 @@ export default function MaintenanceProvider({
 
     return () => {
       stopped = true
+      rescheduleRef.current = () => {}
       clearInterval(tick)
       clearTimeout(pollTimer)
       if (idleHandle !== undefined && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
@@ -209,22 +251,26 @@ export default function MaintenanceProvider({
   const pathname = usePathname()
   const onMaintenanceRoute = pathname.startsWith('/ingest') || pathname.startsWith('/admin/maintenance')
 
+  const controls = useMemo<MaintenanceControls>(() => ({ registerUnsavedEntry }), [registerUnsavedEntry])
+
   return (
-    <Ctx.Provider value={state}>
-      <MaintenanceBanner state={state} admin={admin} />
-      {children}
-      {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
-          grid mid auto-save). The poller keeps trying; the overlay lifts when a sysadmin EXPLICITLY
-          clears the window — there is no auto-expire, so a long maintenance job is never cut short. */}
-      {state.stage === 'down' && !onMaintenanceRoute ? (
-        <MaintenanceDown
-          message={state.message}
-          admin={admin}
-          authSlot={authSlot}
-          links={{ ingest: canRunIngest, maintenance: isSysAdmin }}
-        />
-      ) : null}
-    </Ctx.Provider>
+    <ControlsCtx.Provider value={controls}>
+      <Ctx.Provider value={state}>
+        <MaintenanceBanner state={state} admin={admin} />
+        {children}
+        {/* Past T: cover the app with a fixed overlay rather than unmounting it (avoids tearing down a
+            grid mid auto-save). The poller keeps trying; the overlay lifts when a sysadmin EXPLICITLY
+            clears the window — there is no auto-expire, so a long maintenance job is never cut short. */}
+        {state.stage === 'down' && !onMaintenanceRoute ? (
+          <MaintenanceDown
+            message={state.message}
+            admin={admin}
+            authSlot={authSlot}
+            links={{ ingest: canRunIngest, maintenance: isSysAdmin }}
+          />
+        ) : null}
+      </Ctx.Provider>
+    </ControlsCtx.Provider>
   )
 }
 
