@@ -42,7 +42,7 @@ BEGIN
     TRUNCATE TABLE dbo.SectionRosterMembership;
 
     INSERT INTO dbo.SectionRosterMembership (
-        AssessmentWindowID, SectionKey, SectionID, SchoolID, GroupKey, WindowEffectiveDate,
+        AssessmentWindowID, SectionKey, SectionID, SchoolID, GroupKey, SectionLanguage, WindowEffectiveDate,
         StudentKey, StudentNumber, FirstName, LastName, Grade, Homeroom, SchoolName,
         ProgramCode, ProgramFamily, LastRebuiltAt
     )
@@ -52,6 +52,7 @@ BEGIN
         sec.SectionID,
         sec.SchoolID,
         'SEC:' + sec.SectionID,
+        ca.Language,   -- the SECTION's course language decides writing EN/FR (not the student's program)
         w.EffDate,
         s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
         sch.SchoolName, s.ProgramCode, dp.ProgramFamily,
@@ -99,13 +100,13 @@ BEGIN
     TRUNCATE TABLE dbo.TeacherRosterMembership;
 
     INSERT INTO dbo.TeacherRosterMembership (
-        TeacherEmail, AssessmentWindowID, SectionID, GroupKey, StudentKey, StudentNumber,
+        TeacherEmail, AssessmentWindowID, SectionID, GroupKey, SectionLanguage, StudentKey, StudentNumber,
         FirstName, LastName, Grade, Homeroom, SchoolName, ProgramCode, ProgramFamily,
         SchoolID, LastRebuiltAt
     )
     SELECT DISTINCT
         LOWER(fst.TeacherEmail),
-        b.AssessmentWindowID, b.SectionID, b.GroupKey, b.StudentKey, b.StudentNumber,
+        b.AssessmentWindowID, b.SectionID, b.GroupKey, b.SectionLanguage, b.StudentKey, b.StudentNumber,
         b.FirstName, b.LastName, b.Grade, b.Homeroom, b.SchoolName, b.ProgramCode, b.ProgramFamily,
         b.SchoolID, @Now
     FROM dbo.SectionRosterMembership b

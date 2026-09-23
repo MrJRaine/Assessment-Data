@@ -32,6 +32,7 @@ CREATE TABLE dbo.TeacherRosterMembership (
     AssessmentWindowID   BIGINT          NOT NULL,
     SectionID            VARCHAR(50)     NOT NULL,
     GroupKey             VARCHAR(70)     NOT NULL,    -- 'SEC:' + SectionID
+    SectionLanguage      VARCHAR(10)     NULL,        -- DimCourseAssessment.Language (writing EN/FR toggle filter)
     StudentKey           BIGINT          NOT NULL,
     StudentNumber        BIGINT          NOT NULL,
     FirstName            VARCHAR(100)    NOT NULL,

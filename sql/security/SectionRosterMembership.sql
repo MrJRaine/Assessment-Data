@@ -36,6 +36,10 @@ CREATE TABLE dbo.SectionRosterMembership (
     SectionID            VARCHAR(50)     NOT NULL,    -- business key; the FactSectionTeachers / GroupKey anchor
     SchoolID             VARCHAR(10)     NOT NULL,    -- for the oversight StaffSchoolAccess check
     GroupKey             VARCHAR(70)     NOT NULL,    -- 'SEC:' + SectionID (what the app passes as @GroupKeys)
+    SectionLanguage      VARCHAR(10)     NULL,        -- DimCourseAssessment.Language of the section's course
+                                                      -- ('English'/'French' for literacy, NULL for Math). The
+                                                      -- writing roster filters the EN/FR toggle by THIS (the
+                                                      -- section decides the language, NOT the student's program).
     WindowEffectiveDate  DATE            NOT NULL,    -- MIN(rebuild day, window EndDate); drives the TVF's live access date-check
     StudentKey           BIGINT          NOT NULL,   -- the DimStudent version FactEnrollment points at
     StudentNumber        BIGINT          NOT NULL,   -- provincial 10-digit number (stable across SCD versions)
