@@ -11,7 +11,11 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [Unreleased]
+## [0.6.2] — 2026-09-23
+
+### Added
+- **"Diff from Benchmark" column** on the reading entry grid — the numerical difference of the selected
+  level from the expected range (signed/coloured), right after the New-level dropdown.
 
 ### Changed
 - **Roster load perf pass.** A reading roster open was ~2.5s of Fabric — a ~1s `getTeacherGroups`
@@ -32,19 +36,12 @@ with `0.3.0`, so earlier detail is approximate.
   - **Dropped dead server work.** The reading/writing grids recompute the delta + achievement band
     client-side (they must update live as a level is picked), so the `DimAchievementLevel` join +
     `ExistingDelta`/`Achievement*` columns were removed from the roster TVFs and `data.ts`.
-  Net (dev, 20-student roster): roster TVF ~2050 → ~1430ms warm, and the picker round-trip gone.
+  Net: roster TVF ~2050 → ~1430ms warm (dev, 20-student); the picker round-trip gone; LIVE warm
+  roster load ~3.47s → ~2.3s app-observed (deployed in the 0.6.2 container swap, 2026-09-23).
   **SQL to deploy (dev first, in order):** `SectionRosterMembership.sql` + `TeacherRosterMembership.sql`
   + `usp_RebuildRosterMembership.sql` + `usp_RunFullIngestCycle.sql`, then `EXEC usp_RebuildRosterMembership`,
   then `tvf_TeacherRoster.sql` + `tvf_TeacherRosterOwn.sql` + `tvf_TeacherRosterWriting.sql` +
   `tvf_TeacherRosterMath.sql`. Web changes (card metadata, dead-column trim) ride in the container.
-
-### Added
-- **"Diff from Benchmark" column** on the reading entry grid — the numerical difference of the selected
-  level from the expected range (signed/coloured), right after the New-level dropdown.
-
-## [0.6.2] — 2026-09-23
-
-### Changed
 - **Maintenance heartbeat: stop polling idle non-entry tabs.** The maintenance-window poller runs
   app-wide (root layout), so every backgrounded tab — Reports, the group picker, home, admin — woke
   every 8 min to hit `/api/status`, re-opening a TLS connection each time (the idle-keepalive reap

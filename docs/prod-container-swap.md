@@ -1,8 +1,9 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.6.0` → `0.6.1` on 2026-09-23
-(streaming fix — `compress:false`; container swap only, no live-warehouse SQL).
+running Podman container for a new one. Most recent cutover: `0.6.1` → `0.6.2` on 2026-09-23
+(roster perf pass — materialized membership + card-metadata pass-through + dead-column trim;
+**requires live SQL first** — see the prerequisite section below).
 
 ## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
 
@@ -71,6 +72,13 @@ and run any listed scripts against live **before** swapping the container.
   `sql/procedures/usp_MergeStudent.sql` → `sql/scripts/deploy_groupkey_tvfs_live.sql`. Then run one
   ingest so `GroupKey` is populated for existing students (or the backfill in the migrate script covers
   the current set).
+- **`0.6.2`** requires (in order, against live `Assessment_Warehouse`, under maintenance mode): the two
+  membership tables `sql/security/SectionRosterMembership.sql` + `sql/security/TeacherRosterMembership.sql`,
+  then `sql/procedures/usp_RebuildRosterMembership.sql` + `sql/procedures/usp_RunFullIngestCycle.sql`,
+  then `EXEC dbo.usp_RebuildRosterMembership` (verify both tables return > 0), then the four roster TVFs
+  `sql/security/tvf_TeacherRoster.sql` / `tvf_TeacherRosterOwn.sql` / `tvf_TeacherRosterWriting.sql` /
+  `tvf_TeacherRosterMath.sql`. The tables/proc are inert until the TVFs read them, so they can go in
+  before the window; keep the TVF swap + container swap inside it.
 
 ## 1. Pre-flight (nothing changes yet)
 
