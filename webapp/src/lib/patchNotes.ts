@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.6.2',
+    date: '2026-09-23',
+    kind: 'fix',
+    summary:
+      'Clicking a class or cycle card now responds right away — the card presses in and shows "Opening…" while the next page loads, instead of the click seeming to do nothing.',
+  },
+  {
     version: '0.6.1',
     date: '2026-09-23',
     kind: 'fix',

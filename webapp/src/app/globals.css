@@ -105,8 +105,20 @@ a { color: inherit; text-decoration: none; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.1rem 1.1rem 1.25rem; }
 /* card-link mirrors the Power App landing cards: cyan accent edge, title, description, "go" link */
-.card-link { display: flex; flex-direction: column; border-left: 4px solid var(--primary); transition: border-color 0.12s, box-shadow 0.12s; }
+.card-link { position: relative; display: flex; flex-direction: column; border-left: 4px solid var(--primary); transition: border-color 0.12s, box-shadow 0.12s, transform 0.08s ease; }
 .card-link:hover { box-shadow: 0 1px 8px rgba(0, 146, 201, 0.16); background: #fafdff; }
+/* Press feedback: the card dips slightly when clicked (matches the primary buttons). */
+.card-link:active { transform: scale(0.985); box-shadow: 0 1px 4px rgba(0, 146, 201, 0.22); }
+.btn-primary { transition: transform 0.08s ease, filter 0.12s; }
+.btn-primary:active { transform: scale(0.97); }
+/* "Opening…" overlay shown by <LinkPending> while a card navigation is pending — instant client-side
+   feedback, immune to the reverse-proxy buffering that swallowed the server-streamed loading state. */
+.card-pending {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: rgba(250, 253, 255, 0.9); border-radius: 8px;
+  font-size: 0.9rem; font-weight: 600; color: var(--primary);
+}
 .card-title { font-weight: 700; font-size: 1.05rem; margin-bottom: 0.3rem; }
 .card-desc { color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
 .card-cta { color: var(--primary); font-weight: 700; font-size: 0.85rem; margin-top: 0.8rem; }

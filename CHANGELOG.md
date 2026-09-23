@@ -11,6 +11,17 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.2] — 2026-09-23
+
+### Fixed
+- **Clicking a card gives instant feedback.** Data-entry cycle cards, the group picker, and the home
+  cards now show a **press animation** and an **"Opening…" spinner** the moment they're clicked, via a
+  client-side `useLinkStatus` indicator (`LinkPending`). This is immune to the reverse-proxy response
+  buffering that collapsed the server-streamed roster loading state on live (see 0.6.1) — the click is
+  acknowledged in the browser immediately, before any server byte, so even while the roster query runs
+  it no longer looks like a dead hang. (The underlying roster-query latency is a separate perf item.)
+  Web-only (`LinkPending.tsx`, `components/ui.tsx`, `globals.css`). Ships as `assessment-webapp:0.6.2`.
+
 ## [0.6.1] — 2026-09-23
 
 ### Fixed
