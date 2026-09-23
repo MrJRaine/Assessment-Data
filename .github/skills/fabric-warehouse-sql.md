@@ -368,3 +368,20 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
     itself is not tunable; it can only be moved off the request path (warm at startup) or kept open
     (`pool.min` — note `tarn` defaults to `min: 0` and `idleTimeoutMillis: 30000`, so a pool left idle
     30s empties and the next request pays the full 1.8s again). (2026-09-18)
+
+## NEWID() in a CROSS APPLY is folded to ONE value per query (2026-09-22)
+
+Per-row randomness via `NEWID()` fails when the expression sits in a `CROSS APPLY (VALUES ( …NEWID()… ))`:
+Fabric evaluates that derived scalar **once for the whole statement**, so every row gets the SAME "random"
+number. Symptom (demo-data seed): every student in a class landed on the IDENTICAL reading level / writing
+score because the random offset was constant — while a `NEWID()` used INLINE in the outer `SELECT` (a
+per-task coin flip) DID vary per row.
+
+**Fix — seed from a PER-ROW COLUMN so it can't be folded to a constant.** Hash a key:
+`HASHBYTES('SHA2_256', CONVERT(VARCHAR(60), StudentKey) + '<salt>')`, then take disjoint 8-byte windows as
+uniforms in [0,1): `(((CONVERT(BIGINT, SUBSTRING(h,1,8)) % 100000) + 100000) % 100000) / 100000.0` (the
+`+100000)%100000` avoids `ABS` overflow on a negative `BIGINT`). Because it depends on `StudentKey` it
+evaluates per row AND is **reproducible** (same input → same value, so a re-seed reproduces identical
+numbers). Different salts or byte windows give independent draws; sum 3 uniforms − 1.5 ≈ N(0, 0.5²) for a
+bell. Confirmed working alongside this: `HASHBYTES` `SHA2_256`, `SUBSTRING` on `varbinary`,
+`CONVERT(BIGINT, varbinary)`, and multi-table `DELETE f FROM … JOIN … WHERE …`.

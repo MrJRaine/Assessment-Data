@@ -17,7 +17,18 @@ const CACHE_MS = 4_000
 
 let cache: { at: string | null; message: string | null; fetchedAt: number } | null = null
 
-export async function GET() {
+let pollSeq = 0
+
+export async function GET(req: Request) {
+  // Dev-only heartbeat capture: log one line per poll so `podman logs` records the maintenance
+  // polling CADENCE (verifying that hidden non-entry tabs stop polling). Gated by env — never on in
+  // prod. `referer` shows which page issued the poll (entry route vs. elsewhere). See 0.6.2.
+  if (process.env.LOG_STATUS_POLLS === '1') {
+    const ref = req.headers.get('referer') ?? '-'
+    // eslint-disable-next-line no-console
+    console.log(`[status-poll] #${++pollSeq} ${new Date().toISOString()} ref=${ref}`)
+  }
+
   const now = Date.now()
   if (!cache || now - cache.fetchedAt > CACHE_MS) {
     try {

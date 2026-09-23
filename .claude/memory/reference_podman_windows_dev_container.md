@@ -1,11 +1,11 @@
 ---
 name: reference_podman_windows_dev_container
-description: "How to run the webapp container on a Windows/podman (WSL) machine — publish to 127.0.0.1 explicitly (the default binding empty-replies), awdev vs awlive recipes, and the container-only-machine constraints (no node, no gh)."
+description: "How to run the webapp container on a Windows/podman (WSL) machine — publish to 127.0.0.1 explicitly (the default binding empty-replies); THREE containers (awlive :3000 live, awdev :3001 dev, awdev-impersonation :3002 dev+impersonation from the dev-impersonation branch's -imp image); container-only-machine constraints (no node, no gh)."
 metadata: 
   node_type: memory
   type: reference
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-18T13:40:14.125Z
+  modified: 2026-09-22T19:42:46.949Z
 ---
 
 Running the `webapp/` container locally on a Windows machine with rootless podman (WSL backend). Verified on a fresh laptop 2026-09-04.
@@ -14,16 +14,25 @@ Running the `webapp/` container locally on a Windows machine with rootless podma
 
 **Each boot:** `podman machine start` (the VM doesn't auto-start; `podman machine init` only the first time). No compose provider is installed → use plain `podman build` / `podman run`, NOT `podman compose`.
 
-**Recipes** (run from repo root; image listens on 3000 internally):
+**THREE containers as of 2026-09-22** (was two). Impersonation was pulled OFF main/`dev` and now
+lives ONLY on the `dev-impersonation` branch, built into a separate `:<ver>-imp` image. So:
+- **awlive** — :3000 — clean release image (built from `main`) — `.env` (**live** warehouse, real PII), Entra auth. "awlive = the latest build pointed at live data," not a separate track.
+- **awdev** — :3001 — clean release image (built from `dev`) — `.env.dev` (synthetic `_Dev`), Entra auth. NO impersonation (clean image). Safe demo target ([[feedback_live_pii_boundary]]).
+- **awdev-impersonation** — :3002 — the `:<ver>-imp` image (built from `dev-impersonation`) — `.env.dev` **with `-e AUTH_MODE=dev`** so it opens already signed-in as `DEV_FAKE_UPN` with the impersonation bar always on (dev auth ⇒ no `:3002` Entra redirect-URI needed). For how-tos / demos / troubleshooting.
+
+`.env.dev` is now `AUTH_MODE=entra` + `ALLOW_IMPERSONATION=true` + `AUTH_URL=http://localhost:3001` (awdev signs in via Entra like live). The impersonation container overrides `AUTH_MODE=dev` at run time.
+
 ```
-# build (tag with the commit sha)
-podman build -t assessment-webapp:dev -t assessment-webapp:$(git rev-parse --short HEAD) webapp
-# awdev — synthetic _Dev data, dev auth + impersonation bar, port 3001
-podman run -d --name awdev  --env-file webapp/.env.dev  -p 127.0.0.1:3001:3000 --restart unless-stopped assessment-webapp:dev
-# awlive — live warehouse (real PII), Entra auth, port 3000
-podman run -d --name awlive --env-file webapp/.env      -p 127.0.0.1:3000:3000 --restart unless-stopped assessment-webapp:dev
+# build clean (from dev or main worktree)
+podman build -t assessment-webapp:<ver> webapp
+# build impersonation image (from the dev-impersonation worktree)
+podman build -t assessment-webapp:<ver>-imp webapp
+# forward-slash the absolute --env-file path (bash strips backslashes); swap = stop+rm+run (env-file isn't re-read on restart)
+podman run -d --name awlive               --restart unless-stopped -p 127.0.0.1:3000:3000 --env-file 'c:/Git-Repos/Assessment-Data/webapp/.env'     localhost/assessment-webapp:<ver>
+podman run -d --name awdev                --restart unless-stopped -p 127.0.0.1:3001:3000 --env-file 'c:/Git-Repos/Assessment-Data/webapp/.env.dev' localhost/assessment-webapp:<ver>
+podman run -d --name awdev-impersonation  --restart unless-stopped -p 127.0.0.1:3002:3000 --env-file 'c:/Git-Repos/Assessment-Data/webapp/.env.dev' -e AUTH_MODE=dev localhost/assessment-webapp:<ver>-imp
 ```
-`awdev` = `.env.dev` (`FABRIC_SQL_DATABASE=Assessment_Warehouse_Dev`, `AUTH_MODE=dev`, `ALLOW_DEV_AUTH=true` → no Entra login + dev impersonation bar) — the safe target for meetings/demos ([[feedback_live_pii_boundary]]). `awlive`/`.env` point at the live `Assessment_Warehouse`. Confirm the DB in each `.env*` before running. All `.env*` are gitignored → they travel by thumb drive, not git. Verify health at `/api/health` (shows `authMode`, `fabricConfigured`, region).
+**Per-release upkeep for the `-imp` image:** merge `main`→`dev-impersonation` (in its OWN temp worktree, never by flipping the `dev`/`-prod` worktrees), then re-layer any impersonation the auto-merge silently drops — the 0.6.0 merge dropped `data.ts:getImpersonationTargets`, the `cookies` imports in `auth.ts`+`AppShell`, and `AppShell`'s `DevImpersonationBar` import + a `currentUpn` scope. The image **build catches all of these** — always build-verify before swapping :3002. Confirm the DB in each `.env*` before running; all `.env*` are gitignored (travel by thumb drive). Health at `/api/health`.
 
 **The container is NOT a SQL channel.** It holds service-principal credentials with broad warehouse
 access, so `podman exec` + a `mssql`/`ClientSecretCredential` script reaches Fabric directly. I do not

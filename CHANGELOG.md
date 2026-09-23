@@ -11,6 +11,85 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.2] — 2026-09-23
+
+### Added
+- **"Diff from Benchmark" column** on the reading entry grid — the numerical difference of the selected
+  level from the expected range (signed/coloured), right after the New-level dropdown.
+
+### Changed
+- **Roster load perf pass.** A reading roster open was ~2.5s of Fabric — a ~1s `getTeacherGroups`
+  re-resolve **plus** a ~2s roster TVF, back-to-back. Reworked end to end:
+  - **Materialized the roster membership skeleton.** The ingest-stable half of the roster (which
+    students sit in which subject-mapped section per window + their static attrs) is pre-joined into
+    **`SectionRosterMembership`** (section-keyed source of truth) and the derived
+    **`TeacherRosterMembership`** (bounded Taught-scope projection for the teacher fast path), rebuilt
+    each ingest by **`usp_RebuildRosterMembership`** (wired into `usp_RunFullIngestCycle` after the DQ
+    gate). Reading, **Writing** (language filtered by the SECTION's course language, not the student's
+    program — `SectionLanguage` from `DimCourseAssessment`) and **Math** roster TVFs now read the base
+    + a live access predicate. Volatile results (levels/scores/tasks, IPP, benchmark, starting point)
+    stay live. No new staleness — membership was already ingest-cadence.
+  - **Skip the picker round-trip.** The group card now carries its `windowIds`/label/language/school on
+    the link, so the roster page uses them instead of re-running `getTeacherGroups` (~1s off every
+    open). Falls back for direct links / combined rosters. Safe — the roster TVF still authorizes by
+    section, so a spoofed param returns no students.
+  - **Dropped dead server work.** The reading/writing grids recompute the delta + achievement band
+    client-side (they must update live as a level is picked), so the `DimAchievementLevel` join +
+    `ExistingDelta`/`Achievement*` columns were removed from the roster TVFs and `data.ts`.
+  Net: roster TVF ~2050 → ~1430ms warm (dev, 20-student); the picker round-trip gone; LIVE warm
+  roster load ~3.47s → ~2.3s app-observed (deployed in the 0.6.2 container swap, 2026-09-23).
+  **SQL to deploy (dev first, in order):** `SectionRosterMembership.sql` + `TeacherRosterMembership.sql`
+  + `usp_RebuildRosterMembership.sql` + `usp_RunFullIngestCycle.sql`, then `EXEC usp_RebuildRosterMembership`,
+  then `tvf_TeacherRoster.sql` + `tvf_TeacherRosterOwn.sql` + `tvf_TeacherRosterWriting.sql` +
+  `tvf_TeacherRosterMath.sql`. Web changes (card metadata, dead-column trim) ride in the container.
+- **Maintenance heartbeat: stop polling idle non-entry tabs.** The maintenance-window poller runs
+  app-wide (root layout), so every backgrounded tab — Reports, the group picker, home, admin — woke
+  every 8 min to hit `/api/status`, re-opening a TLS connection each time (the idle-keepalive reap
+  pulse IT saw in the HTTP.sys error log). A hidden tab only needs the heartbeat to guarantee its
+  **T-1 auto-save**, which only exists on data-entry grids. Entry grids now report unsaved work up to
+  the provider (`useEntryLock` → `registerUnsavedEntry`); a **hidden tab with no unsaved entry work
+  stops polling entirely** and re-polls immediately on refocus (`visibilitychange`). Visible tabs
+  (any page) poll a **flat 8s** (dropped the leftover 4s-near-T tighten) and still show the banner; a
+  hidden entry tab holding unsaved work keeps its heartbeat so auto-save is never missed. Web-only
+  (`components/maintenance/MaintenanceProvider.tsx`, `useEntryLock.ts`).
+- **Perf: cache the static reference lookups.** The reading-scale levels (`DimReadingScale`) and the
+  achievement bands (`DimAchievementLevel`) were queried on **every** reading roster and every Reports
+  load, serially — yet they're seeded once and only change on a deploy. Now cached per-process
+  (`lib/refCache.ts`, 6h TTL, cleared on restart/deploy), removing two warehouse round trips from the
+  roster's critical path. The dominant roster cost remains the dynamic `tvf_TeacherRoster` query
+  itself (being measured separately). Web-only.
+
+### Fixed
+- **Clicking a card gives instant feedback.** Data-entry cycle cards, the group picker, and the home
+  cards now show a **press animation** and an **"Opening…" spinner** the moment they're clicked, via a
+  client-side `useLinkStatus` indicator (`LinkPending`). This is immune to the reverse-proxy response
+  buffering that collapsed the server-streamed roster loading state on live (see 0.6.1) — the click is
+  acknowledged in the browser immediately, before any server byte, so even while the roster query runs
+  it no longer looks like a dead hang. (The underlying roster-query latency is a separate perf item.)
+  Web-only (`LinkPending.tsx`, `components/ui.tsx`, `globals.css`). Ships as `assessment-webapp:0.6.2`.
+- **Math "Edit checklist" formatting restored.** The task-selection list rendered as one run-on wall
+  of text — its CSS block (`.checklist` / `.cl-task` / …) had been accidentally deleted in the
+  check-mark restyle (`05fe0af`). Restored the original rules (one task per row, unit headers, chip
+  answer key). Web-only (`globals.css`).
+- **Math cards now count entered students.** The cycle cards (`tvf_UserAssessmentWindows`) and group
+  picker (`tvf_TeacherGroups`) counted "entered" for Reading/Writing only — a long-standing
+  `Math entry count TBD` gap — so Math cards always read 0. Added a `FactAssessmentMath` branch to
+  both (a student is entered once they have any task result). **SQL to deploy live + dev:**
+  `sql/security/tvf_UserAssessmentWindows.sql` + `sql/security/tvf_TeacherGroups.sql`.
+
+## [0.6.1] — 2026-09-23
+
+### Fixed
+- **Opening a class no longer hangs on live (streaming behind IIS).** Next's built-in gzip
+  (`compress: true`, the default) buffers the response to compress it — an origin-side buffer
+  *upstream* of IIS that defeated the roster Suspense streaming behind the reverse proxy: the loading
+  shell never flushed, so a click looked like a dead hang before the whole page dropped in at once.
+  `responseBufferLimit=0` and disabling IIS dynamic compression couldn't fix it because both are
+  downstream of Next's own compression. Set **`compress: false`** in `next.config.ts` so streamed
+  responses go out uncompressed + chunked and flush immediately. Web-only, ships as
+  `assessment-webapp:0.6.1`. **Deploy note:** IIS **dynamic compression must stay OFF** and ARR
+  `responseBufferLimit` must stay `0`, or IIS re-gzips/re-buffers the now-uncompressed HTML.
+
 ## [0.6.0] — 2026-09-22
 
 The **French answer key** in Math Short Cycles, plus the security + data fixes that landed through the

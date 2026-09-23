@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useMaintenance } from './MaintenanceProvider'
+import { useMaintenance, useMaintenanceControls } from './MaintenanceProvider'
 
 // Sticky "locked after save" flag, keyed by the window's T so it persists across navigation (same
 // section or between sections) for the rest of THAT window, and a past window never locks a new one.
@@ -16,6 +16,7 @@ const LOCK_KEY = 'maintLockedAfterSave'
  */
 export function useEntryLock({ dirty, onSave }: { dirty: boolean; onSave: () => void }) {
   const { stage, maintenanceAt } = useMaintenance()
+  const { registerUnsavedEntry } = useMaintenanceControls()
   const [lockedAfterSave, setLockedAfterSave] = useState(false)
   const autoSavedRef = useRef(false)
 
@@ -66,6 +67,15 @@ export function useEntryLock({ dirty, onSave }: { dirty: boolean; onSave: () => 
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty])
+
+  // Tell the maintenance provider this tab is holding unsaved entry work. That keeps the background
+  // maintenance heartbeat (and therefore the T-1 auto-save) alive for THIS tab even when it's hidden,
+  // while tabs with nothing to save let the provider drop the heartbeat. Registered only while dirty;
+  // the returned release fn decrements on save/clean or unmount.
+  useEffect(() => {
+    if (!dirty) return
+    return registerUnsavedEntry()
+  }, [dirty, registerUnsavedEntry])
 
   // Call after a successful save: from T-5 on, the next save locks input — and it stays locked in
   // every section for the rest of the window (persisted, so navigating away/back can't re-open it).

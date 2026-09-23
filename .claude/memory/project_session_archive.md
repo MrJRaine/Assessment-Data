@@ -1404,3 +1404,45 @@ readings.
 **IIS buffering (TOP of tomorrow):** 0.5.1 roster streaming works locally but IIS/ARR buffers the slow roster response on live so the loading state never flushes (dead-click only on the slow roster page). Fix = disable ARR response buffering (IT sign-off, out tonight) or add the `useLinkStatus` client overlay (buffering-immune) as 0.5.2.
 
 **Queued (awaiting user's go before generating):** synthetic ingest test data — 30 English students at EACH of grades P,1,4,5,7,8,10,11 (per grade: 20 straight-class + 10 split; splits P/1,4/5,7/8,10/11; each student in a math + an english class); repeat the full set for Early Immersion; 7/8 split only for Late Immersion. PS-format export files.
+
+## Session 2026-09-22 — 0.6.0 "The SCoR Hub" LIVE; demo dev data; memory-hygiene reckoning
+
+**Shipped 0.6.0 LIVE on data.tcrce.ca:** "The SCoR Hub" rename (header/home/tab/maintenance; the `/cycles`
+Short-Cycles-of-Response feature name unchanged); **French math answer key** (`tvf_TeacherRosterMath`
+`COALESCE(AnswerKeyFR, AnswerKey)` for French Immersion); **RegionalAnalyst RLS scoped by
+`StaffSchoolAccess`** across all 13 user-scoped TVFs (security fix — was region-wide); reading cycle-card
+count fix (counts all language instances, not English only); 14 mislocated immersion reading results
+migrated to the French·Early-Immersion window; math task bank `AnswerKeyFR` + `AnswerKey` widened to 500.
+Math task ingest (prior context): 370 tasks live+dev, months remapped 10→9. Release git: dev→main
+**squash 46a6098**, tag **v0.6.0**, mandatory **main→dev back-merge**; local main worktree was 190 behind
+origin/main (never updated after 0.4.1) — fast-forwarded first.
+
+**Three local containers now, all 0.6.0:** awlive :3000 (live data), awdev :3001 (dev, clean), and a NEW
+**awdev-impersonation :3002** (dev, `AUTH_MODE=dev` override, impersonation always-on) built from the
+`0.6.0-imp` image. Impersonation lives ONLY on the `dev-impersonation` branch. Merging main→dev-impersonation
+to carry 0.6.0 in: the auto-merge SILENTLY DROPPED impersonation pieces (took main's stripped side in
+non-conflicting regions) — `data.ts:getImpersonationTargets`, the `cookies` imports in `auth.ts`+`AppShell`,
+`AppShell`'s `DevImpersonationBar` import, and a `currentUpn` scope var. All caught by the image build; the
+per-release upkeep note is in [[reference_podman_windows_dev_container]].
+
+**Demo dev data — `sql/scripts/seed_demo_results_dev.sql`:** prior-year JUNE Short Cycle (reading+writing,
+grade−1 rollback, grade P excluded) + partial SC1 (reading+writing+math, half of each homeroom). Values on a
+per-student bell curve around each subject's target (reading = decimal avg of benchmark min/max + round-half-
+even; writing = trait around Approaching-2; math = per-student mastery ~65%). DEV-guarded, idempotent (June
+cycle fully cleared each run; SC1 seed-only). **KEY FABRIC GOTCHA (→ fabric skill):** `NEWID()` inside a
+`CROSS APPLY (VALUES(…))` is hoisted to ONE value per query → every student in a class got the identical
+level; fix = seed randomness from a per-row column via `HASHBYTES(StudentKey+salt)` (per-row AND reproducible).
+Also: the June cycle (start 2026-06-01, active) stole `@SC1CGID` from the "earliest active cycle" resolver on
+re-run → excluded it by fixed CycleGroupID.
+
+**Process reckoning (the theme of the day):** repeatedly cited "stale" memories that led me into repetitive
+tangents — dredged up the SETTLED "math gets no re-record checkbox" decision (math is binary, only no→yes,
+captured by the cell edit), and described 0.5.0 as unshipped when 0.5.0/0.5.1/0.6.0 were all live. Root cause:
+append-only memory. New rule **[[feedback_keep_memories_current]]**: update/DELETE a memory at its SOURCE the
+moment its item ships or reverses; record provenance; one source of truth; prune running lists; never act on a
+note you suspect is stale. Rewrote **[[project_prelaunch_queue]]** to current (0.6.0 live; math re-record
+settled-out; math-outcomes framework RESOLVED not parked; group-picker perf `tvf_TeacherGroups` + connection
+pre-warm TIED at lowest priority; `J020`-refs cleanup lowest priority). Deferred: a one-time **memory
+consistency audit** (findings list before editing). Git-workflow reminders re-applied: mandatory main→dev
+back-merge (missed then fixed same turn); worktree consistency (impersonation merge done in a dedicated temp
+worktree, not by flipping the dev/prod worktrees; main mutations only in the prod worktree).
