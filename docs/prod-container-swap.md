@@ -1,8 +1,22 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.5.1` → `0.6.0` on 2026-09-22
-(The SCoR Hub rename + French math answer key; live-warehouse SQL: `sql/security/tvf_TeacherRosterMath.sql`).
+running Podman container for a new one. Most recent cutover: `0.6.0` → `0.6.1` on 2026-09-23
+(streaming fix — `compress:false`; container swap only, no live-warehouse SQL).
+
+## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
+
+Roster pages stream a loading shell then fill in (Suspense). For that to reach the browser, NOTHING in
+the chain may buffer the response. Three settings work together — all three are required:
+- **App:** `next.config.ts` `compress: false` (Next's default gzip buffers to compress — the origin
+  buffer that broke streaming behind the proxy). Baked into the image as of `0.6.1`.
+- **IIS ARR:** `responseBufferLimit = 0` on `system.webServer/proxy` (disable ARR response buffering).
+  Set with `appcmd set config -section:system.webServer/proxy /responseBufferLimit:"0" /commit:apphost`.
+- **IIS:** dynamic compression **OFF** (`doDynamicCompression:"False"`) — else IIS re-gzips + re-buffers
+  the now-uncompressed HTML. `appcmd set config -section:system.webServer/urlCompression /doDynamicCompression:"False" /commit:apphost`.
+
+The two IIS settings live in `applicationHost.config` and survive reboots + container swaps; they only
+need re-applying if IIS/ARR is reinstalled or the config is rebuilt.
 
 ## Environment facts
 
