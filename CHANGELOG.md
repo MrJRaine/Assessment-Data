@@ -11,6 +11,16 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.3] — 2026-09-23
+
+### Changed
+- **Perf: cache the static reference lookups.** The reading-scale levels (`DimReadingScale`) and the
+  achievement bands (`DimAchievementLevel`) were queried on **every** reading roster and every Reports
+  load, serially — yet they're seeded once and only change on a deploy. Now cached per-process
+  (`lib/refCache.ts`, 6h TTL, cleared on restart/deploy), removing two warehouse round trips from the
+  roster's critical path. The dominant roster cost remains the dynamic `tvf_TeacherRoster` query
+  itself (being measured separately). Web-only.
+
 ## [0.6.2] — 2026-09-23
 
 ### Fixed

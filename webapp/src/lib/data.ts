@@ -2,6 +2,7 @@ import 'server-only'
 import { queryAsUser, query } from './db'
 import { readGroups, writeGroups } from './groupCache'
 import { readAccessLevel, writeAccessLevel, readCapabilities, writeCapabilities } from './identityCache'
+import { readRef, writeRef } from './refCache'
 
 /**
  * Secured data-access layer (SERVER-ONLY).
@@ -485,6 +486,9 @@ export interface ScaleLevel {
  * dropdown. Reference data (not user-scoped), so it reads the bridge scale view directly.
  */
 export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]> {
+  // Static reference data (a scale is seeded once) — cache per scale system. See lib/refCache.
+  const cached = readRef<ScaleLevel[]>(`scale:${scaleSystem}`)
+  if (cached.hit) return cached.value
   const rows = await query<{ ReadingScaleID: string; LevelCode: string; LevelOrder: number }>(
     `SELECT CAST(ReadingScaleID AS VARCHAR(20)) AS ReadingScaleID, LevelCode, LevelOrder
      FROM dbo.DimReadingScale
@@ -492,11 +496,13 @@ export async function getScaleLevels(scaleSystem: string): Promise<ScaleLevel[]>
      ORDER BY LevelOrder`,
     { ScaleSystem: scaleSystem },
   )
-  return rows.map((r) => ({
+  const out = rows.map((r) => ({
     readingScaleId: String(r.ReadingScaleID),
     levelCode: r.LevelCode,
     levelOrder: Number(r.LevelOrder),
   }))
+  writeRef(`scale:${scaleSystem}`, out)
+  return out
 }
 
 /**
@@ -1008,6 +1014,9 @@ export interface AchievementBand {
  * server-side bounds logic in usp_UpsertReadingAssessment / tvf_TeacherRoster.
  */
 export async function getAchievementLevels(): Promise<AchievementBand[]> {
+  // Static reference data (the 4 bands are seeded once). See lib/refCache.
+  const cached = readRef<AchievementBand[]>('achievement')
+  if (cached.hit) return cached.value
   const rows = await query<{
     AchievementLevelCode: string
     AchievementLevelName: string
@@ -1022,7 +1031,7 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
      FROM dbo.DimAchievementLevel
      WHERE ActiveFlag = 1`,
   )
-  return rows.map((r) => ({
+  const out = rows.map((r) => ({
     code: r.AchievementLevelCode,
     name: r.AchievementLevelName,
     lowerBound: r.LowerBound == null ? null : Number(r.LowerBound),
@@ -1032,6 +1041,8 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
     hexColor: r.HexColor,
     hexColorTint: r.HexColorTint,
   }))
+  writeRef('achievement', out)
+  return out
 }
 
 // ---------------------------------------------------------------------------
