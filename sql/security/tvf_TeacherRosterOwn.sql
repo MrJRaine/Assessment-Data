@@ -105,7 +105,6 @@ RETURN
                       WHEN sg.ProgramFamily     = 'English'          THEN 'EN_Reading'
                       WHEN sg.ProgramFamily     = 'French Immersion' THEN 'FR_Reading' END) AS ScaleSystem,
         drs.LevelCode        AS ExistingScaleValue,
-        far.ReadingDelta     AS ExistingDelta,
         far.AssessmentDate   AS ExistingAssessmentDate,
         drb.ExpectedMinLevel AS ExpectedMinLevel,
         drb.ExpectedMaxLevel AS ExpectedMaxLevel,
@@ -116,10 +115,7 @@ RETURN
              WHEN wed.AssessmentLanguage = 'French'  THEN 'French Immersion'
              WHEN sg.ProgramCode = 'J020'            THEN 'English'
              ELSE sg.ProgramFamily END AS IPPProgramFamily,
-        dal.AchievementLevelCode AS AchievementLevel,
-        dal.AchievementLevelName AS AchievementLevelName,
-        dal.HexColor             AS AchievementHexColor,
-        dal.HexColorTint         AS AchievementHexColorTint,
+        -- Achievement band computed CLIENT-SIDE (see tvf_TeacherRoster); join removed 2026-09-23.
         sp.StartingLevelCode     AS JuneReadingLevel,
         lastR.LevelCode          AS LastReadingLevel,
         prevR.LevelCode          AS PrevCycleReadingLevel
@@ -149,17 +145,6 @@ RETURN
                    WHEN sg.ProgramCode = 'J020'            THEN 'English'
                    ELSE sg.ProgramFamily END
           AND ipp.IsCurrent     = 1
-    LEFT JOIN DimAchievementLevel dal
-           ON dal.ActiveFlag = 1
-          AND far.ReadingDelta IS NOT NULL
-          AND (dal.LowerBound IS NULL
-               OR (dal.LowerOp = '>=' AND far.ReadingDelta >= dal.LowerBound)
-               OR (dal.LowerOp = '>'  AND far.ReadingDelta >  dal.LowerBound)
-               OR (dal.LowerOp = '='  AND far.ReadingDelta =  dal.LowerBound))
-          AND (dal.UpperBound IS NULL
-               OR (dal.UpperOp = '<=' AND far.ReadingDelta <= dal.UpperBound)
-               OR (dal.UpperOp = '<'  AND far.ReadingDelta <  dal.UpperBound)
-               OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
     LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
            ON sp.StudentNumber = sg.StudentNumber
           AND sp.ScaleSystem   = COALESCE(wed.ScaleSystem,

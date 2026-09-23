@@ -288,15 +288,13 @@ export interface RosterStudent {
   scaleSystem: string | null // window's scale (e.g. EN_Reading) — drives the level dropdown
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
   currentLevel: string | null // existing LevelCode for this window, or null if not yet entered
-  currentDelta: number | null
   assessmentDate: string | null
   expectedMin: string | null
   expectedMax: string | null
   ippStatus: boolean | null // IsIPP (Reading): true/false/null(=unresolved)
   ippNeedsConfirmation: boolean
-  achievementLevel: string | null // DimAchievementLevel code/name for the current delta
-  achievementHexColor: string | null // strong colour (text/border)
-  achievementHexColorTint: string | null // light colour (cell background)
+  // NB: the delta and achievement band are computed CLIENT-SIDE in RosterEntry (they must update
+  // live as the teacher picks a level), so the roster TVF no longer returns them.
   juneLevel: string | null // prior-year "Prev June" starting reading level (anchor)
   lastLevel: string | null // last recorded reading level, ANY cycle (fallback for current)
   prevLevel: string | null // the cycle before the last (for Diff from Prev Cycle)
@@ -316,7 +314,6 @@ export async function getTeacherRoster(
     Grade: string | null
     ScaleSystem: string | null
     ExistingScaleValue: string | null
-    ExistingDelta: number | null
     ExistingAssessmentDate: Date | string | null
     ExpectedMinLevel: string | null
     ExpectedMaxLevel: string | null
@@ -326,10 +323,6 @@ export async function getTeacherRoster(
     ReadingIPPStatus: boolean | null
     ReadingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
-    AchievementLevel: string | null
-    AchievementLevelName: string | null
-    AchievementHexColor: string | null
-    AchievementHexColorTint: string | null
     JuneReadingLevel: string | null
     LastReadingLevel: string | null
     PrevCycleReadingLevel: string | null
@@ -350,7 +343,6 @@ export async function getTeacherRoster(
     scaleSystem: r.ScaleSystem ?? null,
     programFamily: r.IPPProgramFamily ?? null,
     currentLevel: r.ExistingScaleValue ?? null,
-    currentDelta: r.ExistingDelta ?? null,
     assessmentDate:
       r.ExistingAssessmentDate instanceof Date
         ? r.ExistingAssessmentDate.toISOString().slice(0, 10)
@@ -359,9 +351,6 @@ export async function getTeacherRoster(
     expectedMax: r.ExpectedMaxLevel ?? null,
     ippStatus: r.ReadingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.ReadingIPPNeedsConfirmation),
-    achievementLevel: r.AchievementLevelName ?? r.AchievementLevel ?? null,
-    achievementHexColor: r.AchievementHexColor ?? null,
-    achievementHexColorTint: r.AchievementHexColorTint ?? null,
     juneLevel: r.JuneReadingLevel ?? null,
     lastLevel: r.LastReadingLevel ?? null,
     prevLevel: r.PrevCycleReadingLevel ?? null,
@@ -410,9 +399,8 @@ export interface WritingRosterStudent {
   assessmentDate: string | null
   ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
   ippNeedsConfirmation: boolean
-  achievementLevel: string | null // band name for the average
-  achievementHexColor: string | null
-  achievementHexColorTint: string | null
+  // Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the roster
+  // TVF no longer returns it.
 }
 
 /** One Writing window's roster for the signed-in teacher + group, with each student's latest 4-trait entry. */
@@ -440,9 +428,6 @@ export async function getTeacherRosterWriting(
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
-    AchievementLevelName: string | null
-    AchievementHexColor: string | null
-    AchievementHexColorTint: string | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language) ORDER BY LastName, FirstName',
@@ -469,9 +454,6 @@ export async function getTeacherRosterWriting(
         : (r.ExistingAssessmentDate ?? null),
     ippStatus: r.WritingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.WritingIPPNeedsConfirmation),
-    achievementLevel: r.AchievementLevelName ?? null,
-    achievementHexColor: r.AchievementHexColor ?? null,
-    achievementHexColorTint: r.AchievementHexColorTint ?? null,
   }))
 }
 

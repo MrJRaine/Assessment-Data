@@ -123,11 +123,9 @@ RETURN
         CASE WHEN ipp.StudentIPPID IS NOT NULL AND ipp.IsIPP IS NULL
              THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS WritingIPPNeedsConfirmation,
         -- Writing IPP family follows the effective language track (cycle scope, else toggle).
-        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
-        dal.AchievementLevelCode AS AchievementLevel,
-        dal.AchievementLevelName AS AchievementLevelName,
-        dal.HexColor             AS AchievementHexColor,
-        dal.HexColorTint         AS AchievementHexColorTint
+        -- Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the
+        -- DimAchievementLevel join + its columns were dead server work; removed 2026-09-23.
+        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     LEFT JOIN LatestWritingInWindow faw
@@ -139,14 +137,6 @@ RETURN
           AND ipp.Subject       = 'Writing'
           AND ipp.ProgramFamily = CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END
           AND ipp.IsCurrent     = 1
-    LEFT JOIN DimAchievementLevel dal
-           ON dal.ActiveFlag = 1
-          AND faw.AvgScore IS NOT NULL
-          AND dal.AchievementLevelCode =
-              CASE WHEN faw.AvgScore >= 3.50 THEN 4
-                   WHEN faw.AvgScore >= 2.75 THEN 3
-                   WHEN faw.AvgScore >= 1.75 THEN 2
-                   ELSE 1 END
 );
 GO
 
