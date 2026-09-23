@@ -1,65 +1,45 @@
 /*******************************************************************************
  * Function: tvf_TeacherRosterMath  (INLINE table-valued function)
- * Purpose: @UPN-parameterized roster for the web-app MATH entry grid. Same
- *          three role branches as tvf_TeacherRoster (Teacher / SchoolAdmin+
- *          Specialist / RegionalAnalyst), but returns ONE ROW PER (student x
- *          applicable task): each student is joined to THEIR grade's DimMathTask
- *          set for the cycle's month, with the latest recorded result and the
- *          student's Math-IPP status. A multi-grade homeroom therefore returns
- *          each grade's own task set against its own students. The web app
- *          pivots these rows into the student x task matrix.
+ * Purpose: @UPN-parameterized roster for the web-app MATH entry grid. Returns ONE
+ *          ROW PER (student x applicable task): each student joined to THEIR grade's
+ *          DimMathTask set for the cycle's month, with the latest recorded result and
+ *          Math-IPP status. The web app pivots these into the student x task matrix.
  * Created: 2026-09-03
- * Modified: 2026-09-08 — @GroupKey now matches the stored DimStudent.GroupKey for
- *          homerooms (URL-safe, school-qualified); returns Homeroom + SchoolName.
- *          2026-09-15b — @GroupKey resolves homeroom OR (HS) section OR a
- *          'GRADE:<SchoolID>:<Grade>' cohort key (oversight Grade lens); StudentGroups
- *          rewritten to the multi-candidate form. SchoolID threaded through.
- *          2026-09-18 — @GroupKeys takes a comma-delimited LIST (combined rosters);
- *          DimMathTask join INNER -> LEFT so a student whose grade/month has no tasks
- *          still appears (the grid says why) instead of vanishing; and the three role
- *          branches were replaced by SECTION-FIRST resolution — see the block comment
- *          below. Homeroom / 'GRADE:' keys are no longer resolved here (course-scoped
- *          entry only ever sends 'SEC:'); recover from git if ever needed.
+ * Modified: 2026-09-08 — @GroupKey now matches the stored DimStudent.GroupKey for homerooms.
+ *          2026-09-15b — @GroupKey resolves homeroom / section / 'GRADE:' cohort keys.
+ *          2026-09-18 — @GroupKeys takes a comma-delimited LIST; DimMathTask join INNER -> LEFT so a
+ *          student whose grade/month has no tasks still appears; three role branches replaced by
+ *          SECTION-FIRST resolution.
+ *          2026-09-23 — MATERIALIZED membership. Reads SectionRosterMembership (rebuilt each ingest
+ *          by usp_RebuildRosterMembership) + a live access predicate, replacing the per-request
+ *          DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram join. The per-student TASK
+ *          enrichment (DimMathTask by grade/month, latest result, Math-IPP) is unchanged and still
+ *          live. Membership logic lives in usp_RebuildRosterMembership — keep the two in lockstep.
  * Region: Canada East (PIIDPA compliant)
  *
- * Task selection: DimMathTask WHERE GradeCode = student.Grade AND AssessmentMonth
- *   = the cycle's benchmark/dominant month (same month lever reading uses) AND
- *   ActiveFlag = 1. Description is chosen by program: French Immersion -> FR text
- *   (falling back to EN until FR is seeded), else EN.
- *
- * Result: latest-by-date per (student, window, task) — FactAssessmentMath keeps a
- *   dated history (ongoing-assessment model), so the rn=1 pick shows the most
- *   recent 0/1 without fanning a task out to one row per entry.
- *
- * SECURITY: trusts @UPN; SELECT granted to the SP only (see tvf_TeacherRoster
- *   header). Role logic mirrors tvf_TeacherRoster exactly.
+ * Task selection: DimMathTask WHERE GradeCode = student.Grade AND AssessmentMonth = the cycle's
+ *   benchmark/dominant month AND ActiveFlag = 1. Description/answer key chosen by program (FI -> FR
+ *   text, falling back to EN until FR is seeded).
+ * SECURITY: trusts @UPN; SELECT granted to the SP only. Role logic mirrors tvf_TeacherRoster.
  ******************************************************************************/
 
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherRosterMath;
 GO
 
--- @GroupKeys: a COMMA-DELIMITED list of group keys, so several same-language course sections can be
--- entered as one combined roster. A single key is just a list of one (back-compatible).
 CREATE FUNCTION dbo.tvf_TeacherRosterMath(@UPN VARCHAR(255), @AssessmentWindowID VARCHAR(20), @GroupKeys VARCHAR(4000))
 RETURNS TABLE
 AS
 RETURN
 (
-    WITH AtlanticToday AS (
-        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
-    ),
-    Caller AS (
+    WITH Caller AS (
         SELECT TOP 1 d.StaffKey, LOWER(d.Email) AS Email, d.AccessLevel
         FROM DimStaff d
         WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
     ),
     WindowEffectiveDates AS (
-        SELECT
-            w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ScaleSystem, w.BenchmarkMonth, w.AssessmentType,
-            CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
+        SELECT w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
+               w.BenchmarkMonth, w.ProgramFamily
         FROM DimAssessmentWindow w
-        CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
           AND w.AssessmentType = 'Math'
@@ -77,67 +57,30 @@ RETURN
             ) AS DominantMonth
         FROM WindowEffectiveDates wed
     ),
-    -- ------------------------------------------------------------------------------------------
-    -- SECTION-FIRST resolution (2026-09-18). Start from the class asked for; join outward.
-    --
-    -- What this replaces: three role branches that each ENUMERATED EVERY STUDENT the caller could
-    -- possibly see (an analyst: the whole region, with four dimension joins), and only then narrowed
-    -- to the one section. Because @UPN is a parameter, Fabric cannot prune the unused branches at
-    -- plan time, so a plain teacher paid for the analyst's region-wide scan too -- measured at 3.8s
-    -- on a 3-student class, with math and reading near-identical despite reading's much heavier
-    -- enrichment, which is what proved the cost was here and not in the per-student joins.
-    --
-    -- Access is now a PREDICATE on a handful of sections rather than a pre-built student universe.
-    -- The rules are unchanged: you teach the section, or you have school access to it, or you are a
-    -- RegionalAnalyst.
-    -- ------------------------------------------------------------------------------------------
-    RequestedSections AS (
-        SELECT sec.SectionKey, sec.SectionID, sec.SchoolID
-        FROM DimSection sec
-        CROSS JOIN WindowEffectiveDates wed
-        WHERE wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-          AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
-    ),
-    AccessibleSections AS (
-        SELECT rs.SectionKey, rs.SectionID
-        FROM RequestedSections rs
-        CROSS JOIN Caller c
-        CROSS JOIN WindowEffectiveDates wed
-        WHERE
-            -- RegionalAnalyst / Administrator / SpecialistTeacher: the section must be in a school
-            -- they cover (StaffSchoolAccess = their CanChangeSchool buildings). NO region-wide branch;
-            -- a region-wide analyst simply has every building in their list.
-            (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
-             AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                         WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = rs.SchoolID))
-            -- Teacher (any role -- a teaching admin keeps their own classes too).
-         OR EXISTS (SELECT 1 FROM FactSectionTeachers fst
-                    WHERE fst.SectionID = rs.SectionID
-                      AND LOWER(fst.TeacherEmail) = c.Email
-                      AND wed.EffectiveDate BETWEEN fst.EffectiveStartDate
-                                                AND COALESCE(fst.EffectiveEndDate, '9999-12-31'))
+    -- MATERIALIZED membership (2026-09-23): pre-joined rows for the requested classes; access
+    -- resolved LIVE as a predicate on that handful of sections.
+    Membership AS (
+        SELECT m.AssessmentWindowID, m.SectionID, m.SchoolID, m.GroupKey, m.WindowEffectiveDate,
+               m.StudentKey, m.StudentNumber, m.FirstName, m.LastName, m.Grade, m.Homeroom,
+               m.SchoolName, m.ProgramFamily
+        FROM SectionRosterMembership m
+        WHERE m.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
+          AND (',' + @GroupKeys + ',') LIKE ('%,' + m.GroupKey + ',%')
     ),
     StudentGroups AS (
-        SELECT
-            wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, s.Homeroom, sch.SchoolName, dp.ProgramFamily,
-            'SEC:' + asec.SectionID AS GroupKey
-        FROM AccessibleSections asec
-        CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN FactEnrollment e
-                ON e.SectionKey  = asec.SectionKey
-               AND e.StartDate  <= wed.WindowEndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= wed.WindowStartDate)
-        -- FactEnrollment.StudentKey points at a specific DimStudent version, so no date filter here
-        -- (adding one would silently drop students whose row was re-versioned mid-window).
-        INNER JOIN DimStudent s    ON s.StudentKey   = e.StudentKey
-        LEFT  JOIN DimSchool  sch  ON sch.SchoolID   = s.SchoolID
-        INNER JOIN DimGrade   dg   ON dg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE dg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
+        SELECT DISTINCT
+            m.AssessmentWindowID, m.StudentKey, m.StudentNumber, m.FirstName, m.LastName,
+            m.Grade, m.Homeroom, m.SchoolName, m.ProgramFamily, m.GroupKey
+        FROM Membership m
+        CROSS JOIN Caller c
+        WHERE (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+               AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
+                           WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = m.SchoolID))
+           OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
+                      WHERE fst.SectionID = m.SectionID
+                        AND LOWER(fst.TeacherEmail) = c.Email
+                        AND m.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
+                                                      AND COALESCE(fst.EffectiveEndDate, '9999-12-31'))
     ),
     -- Latest math result per (student, window, task). Dated history is kept, so pick the most recent.
     LatestMathPerTask AS (
@@ -183,14 +126,8 @@ RETURN
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
-    -- Each student gets THEIR grade's tasks for the cycle's month (multi-grade homerooms
-    -- therefore surface each grade's own task set against its own students).
-    -- LEFT, not INNER (changed 2026-09-18). As an INNER JOIN this SILENTLY DROPPED any student whose
-    -- grade has no active tasks for the cycle's month: a section of 4 opened as a roster of 1, while
-    -- the picker card still said 0/4 (tvf_TeacherGroups never looks at tasks). The teacher had no way
-    -- to know three children were missing, or why. Now the student always comes back -- with NULL
-    -- task columns -- and the grid says tasks aren't configured for that grade/month. Turns an
-    -- invisible data gap into a visible one.
+    -- Each student gets THEIR grade's tasks for the cycle's month. LEFT so a student whose grade has
+    -- no active tasks still comes back (with NULL task columns) instead of vanishing.
     LEFT JOIN DimMathTask mt
            ON mt.GradeCode       = sg.Grade
           AND mt.AssessmentMonth = wdm.DominantMonth
@@ -205,9 +142,6 @@ RETURN
           AND ipp.Subject       = 'Math'
           AND ipp.ProgramFamily = COALESCE(wed.ProgramFamily, sg.ProgramFamily)
           AND ipp.IsCurrent     = 1
-    -- No group-key filter here any more: RequestedSections already matched @GroupKeys and
-    -- AccessibleSections already checked permission, so every row reaching this point is wanted.
-    -- Re-testing it would only add to the plan.
 );
 GO
 

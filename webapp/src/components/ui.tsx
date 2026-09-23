@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { LinkPending } from './LinkPending'
 
 export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -77,6 +78,9 @@ export function CardLink({
     // query load for pages nobody opens. loading.tsx already gives instant feedback on click, so the
     // perceived speed we lose is close to nil.
     <Link href={href} prefetch={false} className="card card-link">
+      {/* Instant client-side "Opening…" overlay on click — immune to the response buffering that
+          swallowed the server-streamed loading state on live. */}
+      <LinkPending />
       <div className="card-title">{title}</div>
       {desc ? <div className="card-desc">{desc}</div> : null}
       {meta ? <div className="muted">{meta}</div> : null}

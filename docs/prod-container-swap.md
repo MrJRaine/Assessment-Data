@@ -1,8 +1,23 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.5.1` → `0.6.0` on 2026-09-22
-(The SCoR Hub rename + French math answer key; live-warehouse SQL: `sql/security/tvf_TeacherRosterMath.sql`).
+running Podman container for a new one. Most recent cutover: `0.6.1` → `0.6.2` on 2026-09-23
+(roster perf pass — materialized membership + card-metadata pass-through + dead-column trim;
+**requires live SQL first** — see the prerequisite section below).
+
+## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
+
+Roster pages stream a loading shell then fill in (Suspense). For that to reach the browser, NOTHING in
+the chain may buffer the response. Three settings work together — all three are required:
+- **App:** `next.config.ts` `compress: false` (Next's default gzip buffers to compress — the origin
+  buffer that broke streaming behind the proxy). Baked into the image as of `0.6.1`.
+- **IIS ARR:** `responseBufferLimit = 0` on `system.webServer/proxy` (disable ARR response buffering).
+  Set with `appcmd set config -section:system.webServer/proxy /responseBufferLimit:"0" /commit:apphost`.
+- **IIS:** dynamic compression **OFF** (`doDynamicCompression:"False"`) — else IIS re-gzips + re-buffers
+  the now-uncompressed HTML. `appcmd set config -section:system.webServer/urlCompression /doDynamicCompression:"False" /commit:apphost`.
+
+The two IIS settings live in `applicationHost.config` and survive reboots + container swaps; they only
+need re-applying if IIS/ARR is reinstalled or the config is rebuilt.
 
 ## Environment facts
 
@@ -57,6 +72,13 @@ and run any listed scripts against live **before** swapping the container.
   `sql/procedures/usp_MergeStudent.sql` → `sql/scripts/deploy_groupkey_tvfs_live.sql`. Then run one
   ingest so `GroupKey` is populated for existing students (or the backfill in the migrate script covers
   the current set).
+- **`0.6.2`** requires (in order, against live `Assessment_Warehouse`, under maintenance mode): the two
+  membership tables `sql/security/SectionRosterMembership.sql` + `sql/security/TeacherRosterMembership.sql`,
+  then `sql/procedures/usp_RebuildRosterMembership.sql` + `sql/procedures/usp_RunFullIngestCycle.sql`,
+  then `EXEC dbo.usp_RebuildRosterMembership` (verify both tables return > 0), then the four roster TVFs
+  `sql/security/tvf_TeacherRoster.sql` / `tvf_TeacherRosterOwn.sql` / `tvf_TeacherRosterWriting.sql` /
+  `tvf_TeacherRosterMath.sql`. The tables/proc are inert until the TVFs read them, so they can go in
+  before the window; keep the TVF swap + container swap inside it.
 
 ## 1. Pre-flight (nothing changes yet)
 

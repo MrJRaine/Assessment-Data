@@ -76,13 +76,25 @@ function RosterLoading({ rawCycle, rawSubject }: { rawCycle: string; rawSubject:
 // every roster query finishes — so the click never looks dead, and the roster fills in a beat later.
 export default async function RosterGrid({
   params,
+  searchParams,
 }: {
   params: Promise<{ cycleGroupId: string; subject: string; groupKey: string }>
+  searchParams: Promise<{ [k: string]: string | string[] | undefined }>
 }) {
   const { cycleGroupId: rawCycle, subject: rawSubject, groupKey: rawGroupKey } = await params
+  // Metadata the picker card carried forward (see GroupCards.cardHref) so the roster can skip the
+  // getTeacherGroups re-resolve. Absent on direct links / combined rosters -> the page falls back.
+  const sp = await searchParams
+  const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? null
+  const card = {
+    windowIds: (first(sp.w) ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+    label: first(sp.label),
+    language: first(sp.lang),
+    schoolName: first(sp.school),
+  }
   return (
     <Suspense fallback={<RosterLoading rawCycle={rawCycle} rawSubject={rawSubject} />}>
-      <RosterBody rawCycle={rawCycle} rawSubject={rawSubject} rawGroupKey={rawGroupKey} />
+      <RosterBody rawCycle={rawCycle} rawSubject={rawSubject} rawGroupKey={rawGroupKey} card={card} />
     </Suspense>
   )
 }
@@ -91,10 +103,12 @@ async function RosterBody({
   rawCycle,
   rawSubject,
   rawGroupKey,
+  card,
 }: {
   rawCycle: string
   rawSubject: string
   rawGroupKey: string
+  card: { windowIds: string[]; label: string | null; language: string | null; schoolName: string | null }
 }) {
   const cycleGroupId = decodeURIComponent(rawCycle)
   const subject = decodeURIComponent(rawSubject)
@@ -113,18 +127,36 @@ async function RosterBody({
   let error: string | null = null
 
   try {
-    // Re-resolving the caller's groups does three jobs: it AUTHORIZES the group (a key the caller
-    // can't see resolves to nothing), supplies the display label, and names which cycle INSTANCE(S)
-    // this class's students sit under — there is no windowId in the URL, because you pick a cycle.
-    const groups = await getTeacherGroups(upn, cycleGroupId, subject)
-    // Every requested key must be one the caller can actually see, so a hand-typed key grants
-    // nothing. But don't drop the rest in silence — if a teacher opened three classes and one
-    // resolved to nothing, they must be told, not left counting heads.
-    picked = groupKeys.map((k) => groups.find((g) => g.key === k)).filter((g): g is TeacherGroup => !!g)
-    unresolvedKeys = groupKeys.filter((k) => !groups.some((g) => g.key === k))
-    group = picked[0] ?? null
-    // A combined roster spans the union of its classes' instances.
-    const windowIds = [...new Set(picked.flatMap((g) => g.windowIds ?? []))]
+    let windowIds: string[]
+    // FAST PATH: a single card click carries the group's windows + label + language + school on the
+    // URL (see GroupCards.cardHref), so we skip the ~1s getTeacherGroups re-resolve. Authorization is
+    // unaffected — the roster TVF re-checks access by section, so a spoofed/stale param returns no
+    // students, never someone else's. Falls back below for direct links and combined rosters.
+    if (groupKeys.length === 1 && card.windowIds.length > 0) {
+      const g = {
+        key: groupKeys[0],
+        label: card.label ?? groupKeys[0],
+        language: card.language,
+        schoolName: card.schoolName,
+        windowIds: card.windowIds,
+      } as TeacherGroup
+      picked = [g]
+      group = g
+      windowIds = card.windowIds
+    } else {
+      // Re-resolving the caller's groups does three jobs: it AUTHORIZES the group (a key the caller
+      // can't see resolves to nothing), supplies the display label, and names which cycle INSTANCE(S)
+      // this class's students sit under — there is no windowId in the URL, because you pick a cycle.
+      const groups = await getTeacherGroups(upn, cycleGroupId, subject)
+      // Every requested key must be one the caller can actually see, so a hand-typed key grants
+      // nothing. But don't drop the rest in silence — if a teacher opened three classes and one
+      // resolved to nothing, they must be told, not left counting heads.
+      picked = groupKeys.map((k) => groups.find((g) => g.key === k)).filter((g): g is TeacherGroup => !!g)
+      unresolvedKeys = groupKeys.filter((k) => !groups.some((g) => g.key === k))
+      group = picked[0] ?? null
+      // A combined roster spans the union of its classes' instances.
+      windowIds = [...new Set(picked.flatMap((g) => g.windowIds ?? []))]
+    }
 
     // Usually one instance. A class straddles two when the cycle splits the same language by program
     // scope or grade band, and then each instance gets its own grid and its own Save — the same

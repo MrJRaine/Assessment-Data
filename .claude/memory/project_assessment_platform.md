@@ -124,6 +124,13 @@ App: **`Student Data Staff Portal`** (broader than MVP — Phase 5 adds viewer/a
 
 ## Deployment state (current — watch this)
 
+- **THE LIVE PRODUCT IS THE WEB APP, not Power Apps** (2026-09-22). `assessment-webapp` container on
+  `data.tcrce.ca` (IIS/ARR → 127.0.0.1:3000), **0.6.0 LIVE** ("The SCoR Hub"). Release ritual: semver-tagged
+  image + tar → dev→main squash + `vX.Y.Z` tag + **mandatory main→dev back-merge** → prod swap by the
+  project lead over RDP. Local dev containers: **awlive :3000** (live) / **awdev :3001** (dev) /
+  **awdev-impersonation :3002** (dev, impersonation image from the `dev-impersonation` branch) —
+  [[reference_podman_windows_dev_container]]. The Power-Apps-era bullets below are HISTORICAL/superseded
+  (slated for the memory audit — [[feedback_keep_memories_current]]).
 - **Deployed & live:** all dims/facts, all 5 merge procs + orchestrator + year-end close-out, 3 RLS views + window-context views, StaffSchoolAccess table, semantic model + 3 DAX roles, all write/delete procs (reading assessment, IPP, ingest-trigger, audit), data-quality suite. Power Apps: 8 screens built (see implementation-plan Step 18 status).
 - **Source ahead of deployed (do NOT deploy yet):** the 5 `usp_Load*Staging` procs are updated *in source* to PowerSchool **sqlReport CSV** format (comma/quote/CRLF, `'*'` wildcard) but the warehouse still runs the **TAB direct-extract** ingest. Deploy the CSV loaders **only at cutover**, together with the new PS SQL reports being authored. Headers in the files say so. Don't deploy or regenerate test data as CSV until a cutover is explicitly scheduled.
 - **App restyle — COMPLETE (7/7, validated 2026-06-12).** Direction B ported to all screens incl. scrRosterGrid (tint-column swap, classic-button conversions, loaded-flag gating). Waypoint build preserved: `powerapps/waypoints/Student Data Staff Portal.2026-06-11.direction-b-restyle-complete.msapp` (git-kept). Port bugs + patterns in `/power-apps-canvas-build` §3i/§7f/§7g.

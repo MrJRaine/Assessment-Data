@@ -42,7 +42,8 @@
  * Region: Canada East (PIIDPA compliant)
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted.
- * NOTE: EnteredStudentCount covers Reading/Writing only (Math entry count TBD).
+ * NOTE: EnteredStudentCount covers Reading, Writing, AND Math (Math added 2026-09-23; a student is
+ *       "entered" once they have any task result). Deploy the updated TVF to live + dev.
  ******************************************************************************/
 
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherGroups;
@@ -174,6 +175,13 @@ RETURN
         FROM Wins win
         INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Writing'
+        UNION
+        -- Math (added 2026-09-23): entered = has ANY task result (FactAssessmentMath is one row per
+        -- student x task). Was the "Math entry count TBD" gap that made Math group cards read 0.
+        SELECT DISTINCT f.StudentKey
+        FROM Wins win
+        INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = win.AssessmentWindowID
+        WHERE @AssessmentType = 'Math'
     ),
     -- The cycle instance(s) this section's students actually fall under. Normally exactly ONE (the
     -- course's language pins it), but a cycle can be configured so one section straddles two — e.g. an

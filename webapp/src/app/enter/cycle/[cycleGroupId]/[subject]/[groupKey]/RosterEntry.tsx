@@ -201,6 +201,9 @@ export default function RosterEntry({
             </th>
             <th>New level</th>
             <th>
+              Diff from<br />Benchmark
+            </th>
+            <th>
               New<br />Data
             </th>
           </tr>
@@ -311,6 +314,12 @@ export default function RosterEntry({
                       ))}
                     </select>
                   )}
+                </td>
+                {/* Diff from Benchmark — the numerical difference of the SELECTED level from the
+                    expected range (the same delta that tints the row). Live feedback as the teacher
+                    picks; IPP students follow an individualized plan, so the benchmark doesn't apply. */}
+                <td style={{ textAlign: 'center' }}>
+                  {isIPP ? <span className="ipp-badge">IPP</span> : <DeltaCell value={delta} />}
                 </td>
                 {/* New Data — log this row as a new dated result. Auto-ticks on a value change;
                     tick by hand to record a re-assessment whose result is unchanged. */}

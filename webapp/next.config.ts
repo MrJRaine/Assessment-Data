@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
   // 'standalone' emits a minimal self-contained server (server.js + traced node_modules)
   // so the container image stays small. See Dockerfile runner stage.
   output: 'standalone',
+  // Disable Next's built-in gzip. The app is reverse-proxied by IIS/ARR, and Next's compression
+  // BUFFERS the response to compress it — which killed streaming (Suspense) on the slow roster
+  // routes behind the proxy: the loading shell never flushed, so a click looked like a dead hang.
+  // Setting Content-Encoding here is the origin buffer that responseBufferLimit=0 and disabling IIS
+  // dynamic compression could not fix (both are downstream of it). Streamed responses now go out
+  // uncompressed + chunked and flush immediately. IIS DYNAMIC COMPRESSION MUST STAY OFF (else it
+  // re-gzips + re-buffers the now-uncompressed HTML). Static JS/CSS compression is separate. (0.6.1)
+  compress: false,
   // The DB stack must NOT be webpack-bundled: tedious's connection internals break when
   // bundled (the socket opens then drops -> ESOCKET). Keep them external so they are required
   // from node_modules at runtime (traced into the standalone output). Verified: token auth
