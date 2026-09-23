@@ -11,6 +11,19 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.1] — 2026-09-23
+
+### Fixed
+- **Opening a class no longer hangs on live (streaming behind IIS).** Next's built-in gzip
+  (`compress: true`, the default) buffers the response to compress it — an origin-side buffer
+  *upstream* of IIS that defeated the roster Suspense streaming behind the reverse proxy: the loading
+  shell never flushed, so a click looked like a dead hang before the whole page dropped in at once.
+  `responseBufferLimit=0` and disabling IIS dynamic compression couldn't fix it because both are
+  downstream of Next's own compression. Set **`compress: false`** in `next.config.ts` so streamed
+  responses go out uncompressed + chunked and flush immediately. Web-only, ships as
+  `assessment-webapp:0.6.1`. **Deploy note:** IIS **dynamic compression must stay OFF** and ARR
+  `responseBufferLimit` must stay `0`, or IIS re-gzips/re-buffers the now-uncompressed HTML.
+
 ## [0.6.0] — 2026-09-22
 
 The **French answer key** in Math Short Cycles, plus the security + data fixes that landed through the

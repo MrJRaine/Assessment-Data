@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.6.1',
+    date: '2026-09-23',
+    kind: 'fix',
+    summary:
+      'Opening a class no longer looks frozen. You now see a "Loading…" message right away, and the class roster fills in a moment later, instead of the click seeming to do nothing and then the whole page appearing at once.',
+  },
+  {
     version: '0.6.0',
     date: '2026-09-22',
     kind: 'feature',
