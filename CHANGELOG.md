@@ -14,22 +14,33 @@ with `0.3.0`, so earlier detail is approximate.
 ## [Unreleased]
 
 ### Changed
-- **Materialized the roster membership skeleton (perf).** `tvf_TeacherRoster` was re-deriving the
-  ingest-stable half of the roster — which students sit in which subject-mapped section per window +
-  their static attrs — on **every** request, a DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram
-  join that measured **~2.0–2.3s warm for a 20-student roster** (`diag_roster_timing.sql`, 2026-09-23).
-  That half only changes on ingest, so it's now pre-joined into **`SectionRosterMembership`** (the
-  section-keyed source of truth) and the derived **`TeacherRosterMembership`** (bounded Taught-scope
-  projection for the teacher fast path), rebuilt each ingest by **`usp_RebuildRosterMembership`** (wired
-  into `usp_RunFullIngestCycle` after the DQ gate). The roster TVF now reads the base table + a live
-  access predicate (`FactSectionTeachers`/`StaffSchoolAccess`); the volatile results half (reading
-  values, deltas, benchmark, IPP, achievement, starting point) stays live. No new staleness — roster
-  membership was already ingest-cadence. **SQL-only, web app unchanged.** Reading roster first
-  (Writing/Math/Groups + the teacher-table fast path/routing to follow).
-  **SQL to deploy (dev first, in order):** `sql/security/SectionRosterMembership.sql` +
-  `sql/security/TeacherRosterMembership.sql` + `sql/procedures/usp_RebuildRosterMembership.sql` +
-  `sql/procedures/usp_RunFullIngestCycle.sql`, then `EXEC usp_RebuildRosterMembership` to populate,
-  then `sql/security/tvf_TeacherRoster.sql`.
+- **Roster load perf pass.** A reading roster open was ~2.5s of Fabric — a ~1s `getTeacherGroups`
+  re-resolve **plus** a ~2s roster TVF, back-to-back. Reworked end to end:
+  - **Materialized the roster membership skeleton.** The ingest-stable half of the roster (which
+    students sit in which subject-mapped section per window + their static attrs) is pre-joined into
+    **`SectionRosterMembership`** (section-keyed source of truth) and the derived
+    **`TeacherRosterMembership`** (bounded Taught-scope projection for the teacher fast path), rebuilt
+    each ingest by **`usp_RebuildRosterMembership`** (wired into `usp_RunFullIngestCycle` after the DQ
+    gate). Reading, **Writing** (language filtered by the SECTION's course language, not the student's
+    program — `SectionLanguage` from `DimCourseAssessment`) and **Math** roster TVFs now read the base
+    + a live access predicate. Volatile results (levels/scores/tasks, IPP, benchmark, starting point)
+    stay live. No new staleness — membership was already ingest-cadence.
+  - **Skip the picker round-trip.** The group card now carries its `windowIds`/label/language/school on
+    the link, so the roster page uses them instead of re-running `getTeacherGroups` (~1s off every
+    open). Falls back for direct links / combined rosters. Safe — the roster TVF still authorizes by
+    section, so a spoofed param returns no students.
+  - **Dropped dead server work.** The reading/writing grids recompute the delta + achievement band
+    client-side (they must update live as a level is picked), so the `DimAchievementLevel` join +
+    `ExistingDelta`/`Achievement*` columns were removed from the roster TVFs and `data.ts`.
+  Net (dev, 20-student roster): roster TVF ~2050 → ~1430ms warm, and the picker round-trip gone.
+  **SQL to deploy (dev first, in order):** `SectionRosterMembership.sql` + `TeacherRosterMembership.sql`
+  + `usp_RebuildRosterMembership.sql` + `usp_RunFullIngestCycle.sql`, then `EXEC usp_RebuildRosterMembership`,
+  then `tvf_TeacherRoster.sql` + `tvf_TeacherRosterOwn.sql` + `tvf_TeacherRosterWriting.sql` +
+  `tvf_TeacherRosterMath.sql`. Web changes (card metadata, dead-column trim) ride in the container.
+
+### Added
+- **"Diff from Benchmark" column** on the reading entry grid — the numerical difference of the selected
+  level from the expected range (signed/coloured), right after the New-level dropdown.
 
 ## [0.6.2] — 2026-09-23
 
