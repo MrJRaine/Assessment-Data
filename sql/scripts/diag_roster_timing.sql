@@ -82,7 +82,8 @@ SELECT @CycleGroupID AS CycleGroupID, @UPN AS TeacherUPN, @WID AS AssessmentWind
         Scalar accumulators only — Fabric Warehouse does NOT support table variables. */
 DECLARE @t0 DATETIME2(7), @t1 DATETIME2(7), @n BIGINT;
 DECLARE @base_ms INT, @rcold_ms INT, @rwarm1_ms INT, @rwarm2_ms INT, @gcold_ms INT, @gwarm1_ms INT;
-DECLARE @roster_rows BIGINT, @groups_rows BIGINT;
+DECLARE @owncold_ms INT, @ownwarm1_ms INT;
+DECLARE @roster_rows BIGINT, @groups_rows BIGINT, @own_rows BIGINT;
 
 -- server-side floor: a trivial statement round-trip
 SET @t0 = SYSUTCDATETIME();  SELECT @n = 1;  SET @t1 = SYSUTCDATETIME();
@@ -105,6 +106,17 @@ SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WID, @
 SET @t1 = SYSUTCDATETIME();
 SET @rwarm2_ms = DATEDIFF(MILLISECOND, @t0, @t1);
 
+-- roster OWN (teacher fast-table path — no Caller lookup, no access-check subqueries): cold + warm
+SET @t0 = SYSUTCDATETIME();
+SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRosterOwn(@UPN, @WID, @GroupKeys)) x;
+SET @t1 = SYSUTCDATETIME();
+SET @owncold_ms = DATEDIFF(MILLISECOND, @t0, @t1);  SET @own_rows = @n;
+
+SET @t0 = SYSUTCDATETIME();
+SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRosterOwn(@UPN, @WID, @GroupKeys)) x;
+SET @t1 = SYSUTCDATETIME();
+SET @ownwarm1_ms = DATEDIFF(MILLISECOND, @t0, @t1);
+
 -- groups picker: cold + warm (the perf item tied to pre-warm / min-connections)
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, 'Reading')) x;
@@ -120,7 +132,10 @@ SELECT @base_ms      AS baseline_ms,
        @rcold_ms     AS roster_cold_ms,
        @rwarm1_ms    AS roster_warm1_ms,
        @rwarm2_ms    AS roster_warm2_ms,
+       @owncold_ms   AS own_cold_ms,
+       @ownwarm1_ms  AS own_warm1_ms,
        @gcold_ms     AS groups_cold_ms,
        @gwarm1_ms    AS groups_warm1_ms,
        @roster_rows  AS roster_rows,
+       @own_rows     AS own_rows,
        @groups_rows  AS groups_rows;
