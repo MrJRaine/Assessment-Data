@@ -78,40 +78,49 @@ END
 SELECT @CycleGroupID AS CycleGroupID, @UPN AS TeacherUPN, @WID AS AssessmentWindowID,
        @GroupKeys AS GroupKeys, @Students AS ApplicableStudents;
 
-/* 3 ── timings (wall-clock; server-side only, excludes the app's connection overhead by design) */
+/* 3 ── timings (wall-clock; server-side only, excludes the app's connection overhead by design)
+        Scalar accumulators only — Fabric Warehouse does NOT support table variables. */
 DECLARE @t0 DATETIME2(7), @t1 DATETIME2(7), @n BIGINT;
-DECLARE @Timings TABLE (Seq INT IDENTITY(1,1), Step VARCHAR(40), Elapsed_ms INT, Rows BIGINT);
+DECLARE @base_ms INT, @rcold_ms INT, @rwarm1_ms INT, @rwarm2_ms INT, @gcold_ms INT, @gwarm1_ms INT;
+DECLARE @roster_rows BIGINT, @groups_rows BIGINT;
 
 -- server-side floor: a trivial statement round-trip
 SET @t0 = SYSUTCDATETIME();  SELECT @n = 1;  SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('baseline_select1', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @base_ms = DATEDIFF(MILLISECOND, @t0, @t1);
 
 -- roster: cold (first compile + exec)
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WID, @GroupKeys)) x;
 SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('roster_cold', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @rcold_ms = DATEDIFF(MILLISECOND, @t0, @t1);  SET @roster_rows = @n;
 
 -- roster: warm x2 (plan cached; the number the app effectively pays on a repeat open)
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WID, @GroupKeys)) x;
 SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('roster_warm1', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @rwarm1_ms = DATEDIFF(MILLISECOND, @t0, @t1);
 
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherRoster(@UPN, @WID, @GroupKeys)) x;
 SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('roster_warm2', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @rwarm2_ms = DATEDIFF(MILLISECOND, @t0, @t1);
 
 -- groups picker: cold + warm (the perf item tied to pre-warm / min-connections)
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, 'Reading')) x;
 SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('groups_cold', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @gcold_ms = DATEDIFF(MILLISECOND, @t0, @t1);  SET @groups_rows = @n;
 
 SET @t0 = SYSUTCDATETIME();
 SELECT @n = COUNT_BIG(*) FROM (SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, 'Reading')) x;
 SET @t1 = SYSUTCDATETIME();
-INSERT @Timings (Step, Elapsed_ms, Rows) VALUES ('groups_warm1', DATEDIFF(MILLISECOND, @t0, @t1), @n);
+SET @gwarm1_ms = DATEDIFF(MILLISECOND, @t0, @t1);
 
-SELECT Step, Elapsed_ms, Rows FROM @Timings ORDER BY Seq;
+SELECT @base_ms      AS baseline_ms,
+       @rcold_ms     AS roster_cold_ms,
+       @rwarm1_ms    AS roster_warm1_ms,
+       @rwarm2_ms    AS roster_warm2_ms,
+       @gcold_ms     AS groups_cold_ms,
+       @gwarm1_ms    AS groups_warm1_ms,
+       @roster_rows  AS roster_rows,
+       @groups_rows  AS groups_rows;
