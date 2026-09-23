@@ -177,9 +177,11 @@ export default function MaintenanceProvider({
       // is guaranteed to fire. This is what stops backgrounded non-entry tabs from waking every 8 min
       // to re-open a socket (the idle-keepalive reap pulse in HTTPERR).
       if (isHidden() && dirtyEntryCountRef.current === 0) return
-      const s = windowRef.current.atMs == null ? null : Math.round((windowRef.current.atMs - (Date.now() + windowRef.current.offsetMs)) / 1000)
-      const visibleDelay = s != null && s <= 6 * 60 ? 4000 : 8000 // 4s when close, else 8s
-      const delay = overrideDelay ?? (isHidden() ? HIDDEN_MS : visibleDelay)
+      // Visible cadence is a flat 8s (no tighten-near-T) — the 1s local ticker already drives the
+      // countdown and every stage transition once a window is known, so a faster poll only shaves a
+      // few seconds off DISCOVERING a short-notice window, which the min-window admin warning covers.
+      const VISIBLE_MS = 8000
+      const delay = overrideDelay ?? (isHidden() ? HIDDEN_MS : VISIBLE_MS)
       pollTimer = setTimeout(async () => {
         if (stopped) return
         const ok = await poll()

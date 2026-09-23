@@ -21,8 +21,8 @@ with `0.3.0`, so earlier detail is approximate.
   **T-1 auto-save**, which only exists on data-entry grids. Entry grids now report unsaved work up to
   the provider (`useEntryLock` → `registerUnsavedEntry`); a **hidden tab with no unsaved entry work
   stops polling entirely** and re-polls immediately on refocus (`visibilitychange`). Visible tabs
-  (any page) are unchanged and still show the banner; a hidden entry tab holding unsaved work keeps
-  its heartbeat so auto-save is never missed. Web-only
+  (any page) poll a **flat 8s** (dropped the leftover 4s-near-T tighten) and still show the banner; a
+  hidden entry tab holding unsaved work keeps its heartbeat so auto-save is never missed. Web-only
   (`components/maintenance/MaintenanceProvider.tsx`, `useEntryLock.ts`).
 - **Perf: cache the static reference lookups.** The reading-scale levels (`DimReadingScale`) and the
   achievement bands (`DimAchievementLevel`) were queried on **every** reading roster and every Reports
