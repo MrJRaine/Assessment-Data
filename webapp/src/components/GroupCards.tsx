@@ -66,10 +66,23 @@ export default function GroupCards({
   const taught = groups.filter((g) => g.scope === 'Taught')
   const oversight = groups.filter((g) => g.scope === 'Oversight')
 
+  // Carry the group's own metadata (windows, label, language, school) on the link so the roster page
+  // can SKIP the ~1s getTeacherGroups round-trip it would otherwise fire just to re-resolve them.
+  // Safe: the roster TVF still authorizes by section, so a spoofed/stale param returns no students,
+  // never someone else's. Combined-roster links (below) deliberately omit these and fall back.
+  const cardHref = (g: TeacherGroup) => {
+    const qs = new URLSearchParams()
+    if (g.windowIds?.length) qs.set('w', g.windowIds.join(','))
+    qs.set('label', g.label)
+    if (g.language) qs.set('lang', g.language)
+    if (g.schoolName) qs.set('school', g.schoolName)
+    return `${hrefBase}/${encodeURIComponent(g.key)}?${qs.toString()}`
+  }
+
   const card = (g: TeacherGroup) => (
     <CardLink
       key={`${g.scope}-${g.groupType}-${g.key}`}
-      href={`${hrefBase}/${encodeURIComponent(g.key)}`}
+      href={cardHref(g)}
       title={g.label}
       // Oversight cards say WHOSE class this is — the whole point of showing someone else's section.
       desc={[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ') || undefined}
