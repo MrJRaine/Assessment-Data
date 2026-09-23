@@ -23,6 +23,13 @@ export const PATCH_NOTES: PatchNote[] = [
       'Clicking a class or cycle card now responds right away — the card presses in and shows "Opening…" while the next page loads, instead of the click seeming to do nothing.',
   },
   {
+    version: '0.6.2',
+    date: '2026-09-23',
+    kind: 'fix',
+    summary:
+      'Math fixes: the task list in "Edit checklist" is laid out properly again (one task per line), and the class and cycle cards now show how many students have their math entered.',
+  },
+  {
     version: '0.6.1',
     date: '2026-09-23',
     kind: 'fix',

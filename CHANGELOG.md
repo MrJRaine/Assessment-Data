@@ -11,7 +11,7 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.6.3] — 2026-09-23
+## [0.6.2] — 2026-09-23
 
 ### Changed
 - **Perf: cache the static reference lookups.** The reading-scale levels (`DimReadingScale`) and the
@@ -21,8 +21,6 @@ with `0.3.0`, so earlier detail is approximate.
   roster's critical path. The dominant roster cost remains the dynamic `tvf_TeacherRoster` query
   itself (being measured separately). Web-only.
 
-## [0.6.2] — 2026-09-23
-
 ### Fixed
 - **Clicking a card gives instant feedback.** Data-entry cycle cards, the group picker, and the home
   cards now show a **press animation** and an **"Opening…" spinner** the moment they're clicked, via a
@@ -31,6 +29,15 @@ with `0.3.0`, so earlier detail is approximate.
   acknowledged in the browser immediately, before any server byte, so even while the roster query runs
   it no longer looks like a dead hang. (The underlying roster-query latency is a separate perf item.)
   Web-only (`LinkPending.tsx`, `components/ui.tsx`, `globals.css`). Ships as `assessment-webapp:0.6.2`.
+- **Math "Edit checklist" formatting restored.** The task-selection list rendered as one run-on wall
+  of text — its CSS block (`.checklist` / `.cl-task` / …) had been accidentally deleted in the
+  check-mark restyle (`05fe0af`). Restored the original rules (one task per row, unit headers, chip
+  answer key). Web-only (`globals.css`).
+- **Math cards now count entered students.** The cycle cards (`tvf_UserAssessmentWindows`) and group
+  picker (`tvf_TeacherGroups`) counted "entered" for Reading/Writing only — a long-standing
+  `Math entry count TBD` gap — so Math cards always read 0. Added a `FactAssessmentMath` branch to
+  both (a student is entered once they have any task result). **SQL to deploy live + dev:**
+  `sql/security/tvf_UserAssessmentWindows.sql` + `sql/security/tvf_TeacherGroups.sql`.
 
 ## [0.6.1] — 2026-09-23
 

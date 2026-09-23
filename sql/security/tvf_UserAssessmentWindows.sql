@@ -152,6 +152,14 @@ RETURN
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Writing' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
+        UNION
+        -- Math (added 2026-09-23): a student counts as entered once they have ANY task result -
+        -- FactAssessmentMath is one row per (student x task), so DISTINCT StudentKey gives "has begun",
+        -- the same "has a result" meaning used for Reading/Writing. Without this, Math cards read 0.
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        FROM DimAssessmentWindow w2
+        INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = w2.AssessmentWindowID
+        WHERE w2.AssessmentType = 'Math' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
     )
     SELECT
         CAST(wed.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
