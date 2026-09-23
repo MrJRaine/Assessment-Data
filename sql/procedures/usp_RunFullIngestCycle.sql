@@ -138,6 +138,16 @@ BEGIN
     END;
 
     -- ------------------------------------------------------------------------
+    -- Phase 3.5: Rebuild the materialized roster skeleton from the freshly merged
+    -- dims/facts. Runs AFTER the data quality gate so we never materialize dirty
+    -- membership. Roster membership only changes on ingest, so this is the one place
+    -- it needs refreshing; the roster TVFs read these tables instead of re-deriving
+    -- the DimStudent/FactEnrollment/DimSection join per request. (See
+    -- SectionRosterMembership.sql / usp_RebuildRosterMembership.sql.)
+    -- ------------------------------------------------------------------------
+    EXEC usp_RebuildRosterMembership;
+
+    -- ------------------------------------------------------------------------
     -- Phase 4: Cycle-level success audit. Written only on a fully clean run
     -- (data quality gate passed) — useful as a "cycle boundary" marker when
     -- scanning the audit log.

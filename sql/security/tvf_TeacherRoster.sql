@@ -19,6 +19,14 @@
  *          role branches were replaced by SECTION-FIRST resolution — see the block comment below.
  *          Homeroom / 'GRADE:' keys are no longer resolved here (course-scoped entry only ever
  *          sends 'SEC:'); recover from git if ever needed.
+ *          2026-09-23 — MATERIALIZED membership. The ingest-stable half (which students sit in
+ *          which subject-mapped section per window + their static attrs) now comes pre-joined from
+ *          SectionRosterMembership, rebuilt each ingest by usp_RebuildRosterMembership. This TVF
+ *          reads that table + a LIVE access predicate (FactSectionTeachers / StaffSchoolAccess),
+ *          replacing the per-request DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram join
+ *          that measured ~2s for 20 students. The VOLATILE half below (reading results, deltas,
+ *          benchmark, IPP, achievement, starting point) is unchanged and still live. Membership
+ *          logic lives in usp_RebuildRosterMembership — keep the two in lockstep.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
@@ -38,10 +46,7 @@ RETURNS TABLE
 AS
 RETURN
 (
-    WITH AtlanticToday AS (
-        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
-    ),
-    Caller AS (
+    WITH Caller AS (
         SELECT TOP 1 d.StaffKey, LOWER(d.Email) AS Email, d.AccessLevel
         FROM DimStaff d
         WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
@@ -49,10 +54,8 @@ RETURN
     WindowEffectiveDates AS (
         SELECT
             w.AssessmentWindowID, w.StartDate AS WindowStartDate, w.EndDate AS WindowEndDate,
-            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.ScaleSystem, w.AssessmentLanguage, w.BenchmarkMonth,
-            CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate
+            w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.ScaleSystem, w.AssessmentLanguage, w.BenchmarkMonth
         FROM DimAssessmentWindow w
-        CROSS JOIN AtlanticToday at
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
     ),
@@ -70,86 +73,36 @@ RETURN
         FROM WindowEffectiveDates wed
     ),
     -- ------------------------------------------------------------------------------------------
-    -- SECTION-FIRST resolution (2026-09-18). Start from the class asked for; join outward.
-    --
-    -- Replaces three role branches that each ENUMERATED EVERY STUDENT the caller could possibly see
-    -- (an analyst: the whole region, with four dimension joins) and only then narrowed to the one
-    -- section. Because @UPN is a parameter Fabric cannot prune the unused branches at plan time, so a
-    -- plain teacher paid for the analyst's region-wide scan too. Access is now a PREDICATE on a
-    -- handful of sections rather than a pre-built student universe; the rules are unchanged.
+    -- MATERIALIZED membership (2026-09-23). The heavy section->student SCD join is gone; the rows
+    -- for the requested classes come pre-joined from SectionRosterMembership (rebuilt each ingest).
+    -- Access is still resolved LIVE, as a predicate on that handful of sections: a teacher via
+    -- FactSectionTeachers, an oversight role via StaffSchoolAccess on the section's school. Same
+    -- rules as before, none of the per-request enrolment/dimension joins.
     -- ------------------------------------------------------------------------------------------
-    RequestedSections AS (
-        SELECT sec.SectionKey, sec.SectionID, sec.SchoolID
-        FROM DimSection sec
-        CROSS JOIN WindowEffectiveDates wed
-        WHERE wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-          AND (',' + @GroupKeys + ',') LIKE ('%,SEC:' + RTRIM(sec.SectionID) + ',%')
-    ),
-    AccessibleSections AS (
-        SELECT rs.SectionKey, rs.SectionID
-        FROM RequestedSections rs
-        CROSS JOIN Caller c
-        CROSS JOIN WindowEffectiveDates wed
-        -- RegionalAnalyst scoped by StaffSchoolAccess like Admin/Specialist (their CanChangeSchool
-        -- buildings); NO region-wide branch. A region-wide analyst simply has every building listed.
-        WHERE (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
-               AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                           WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = rs.SchoolID))
-           OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
-                      WHERE fst.SectionID = rs.SectionID
-                        AND LOWER(fst.TeacherEmail) = c.Email
-                        AND wed.EffectiveDate BETWEEN fst.EffectiveStartDate
-                                                  AND COALESCE(fst.EffectiveEndDate, '9999-12-31'))
+    Membership AS (
+        SELECT m.AssessmentWindowID, m.SectionID, m.SchoolID, m.GroupKey, m.WindowEffectiveDate,
+               m.StudentKey, m.StudentNumber, m.FirstName, m.LastName, m.Grade, m.Homeroom,
+               m.SchoolName, m.ProgramCode, m.ProgramFamily
+        FROM SectionRosterMembership m
+        WHERE m.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
+          AND (',' + @GroupKeys + ',') LIKE ('%,' + m.GroupKey + ',%')
     ),
     StudentGroups AS (
-        SELECT
-            wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.FirstName, s.LastName,
-            s.Grade, s.Homeroom, sch.SchoolName, s.ProgramCode, dp.ProgramFamily,
-            'SEC:' + asec.SectionID AS GroupKey
-        FROM AccessibleSections asec
-        CROSS JOIN WindowEffectiveDates wed
-        INNER JOIN FactEnrollment e
-                ON e.SectionKey  = asec.SectionKey
-               AND e.StartDate  <= wed.WindowEndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= wed.WindowStartDate)
-        -- FactEnrollment.StudentKey points at a specific DimStudent version, so no date filter here
-        -- (adding one would silently drop students re-versioned mid-window).
-        INNER JOIN DimStudent s    ON s.StudentKey   = e.StudentKey
-        LEFT  JOIN DimSchool  sch  ON sch.SchoolID   = s.SchoolID
-        INNER JOIN DimGrade   dg   ON dg.GradeCode   = s.Grade
-        INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
-        INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE dg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
-          AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
-          -- Cycle PROGRAM-SCOPE: the student's bucket (DimProgram.ScopeBucket: English / Early
-          -- Immersion / Late Immersion) must be in the cycle's comma-delimited set. NULL = all
-          -- programs. Delimiter-guarded LIKE (no STRING_SPLIT dependency).
-          AND (wed.ProgramScope IS NULL
-               OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
-          -- Language track scoped by the CYCLE (reading has no per-request toggle; the cycle IS the
-          -- language). NULL = unscoped -> all students, per-student scale (legacy).
-          --
-          -- STRUCTURAL only: French reading = French Immersion. A French reading assessment on a
-          -- non-immersion student is meaningless whatever anyone decides, so it is safe here.
-          --
-          -- The `AND s.ProgramCode <> 'J020'` that used to sit on this line is GONE (2026-09-18).
-          -- "Late immersion reads English" is POLICY, not structure — it follows from French
-          -- benchmarks not existing yet, and it is already expressed where it belongs: the cycle's
-          -- ProgramScope. J020 sits in the Late Immersion bucket (DimProgram.ScopeBucket), so the
-          -- scope match above already excludes it from an Early-Immersion-scoped French instance.
-          -- Keeping it here made the TVF silently override the config, meaning a scope change on
-          -- /cycles would not do what it says, and it cost a per-row comparison plus a redundant
-          -- predicate fed to a planner that has already proved fragile on this query.
-          --
-          -- CONSEQUENCE: the config is now the single source of truth. A French reading instance
-          -- scoped to all programs (NULL) or including Late Immersion WILL include J020 students.
-          -- That is the intended behaviour — the admin decides — but it is no longer caught here.
-          AND (
-                wed.AssessmentLanguage IS NULL
-             OR wed.AssessmentLanguage = 'English'
-             OR (wed.AssessmentLanguage = 'French' AND dp.ProgramFamily = 'French Immersion')
-              )
+        SELECT DISTINCT
+            m.AssessmentWindowID, m.StudentKey, m.StudentNumber, m.FirstName, m.LastName,
+            m.Grade, m.Homeroom, m.SchoolName, m.ProgramCode, m.ProgramFamily, m.GroupKey
+        FROM Membership m
+        CROSS JOIN Caller c
+        -- RegionalAnalyst scoped by StaffSchoolAccess like Admin/Specialist (NO region-wide branch;
+        -- a region-wide analyst simply has every building listed).
+        WHERE (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+               AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
+                           WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = m.SchoolID))
+           OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
+                      WHERE fst.SectionID = m.SectionID
+                        AND LOWER(fst.TeacherEmail) = c.Email
+                        AND m.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
+                                                      AND COALESCE(fst.EffectiveEndDate, '9999-12-31'))
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this
@@ -271,8 +224,7 @@ RETURN
                                           WHEN sg.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END)
     LEFT JOIN ReadingCycleRank lastR ON lastR.StudentNumber = sg.StudentNumber AND lastR.rn = 1
     LEFT JOIN ReadingCycleRank prevR ON prevR.StudentNumber = sg.StudentNumber AND prevR.rn = 2
-    -- No group-key filter here any more: RequestedSections already matched @GroupKeys and
-    -- AccessibleSections already checked permission, so every row reaching this point is wanted.
+    -- Access + group match already applied in StudentGroups, so every row reaching here is wanted.
 );
 GO
 

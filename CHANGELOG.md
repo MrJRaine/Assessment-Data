@@ -11,6 +11,26 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased]
+
+### Changed
+- **Materialized the roster membership skeleton (perf).** `tvf_TeacherRoster` was re-deriving the
+  ingest-stable half of the roster — which students sit in which subject-mapped section per window +
+  their static attrs — on **every** request, a DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram
+  join that measured **~2.0–2.3s warm for a 20-student roster** (`diag_roster_timing.sql`, 2026-09-23).
+  That half only changes on ingest, so it's now pre-joined into **`SectionRosterMembership`** (the
+  section-keyed source of truth) and the derived **`TeacherRosterMembership`** (bounded Taught-scope
+  projection for the teacher fast path), rebuilt each ingest by **`usp_RebuildRosterMembership`** (wired
+  into `usp_RunFullIngestCycle` after the DQ gate). The roster TVF now reads the base table + a live
+  access predicate (`FactSectionTeachers`/`StaffSchoolAccess`); the volatile results half (reading
+  values, deltas, benchmark, IPP, achievement, starting point) stays live. No new staleness — roster
+  membership was already ingest-cadence. **SQL-only, web app unchanged.** Reading roster first
+  (Writing/Math/Groups + the teacher-table fast path/routing to follow).
+  **SQL to deploy (dev first, in order):** `sql/security/SectionRosterMembership.sql` +
+  `sql/security/TeacherRosterMembership.sql` + `sql/procedures/usp_RebuildRosterMembership.sql` +
+  `sql/procedures/usp_RunFullIngestCycle.sql`, then `EXEC usp_RebuildRosterMembership` to populate,
+  then `sql/security/tvf_TeacherRoster.sql`.
+
 ## [0.6.2] — 2026-09-23
 
 ### Changed
