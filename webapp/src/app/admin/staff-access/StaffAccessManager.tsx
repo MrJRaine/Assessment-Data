@@ -13,6 +13,10 @@ const CAPS: { key: keyof StaffAccessRow; label: string }[] = [
   { key: 'canOverrideLiteracy', label: 'Literacy Override' },
 ]
 
+// A row with no capabilities at all -> a Save removes them from the access list (house-cleaning).
+const isEmptyRow = (r: StaffAccessRow) =>
+  !r.isSysAdmin && !r.canManageCycles && !r.canRunIngest && !r.canOverrideMath && !r.canOverrideLiteracy
+
 export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAccessRow[]; selfUpn: string }) {
   const [rows, setRows] = useState<StaffAccessRow[]>(staff)
   const [dirty, setDirty] = useState<Record<string, boolean>>({})
@@ -80,11 +84,18 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
     if (newSysadmins.length > 0) {
       if (!confirm(`Grant System Administrator to ${newSysadmins.map((r) => r.name).join(', ')}? They will be able to change everyone's access, including yours.`)) return
     }
+    // Clearing every role removes the person from the list — flag those so a mis-click can't drop someone.
+    const removing = dirtyRows.filter(isEmptyRow)
+    if (removing.length > 0) {
+      if (!confirm(`Remove ${removing.map((r) => r.name).join(', ')} from the access list? No roles are selected for them.`)) return
+    }
     setSaveSummary(null)
     startTransition(async () => {
-      let ok = 0
+      let saved = 0
+      let removed = 0
       const errs: string[] = []
       for (const r of dirtyRows) {
+        const empty = isEmptyRow(r)
         const res = await setStaffAccess({
           email: r.email,
           isSysAdmin: r.isSysAdmin,
@@ -94,17 +105,25 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
           canOverrideLiteracy: r.canOverrideLiteracy,
         })
         if (res.ok) {
-          ok++
           setDirty((d) => {
             const n = { ...d }
             delete n[r.email]
             return n
           })
+          if (empty) {
+            removed++
+            setRows((rs) => rs.filter((x) => x.email !== r.email)) // gone from the list
+          } else {
+            saved++
+          }
         } else {
           errs.push(`${r.name}: ${res.message ?? 'failed'}`)
         }
       }
-      setSaveSummary(errs.length ? `Saved ${ok} · ${errs.length} failed — ${errs.join('; ')}` : `Saved ${ok}`)
+      const parts = [saved ? `Saved ${saved}` : '', removed ? `removed ${removed}` : ''].filter(Boolean)
+      setSaveSummary(
+        errs.length ? `${parts.join(' · ') || 'Done'} · ${errs.length} failed — ${errs.join('; ')}` : parts.join(' · ') || 'Saved',
+      )
     })
   }
 
@@ -168,7 +187,11 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
       </table>
       {rows.length === 0 ? (
         <p className="muted">No staff have been granted access yet. Add someone by email below.</p>
-      ) : null}
+      ) : (
+        <p className="muted small" style={{ marginTop: '0.75rem' }}>
+          Tip: to remove someone from this list, clear all of their roles and Save.
+        </p>
+      )}
       <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type="email"

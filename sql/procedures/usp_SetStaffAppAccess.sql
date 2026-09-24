@@ -11,7 +11,9 @@
  *
  * A SysAdmin CAN grant SysAdmin to another user (small-team bootstrap; the GUI
  * confirms first). Email is stored lowercased. Fabric has no MERGE, so this is an
- * IF EXISTS UPDATE / ELSE INSERT. Every change writes a FactSubmissionAudit row.
+ * IF EXISTS UPDATE / ELSE INSERT. A save that clears ALL five flags DELETEs the row
+ * instead (removes the person from the access list — automated house-cleaning; the
+ * last-sysadmin guard still applies). Every change writes a FactSubmissionAudit row.
  *
  * THROW codes:
  *   51010  a required parameter is NULL / @TargetEmail blank
@@ -64,6 +66,23 @@ BEGIN
        AND (SELECT COUNT(*) FROM StaffAppAccess WHERE IsSysAdmin = 1) <= 1
     BEGIN
         ;THROW 51051, 'usp_SetStaffAppAccess: cannot remove the last System Administrator. Grant SysAdmin to someone else first.', 1;
+    END;
+
+    -- REMOVE from the access list: a save that clears EVERY capability deletes the row (automated
+    -- house-cleaning — there is no separate delete button; you clear the roles and Save). The 51051
+    -- guard above already blocks doing this to the last sysadmin. A no-op if no row exists (e.g. a
+    -- staff member who was added-by-email but never granted anything).
+    IF @IsSysAdmin = 0 AND @CanManageCycles = 0 AND @CanRunIngest = 0
+       AND @CanOverrideMath = 0 AND @CanOverrideLiteracy = 0
+    BEGIN
+        DELETE FROM StaffAppAccess WHERE LOWER(Email) = @Target;
+
+        INSERT INTO FactSubmissionAudit
+            (RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message, RecordCount, LastUpdated)
+        VALUES
+            ('StaffAppAccess', 'WebApp', @CallerEmail, @Now, 'Accepted',
+             CONCAT('usp_SetStaffAppAccess: REMOVED ', @Target, ' (all capabilities cleared)'), 1, @Now);
+        RETURN;
     END;
 
     -- Upsert (Fabric has no MERGE).
