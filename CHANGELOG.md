@@ -11,15 +11,20 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.6.4] — 2026-09-24
+## [0.7.0] — unreleased (in development)
+
+Rollup minor. Bundles the Math completion cards + Data Entry "done" relabel + the entry-load perf pass
+below, with the Short-Cycle **grace-lock + override** and the **Reports** changes landing under this same
+version before it promotes to live.
 
 ### Added
 - **Math cards show completion, not just participation.** The Math group-picker cards and the `/enter`
   subject cards now read **"N/M started · K done"** instead of "N/M entered". "started" = ≥1 task marked
   (unchanged); "done" = a student with a latest result for **>80% of their grade's tasks at the cycle's
-  benchmark month**. Reading/Writing cards are unchanged (a single result already means done). Fixes the
-  misleading read where a class with one task marked showed "9/11 entered" while every student was still
-  "Incomplete" on the grid.
+  benchmark month**. Reading/Writing cards are relabeled "entered" → **"done"** (one result already *is*
+  completion for a single-result subject), so every Data Entry card now reads as completion. Fixes the
+  misleading Math read where a class with one task marked showed "9/11 entered" while every student was
+  still "Incomplete" on the grid.
 
 ### Changed (SQL — deploy to live)
 - `tvf_TeacherGroups` and `tvf_UserAssessmentWindows` gain a **`DoneStudentCount`** (Math branch): distinct

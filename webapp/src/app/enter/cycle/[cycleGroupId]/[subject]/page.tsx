@@ -46,7 +46,7 @@ export default async function GroupSelect({
           hint={`You teach no ${subject.toLowerCase()} course section with students in this cycle's grade and program scope.`}
         />
       ) : (
-        <GroupCards groups={groups} hrefBase={`/enter/cycle/${rawCycle}/${rawSubject}`} mode="course" subject={rawSubject} />
+        <GroupCards groups={groups} hrefBase={`/enter/cycle/${rawCycle}/${rawSubject}`} mode="course" subject={rawSubject} metaSuffix="done" />
       )}
     </>
   )

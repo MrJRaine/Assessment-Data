@@ -76,7 +76,7 @@ function CycleCardLink({ c }: { c: CycleCard }) {
       title={c.title}
       meta={c.subject === 'Math'
         ? `${c.status} · ${c.enteredCount}/${c.applicableCount} started · ${c.doneCount} done`
-        : `${c.status} · ${c.enteredCount}/${c.applicableCount} entered`}
+        : `${c.status} · ${c.enteredCount}/${c.applicableCount} done`}
     />
   )
 }

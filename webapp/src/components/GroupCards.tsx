@@ -219,7 +219,7 @@ function LanguageBlock({
                   <span className="muted small">
                     {isMath
                       ? `${g.enteredCount}/${g.applicableCount} started · ${g.doneCount} done`
-                      : `${g.enteredCount}/${g.applicableCount} entered`}
+                      : `${g.enteredCount}/${g.applicableCount} done`}
                   </span>
                 </span>
               </label>
