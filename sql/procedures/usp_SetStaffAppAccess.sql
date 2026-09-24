@@ -16,6 +16,7 @@
  * THROW codes:
  *   51010  a required parameter is NULL / @TargetEmail blank
  *   51050  caller is not a SysAdmin
+ *   51051  would remove the LAST SysAdmin (never allowed — grant sysadmin to someone else first)
  ******************************************************************************/
 
 DROP PROCEDURE IF EXISTS usp_SetStaffAppAccess;
@@ -53,6 +54,16 @@ BEGIN
     IF COALESCE(@CallerIsSysAdmin, 0) = 0
     BEGIN
         ;THROW 51050, 'usp_SetStaffAppAccess: caller is not a SysAdmin — cannot change app access.', 1;
+    END;
+
+    -- 51051: never let a save drop the system to ZERO SysAdmins. Blocks demoting the LAST sysadmin
+    -- (the target is currently a sysadmin, is being set to non-sysadmin, and is the only one) — which
+    -- would lock everyone out of access administration.
+    IF @IsSysAdmin = 0
+       AND EXISTS (SELECT 1 FROM StaffAppAccess WHERE LOWER(Email) = @Target AND IsSysAdmin = 1)
+       AND (SELECT COUNT(*) FROM StaffAppAccess WHERE IsSysAdmin = 1) <= 1
+    BEGIN
+        ;THROW 51051, 'usp_SetStaffAppAccess: cannot remove the last System Administrator. Grant SysAdmin to someone else first.', 1;
     END;
 
     -- Upsert (Fabric has no MERGE).
