@@ -27,7 +27,8 @@ export interface TeacherWindow {
   cycleName: string | null // the HEADER's name ('SCoR 1'); the collapsed card's title, since instance names differ
   name: string
   assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
-  status: string // Upcoming | Open | ClosesToday | Closed
+  status: string // Upcoming | Open | ClosesToday | Closed (in grace) | Locked (grace expired, read-only)
+  graceEndsAt: string | null // ISO ts a Closed window flips to Locked; drives the "N left" countdown
   scaleSystem: string | null
   language: string | null // 'English' | 'French' | null (Both) — distinguishes same-name instances
   programScope: string[] // {English, Early Immersion, Late Immersion}; [] = all programs
@@ -75,6 +76,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     WindowName: string
     AssessmentType: string
     WindowStatus: string
+    GraceEndsAt: unknown
     ScaleSystem: string | null
     AssessmentLanguage: string | null
     ProgramScope: string | null
@@ -95,6 +97,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     name: r.WindowName,
     assessmentType: r.AssessmentType,
     status: r.WindowStatus,
+    graceEndsAt: r.GraceEndsAt instanceof Date ? r.GraceEndsAt.toISOString() : r.GraceEndsAt ? String(r.GraceEndsAt) : null,
     scaleSystem: r.ScaleSystem,
     language: r.AssessmentLanguage ?? null,
     programScope: r.ProgramScope ? r.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
@@ -523,6 +526,8 @@ export interface CallerCapabilities {
   isSysAdmin: boolean // super-user: implies all capabilities
   canManageCycles: boolean // /cycles admin
   canRunIngest: boolean // /ingest admin
+  canOverrideMath: boolean // flip a Math roster editable in a grace-locked cycle (0.7.0)
+  canOverrideLiteracy: boolean // same, for Reading + Writing rosters (0.7.0)
 }
 
 /**
@@ -553,8 +558,15 @@ export async function getCallerCapabilities(
   let lastErr: unknown
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
-        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
+      const rows = await query<{
+        IsSysAdmin: boolean
+        CanManageCycles: boolean
+        CanRunIngest: boolean
+        CanOverrideMath: boolean | null
+        CanOverrideLiteracy: boolean | null
+      }>(
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy
+         FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
         { UPN: upn },
       )
       const r = rows[0]
@@ -563,6 +575,8 @@ export async function getCallerCapabilities(
         isSysAdmin: sysAdmin,
         canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
         canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+        canOverrideMath: sysAdmin || Boolean(r?.CanOverrideMath),
+        canOverrideLiteracy: sysAdmin || Boolean(r?.CanOverrideLiteracy),
       }
       // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
       // poison the cache with a "no capabilities" answer for an hour.

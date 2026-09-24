@@ -19,13 +19,30 @@ type CycleCard = {
   subject: string
   title: string
   status: string
+  graceEndsAt: string | null // latest lock moment across the cycle's instances
   applicableCount: number
   enteredCount: number
   doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks
 }
 
 // Most-open status wins across the cycle's instances: a cycle with any open instance is open.
-const STATUS_RANK: Record<string, number> = { Open: 0, ClosesToday: 1, Upcoming: 2, Closed: 3 }
+const STATUS_RANK: Record<string, number> = { Open: 0, ClosesToday: 1, Upcoming: 2, Closed: 3, Locked: 4 }
+
+// A collapsed cycle stays editable until its LAST instance locks — carry the latest grace end.
+function laterISO(a: string | null, b: string | null): string | null {
+  if (!a) return b
+  if (!b) return a
+  return a > b ? a : b
+}
+// Short "time left before this cycle locks" label from an ISO timestamp (server-rendered at request time).
+function graceLeft(graceEndsAt: string | null): string | null {
+  if (!graceEndsAt) return null
+  const ms = new Date(graceEndsAt).getTime() - Date.now()
+  if (ms <= 0) return null
+  const hrs = Math.ceil(ms / 3_600_000)
+  if (hrs >= 48) return `${Math.ceil(hrs / 24)} days left`
+  return `${hrs} hr${hrs === 1 ? '' : 's'} left`
+}
 
 function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orphans: number } {
   const out: CycleCard[] = []
@@ -50,6 +67,7 @@ function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orpha
         subject: w.assessmentType,
         title: w.cycleName ?? w.name,
         status: w.status,
+        graceEndsAt: w.graceEndsAt,
         applicableCount: w.applicableCount,
         enteredCount: w.enteredCount,
         doneCount: w.doneCount,
@@ -63,6 +81,7 @@ function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orpha
     existing.applicableCount += w.applicableCount
     existing.enteredCount += w.enteredCount
     existing.doneCount += w.doneCount
+    existing.graceEndsAt = laterISO(existing.graceEndsAt, w.graceEndsAt)
     if ((STATUS_RANK[w.status] ?? 9) < (STATUS_RANK[existing.status] ?? 9)) existing.status = w.status
   }
 
@@ -70,13 +89,21 @@ function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orpha
 }
 
 function CycleCardLink({ c }: { c: CycleCard }) {
+  const left = graceLeft(c.graceEndsAt)
+  const stateLabel =
+    c.status === 'ClosesToday' ? 'Closes today'
+      : c.status === 'Closed' ? `Late entry${left ? ` · ${left}` : ''}`
+      : c.status === 'Locked' ? 'View only'
+      : c.status // Open / Upcoming
+  const counts =
+    c.subject === 'Math'
+      ? `${c.enteredCount}/${c.applicableCount} started · ${c.doneCount} done`
+      : `${c.enteredCount}/${c.applicableCount} done`
   return (
     <CardLink
       href={`/enter/cycle/${encodeURIComponent(c.cycleGroupId)}/${encodeURIComponent(c.subject)}`}
       title={c.title}
-      meta={c.subject === 'Math'
-        ? `${c.status} · ${c.enteredCount}/${c.applicableCount} started · ${c.doneCount} done`
-        : `${c.status} · ${c.enteredCount}/${c.applicableCount} done`}
+      meta={`${stateLabel} · ${counts}`}
     />
   )
 }
@@ -85,7 +112,7 @@ function CycleCardLink({ c }: { c: CycleCard }) {
 // (still selectable, since late entry is allowed).
 function SubjectSection({ title, cycles }: { title: string; cycles: CycleCard[] }) {
   const current = cycles.filter((c) => c.status === 'Open' || c.status === 'ClosesToday')
-  const past = cycles.filter((c) => c.status === 'Closed')
+  const past = cycles.filter((c) => c.status === 'Closed' || c.status === 'Locked')
   const lower = title.toLowerCase()
 
   return (
@@ -104,7 +131,7 @@ function SubjectSection({ title, cycles }: { title: string; cycles: CycleCard[] 
       {past.length > 0 ? (
         <details className="accordion">
           <summary>
-            Past {lower} cycles ({past.length}) — still open for late entry
+            Past {lower} cycles ({past.length}) — late entry while in grace, then view-only
           </summary>
           <div className="card-grid">
             {past.map((c) => (
