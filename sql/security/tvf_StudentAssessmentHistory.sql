@@ -60,12 +60,32 @@ RETURN
         dal.AchievementLevelCode,
         dal.AchievementLevelName,
         dal.HexColor                                            AS AchievementHexColor,
-        dal.HexColorTint                                        AS AchievementHexColorTint
+        dal.HexColorTint                                        AS AchievementHexColorTint,
+        -- Expected benchmark range for THIS row's window month + the student's family (item 2).
+        drb.ExpectedMinLevel                                    AS ExpectedMinLevel,
+        drb.ExpectedMaxLevel                                    AS ExpectedMaxLevel,
+        -- Prev-June prior-year anchor (same on every row; item 1a) — the client prepends it to the trend.
+        sp.StartingLevelCode                                    AS JuneReadingLevel,
+        sp.StartingLevelOrder                                   AS JuneReadingLevelOrder
     FROM FactAssessmentReading far
     JOIN DimStudent s ON s.StudentKey = far.StudentKey AND s.IsCurrent = 1
     JOIN DimProgram p ON p.ProgramCode = s.ProgramCode
     JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = far.AssessmentWindowID
     JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
+    -- Expected range for this row's window month (BenchmarkMonth, else the window's dominant month).
+    LEFT JOIN DimReadingBenchmark drb
+           ON drb.GradeCode       = s.Grade
+          AND drb.ProgramFamily   = CASE WHEN s.ProgramCode = 'J020' THEN 'English' ELSE p.ProgramFamily END
+          AND drb.AssessmentMonth = COALESCE(aw.BenchmarkMonth,
+                 (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                  WHERE dc.Date BETWEEN aw.StartDate AND aw.EndDate
+                  GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month))
+    -- Prev-June anchor by the student's family scale (J020 -> EN_Reading).
+    LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
+           ON sp.StudentNumber = s.StudentNumber
+          AND sp.ScaleSystem   = CASE WHEN s.ProgramCode  = 'J020'             THEN 'EN_Reading'
+                                      WHEN p.ProgramFamily = 'English'          THEN 'EN_Reading'
+                                      WHEN p.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END
     LEFT JOIN CurrentReadingIPP crd
            ON crd.StudentKey    = s.StudentKey
           AND crd.ProgramFamily = p.ProgramFamily

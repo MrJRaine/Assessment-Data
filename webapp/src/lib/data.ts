@@ -846,6 +846,10 @@ export interface HistoryRow {
   levelCode: string | null
   levelOrder: number | null
   delta: number | null
+  expectedMin: string | null // benchmark range for this row's window (item 2)
+  expectedMax: string | null
+  juneLevel: string | null // prev-June anchor (item 1a; same on every row)
+  juneLevelOrder: number | null
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -870,6 +874,10 @@ export async function getStudentHistory(upn: string, studentKey: string): Promis
     levelCode: (r.LevelCode as string) ?? null,
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
     delta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
+    expectedMin: (r.ExpectedMinLevel as string) ?? null,
+    expectedMax: (r.ExpectedMaxLevel as string) ?? null,
+    juneLevel: (r.JuneReadingLevel as string) ?? null,
+    juneLevelOrder: r.JuneReadingLevelOrder == null ? null : Number(r.JuneReadingLevelOrder),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
