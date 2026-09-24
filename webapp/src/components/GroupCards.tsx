@@ -57,12 +57,15 @@ export default function GroupCards({
   hrefBase,
   metaSuffix = 'entered',
   mode = 'lens',
+  subject,
 }: {
   groups: TeacherGroup[]
   hrefBase: string
   metaSuffix?: string
   mode?: 'lens' | 'course'
+  subject?: string // entry subject; 'math' switches the card meta to "N/M started · K done"
 }) {
+  const isMath = subject === 'math'
   const taught = groups.filter((g) => g.scope === 'Taught')
   const oversight = groups.filter((g) => g.scope === 'Oversight')
 
@@ -86,7 +89,7 @@ export default function GroupCards({
       title={g.label}
       // Oversight cards say WHOSE class this is — the whole point of showing someone else's section.
       desc={[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ') || undefined}
-      meta={`${g.enteredCount}/${g.applicableCount} ${metaSuffix}`}
+      meta={isMath ? `${g.enteredCount}/${g.applicableCount} started · ${g.doneCount} done` : `${g.enteredCount}/${g.applicableCount} ${metaSuffix}`}
     />
   )
 
@@ -95,12 +98,12 @@ export default function GroupCards({
       {taught.length > 0 && (
         <section>
           <h2 className="section-heading">My classes</h2>
-          {mode === 'course' ? <ByLanguage groups={taught} card={card} hrefBase={hrefBase} /> : <div className="card-grid">{taught.map(card)}</div>}
+          {mode === 'course' ? <ByLanguage groups={taught} card={card} hrefBase={hrefBase} isMath={isMath} /> : <div className="card-grid">{taught.map(card)}</div>}
         </section>
       )}
 
       {oversight.length > 0 && (
-        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} hrefBase={hrefBase} />
+        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} hrefBase={hrefBase} isMath={isMath} />
       )}
     </>
   )
@@ -115,10 +118,12 @@ function ByLanguage({
   groups,
   card,
   hrefBase,
+  isMath = false,
 }: {
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
   hrefBase: string
+  isMath?: boolean
 }) {
   const langs = [...new Set(groups.map((g) => g.language ?? 'Other'))].sort()
   return (
@@ -131,6 +136,7 @@ function ByLanguage({
           groups={groups.filter((g) => (g.language ?? 'Other') === lang)}
           card={card}
           hrefBase={hrefBase}
+          isMath={isMath}
         />
       ))}
     </>
@@ -150,11 +156,13 @@ function LanguageBlock({
   groups,
   card,
   hrefBase,
+  isMath = false,
 }: {
   heading: string | null
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
   hrefBase: string
+  isMath?: boolean
 }) {
   const [picking, setPicking] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -209,7 +217,9 @@ function LanguageBlock({
                     {[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ')}
                   </span>
                   <span className="muted small">
-                    {g.enteredCount}/{g.applicableCount} entered
+                    {isMath
+                      ? `${g.enteredCount}/${g.applicableCount} started · ${g.doneCount} done`
+                      : `${g.enteredCount}/${g.applicableCount} entered`}
                   </span>
                 </span>
               </label>
@@ -244,12 +254,14 @@ function Oversight({
   showHeading,
   hrefBase,
   mode,
+  isMath = false,
 }: {
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
   showHeading: boolean
   hrefBase: string
   mode: 'lens' | 'course'
+  isMath?: boolean
 }) {
   const byCourse = mode === 'course'
   const hasSections = useMemo(() => !byCourse && groups.some((g) => g.groupType === 'Section'), [groups, byCourse])
@@ -387,7 +399,7 @@ function Oversight({
       {visible.length === 0 ? (
         <p className="muted" style={{ marginTop: '1rem' }}>No {byCourse ? 'sections' : lens === 'Section' ? 'sections' : lens === 'Grade' ? 'grades' : 'homerooms'} match the current filters.</p>
       ) : byCourse ? (
-        <ByLanguage groups={visible} card={card} hrefBase={hrefBase} />
+        <ByLanguage groups={visible} card={card} hrefBase={hrefBase} isMath={isMath} />
       ) : (
         <div className="card-grid">{visible.map(card)}</div>
       )}

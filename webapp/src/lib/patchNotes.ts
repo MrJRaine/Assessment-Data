@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.6.4',
+    date: '2026-09-24',
+    kind: 'feature',
+    summary:
+      'Math class and cycle cards now show how many students are finished, not just how many have started. "Started" means at least one task marked; "done" means a student has most of their tasks for the cycle recorded.',
+  },
+  {
     version: '0.6.3',
     date: '2026-09-24',
     kind: 'fix',

@@ -160,6 +160,43 @@ RETURN
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Math' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
+    ),
+    -- Math COMPLETION ("done", 0.6.4): a Math student is "done" when they have a latest result for
+    -- MORE THAN 80% of the tasks applicable to their grade at the window's benchmark month (DimMathTask
+    -- by GradeCode + AssessmentMonth). Reading/Writing have a single result, so done == entered and
+    -- these CTEs stay empty for them (MathBench is @AssessmentType-guarded to Math windows).
+    MathBench AS (   -- effective benchmark month per Math window (BenchmarkMonth, else dominant calendar month)
+        SELECT wed.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN wed.StartDate AND wed.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
+        FROM WindowEffectiveDates wed
+        INNER JOIN DimAssessmentWindow w ON w.AssessmentWindowID = wed.AssessmentWindowID
+        WHERE wed.AssessmentType = 'Math'
+    ),
+    MathApplicable AS (   -- # active tasks for a (window, grade) at that window's benchmark month
+        SELECT mb.AssessmentWindowID, mt.GradeCode, COUNT(*) AS ApplicableTasks
+        FROM MathBench mb
+        INNER JOIN DimMathTask mt ON mt.ActiveFlag = 1 AND mt.AssessmentMonth = mb.BenchMonth
+        GROUP BY mb.AssessmentWindowID, mt.GradeCode
+    ),
+    MathEnteredTasks AS (   -- distinct tasks each applicable student has a result for, with their grade
+        SELECT a.AssessmentWindowID, a.StudentKey, s.Grade,
+               COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
+        FROM ApplicableStudents a
+        INNER JOIN DimStudent s ON s.StudentKey = a.StudentKey AND s.IsCurrent = 1
+        INNER JOIN FactAssessmentMath fm
+                ON fm.StudentKey = a.StudentKey AND fm.AssessmentWindowID = a.AssessmentWindowID
+        GROUP BY a.AssessmentWindowID, a.StudentKey, s.Grade
+    ),
+    MathDone AS (   -- (window, student) over the >80% bar; empty for R/W (MathApplicable empty there)
+        SELECT met.AssessmentWindowID, met.StudentKey
+        FROM MathEnteredTasks met
+        INNER JOIN MathApplicable ma
+                ON ma.AssessmentWindowID = met.AssessmentWindowID AND ma.GradeCode = met.Grade
+        WHERE ma.ApplicableTasks > 0
+          AND CAST(met.EnteredTasks AS DECIMAL(9,4)) / ma.ApplicableTasks > 0.8
     )
     SELECT
         CAST(wed.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
@@ -180,13 +217,18 @@ RETURN
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
         -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
         -- so a result on a sibling-language instance still counts and the card matches the group picker.
-        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount
+        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount,
+        -- Math "done" (0.6.4): >80% of the student's benchmark-month tasks marked. 0 for Reading/Writing.
+        COUNT(DISTINCT CASE WHEN mdn.StudentKey IS NOT NULL THEN a.StudentKey END) AS DoneStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
     LEFT JOIN CycleEntered ce
            ON ce.CycleGroupID   = wed.CycleGroupID
           AND ce.AssessmentType = wed.AssessmentType
           AND ce.StudentKey     = a.StudentKey
+    LEFT JOIN MathDone mdn
+           ON mdn.AssessmentWindowID = a.AssessmentWindowID
+          AND mdn.StudentKey         = a.StudentKey
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,

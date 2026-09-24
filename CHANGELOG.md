@@ -11,6 +11,24 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.4] — 2026-09-24
+
+### Added
+- **Math cards show completion, not just participation.** The Math group-picker cards and the `/enter`
+  subject cards now read **"N/M started · K done"** instead of "N/M entered". "started" = ≥1 task marked
+  (unchanged); "done" = a student with a latest result for **>80% of their grade's tasks at the cycle's
+  benchmark month**. Reading/Writing cards are unchanged (a single result already means done). Fixes the
+  misleading read where a class with one task marked showed "9/11 entered" while every student was still
+  "Incomplete" on the grid.
+
+### Changed (SQL — deploy to live)
+- `tvf_TeacherGroups` and `tvf_UserAssessmentWindows` gain a **`DoneStudentCount`** (Math branch): distinct
+  students over the >80% bar, computed from `DimMathTask` (grade × the window's benchmark/dominant month)
+  vs distinct `FactAssessmentMath` tasks. Read-only; returns 0 for Reading/Writing.
+
+### SQL to deploy on live
+- `sql/security/tvf_TeacherGroups.sql`, `sql/security/tvf_UserAssessmentWindows.sql`.
+
 ## [0.6.3] — 2026-09-24
 
 ### Changed

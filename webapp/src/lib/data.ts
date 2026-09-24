@@ -37,6 +37,7 @@ export interface TeacherWindow {
   endDate: string // 'YYYY-MM-DD' (window closes on the last day of its month)
   applicableCount: number
   enteredCount: number
+  doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks (0 for R/W)
 }
 
 // DATE columns come back from tedious as a JS Date (UTC midnight) or a string; normalize to 'YYYY-MM-DD'.
@@ -60,6 +61,7 @@ export interface TeacherGroup {
   grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
   applicableCount: number
   enteredCount: number
+  doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks (0 for R/W + Programming)
 }
 
 /** Assessment windows applicable to the signed-in user (any role), with per-window progress counts. */
@@ -80,6 +82,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     EndDate: unknown
     ApplicableStudentCount: number
     EnteredStudentCount: number
+    DoneStudentCount: number
   }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
   return rows.map((r) => ({
     id: String(r.AssessmentWindowID),
@@ -97,6 +100,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     endDate: toYMD(r.EndDate),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
     enteredCount: Number(r.EnteredStudentCount ?? 0),
+    doneCount: Number(r.DoneStudentCount ?? 0),
   }))
 }
 
@@ -242,6 +246,7 @@ export async function getTeacherGroups(
     WindowIDs: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
+    DoneStudentCount: number
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) ORDER BY GroupKey',
@@ -270,6 +275,7 @@ export async function getTeacherGroups(
       grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
       applicableCount: Number(r.ApplicableStudentCount ?? 0),
       enteredCount: Number(r.EnteredStudentCount ?? 0),
+      doneCount: Number(r.DoneStudentCount ?? 0),
     }
   })
   writeGroups(upn, cycleGroupId, assessmentType, groups)
@@ -892,6 +898,7 @@ export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]>
     grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
     enteredCount: Number(r.NeedsConfirmCount ?? 0), // reuses the slot: shown as "N need confirmation"
+    doneCount: 0, // Programming has no completion metric
   }))
 }
 

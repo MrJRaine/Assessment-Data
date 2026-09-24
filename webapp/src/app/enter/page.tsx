@@ -21,6 +21,7 @@ type CycleCard = {
   status: string
   applicableCount: number
   enteredCount: number
+  doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks
 }
 
 // Most-open status wins across the cycle's instances: a cycle with any open instance is open.
@@ -51,6 +52,7 @@ function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orpha
         status: w.status,
         applicableCount: w.applicableCount,
         enteredCount: w.enteredCount,
+        doneCount: w.doneCount,
       }
       byCycle.set(key, card)
       out.push(card)
@@ -60,6 +62,7 @@ function collapseToCycles(windows: TeacherWindow[]): { cards: CycleCard[]; orpha
     // a French writing result owes two entries, and the ratio tracks entries, not heads.
     existing.applicableCount += w.applicableCount
     existing.enteredCount += w.enteredCount
+    existing.doneCount += w.doneCount
     if ((STATUS_RANK[w.status] ?? 9) < (STATUS_RANK[existing.status] ?? 9)) existing.status = w.status
   }
 
@@ -71,7 +74,9 @@ function CycleCardLink({ c }: { c: CycleCard }) {
     <CardLink
       href={`/enter/cycle/${encodeURIComponent(c.cycleGroupId)}/${encodeURIComponent(c.subject)}`}
       title={c.title}
-      meta={`${c.status} · ${c.enteredCount}/${c.applicableCount} entered`}
+      meta={c.subject === 'Math'
+        ? `${c.status} · ${c.enteredCount}/${c.applicableCount} started · ${c.doneCount} done`
+        : `${c.status} · ${c.enteredCount}/${c.applicableCount} entered`}
     />
   )
 }
