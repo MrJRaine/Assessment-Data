@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.6.3',
+    date: '2026-09-24',
+    kind: 'fix',
+    summary:
+      'On the Programming page, the IPPs and Adaptations progress labels now count students rather than each individual subject entry, so the totals reflect how many students actually need attention.',
+  },
+  {
     version: '0.6.2',
     date: '2026-09-23',
     kind: 'fix',
