@@ -182,9 +182,14 @@ RETURN
         GROUP BY mb.AssessmentWindowID, mt.GradeCode
     ),
     MathEnteredTasks AS (   -- distinct tasks each applicable student has a result for, with their grade
+        -- Gated to Math windows (INNER JOIN MathBench) so a Reading/Writing load pays NOTHING here:
+        -- MathBench is empty for non-Math windows, which prunes this whole scan before it touches
+        -- DimStudent / FactAssessmentMath. (A clear DELETEs its row, so a distinct-task count is a
+        -- true "has a mark" count -- no NULL tombstones to over-count.)
         SELECT a.AssessmentWindowID, a.StudentKey, s.Grade,
                COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
         FROM ApplicableStudents a
+        INNER JOIN MathBench mb ON mb.AssessmentWindowID = a.AssessmentWindowID
         INNER JOIN DimStudent s ON s.StudentKey = a.StudentKey AND s.IsCurrent = 1
         INNER JOIN FactAssessmentMath fm
                 ON fm.StudentKey = a.StudentKey AND fm.AssessmentWindowID = a.AssessmentWindowID

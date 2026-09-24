@@ -210,8 +210,11 @@ RETURN
         SELECT DISTINCT StudentKey, AssessmentWindowID, Grade FROM SectionStudents
     ),
     MathEnteredTasks AS (   -- distinct tasks each student has a result for, per window
+        -- Gated to Math windows (INNER JOIN MathBench, itself @AssessmentType='Math'-guarded) so a
+        -- Reading/Writing picker pays NOTHING here -- MathBench is empty then, pruning this scan.
         SELECT msw.StudentKey, msw.AssessmentWindowID, COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
         FROM MathStudentWindow msw
+        INNER JOIN MathBench mb ON mb.AssessmentWindowID = msw.AssessmentWindowID
         INNER JOIN FactAssessmentMath fm
                 ON fm.StudentKey = msw.StudentKey AND fm.AssessmentWindowID = msw.AssessmentWindowID
         GROUP BY msw.StudentKey, msw.AssessmentWindowID

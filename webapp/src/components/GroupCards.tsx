@@ -65,7 +65,7 @@ export default function GroupCards({
   mode?: 'lens' | 'course'
   subject?: string // entry subject; 'math' switches the card meta to "N/M started · K done"
 }) {
-  const isMath = subject === 'math'
+  const isMath = (subject ?? '').toLowerCase() === 'math' // route passes 'Math' (from AssessmentType)
   const taught = groups.filter((g) => g.scope === 'Taught')
   const oversight = groups.filter((g) => g.scope === 'Oversight')
 
