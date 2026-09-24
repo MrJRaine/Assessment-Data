@@ -68,7 +68,7 @@ RETURN
         WHERE w.ActiveFlag = 1
     ),
     TeacherStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN FactSectionTeachers fst
@@ -107,7 +107,7 @@ RETURN
     -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
     -- simply has every building in their list. Mirrors tvf_TeacherGroups' Oversight path.
     AdminStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
@@ -182,18 +182,18 @@ RETURN
         GROUP BY mb.AssessmentWindowID, mt.GradeCode
     ),
     MathEnteredTasks AS (   -- distinct tasks each applicable student has a result for, with their grade
-        -- Gated to Math windows (INNER JOIN MathBench) so a Reading/Writing load pays NOTHING here:
-        -- MathBench is empty for non-Math windows, which prunes this whole scan before it touches
-        -- DimStudent / FactAssessmentMath. (A clear DELETEs its row, so a distinct-task count is a
-        -- true "has a mark" count -- no NULL tombstones to over-count.)
-        SELECT a.AssessmentWindowID, a.StudentKey, s.Grade,
+        -- Grade is CARRIED from ApplicableStudents (which already joined DimStudent to grade-band the
+        -- student) -- no re-join. Gated to Math windows (INNER JOIN MathBench) so a Reading/Writing load
+        -- pays NOTHING here: MathBench is empty for non-Math windows, pruning the scan before it touches
+        -- FactAssessmentMath. (A clear DELETEs its row, so a distinct-task count is a true "has a mark"
+        -- count -- no NULL tombstones to over-count.)
+        SELECT a.AssessmentWindowID, a.StudentKey, a.Grade,
                COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
         FROM ApplicableStudents a
         INNER JOIN MathBench mb ON mb.AssessmentWindowID = a.AssessmentWindowID
-        INNER JOIN DimStudent s ON s.StudentKey = a.StudentKey AND s.IsCurrent = 1
         INNER JOIN FactAssessmentMath fm
                 ON fm.StudentKey = a.StudentKey AND fm.AssessmentWindowID = a.AssessmentWindowID
-        GROUP BY a.AssessmentWindowID, a.StudentKey, s.Grade
+        GROUP BY a.AssessmentWindowID, a.StudentKey, a.Grade
     ),
     MathDone AS (   -- (window, student) over the >80% bar; empty for R/W (MathApplicable empty there)
         SELECT met.AssessmentWindowID, met.StudentKey
