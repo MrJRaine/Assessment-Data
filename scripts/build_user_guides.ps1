@@ -1,4 +1,10 @@
-﻿# Builds the v0.6.0 teacher how-to one-pagers (.docx) via Word COM, from a single
+﻿# TODO (0.7.0 grace-lock): document the GRACE WINDOW where appropriate — in the reading/writing/math
+#   "enter data" guides (03/04/05) and the "choose a cycle" guide: after a cycle closes it stays editable
+#   for a grace period (default 7 days / 168h, per-cycle configurable), shows under "Past cycles — late
+#   entry (N left)", then LOCKS to read-only ("View only"); designated Literacy/Math override staff can
+#   flip a locked group back on via "Override lock for this group". Add once 0.7.0 ships.
+#
+# Builds the v0.6.0 teacher how-to one-pagers (.docx) via Word COM, from a single
 # consistent template. Regenerates docs/user-guides/v0.6.0/*.docx from the content below.
 # Run:  powershell -ExecutionPolicy Bypass -File scripts\build_user_guides.ps1
 # NOTE: this .ps1 is UTF-8 + BOM so the Δ ✓ ✗ → • · — characters render.
