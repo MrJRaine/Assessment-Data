@@ -1234,3 +1234,100 @@ export async function getMathRoster(
     ippProgramFamily: r.IPPProgramFamily ?? null,
   }))
 }
+
+// ---- Reports > Math cohort (0.7.0, item 4) ----------------------------------
+// Read-only matrix, group-scoped, ALL of the current year's math cycles (latest result per task).
+// Mirrors the choose-a-group + roster split of Data Entry, but points at the Reports TVFs.
+
+/** Group picker for the Math cohort report (homeroom / grade lenses, P-6). Same shape as Data Entry. */
+export async function getMathCohortGroups(upn: string): Promise<TeacherGroup[]> {
+  const rows = await queryAsUser<{
+    GroupKey: string
+    GroupLabel: string | null
+    Scope: string
+    GroupType: string
+    SchoolName: string | null
+    Grade: string | null
+    Grades: string | null
+    ApplicableStudentCount: number
+    EnteredStudentCount: number
+  }>(upn, 'SELECT * FROM dbo.tvf_MathCohortGroups(@UPN) ORDER BY GroupKey')
+  return rows.map((r) => ({
+    key: String(r.GroupKey),
+    label: r.GroupLabel ?? String(r.GroupKey),
+    scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
+    groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
+    schoolName: r.SchoolName ?? null,
+    grade: r.Grade ?? null,
+    grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
+    applicableCount: Number(r.ApplicableStudentCount ?? 0),
+    enteredCount: 0, // reports picker: no entered count
+    doneCount: 0,
+  }))
+}
+
+/** One row per (student × their-grade task) for a group, carrying the LATEST result. Client pivots. */
+export interface MathCohortRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  programFamily: string | null
+  mathTaskKey: string
+  unitName: string | null
+  unitOrder: number | null
+  questionNumber: string | null
+  displayOrder: number | null
+  outcomeCode: string | null
+  description: string | null
+  result: boolean | null // latest 0/1 (BIT), or null if never marked (a blank cell)
+  mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
+}
+
+export async function getMathCohort(upn: string, groupKey: string): Promise<MathCohortRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    Homeroom: string | null
+    SchoolName: string | null
+    ProgramFamily: string | null
+    MathTaskKey: string
+    UnitName: string | null
+    UnitOrder: number | null
+    QuestionNumber: string | null
+    DisplayOrder: number | null
+    OutcomeCode: string | null
+    TaskDescription: string | null
+    ExistingResult: boolean | null
+    MathIPPStatus: boolean | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
+    programFamily: r.ProgramFamily ?? null,
+    mathTaskKey: String(r.MathTaskKey),
+    unitName: r.UnitName ?? null,
+    unitOrder: r.UnitOrder ?? null,
+    questionNumber: r.QuestionNumber ?? null,
+    displayOrder: r.DisplayOrder ?? null,
+    outcomeCode: r.OutcomeCode ?? null,
+    description: r.TaskDescription ?? null,
+    result: r.ExistingResult ?? null,
+    mathIPPStatus: r.MathIPPStatus ?? null,
+  }))
+}

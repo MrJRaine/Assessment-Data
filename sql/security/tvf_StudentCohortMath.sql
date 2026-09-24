@@ -74,7 +74,7 @@ RETURN
     -- Active tasks for the group's grades at the current-year math months (the matrix's columns/rows).
     Tasks AS (
         SELECT DISTINCT mt.MathTaskKey, mt.GradeCode, mt.UnitName, mt.UnitOrder, mt.QuestionNumber,
-               mt.DisplayOrder, mt.OutcomeCode
+               mt.DisplayOrder, mt.OutcomeCode, mt.TaskDescriptionEN, mt.TaskDescriptionFR
         FROM DimMathTask mt
         WHERE mt.ActiveFlag = 1
           AND mt.GradeCode IN (SELECT DISTINCT Grade FROM GroupStudents)
@@ -107,6 +107,10 @@ RETURN
         t.QuestionNumber,
         t.DisplayOrder,
         t.OutcomeCode,
+        -- Description in the student's family language (FI -> FR w/ EN fallback), like the entry roster.
+        CASE WHEN gs.ProgramFamily = 'French Immersion'
+             THEN COALESCE(t.TaskDescriptionFR, t.TaskDescriptionEN)
+             ELSE t.TaskDescriptionEN END AS TaskDescription,
         lm.Result           AS ExistingResult,   -- BIT: latest 0/1, or NULL if never marked
         ipp.IsIPP           AS MathIPPStatus      -- 1 = math IPP, 0 = not, NULL = unresolved
     FROM GroupStudents gs

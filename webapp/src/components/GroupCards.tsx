@@ -56,12 +56,14 @@ export default function GroupCards({
   groups,
   hrefBase,
   metaSuffix = 'entered',
+  metaMode = 'progress',
   mode = 'lens',
   subject,
 }: {
   groups: TeacherGroup[]
   hrefBase: string
   metaSuffix?: string
+  metaMode?: 'progress' | 'count' // 'count' = just "N students" (reports pickers have no progress)
   mode?: 'lens' | 'course'
   subject?: string // entry subject; 'math' switches the card meta to "N/M started · K done"
 }) {
@@ -89,7 +91,13 @@ export default function GroupCards({
       title={g.label}
       // Oversight cards say WHOSE class this is — the whole point of showing someone else's section.
       desc={[g.scope === 'Oversight' ? g.teacherNames : null, g.schoolName].filter(Boolean).join(' · ') || undefined}
-      meta={isMath ? `${g.enteredCount}/${g.applicableCount} started · ${g.doneCount} done` : `${g.enteredCount}/${g.applicableCount} ${metaSuffix}`}
+      meta={
+        isMath
+          ? `${g.enteredCount}/${g.applicableCount} started · ${g.doneCount} done`
+          : metaMode === 'count'
+            ? `${g.applicableCount} ${metaSuffix}`
+            : `${g.enteredCount}/${g.applicableCount} ${metaSuffix}`
+      }
     />
   )
 

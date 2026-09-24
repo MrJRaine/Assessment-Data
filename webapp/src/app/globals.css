@@ -479,6 +479,10 @@ a { color: inherit; text-decoration: none; }
 .mgrid .stu { width: 84px; min-width: 84px; max-width: 84px; }
 .mgrid thead th.stu { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mgrid td.cell { padding: 0; text-align: center; }
+/* Reports read-only matrix: give the sticky roll-up cell a solid ground (heat classes override it),
+   and centre the transposed unit-group column header. */
+.mgrid td.col-pct { background: var(--card); }
+.mgrid thead th.unitcol { text-align: center; text-transform: uppercase; letter-spacing: .05em; font-size: .72rem; cursor: pointer; }
 /* font-size drives every state mark: the ✓ directly, and the disc via its em-based size. The cell is
    44px tall and the marks were ~15px in it — small to read and small to hit. 1.5rem gives ~24px,
    still comfortably inside the row. */
