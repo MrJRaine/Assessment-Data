@@ -55,12 +55,16 @@ export default function RosterEntry({
   roster,
   levels,
   achievementLevels,
+  locked = false,
+  canOverride = false,
 }: {
   windowId: string
   groupKey: string
   roster: RosterStudent[]
   levels: ScaleLevel[]
   achievementLevels: AchievementBand[]
+  locked?: boolean // cycle past its grace: read-only unless overridden
+  canOverride?: boolean // caller holds the Literacy override (or is sysadmin)
 }) {
   const codeToId = new Map(levels.map((l) => [l.levelCode, l.readingScaleId] as const))
   const idToCode = new Map(levels.map((l) => [l.readingScaleId, l.levelCode] as const))
@@ -81,6 +85,11 @@ export default function RosterEntry({
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
+  // Grace-lock: when the cycle is locked, the grid is read-only. An override-holder can flip it back
+  // on for THIS group with a one-shot toggle that reverts after the next save completes (see onSave).
+  const [override, setOverride] = useState(false)
+  const editable = !locked || override
+  const ro = !editable // read-only: disables every input + Save
   // Grades 7-8 are assessed only until a student reaches the expected (Grade-6 June) level, so
   // default-hide any 7/8 student whose most recent reading is already Meeting/Exceeding (delta >= 0).
   // Non-IPP, benchmark-resolved only; they stay listed in the Students picker to re-show.
@@ -168,6 +177,7 @@ export default function RosterEntry({
         return next
       })
       markSaved() // at T-5 the next save is what locks input
+      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
       // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
       // recompute instantly from that — no server re-fetch (which was the ~5s lag).
     })
@@ -175,6 +185,27 @@ export default function RosterEntry({
 
   return (
     <>
+      {locked && (
+        <div className="no-tasks">
+          {override ? (
+            <>
+              <strong>Lock overridden.</strong> You can enter data for this group; this reverts after you save.{' '}
+              <button type="button" className="btn-ghost" onClick={() => setOverride(false)}>
+                Cancel override
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>This cycle is locked (view only).</strong> The grace period for late entry has ended.{' '}
+              {canOverride && (
+                <button type="button" className="btn-ghost" onClick={() => setOverride(true)}>
+                  Override lock for this group
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <SmallGroupFilter
         sg={sg}
         note={
@@ -278,14 +309,14 @@ export default function RosterEntry({
                     <span className="ipp-seg">
                       <button
                         className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
-                        disabled={pending || inputsLocked}
+                        disabled={pending || inputsLocked || ro}
                         onClick={() => chooseIPP(s.studentKey, true)}
                       >
                         Yes ({ippTypeLabel('Reading')})
                       </button>
                       <button
                         className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
-                        disabled={pending || inputsLocked}
+                        disabled={pending || inputsLocked || ro}
                         onClick={() => chooseIPP(s.studentKey, false)}
                       >
                         No
@@ -294,7 +325,7 @@ export default function RosterEntry({
                   ) : (
                     <select
                       value={selId}
-                      disabled={pending || inputsLocked || levels.length === 0}
+                      disabled={pending || inputsLocked || ro || levels.length === 0}
                       onChange={(e) => {
                         const v = e.target.value
                         setSel((p) => ({ ...p, [s.studentKey]: v }))
@@ -330,7 +361,7 @@ export default function RosterEntry({
                     <input
                       type="checkbox"
                       checked={isChecked(s.studentKey)}
-                      disabled={pending || inputsLocked || !sel[s.studentKey]}
+                      disabled={pending || inputsLocked || ro || !sel[s.studentKey]}
                       onChange={() => toggleEvidence(s.studentKey)}
                       aria-label={`New data for ${s.lastName}, ${s.firstName}`}
                     />
@@ -343,7 +374,7 @@ export default function RosterEntry({
       </table>
 
       <div className="actions">
-        <button className="btn" onClick={onSave} disabled={pending || dirtyCount === 0}>
+        <button className="btn" onClick={onSave} disabled={pending || dirtyCount === 0 || ro}>
           {pending ? 'Saving…' : dirtyCount ? `Save ${dirtyCount} change(s)` : 'Save'}
         </button>
         {result ? (
