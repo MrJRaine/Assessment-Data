@@ -159,6 +159,7 @@ export default function CohortView({
     }
   }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach])
 
+  const oneSchool = sch.size === 1 // homeroom is only offered/applied once narrowed to one school
   // A student passes every ACTIVE filter except the named dimension — the basis for both the final
   // list (except='') and each filter's faceted options (so a filter never hides its own choices).
   const matchExcept = (s: CohortStudent, except: string) =>
@@ -166,14 +167,13 @@ export default function CohortView({
     (except === 'gender' || gender === 'All' || s.gender === gender) &&
     (except === 'african' || triMatch(african, s.selfIDAfrican)) &&
     (except === 'indigenous' || triMatch(indigenous, s.selfIDIndigenous)) &&
-    (except === 'hr' || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
+    (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
     (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
     (except === 'ach' || ach.size === 0 || (s.achievementCode != null && ach.has(s.achievementCode)))
 
   // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
   // until a SINGLE school is selected — region-wide it's an unusable wall of chips.
-  const oneSchool = sch.size === 1
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const homerooms = useMemo(
     () => (oneSchool ? distinct(cohort.filter((s) => matchExcept(s, 'hr')).map((s) => s.homeroom).filter(Boolean) as string[]).sort() : []),
@@ -335,7 +335,7 @@ export default function CohortView({
             </div>
           ) : null}
 
-          {programs.length > 1 ? (
+          {programs.length > 1 || prog.size > 0 ? (
             <div className="filter-group">
               <label>Program</label>
               <div className="chips">
@@ -352,7 +352,7 @@ export default function CohortView({
             </div>
           ) : null}
 
-          {schools.length > 1 ? (
+          {schools.length > 1 || sch.size > 0 ? (
             <div className="filter-group">
               <label>School</label>
               <div className="chips">
