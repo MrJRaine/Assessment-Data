@@ -39,35 +39,50 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   const [programs, setPrograms] = useState<Set<string>>(new Set())
   const [schools, setSchools] = useState<Set<string>>(new Set())
   const [scores, setScores] = useState<Set<number>>(new Set())
+  // The Math component's roll-up (and therefore the 0–3 score) depends on how blanks are treated.
+  // Reading/Writing are single most-recent results and unaffected. Recompute client-side so the
+  // toggle flips instantly. Default: blanks excluded (matches the Math report's default).
+  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+
+  type Row = RWMStudent & { mathMeeting: boolean; rwmScore: number; mathEffPct: number | null }
+  const rows = useMemo<Row[]>(
+    () => cohort.map((s) => {
+      const pct = blankMode === 'zero' ? s.mathRollupPctZero : s.mathRollupPct
+      const mathMeeting = pct != null && pct >= 0.75
+      const rwmScore = (s.readingMeeting ? 1 : 0) + (s.writingMeeting ? 1 : 0) + (mathMeeting ? 1 : 0)
+      return { ...s, mathMeeting, rwmScore, mathEffPct: pct }
+    }),
+    [cohort, blankMode],
+  )
 
   // A student matches every filter EXCEPT the one named — so each facet's chip list can be trimmed to
   // what's still reachable given the other active filters (live-trim), without a facet hiding itself.
-  const matchExcept = (s: RWMStudent, except: string) =>
+  const matchExcept = (s: Row, except: string) =>
     (except === 'grade' || grades.size === 0 || (s.grade != null && grades.has(s.grade))) &&
     (except === 'prog' || programs.size === 0 || (s.programFamily != null && programs.has(s.programFamily))) &&
     (except === 'sch' || schools.size === 0 || (s.schoolName != null && schools.has(s.schoolName))) &&
     (except === 'score' || scores.size === 0 || scores.has(s.rwmScore))
 
   const facetGrades = useMemo(
-    () => allGrades.filter((g) => cohort.some((s) => s.grade === g && matchExcept(s, 'grade'))),
+    () => allGrades.filter((g) => rows.some((s) => s.grade === g && matchExcept(s, 'grade'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allGrades, cohort, programs, schools, scores],
+    [allGrades, rows, programs, schools, scores],
   )
   const facetPrograms = useMemo(
-    () => allPrograms.filter((p) => cohort.some((s) => s.programFamily === p && matchExcept(s, 'prog'))),
+    () => allPrograms.filter((p) => rows.some((s) => s.programFamily === p && matchExcept(s, 'prog'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allPrograms, cohort, grades, schools, scores],
+    [allPrograms, rows, grades, schools, scores],
   )
   const facetSchools = useMemo(
-    () => allSchools.filter((sc) => cohort.some((s) => s.schoolName === sc && matchExcept(s, 'sch'))),
+    () => allSchools.filter((sc) => rows.some((s) => s.schoolName === sc && matchExcept(s, 'sch'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allSchools, cohort, grades, programs, scores],
+    [allSchools, rows, grades, programs, scores],
   )
 
   const filtered = useMemo(
-    () => cohort.filter((s) => matchExcept(s, '')),
+    () => rows.filter((s) => matchExcept(s, '')),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cohort, grades, programs, schools, scores],
+    [rows, grades, programs, schools, scores],
   )
 
   // Distribution donut over the filtered set, bucketed by 0–3.
@@ -147,6 +162,13 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
 
       <div className="cohort-bar">
         <span className="muted">{filtered.length} of {cohort.length} students</span>
+        <button
+          className="btn-ghost"
+          onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}
+          title="How un-recorded Math tasks affect the roll-up (Reading/Writing are unaffected)"
+        >
+          Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
+        </button>
         {anyFilter ? <button className="btn-ghost" onClick={reset}>Reset filters</button> : null}
       </div>
 

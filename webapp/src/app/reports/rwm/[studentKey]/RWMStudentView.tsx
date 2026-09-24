@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useMemo, useState } from 'react'
 import { PageHeader } from '@/components/ui'
 import type { RWMStudent, RWMHistoryRow } from '@/lib/data'
 
@@ -61,6 +62,9 @@ export default function RWMStudentView({
   prevKey: string | null
   nextKey: string | null
 }) {
+  // Blanks toggle affects only the Math component (see the cohort view). Recompute client-side.
+  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+
   const meta = [
     gradeLabel(student.grade ?? '—'),
     student.programFamily ?? '—',
@@ -68,8 +72,21 @@ export default function RWMStudentView({
     student.homeroom ? `Homeroom ${student.homeroom}` : null,
   ].filter(Boolean) as string[]
 
-  const mathPct = student.mathRollupPct == null ? null : (student.mathRollupPct * 100).toFixed(1)
-  const points = history.map((h) => ({ value: h.rwmScore, label: h.cycleLabel.split(' ')[0].slice(0, 3) }))
+  const effMathPct = blankMode === 'zero' ? student.mathRollupPctZero : student.mathRollupPct
+  const mathMeeting = effMathPct != null && effMathPct >= 0.75
+  const rwmScore = (student.readingMeeting ? 1 : 0) + (student.writingMeeting ? 1 : 0) + (mathMeeting ? 1 : 0)
+  const mathPct = effMathPct == null ? null : (effMathPct * 100).toFixed(1)
+
+  const cycles = useMemo(
+    () => history.map((h) => {
+      const pct = blankMode === 'zero' ? h.mathRollupPctZero : h.mathRollupPct
+      const mMeet = pct != null && pct >= 0.75
+      const score = (h.readingMeeting ? 1 : 0) + (h.writingMeeting ? 1 : 0) + (mMeet ? 1 : 0)
+      return { ...h, mMeet, mPct: pct, score }
+    }),
+    [history, blankMode],
+  )
+  const points = cycles.map((h) => ({ value: h.score, label: h.cycleLabel.split(' ')[0].slice(0, 3) }))
 
   return (
     <>
@@ -85,15 +102,25 @@ export default function RWMStudentView({
 
       <div className="meta-strip">{meta.join('   ·   ')}</div>
 
+      <div className="cohort-bar">
+        <button
+          className="btn-ghost"
+          onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}
+          title="How un-recorded Math tasks affect the roll-up (Reading/Writing are unaffected)"
+        >
+          Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
+        </button>
+      </div>
+
       <div className="rwm-hero">
-        <span className="rwm-score lg" style={{ background: SCORE_HEX[student.rwmScore] }}>{student.rwmScore}</span>
+        <span className="rwm-score lg" style={{ background: SCORE_HEX[rwmScore] }}>{rwmScore}</span>
         <span className="rwm-hero-label">of 3 areas currently meeting or exceeding</span>
       </div>
 
       <div className="rwm-snaps">
         <AreaSnapshot title="Reading" meeting={student.readingMeeting} has={student.hasReading} />
         <AreaSnapshot title="Writing" meeting={student.writingMeeting} has={student.hasWriting} />
-        <AreaSnapshot title="Math" meeting={student.mathMeeting} has={student.hasMath} detail={mathPct == null ? undefined : `Roll-up ${mathPct}%`} />
+        <AreaSnapshot title="Math" meeting={mathMeeting} has={student.hasMath} detail={mathPct == null ? undefined : `Roll-up ${mathPct}%`} />
       </div>
 
       <h2 className="section-title">Score by cycle</h2>
@@ -115,13 +142,13 @@ export default function RWMStudentView({
               </tr>
             </thead>
             <tbody>
-              {history.map((h) => (
+              {cycles.map((h) => (
                 <tr key={h.cycleDate ?? h.cycleLabel}>
                   <td>{h.cycleLabel}</td>
                   <td className={h.readingMeeting ? 'rwm-meet' : 'muted'}>{h.readingCode == null ? '—' : h.readingMeeting ? 'Meeting+' : 'Not yet'}</td>
                   <td className={h.writingMeeting ? 'rwm-meet' : 'muted'}>{h.writingCode == null ? '—' : h.writingMeeting ? 'Meeting+' : 'Not yet'}</td>
-                  <td className={h.mathMeeting ? 'rwm-meet' : 'muted'}>{h.mathRollupPct == null ? '—' : `${(h.mathRollupPct * 100).toFixed(1)}%`}</td>
-                  <td><span className="rwm-score sm" style={{ background: SCORE_HEX[h.rwmScore] }}>{h.rwmScore}</span></td>
+                  <td className={h.mMeet ? 'rwm-meet' : 'muted'}>{h.mPct == null ? '—' : `${(h.mPct * 100).toFixed(1)}%`}</td>
+                  <td><span className="rwm-score sm" style={{ background: SCORE_HEX[h.score] }}>{h.score}</span></td>
                 </tr>
               ))}
             </tbody>

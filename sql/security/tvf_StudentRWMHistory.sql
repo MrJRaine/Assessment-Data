@@ -36,9 +36,26 @@ RETURN
         FROM Env e
     ),
     MathWins AS (
-        SELECT w.AssessmentWindowID
+        SELECT w.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w CROSS JOIN CurYear cy
         WHERE w.AssessmentType = 'Math' AND w.ActiveFlag = 1 AND w.SchoolYear = cy.Yr
+    ),
+    -- The student, with grade (drives the count-as-0 task universe).
+    Stu AS (
+        SELECT s.StudentKey, s.Grade
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.StudentKey = CAST(@StudentKey AS BIGINT)
+    ),
+    -- Count-as-0 universe: active tasks per (grade, unit) at the current-year math months.
+    TaskUniverse AS (
+        SELECT mt.GradeCode, mt.UnitName, COUNT(*) AS ConfiguredCount
+        FROM DimMathTask mt
+        WHERE mt.ActiveFlag = 1 AND mt.AssessmentMonth IN (SELECT BenchMonth FROM MathWins)
+        GROUP BY mt.GradeCode, mt.UnitName
     ),
     -- Only proceed when the caller can see this student.
     Visible AS (
@@ -107,7 +124,8 @@ RETURN
         DATENAME(MONTH, c.CycleDate) + ' ' + CAST(YEAR(c.CycleDate) AS VARCHAR(4)) AS CycleLabel,
         rc.Code               AS ReadingCode,
         wc.Code               AS WritingCode,
-        CAST(mc.RollupPct AS DECIMAL(5,4)) AS MathRollupPct,
+        CAST(mc.RollupPct  AS DECIMAL(5,4)) AS MathRollupPct,      -- blanks excluded
+        CAST(mcz.RollupPct AS DECIMAL(5,4)) AS MathRollupPctZero,  -- blanks count as 0
         CAST(CASE WHEN rc.Code IN (3, 4) THEN 1 ELSE 0 END AS BIT)     AS ReadingMeeting,
         CAST(CASE WHEN wc.Code IN (3, 4) THEN 1 ELSE 0 END AS BIT)     AS WritingMeeting,
         CAST(CASE WHEN mc.RollupPct >= 0.75 THEN 1 ELSE 0 END AS BIT)  AS MathMeeting,
@@ -116,6 +134,7 @@ RETURN
          + CASE WHEN mc.RollupPct >= 0.75 THEN 1 ELSE 0 END)          AS RWMScore
     FROM Cycles c
     CROSS JOIN Visible v      -- no rows if the student isn't visible to @UPN
+    CROSS JOIN Stu st
     -- most-recent reading on/before this cycle's month end
     OUTER APPLY (
         SELECT TOP 1 re.Code
@@ -148,6 +167,32 @@ RETURN
             GROUP BY mt.UnitName
         ) u
     ) mc
+    -- math roll-up as-of this cycle, blanks COUNT-AS-0: ones-so-far / configured, over the grade's
+    -- full-year unit universe (fully-blank units = 0), averaged.
+    OUTER APPLY (
+        SELECT AVG(z.UnitAvg) AS RollupPct
+        FROM (
+            SELECT tu.UnitName,
+                   CAST(COALESCE(o.Ones, 0) AS FLOAT) / NULLIF(tu.ConfiguredCount, 0) AS UnitAvg
+            FROM TaskUniverse tu
+            LEFT JOIN (
+                SELECT mt.UnitName, SUM(CAST(x.Result AS INT)) AS Ones
+                FROM (
+                    SELECT fm.MathTaskKey, fm.Result,
+                           ROW_NUMBER() OVER (PARTITION BY fm.MathTaskKey
+                                              ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
+                    FROM FactAssessmentMath fm
+                    WHERE fm.StudentKey = CAST(@StudentKey AS BIGINT)
+                      AND fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
+                      AND fm.AssessmentDate <= c.CycleEnd
+                ) x
+                INNER JOIN DimMathTask mt ON mt.MathTaskKey = x.MathTaskKey AND mt.ActiveFlag = 1
+                WHERE x.rn = 1
+                GROUP BY mt.UnitName
+            ) o ON o.UnitName = tu.UnitName
+            WHERE tu.GradeCode = st.Grade
+        ) z
+    ) mcz
 );
 GO
 

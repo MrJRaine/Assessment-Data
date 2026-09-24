@@ -1351,7 +1351,8 @@ export interface RWMStudent {
   homeroom: string | null
   readingCode: number | null // most-recent reading achievement code (3-4 = meeting/exceeding)
   writingCode: number | null
-  mathRollupPct: number | null // 0-1 current-year roll-up (avg of unit averages)
+  mathRollupPct: number | null // 0-1 current-year roll-up, blanks EXCLUDED (avg of unit averages)
+  mathRollupPctZero: number | null // 0-1 roll-up, blanks COUNT AS 0 (denominator = configured tasks)
   readingMeeting: boolean
   writingMeeting: boolean
   mathMeeting: boolean
@@ -1383,6 +1384,7 @@ export async function getStudentCohortRWM(upn: string): Promise<RWMStudent[]> {
     readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
     writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
     mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    mathRollupPctZero: r.MathRollupPctZero == null ? null : Number(r.MathRollupPctZero),
     readingMeeting: Boolean(r.ReadingMeeting),
     writingMeeting: Boolean(r.WritingMeeting),
     mathMeeting: Boolean(r.MathMeeting),
@@ -1399,6 +1401,7 @@ export interface RWMHistoryRow {
   readingCode: number | null
   writingCode: number | null
   mathRollupPct: number | null
+  mathRollupPctZero: number | null
   readingMeeting: boolean
   writingMeeting: boolean
   mathMeeting: boolean
@@ -1417,6 +1420,7 @@ export async function getStudentRWMHistory(upn: string, studentKey: string): Pro
     readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
     writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
     mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    mathRollupPctZero: r.MathRollupPctZero == null ? null : Number(r.MathRollupPctZero),
     readingMeeting: Boolean(r.ReadingMeeting),
     writingMeeting: Boolean(r.WritingMeeting),
     mathMeeting: Boolean(r.MathMeeting),

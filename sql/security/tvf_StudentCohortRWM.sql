@@ -37,8 +37,12 @@ RETURN
                     ELSE CONCAT(YEAR(d.Today) - 1, '-', YEAR(d.Today)) END AS Yr
         FROM (SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today) d
     ),
-    MathWins AS (   -- current-year active math windows (the roll-up's evidence set)
-        SELECT w.AssessmentWindowID
+    MathWins AS (   -- current-year active math windows + their effective benchmark month
+        SELECT w.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w CROSS JOIN CurYear cy
         WHERE w.AssessmentType = 'Math' AND w.ActiveFlag = 1 AND w.SchoolYear = cy.Yr
     ),
@@ -129,8 +133,33 @@ RETURN
         WHERE ml.rn = 1
         GROUP BY ml.StudentKey, mt.UnitName
     ),
-    MathRoll AS (
+    MathRoll AS (   -- blanks EXCLUDED: unit avg over recorded tasks only
         SELECT StudentKey, AVG(UnitAvg) AS RollupPct FROM MathUnit GROUP BY StudentKey
+    ),
+    -- blanks COUNT-AS-0: denominator = every configured task for the grade's units this year, so an
+    -- un-recorded task counts as a miss. Universe = active tasks at the current-year math months.
+    TaskUniverse AS (
+        SELECT mt.GradeCode, mt.UnitName, COUNT(*) AS ConfiguredCount
+        FROM DimMathTask mt
+        WHERE mt.ActiveFlag = 1 AND mt.AssessmentMonth IN (SELECT BenchMonth FROM MathWins)
+        GROUP BY mt.GradeCode, mt.UnitName
+    ),
+    MathUnitOnes AS (   -- recorded 1s per (student, unit)
+        SELECT ml.StudentKey, mt.GradeCode, mt.UnitName, SUM(CAST(ml.Result AS INT)) AS Ones
+        FROM MathLatest ml
+        INNER JOIN DimMathTask mt ON mt.MathTaskKey = ml.MathTaskKey AND mt.ActiveFlag = 1
+        WHERE ml.rn = 1
+        GROUP BY ml.StudentKey, mt.GradeCode, mt.UnitName
+    ),
+    MathZeroUnit AS (   -- one row per (student, configured unit): ones / configured (fully-blank unit = 0)
+        SELECT isc.StudentKey,
+               CAST(COALESCE(mo.Ones, 0) AS FLOAT) / NULLIF(tu.ConfiguredCount, 0) AS UnitAvg
+        FROM InScope isc
+        INNER JOIN TaskUniverse tu ON tu.GradeCode = isc.Grade
+        LEFT  JOIN MathUnitOnes mo ON mo.StudentKey = isc.StudentKey AND mo.GradeCode = isc.Grade AND mo.UnitName = tu.UnitName
+    ),
+    MathZeroRoll AS (
+        SELECT StudentKey, AVG(UnitAvg) AS RollupPct FROM MathZeroUnit GROUP BY StudentKey
     )
     SELECT
         CAST(isc.StudentKey AS VARCHAR(20))            AS StudentKey,
@@ -148,7 +177,8 @@ RETURN
         isc.Homeroom,
         ra.Code                                        AS ReadingCode,
         wa.Code                                        AS WritingCode,
-        CAST(mr.RollupPct AS DECIMAL(5,4))             AS MathRollupPct,
+        CAST(mr.RollupPct AS DECIMAL(5,4))             AS MathRollupPct,      -- blanks excluded
+        CAST(mz.RollupPct AS DECIMAL(5,4))             AS MathRollupPctZero,  -- blanks count as 0
         CAST(CASE WHEN ra.Code IN (3, 4) THEN 1 ELSE 0 END AS BIT)          AS ReadingMeeting,
         CAST(CASE WHEN wa.Code IN (3, 4) THEN 1 ELSE 0 END AS BIT)          AS WritingMeeting,
         CAST(CASE WHEN mr.RollupPct >= 0.75 THEN 1 ELSE 0 END AS BIT)       AS MathMeeting,
@@ -161,9 +191,10 @@ RETURN
         CAST(CASE WHEN wa.StudentKey IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasWriting,
         CAST(CASE WHEN mr.StudentKey IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasMath
     FROM InScope isc
-    LEFT JOIN ReadAch  ra ON ra.StudentKey = isc.StudentKey
-    LEFT JOIN WriteAch wa ON wa.StudentKey = isc.StudentKey
-    LEFT JOIN MathRoll mr ON mr.StudentKey = isc.StudentKey
+    LEFT JOIN ReadAch   ra ON ra.StudentKey = isc.StudentKey
+    LEFT JOIN WriteAch  wa ON wa.StudentKey = isc.StudentKey
+    LEFT JOIN MathRoll  mr ON mr.StudentKey = isc.StudentKey
+    LEFT JOIN MathZeroRoll mz ON mz.StudentKey = isc.StudentKey
     WHERE NOT EXISTS (SELECT 1 FROM AnyIPP ai WHERE ai.StudentKey = isc.StudentKey)
 );
 GO
