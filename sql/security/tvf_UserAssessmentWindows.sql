@@ -44,7 +44,8 @@ AS
 RETURN
 (
     WITH AtlanticToday AS (
-        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
+        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)         AS Today,
+               CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATETIME2(0))  AS NowTs
     ),
     Caller AS (
         SELECT TOP 1 d.StaffKey, LOWER(d.Email) AS Email, d.AccessLevel
@@ -57,11 +58,16 @@ RETURN
             w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage, w.ScaleSystem,
             w.CycleGroupID,
             sc.DisplayName AS CycleName,   -- the HEADER's name ("SCoR 1"); the collapsed card's title
+            -- Grace-lock (0.7.0): a window stays EDITABLE through EndDate + the cycle's GraceHours
+            -- (default 168h), counted from the close moment (midnight after EndDate, Atlantic). Past
+            -- that it is Locked (read-only). GraceEndsAt is surfaced so the card can count down "N left".
+            DATEADD(HOUR, COALESCE(sc.GraceHours, 168), CAST(DATEADD(DAY, 1, w.EndDate) AS DATETIME2(0))) AS GraceEndsAt,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate,
-            CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
-                 WHEN at.Today > w.EndDate   THEN 'Closed'
-                 WHEN at.Today = w.EndDate   THEN 'ClosesToday'
-                 ELSE 'Open' END AS WindowStatus
+            CASE WHEN at.Today  < w.StartDate THEN 'Upcoming'
+                 WHEN at.Today  < w.EndDate   THEN 'Open'
+                 WHEN at.Today  = w.EndDate   THEN 'ClosesToday'
+                 WHEN at.NowTs <= DATEADD(HOUR, COALESCE(sc.GraceHours, 168), CAST(DATEADD(DAY, 1, w.EndDate) AS DATETIME2(0))) THEN 'Closed'
+                 ELSE 'Locked' END AS WindowStatus
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         LEFT JOIN DimShortCycle sc ON sc.CycleGroupID = w.CycleGroupID
@@ -219,6 +225,7 @@ RETURN
         wed.CycleGroupID,   -- lets /enter collapse a cycle's instances into ONE card per subject
         wed.CycleName,      -- header name for that collapsed card (instance names differ per scope)
         wed.WindowStatus,
+        wed.GraceEndsAt,    -- when a Closed (in-grace) window flips to Locked; drives the "N left" countdown
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
         -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
         -- so a result on a sibling-language instance still counts and the card matches the group picker.
@@ -238,7 +245,7 @@ RETURN
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
         wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.CycleGroupID, wed.CycleName,
-        wed.WindowStatus
+        wed.WindowStatus, wed.GraceEndsAt
 );
 GO
 

@@ -13,6 +13,12 @@
  * SCD Type: N/A (managed manually via usp_UpsertShortCycleHeader)
  * Created: 2026-09-17
  * Region: Canada East (PIIDPA compliant)
+ *
+ * GraceHours (0.7.0): how long AFTER a window's EndDate a cycle stays EDITABLE for late entry before
+ *   it LOCKS to read-only. Measured in HOURS from the close moment (midnight after EndDate, Atlantic)
+ *   so it can be tuned finer than whole days. NULL = the 168h (7-day) default, applied via COALESCE in
+ *   tvf_UserAssessmentWindows + the write-gate procs (Fabric can't ADD a NOT NULL column to a populated
+ *   table, so the column is nullable and the default lives in reads + usp_UpsertShortCycleHeader).
  ******************************************************************************/
 
 CREATE TABLE DimShortCycle (
@@ -22,6 +28,7 @@ CREATE TABLE DimShortCycle (
     EndDate        DATE          NOT NULL,
     SchoolYear     VARCHAR(9)    NOT NULL,   -- derived from StartDate (Sep-Aug)
     ActiveFlag     BIT           NOT NULL,
+    GraceHours     INT           NULL,       -- editable-after-close window, HOURS from EndDate close (NULL = 168h / 7d default)
     CreatedDate    DATETIME2(0)  NOT NULL,
     CreatedBy      VARCHAR(100)  NULL,
     LastUpdated    DATETIME2(0)  NOT NULL
