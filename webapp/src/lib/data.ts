@@ -1,6 +1,6 @@
 import 'server-only'
 import { queryAsUser, query } from './db'
-import { readGroups, writeGroups } from './groupCache'
+import { readGroups, writeGroups, readWindows, writeWindows } from './groupCache'
 import { readAccessLevel, writeAccessLevel, readCapabilities, writeCapabilities } from './identityCache'
 import { readRef, writeRef } from './refCache'
 
@@ -66,6 +66,10 @@ export interface TeacherGroup {
 
 /** Assessment windows applicable to the signed-in user (any role), with per-window progress counts. */
 export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
+  // Cached per user for 30s, invalidated on save/ingest (shares groupCache's invalidation) — the
+  // /enter landing was the only hot entry read hitting the TVF fresh on every navigation.
+  const cached = readWindows(upn)
+  if (cached) return cached
   const rows = await queryAsUser<{
     AssessmentWindowID: string
     WindowName: string
@@ -84,7 +88,7 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     EnteredStudentCount: number
     DoneStudentCount: number
   }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
-  return rows.map((r) => ({
+  const windows = rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     cycleGroupId: r.CycleGroupID ?? null,
     cycleName: r.CycleName ?? null,
@@ -102,6 +106,8 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     enteredCount: Number(r.EnteredStudentCount ?? 0),
     doneCount: Number(r.DoneStudentCount ?? 0),
   }))
+  writeWindows(upn, windows)
+  return windows
 }
 
 // One scoped assessment INSTANCE within a cycle: a DimAssessmentWindow row (subject x language x
