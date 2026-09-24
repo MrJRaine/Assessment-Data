@@ -462,6 +462,12 @@ export default function CohortView({
               <th>Program</th>
               <th>School</th>
               <th>{subject === 'Writing' ? 'Avg' : 'Level'}</th>
+              {subject === 'Reading' ? <th>Expected</th> : null}
+              {subject === 'Reading' ? (
+                <th>
+                  Diff from<br />Prev June
+                </th>
+              ) : null}
               <th>Achievement</th>
             </tr>
           </thead>
@@ -481,6 +487,26 @@ export default function CohortView({
                   <td>{s.programFamily ?? '—'}</td>
                   <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
                   <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
+                  {subject === 'Reading' ? (
+                    <td>
+                      {s.expectedMin && s.expectedMax ? (
+                        s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                  {subject === 'Reading' ? (
+                    <td style={{ textAlign: 'center' }}>
+                      {s.diffFromPrevJune == null ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <strong style={{ color: s.diffFromPrevJune > 0 ? '#137333' : s.diffFromPrevJune < 0 ? '#a50e0e' : 'inherit' }}>
+                          {s.diffFromPrevJune > 0 ? `+${s.diffFromPrevJune}` : s.diffFromPrevJune}
+                        </strong>
+                      )}
+                    </td>
+                  ) : null}
                   <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
                     {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
                   </td>

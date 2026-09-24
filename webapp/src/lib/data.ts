@@ -691,6 +691,10 @@ export interface CohortStudent {
   mostRecentLevelCode: string | null
   mostRecentLevelOrder: number | null
   mostRecentDelta: number | null
+  expectedMin: string | null // reading benchmark min for the recent window (item 2); null for Writing
+  expectedMax: string | null
+  juneReadingLevel: string | null // prev-June anchor (item 1); Reading only
+  diffFromPrevJune: number | null
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -738,6 +742,10 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
     mostRecentLevelCode: (r.MostRecentLevelCode as string) ?? null,
     mostRecentLevelOrder: r.MostRecentLevelOrder == null ? null : Number(r.MostRecentLevelOrder),
     mostRecentDelta: r.MostRecentReadingDelta == null ? null : Number(r.MostRecentReadingDelta),
+    expectedMin: (r.ExpectedMinLevel as string) ?? null,
+    expectedMax: (r.ExpectedMaxLevel as string) ?? null,
+    juneReadingLevel: (r.JuneReadingLevel as string) ?? null,
+    diffFromPrevJune: r.DiffFromPrevJune == null ? null : Number(r.DiffFromPrevJune),
     achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
@@ -780,6 +788,10 @@ export async function getStudentCohortWriting(upn: string): Promise<CohortStuden
     mostRecentLevelCode: r.MostRecentAvgScore == null ? null : Number(r.MostRecentAvgScore).toFixed(2),
     mostRecentLevelOrder: null,
     mostRecentDelta: null,
+    expectedMin: null, // reading-only fields — not applicable to Writing
+    expectedMax: null,
+    juneReadingLevel: null,
+    diffFromPrevJune: null,
     achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
