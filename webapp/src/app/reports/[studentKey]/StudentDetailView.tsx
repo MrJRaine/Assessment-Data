@@ -247,8 +247,15 @@ export default function StudentDetailView({
             <TrendChart
               points={(() => {
                 const rh = history as HistoryRow[]
+                // The trend is THIS school year's progression from the Prev-June baseline. The June anchor
+                // IS the prior year's last reading, which is also a history row — so restrict the plotted
+                // points to the latest school year (else that June shows twice: as "Prev June" and "Jun").
+                const latestYear = rh.reduce<string | null>(
+                  (m, h) => (h.windowSchoolYear && (m == null || h.windowSchoolYear > m) ? h.windowSchoolYear : m),
+                  null,
+                )
                 const pts = rh
-                  .filter((h) => h.levelOrder != null && h.assessmentDate)
+                  .filter((h) => h.levelOrder != null && h.assessmentDate && (latestYear == null || h.windowSchoolYear === latestYear))
                   .map((h) => ({ value: h.levelOrder!, date: h.assessmentDate!, key: h.readingAssessmentId }))
                 // Prev-June anchor as the first point (item 1a) — same value on every row.
                 const june = rh.find((h) => h.juneLevelOrder != null)
