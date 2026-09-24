@@ -35,6 +35,23 @@ same version before it promotes to live.
 - **`/admin/staff-access` (SysAdmin-only).** A GUI over `StaffAppAccess` to grant app capabilities — Manage
   Cycles, Run Ingest, and the new Math / Literacy grace overrides — per staff member. Sysadmin implies all;
   a sysadmin can grant sysadmin (with a confirm) but can't revoke their own here.
+- **Reports — Reading "Expected" + "Diff from Prev June".** The Reading cohort table and the student page
+  now show, beside the level, the **expected** benchmark range for the most-recent displayed cycle's month;
+  the cohort table adds a **Diff from Prev June** column and the student trend now starts from the prior-June
+  baseline as its first point.
+- **Reports — Math cohort + student pages.** A new **Math** report: pick a homeroom or grade (Primary–6) to
+  see a **read-only results matrix** styled like the entry grid across the whole year's cycles (latest result
+  per task) — unit grouping/collapse, per-student + cohort roll-ups (average of unit averages), class-% heat,
+  an **achievement-by-unit** chart and a **roll-up donut**, a **tasks-down/students-across axis flip** (task
+  info on hover when transposed), and a **blanks excluded / count-as-0** toggle. Clicking a name opens that
+  student's math grid.
+- **Reports — RWM (new fourth category).** A **0–3** score per Primary–6 student: how many of Reading,
+  Writing, Math their most-recent result is meeting or exceeding (Math = current-year roll-up ≥ 75%).
+  Students with a confirmed IPP in any of the three are excluded. Cohort table with a **0–3 distribution
+  donut** and faceted grade/program/school/score filters; the student page shows a per-area snapshot, a
+  0–3-per-cycle table, and a score trend.
+- **Reports filters live-trim.** Cohort filter chips now hide options that no longer match the other active
+  filters; the homeroom filter waits until a single school is selected.
 
 ### Changed (SQL — deploy to live)
 - `tvf_TeacherGroups` and `tvf_UserAssessmentWindows` gain a **`DoneStudentCount`** (Math branch): distinct
@@ -50,6 +67,10 @@ same version before it promotes to live.
 - **Grace-lock** — run `sql/scripts/migrate_0.7.0_grace_and_overrides.sql` **first** (adds columns + retro 168h),
   then `usp_UpsertReadingAssessment.sql`, `usp_UpsertWritingAssessment.sql`, `usp_UpsertMathAssessment.sql`,
   `usp_SetStaffAppAccess.sql`, `usp_UpsertShortCycleHeader.sql`.
+- **Reports** (all read-only TVFs, idempotent DROP/CREATE/GRANT):
+  `sql/security/tvf_StudentCohort.sql`, `tvf_StudentAssessmentHistory.sql` (Expected + Prev-June);
+  `tvf_MathCohortGroups.sql`, `tvf_StudentCohortMath.sql` (Math cohort);
+  `tvf_StudentCohortRWM.sql`, `tvf_StudentRWMHistory.sql` (RWM).
 
 ## [0.6.3] — 2026-09-24
 

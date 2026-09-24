@@ -20,6 +20,20 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-09-24',
     kind: 'feature',
     summary:
+      'Reports now has a Math view and an RWM view. Pick a class or grade to see a read-only Math results grid (laid out like the entry screen) with class and per-student roll-ups and charts. RWM gives each Primary–6 student a 0–3 score for how many of Reading, Writing, and Math they are currently meeting or exceeding.',
+  },
+  {
+    version: '0.7.0',
+    date: '2026-09-24',
+    kind: 'feature',
+    summary:
+      'On the Reading report, each student now shows the expected level beside their current level, and the trend graph starts from last June so you can see the change across the year. The cohort table adds a "Diff from Prev June" column.',
+  },
+  {
+    version: '0.7.0',
+    date: '2026-09-24',
+    kind: 'feature',
+    summary:
       'After a Short Cycle closes you can still enter results for a grace period (7 days by default) — the cycle shows "Late entry" with the time left, then becomes view-only. If you need to enter something after that, designated staff can briefly unlock a group.',
   },
   {
