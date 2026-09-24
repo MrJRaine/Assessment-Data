@@ -112,6 +112,16 @@ export default function CohortView({
     setter(next)
   }
 
+  // School toggle: homeroom only makes sense within ONE school, so leaving the single-school state
+  // (deselecting the school, or picking a second) clears any homeroom selection with it.
+  function toggleSchool(id: string) {
+    const next = new Set(sch)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSch(next)
+    if (next.size !== 1) setHr(new Set())
+  }
+
   function reset() {
     setGradeMin(minOrd)
     setGradeMax(maxOrd)
@@ -360,7 +370,7 @@ export default function CohortView({
                   <button
                     key={s.id}
                     className={sch.has(s.id) ? 'chip chip-on' : 'chip'}
-                    onClick={() => toggle(sch, s.id, setSch)}
+                    onClick={() => toggleSchool(s.id)}
                   >
                     {s.label}
                   </button>
