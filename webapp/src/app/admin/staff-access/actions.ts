@@ -1,7 +1,7 @@
 'use server'
 
 import { getCurrentUpn } from '@/lib/auth'
-import { getCallerCapabilities } from '@/lib/data'
+import { getCallerCapabilities, lookupStaffByEmail } from '@/lib/data'
 import { execProc } from '@/lib/db'
 import { toUserMessage, UserError } from '@/lib/errors'
 import { invalidateAllIdentities } from '@/lib/identityCache'
@@ -25,6 +25,21 @@ export interface StaffAccessUpdate {
   canRunIngest: boolean
   canOverrideMath: boolean
   canOverrideLiteracy: boolean
+}
+
+/** Find a current staff member by email so a SysAdmin can add them to the access list. */
+export async function findStaff(
+  email: string,
+): Promise<{ ok: boolean; staff?: { email: string; name: string }; message?: string }> {
+  try {
+    await assertSysAdmin()
+    if (!email?.trim()) throw new UserError('Enter a staff email to search.')
+    const staff = await lookupStaffByEmail(email)
+    if (!staff) return { ok: false, message: 'No current staff member found with that email.' }
+    return { ok: true, staff }
+  } catch (e) {
+    return { ok: false, message: toUserMessage(e) }
+  }
 }
 
 /** Upsert one staff member's five app-capability flags (via usp_SetStaffAppAccess). */

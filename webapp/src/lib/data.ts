@@ -606,8 +606,10 @@ export interface StaffAccessRow {
   canOverrideLiteracy: boolean
 }
 
-/** Every current staff member with their StaffAppAccess grants (no row -> all false). SysAdmin-only
- *  screen; a plain SP read (config, not per-user PII). Gated by the page + the write action. */
+/** Only staff who ALREADY hold a StaffAppAccess row (the curated access list) — NOT all ~500 staff.
+ *  New people are added via lookupStaffByEmail + the grant proc. LEFT JOIN DimStaff for the display
+ *  name (a bootstrap sysadmin may not have a DimStaff row yet -> name falls back to the email).
+ *  SysAdmin-only screen; a plain SP read. Gated by the page + the write action. */
 export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
   const rows = await query<{
     Email: string
@@ -619,12 +621,11 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     CanOverrideMath: boolean | null
     CanOverrideLiteracy: boolean | null
   }>(`
-    SELECT d.Email, d.FirstName, d.LastName,
+    SELECT a.Email, d.FirstName, d.LastName,
            a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy
-    FROM DimStaff d
-    LEFT JOIN StaffAppAccess a ON LOWER(a.Email) = LOWER(d.Email)
-    WHERE d.IsCurrent = 1
-    ORDER BY d.LastName, d.FirstName`)
+    FROM StaffAppAccess a
+    LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(a.Email) AND d.IsCurrent = 1
+    ORDER BY d.LastName, d.FirstName, a.Email`)
   return rows.map((r) => ({
     email: r.Email,
     name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email,
@@ -634,6 +635,18 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     canOverrideMath: Boolean(r.CanOverrideMath),
     canOverrideLiteracy: Boolean(r.CanOverrideLiteracy),
   }))
+}
+
+/** Look up a current staff member by email (for the Staff Access "add by email" field). Returns the
+ *  match's email + display name, or null if no current DimStaff row. SysAdmin-only path (via the action). */
+export async function lookupStaffByEmail(email: string): Promise<{ email: string; name: string } | null> {
+  const rows = await query<{ Email: string; FirstName: string | null; LastName: string | null }>(
+    `SELECT TOP 1 Email, FirstName, LastName FROM dbo.DimStaff WHERE LOWER(Email) = LOWER(@Email) AND IsCurrent = 1`,
+    { Email: email.trim() },
+  )
+  if (!rows.length) return null
+  const r = rows[0]
+  return { email: r.Email, name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email }
 }
 
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
