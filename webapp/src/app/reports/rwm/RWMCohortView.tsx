@@ -43,21 +43,28 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   // Reading/Writing are single most-recent results and unaffected. Recompute client-side so the
   // toggle flips instantly. Default: blanks excluded (matches the Math report's default).
   const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+  // "Complete" = has an actual result in ALL THREE areas (not everyone does — the report is P-6 and
+  // areas roll out at different times). Independent of the blanks toggle: this is about evidence
+  // existing at all, not how it's scored.
+  const [completeOnly, setCompleteOnly] = useState(false)
 
-  type Row = RWMStudent & { mathMeeting: boolean; rwmScore: number; mathEffPct: number | null }
+  type Row = RWMStudent & { mathMeeting: boolean; rwmScore: number; mathEffPct: number | null; complete: boolean }
   const rows = useMemo<Row[]>(
     () => cohort.map((s) => {
       const pct = blankMode === 'zero' ? s.mathRollupPctZero : s.mathRollupPct
       const mathMeeting = pct != null && pct >= 0.75
       const rwmScore = (s.readingMeeting ? 1 : 0) + (s.writingMeeting ? 1 : 0) + (mathMeeting ? 1 : 0)
-      return { ...s, mathMeeting, rwmScore, mathEffPct: pct }
+      return { ...s, mathMeeting, rwmScore, mathEffPct: pct, complete: s.hasReading && s.hasWriting && s.hasMath }
     }),
     [cohort, blankMode],
   )
+  const missingAreas = (s: Row) =>
+    [!s.hasReading && 'Reading', !s.hasWriting && 'Writing', !s.hasMath && 'Math'].filter(Boolean).join(', ')
 
   // A student matches every filter EXCEPT the one named — so each facet's chip list can be trimmed to
   // what's still reachable given the other active filters (live-trim), without a facet hiding itself.
   const matchExcept = (s: Row, except: string) =>
+    (!completeOnly || s.complete) &&
     (except === 'grade' || grades.size === 0 || (s.grade != null && grades.has(s.grade))) &&
     (except === 'prog' || programs.size === 0 || (s.programFamily != null && programs.has(s.programFamily))) &&
     (except === 'sch' || schools.size === 0 || (s.schoolName != null && schools.has(s.schoolName))) &&
@@ -66,24 +73,25 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   const facetGrades = useMemo(
     () => allGrades.filter((g) => rows.some((s) => s.grade === g && matchExcept(s, 'grade'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allGrades, rows, programs, schools, scores],
+    [allGrades, rows, programs, schools, scores, completeOnly],
   )
   const facetPrograms = useMemo(
     () => allPrograms.filter((p) => rows.some((s) => s.programFamily === p && matchExcept(s, 'prog'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allPrograms, rows, grades, schools, scores],
+    [allPrograms, rows, grades, schools, scores, completeOnly],
   )
   const facetSchools = useMemo(
     () => allSchools.filter((sc) => rows.some((s) => s.schoolName === sc && matchExcept(s, 'sch'))),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allSchools, rows, grades, programs, scores],
+    [allSchools, rows, grades, programs, scores, completeOnly],
   )
 
   const filtered = useMemo(
     () => rows.filter((s) => matchExcept(s, '')),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, grades, programs, schools, scores],
+    [rows, grades, programs, schools, scores, completeOnly],
   )
+  const incompleteCount = useMemo(() => rows.filter((s) => !s.complete).length, [rows])
 
   // Distribution donut over the filtered set, bucketed by 0–3.
   const donut = useMemo(() => {
@@ -109,8 +117,8 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
     next.has(v) ? next.delete(v) : next.add(v)
     setter(next)
   }
-  const reset = () => { setGrades(new Set()); setPrograms(new Set()); setSchools(new Set()); setScores(new Set()) }
-  const anyFilter = grades.size || programs.size || schools.size || scores.size
+  const reset = () => { setGrades(new Set()); setPrograms(new Set()); setSchools(new Set()); setScores(new Set()); setCompleteOnly(false) }
+  const anyFilter = grades.size || programs.size || schools.size || scores.size || completeOnly
 
   return (
     <>
@@ -169,6 +177,16 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
         >
           Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
         </button>
+        <button
+          className={`btn-ghost${completeOnly ? ' editing' : ''}`}
+          onClick={() => setCompleteOnly((v) => !v)}
+          title="Show only students with a result in Reading, Writing, AND Math"
+        >
+          {completeOnly ? '✓ ' : ''}All 3 areas only
+        </button>
+        {incompleteCount > 0 && !completeOnly ? (
+          <span className="muted small">{incompleteCount} missing a result in ≥1 area</span>
+        ) : null}
         {anyFilter ? <button className="btn-ghost" onClick={reset}>Reset filters</button> : null}
       </div>
 
@@ -224,6 +242,9 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
                 <td>
                   <span className="rwm-score" style={{ background: SCORE_HEX[s.rwmScore] }}>{s.rwmScore}</span>
                   <span className="muted"> / 3</span>
+                  {!s.complete ? (
+                    <span className="rwm-incomplete" title={`No result yet in: ${missingAreas(s)}`}>incomplete</span>
+                  ) : null}
                 </td>
               </tr>
             ))}

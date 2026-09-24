@@ -76,6 +76,11 @@ export default function RWMStudentView({
   const mathMeeting = effMathPct != null && effMathPct >= 0.75
   const rwmScore = (student.readingMeeting ? 1 : 0) + (student.writingMeeting ? 1 : 0) + (mathMeeting ? 1 : 0)
   const mathPct = effMathPct == null ? null : (effMathPct * 100).toFixed(1)
+  const missing = [
+    !student.hasReading && 'Reading',
+    !student.hasWriting && 'Writing',
+    !student.hasMath && 'Math',
+  ].filter(Boolean) as string[]
 
   const cycles = useMemo(
     () => history.map((h) => {
@@ -116,6 +121,13 @@ export default function RWMStudentView({
         <span className="rwm-score lg" style={{ background: SCORE_HEX[rwmScore] }}>{rwmScore}</span>
         <span className="rwm-hero-label">of 3 areas currently meeting or exceeding</span>
       </div>
+
+      {missing.length > 0 ? (
+        <div className="ipp-note">
+          No result yet in <strong>{missing.join(', ')}</strong> — this student doesn&apos;t have a score in
+          all three areas, so their RWM score reflects only the areas with evidence.
+        </div>
+      ) : null}
 
       <div className="rwm-snaps">
         <AreaSnapshot title="Reading" meeting={student.readingMeeting} has={student.hasReading} />
