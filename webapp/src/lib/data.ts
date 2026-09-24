@@ -135,6 +135,7 @@ export interface ShortCycle {
   startDate: string // 'YYYY-MM-DD'
   endDate: string
   active: boolean // header active
+  graceHours: number | null // editable-after-close grace in hours (null = 168 default)
   instances: ShortCycleInstance[]
 }
 
@@ -152,9 +153,10 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     EndDate: unknown
     SchoolYear: string
     ActiveFlag: boolean
+    GraceHours: number | null
     Status: string
   }>(`
-    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag,
+    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag, GraceHours,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
@@ -206,6 +208,7 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     startDate: toYMD(h.StartDate),
     endDate: toYMD(h.EndDate),
     active: Boolean(h.ActiveFlag),
+    graceHours: h.GraceHours == null ? null : Number(h.GraceHours),
     instances: byGroup.get(h.CycleGroupID) ?? [],
   }))
 }

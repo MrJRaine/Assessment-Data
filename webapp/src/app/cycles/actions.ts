@@ -27,6 +27,7 @@ export interface CycleHeaderInput {
   startDate: string // 'YYYY-MM-DD'
   endDate: string
   active: boolean
+  graceHours?: number | null // editable-after-close grace in HOURS; null/omit -> keep existing / 168 default
 }
 
 /**
@@ -44,6 +45,7 @@ export async function saveCycleHeader(input: CycleHeaderInput): Promise<string> 
     StartDate: input.startDate,
     EndDate: input.endDate,
     ActiveFlag: input.active,
+    GraceHours: input.graceHours ?? null,
     CallerUPN: upn,
   })
   return cycleGroupId

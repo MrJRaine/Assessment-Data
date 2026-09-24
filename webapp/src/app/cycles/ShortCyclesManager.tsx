@@ -37,7 +37,8 @@ function statusClass(status: string): string {
 }
 
 // ---- form drafts ----
-type HeaderDraft = { cycleGroupId: string | null; displayName: string; startDate: string; endDate: string; active: boolean }
+// graceDays + graceHours are the two UI fields; they compose to a single GraceHours total on save.
+type HeaderDraft = { cycleGroupId: string | null; displayName: string; startDate: string; endDate: string; active: boolean; graceDays: number; graceHours: number }
 type InstanceDraft = CycleInstanceInput & { key: string }
 type InstancesDraft = { cycleGroupId: string; displayName: string; startDate: string; endDate: string; instances: InstanceDraft[] }
 
@@ -92,7 +93,12 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
     if (!f.startDate || !f.endDate) { setError('Start and end dates are required.'); return }
     if (f.endDate < f.startDate) { setError('End date must be on or after the start date.'); return }
     run(async () => {
-      const id = await saveCycleHeader(f)
+      // Compose the two UI fields into the single stored GraceHours total (days*24 + hours).
+      const graceHours = Math.max(0, Math.trunc(f.graceDays) * 24 + Math.trunc(f.graceHours))
+      const id = await saveCycleHeader({
+        cycleGroupId: f.cycleGroupId, displayName: f.displayName, startDate: f.startDate,
+        endDate: f.endDate, active: f.active, graceHours,
+      })
       setHeaderForm(null)
       // Jump straight into managing this cycle's instances (dates now established).
       const existing = initialCycles.find((c) => c.cycleGroupId === id)
@@ -153,7 +159,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
     <>
       <div className="cycles-toolbar">
         <button className="btn-primary" disabled={pending}
-                onClick={() => { setError(null); setInstForm(null); setHeaderForm({ cycleGroupId: null, displayName: '', startDate: '', endDate: '', active: true }) }}>
+                onClick={() => { setError(null); setInstForm(null); setHeaderForm({ cycleGroupId: null, displayName: '', startDate: '', endDate: '', active: true, graceDays: 7, graceHours: 0 }) }}>
           + New cycle
         </button>
       </div>
@@ -179,6 +185,16 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
             <label>End date
               <input type="date" value={headerForm.endDate}
                      onChange={(e) => setHeaderForm({ ...headerForm, endDate: e.target.value })} />
+            </label>
+            {/* Late-entry grace: how long AFTER the end date the cycle stays editable before it locks
+                to read-only. Two fields for a friendly compose; saved as one total in hours. */}
+            <label>Grace after close · days
+              <input type="number" min={0} step={1} value={headerForm.graceDays}
+                     onChange={(e) => setHeaderForm({ ...headerForm, graceDays: Math.max(0, Math.trunc(Number(e.target.value) || 0)) })} />
+            </label>
+            <label>Grace · hours
+              <input type="number" min={0} max={23} step={1} value={headerForm.graceHours}
+                     onChange={(e) => setHeaderForm({ ...headerForm, graceHours: Math.max(0, Math.trunc(Number(e.target.value) || 0)) })} />
             </label>
             <label className="cycle-form-check">
               <input type="checkbox" checked={headerForm.active}
@@ -278,7 +294,7 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 <td className="cycle-row-actions">
                   <button className="btn-ghost" disabled={pending} onClick={() => manageInstances(c)}>Instances</button>
                   <button className="btn-ghost" disabled={pending}
-                          onClick={() => { setError(null); setInstForm(null); setHeaderForm({ cycleGroupId: c.cycleGroupId, displayName: c.displayName, startDate: c.startDate, endDate: c.endDate, active: c.active }) }}>
+                          onClick={() => { setError(null); setInstForm(null); setHeaderForm({ cycleGroupId: c.cycleGroupId, displayName: c.displayName, startDate: c.startDate, endDate: c.endDate, active: c.active, graceDays: Math.floor((c.graceHours ?? 168) / 24), graceHours: (c.graceHours ?? 168) % 24 }) }}>
                     Edit dates
                   </button>
                   <button className="btn-ghost" disabled={pending}
