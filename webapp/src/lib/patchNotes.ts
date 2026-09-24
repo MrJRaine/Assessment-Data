@@ -20,6 +20,13 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-09-24',
     kind: 'feature',
     summary:
+      'After a Short Cycle closes you can still enter results for a grace period (7 days by default) — the cycle shows "Late entry" with the time left, then becomes view-only. If you need to enter something after that, designated staff can briefly unlock a group.',
+  },
+  {
+    version: '0.7.0',
+    date: '2026-09-24',
+    kind: 'feature',
+    summary:
       'Data Entry cards now show how many students are done. Reading and Writing show one "done" count (a single result finishes a student); Math splits it into "started" and "done", since a student can still have tasks left to record.',
   },
   {
