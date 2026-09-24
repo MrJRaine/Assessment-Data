@@ -131,6 +131,28 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-09-24 — 🟢 0.6.1 + 0.6.2 SHIPPED LIVE; ⚠ TWO OPEN LIVE BUGS (analyst-scoped reads empty)
+- **Shipped LIVE**: **0.6.1** (streaming fix, `compress:false`) and **0.6.2** (roster perf pass —
+  materialized `SectionRosterMembership`/`TeacherRosterMembership` + card-metadata pass-through +
+  dead-column cut; maintenance heartbeat; math fixes; static-lookup caching). Git squared away:
+  dev→main release merge `9f3ec81`, tags `v0.6.1`/`v0.6.2`, mandatory main→dev back-merge, AND
+  `dev-impersonation` reconciled to 0.6.2 (built `:0.6.2-imp`). Standing rule added: reconcile
+  `dev-impersonation` + rebuild `-imp` every release — see [[feedback_git_workflow]],
+  [[project_roster_materialization]].
+- **⚠ OPEN LIVE BUG 1 — Reports "No students in your scope"** for the analyst (`jeffrey.raine@tcrce.ca`)
+  on data.tcrce.ca. **Dev is FINE** (500 students). Live `tvf_StudentCohort('jeffrey.raine@tcrce.ca')`
+  returns 6042 and the header widget = `getCurrentUpn` (both `user.upn ?? user.email`), so scoping
+  *should* work — need clean, environment-STAMPED reconciliation (empty screenshot may predate a live
+  cohort-TVF redeploy, or the app + SQL-editor are on different warehouses). Env attribution got mixed
+  up mid-debug (tired user + me not labelling each query) — RE-BASELINE cleanly on LIVE next.
+- **⚠ OPEN LIVE BUG 2 — documented adaptations not showing on live** (user flagged 2026-09-24).
+  LIKELY SHARED ROOT CAUSE with Bug 1: if a scoped identity read comes back empty on live, every
+  per-caller surface (Reports, Programming/adaptations) empties. Fix one, likely fix both.
+- **Next action**: re-establish clean LIVE-vs-DEV ground truth for Bug 1 (reload live /reports; run the
+  cohort count on the confirmed LIVE warehouse), then chase adaptations. Then back to the **teacher
+  how-to one-pagers** (the original task — `docs/user-guides/v0.6.0/`, mostly `[SCREENSHOT]` placeholders).
+- **Blockers**: None hard; the two live bugs affect the analyst/admin reporting view.
+
 ### Left Off — 2026-09-22 — 🟢 0.6.0 "The SCoR Hub" SHIPPED LIVE; demo dev data seeded
 - **Last completed**: **0.6.0 LIVE** on data.tcrce.ca — "The SCoR Hub" rename, French math answer key
   (`tvf_TeacherRosterMath`), **RegionalAnalyst RLS scoped by `StaffSchoolAccess`** (security fix, 13 TVFs),
