@@ -47,7 +47,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">The SCoR Hub</span>
         </Link>
-        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} showStaffAccess={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
         </div>

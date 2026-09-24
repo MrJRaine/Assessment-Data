@@ -593,6 +593,49 @@ export async function getCallerCapabilities(
   throw lastErr
 }
 
+// ---------------------------------------------------------------------------
+// Staff app-access administration (/admin/staff-access, SysAdmin-only).
+// ---------------------------------------------------------------------------
+export interface StaffAccessRow {
+  email: string
+  name: string
+  isSysAdmin: boolean
+  canManageCycles: boolean
+  canRunIngest: boolean
+  canOverrideMath: boolean
+  canOverrideLiteracy: boolean
+}
+
+/** Every current staff member with their StaffAppAccess grants (no row -> all false). SysAdmin-only
+ *  screen; a plain SP read (config, not per-user PII). Gated by the page + the write action. */
+export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
+  const rows = await query<{
+    Email: string
+    FirstName: string | null
+    LastName: string | null
+    IsSysAdmin: boolean | null
+    CanManageCycles: boolean | null
+    CanRunIngest: boolean | null
+    CanOverrideMath: boolean | null
+    CanOverrideLiteracy: boolean | null
+  }>(`
+    SELECT d.Email, d.FirstName, d.LastName,
+           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy
+    FROM DimStaff d
+    LEFT JOIN StaffAppAccess a ON LOWER(a.Email) = LOWER(d.Email)
+    WHERE d.IsCurrent = 1
+    ORDER BY d.LastName, d.FirstName`)
+  return rows.map((r) => ({
+    email: r.Email,
+    name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email,
+    isSysAdmin: Boolean(r.IsSysAdmin),
+    canManageCycles: Boolean(r.CanManageCycles),
+    canRunIngest: Boolean(r.CanRunIngest),
+    canOverrideMath: Boolean(r.CanOverrideMath),
+    canOverrideLiteracy: Boolean(r.CanOverrideLiteracy),
+  }))
+}
+
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
 // surfaced by /api/status to the client poller. MaintenanceAt is UTC.
 export interface MaintenanceWindow {

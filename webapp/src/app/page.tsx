@@ -86,6 +86,14 @@ export default async function Home() {
                 cta="Open maintenance"
               />
             ) : null}
+            {caps.isSysAdmin ? (
+              <CardLink
+                href="/admin/staff-access"
+                title="Staff Access"
+                desc="Grant app capabilities to staff — cycle management, ingest, and the grace-lock overrides. System administrators only."
+                cta="Manage access"
+              />
+            ) : null}
           </div>
         </section>
       ) : null}
