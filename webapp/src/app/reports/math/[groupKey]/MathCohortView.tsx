@@ -483,6 +483,15 @@ function StudentsDown({
   taskCell: (v: Mark) => React.ReactNode
   onFocus: (key: string) => void
 }) {
+  // Transposed, the task columns are just a question number — the description/outcome would blow the
+  // column width out. Show them in a hover popup instead. It's position:fixed (anchored to the hovered
+  // header cell) so the horizontal-scroll container doesn't clip it.
+  const [tip, setTip] = useState<{ left: number; top: number; task: Task } | null>(null)
+  const showTip = (e: React.MouseEvent, t: Task) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setTip({ left: Math.min(r.left, window.innerWidth - 250), top: r.bottom + 4, task: t })
+  }
+
   // Build the column list: each unit contributes either one summary column (collapsed) or one column
   // per task (expanded). The unit header row spans its columns.
   return (
@@ -514,7 +523,16 @@ function StudentsDown({
               const coll = collapsed.has(uk(g, u))
               return coll
                 ? [<th className="stu" key={`${u.name}-sum`}>Unit</th>]
-                : u.tasks.map((t) => <th className="stu" key={t.mathTaskKey} title={t.description}>{t.questionNumber}</th>)
+                : u.tasks.map((t) => (
+                    <th
+                      className="stu qcol"
+                      key={t.mathTaskKey}
+                      onMouseEnter={(e) => showTip(e, t)}
+                      onMouseLeave={() => setTip(null)}
+                    >
+                      {t.questionNumber}
+                    </th>
+                  ))
             })}
           </tr>
         </thead>
@@ -542,6 +560,13 @@ function StudentsDown({
           })}
         </tbody>
       </table>
+      {tip && (
+        <div className="qtip-fixed" style={{ left: tip.left, top: tip.top }}>
+          <span className="qtip-q">{tip.task.questionNumber}</span>
+          {tip.task.description && <span className="qtip-desc">{tip.task.description}</span>}
+          {tip.task.outcomeCode && <span className="qtip-code">{tip.task.outcomeCode}</span>}
+        </div>
+      )}
     </div>
   )
 }

@@ -483,6 +483,12 @@ a { color: inherit; text-decoration: none; }
    and centre the transposed unit-group column header. */
 .mgrid td.col-pct { background: var(--card); }
 .mgrid thead th.unitcol { text-align: center; text-transform: uppercase; letter-spacing: .05em; font-size: .72rem; cursor: pointer; }
+.mgrid thead th.qcol { cursor: help; }
+/* Fixed so the horizontal-scroll container can't clip it; pointer-events off so it never blocks. */
+.qtip-fixed { position: fixed; z-index: 60; width: 230px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .16); padding: .5rem .6rem; pointer-events: none; display: flex; flex-direction: column; gap: .2rem; }
+.qtip-fixed .qtip-q { font-size: .78rem; color: var(--primary-hover); font-weight: 700; }
+.qtip-fixed .qtip-desc { font-size: .85rem; color: var(--ink); }
+.qtip-fixed .qtip-code { font-size: .7rem; color: var(--muted); }
 /* font-size drives every state mark: the ✓ directly, and the disc via its em-based size. The cell is
    44px tall and the marks were ~15px in it — small to read and small to hit. 1.5rem gives ~24px,
    still comfortably inside the row. */
