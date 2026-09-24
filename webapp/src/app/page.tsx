@@ -33,7 +33,7 @@ export default async function Home() {
 
   return (
     <>
-      <PageHeader title="The SCoR Hub" subtitle={welcome} />
+      <PageHeader title="The SCoR Dashboard" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
           href="/enter"
