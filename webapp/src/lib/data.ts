@@ -1331,3 +1331,95 @@ export async function getMathCohort(upn: string, groupKey: string): Promise<Math
     mathIPPStatus: r.MathIPPStatus ?? null,
   }))
 }
+
+// ---- Reports > RWM (0.7.0, item 5): Reading·Writing·Math achievement roll-up ------------------
+// Cohort-wide (like Reading/Writing), P-6 only, IPP-in-any-area students excluded (in the TVF).
+
+export interface RWMStudent {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  fullName: string
+  grade: string | null
+  gradeOrder: number
+  schoolId: string | null
+  schoolName: string | null
+  schoolAbbrev: string | null
+  programCode: string | null
+  programFamily: string | null
+  homeroom: string | null
+  readingCode: number | null // most-recent reading achievement code (3-4 = meeting/exceeding)
+  writingCode: number | null
+  mathRollupPct: number | null // 0-1 current-year roll-up (avg of unit averages)
+  readingMeeting: boolean
+  writingMeeting: boolean
+  mathMeeting: boolean
+  rwmScore: number // 0-3
+  hasReading: boolean // any evidence yet — lets the UI show "no result" vs "not meeting"
+  hasWriting: boolean
+  hasMath: boolean
+}
+
+export async function getStudentCohortRWM(upn: string): Promise<RWMStudent[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN)',
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: (r.FirstName as string) ?? '',
+    lastName: (r.LastName as string) ?? '',
+    fullName: (r.FullName as string) ?? '',
+    grade: (r.Grade as string) ?? null,
+    gradeOrder: Number(r.GradeOrder ?? 99),
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    schoolAbbrev: (r.SchoolAbbreviation as string) ?? null,
+    programCode: (r.ProgramCode as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
+    writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
+    mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    readingMeeting: Boolean(r.ReadingMeeting),
+    writingMeeting: Boolean(r.WritingMeeting),
+    mathMeeting: Boolean(r.MathMeeting),
+    rwmScore: Number(r.RWMScore ?? 0),
+    hasReading: Boolean(r.HasReading),
+    hasWriting: Boolean(r.HasWriting),
+    hasMath: Boolean(r.HasMath),
+  }))
+}
+
+export interface RWMHistoryRow {
+  cycleDate: string | null
+  cycleLabel: string
+  readingCode: number | null
+  writingCode: number | null
+  mathRollupPct: number | null
+  readingMeeting: boolean
+  writingMeeting: boolean
+  mathMeeting: boolean
+  rwmScore: number
+}
+
+export async function getStudentRWMHistory(upn: string, studentKey: string): Promise<RWMHistoryRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentRWMHistory(@UPN, @StudentKey) ORDER BY CycleDate',
+    { StudentKey: studentKey },
+  )
+  return rows.map((r) => ({
+    cycleDate: toDateStr(r.CycleDate as Date | string | null),
+    cycleLabel: (r.CycleLabel as string) ?? '',
+    readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
+    writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
+    mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    readingMeeting: Boolean(r.ReadingMeeting),
+    writingMeeting: Boolean(r.WritingMeeting),
+    mathMeeting: Boolean(r.MathMeeting),
+    rwmScore: Number(r.RWMScore ?? 0),
+  }))
+}
