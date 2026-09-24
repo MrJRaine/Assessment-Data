@@ -131,6 +131,53 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-09-24 (later) — 🟢 0.6.3 SHIPPED LIVE; both live bugs + Math IPPs RESOLVED (all stale-object drift)
+- **0.6.3 LIVE** (noon cutover, prod-swap of `aw` to `:0.6.3`). Change: **Programming summary chips now count
+  STUDENTS, not records** — `getProgrammingSummary`/`studentLevel` in [data.ts]; the old cell count read
+  ~2–5× the headcount (adaptation 4088 vs ~6000 looked like "almost every student"). Verified on awdev
+  (:3001): chips **0 of 50** IPPs / **0 of 63** Adaptations, matching the DB (was 144/180 records).
+- **Both prior live bugs + a third, ALL RESOLVED — same root cause: merging to `main` ≠ deploying to Fabric.**
+  The code was correct on `main` since 2026-09-17; the live *objects* were never re-executed.
+  - **Adaptations empty** → live `usp_MergeStudent` was pre-2026-09-11 (no Step 6c/6d), so `FactStudentAdaptation`
+    had 0 rows though `DimStudent.Adap=1`. Fixed: `backfill_adaptation_facts_live.sql` (Step 6d verbatim,
+    idempotent) → **4088 rows**; then **redeployed `usp_MergeStudent`** so ingest won't regress.
+  - **Math IPPs missing** → same stale merge predated Math IPPs; `FactStudentIPP` was Reading/Writing only.
+    Fixed: `backfill_ipp_facts_live.sql` (Step 6b, Math P-6 branch) → **+181 Math rows**.
+  - **Analyst Reports/Programming empty** → partial 2026-09-22 analyst-scoping deploy left `@UPN` TVFs stale.
+    Fixed: `reconcile_scoped_tvfs_live.sql` (all 14 `@UPN` TVFs).
+- **STANDING LESSON**: a release isn't done at merge — **execute + verify every changed DB object on live**,
+  object by object. Propose adding this to the release checklist. See [[feedback_sql_write_authorization]].
+- **Grace window (recall)**: there is NO fixed post-cycle grace. Closed cycles stay under "Past cycles — still
+  open for late entry" and remain writeable **indefinitely** until an analyst sets `ActiveFlag=0`
+  ([enter/page.tsx], [actions.ts]). A bounded auto-hide would be a new rule.
+- **NEXT — 0.6.4 (on `dev`, not built)**: Math cards show **"N started · M done"**. `done` = student has entries
+  for **>80% of the tasks whose benchmark month = the cycle's benchmark month**; show on **both** the group-picker
+  card (`tvf_TeacherGroups`) and the /enter subject card (`tvf_UserAssessmentWindows`) — add a `DoneStudentCount`;
+  relabel "entered"→"started". Read-only SQL, ships with 0.6.4, must deploy to live.
+- **Blockers**: None. Handouts are DONE (v0.6.0, not this session).
+
+### Left Off — 2026-09-24 — 🟢 0.6.1 + 0.6.2 SHIPPED LIVE; ⚠ TWO OPEN LIVE BUGS (analyst-scoped reads empty)
+- **Shipped LIVE**: **0.6.1** (streaming fix, `compress:false`) and **0.6.2** (roster perf pass —
+  materialized `SectionRosterMembership`/`TeacherRosterMembership` + card-metadata pass-through +
+  dead-column cut; maintenance heartbeat; math fixes; static-lookup caching). Git squared away:
+  dev→main release merge `9f3ec81`, tags `v0.6.1`/`v0.6.2`, mandatory main→dev back-merge, AND
+  `dev-impersonation` reconciled to 0.6.2 (built `:0.6.2-imp`). Standing rule added: reconcile
+  `dev-impersonation` + rebuild `-imp` every release — see [[feedback_git_workflow]],
+  [[project_roster_materialization]].
+- **⚠ OPEN LIVE BUG 1 — Reports "No students in your scope"** for the analyst (`jeffrey.raine@tcrce.ca`)
+  on data.tcrce.ca. **Dev is FINE** (500 students). Live `tvf_StudentCohort('jeffrey.raine@tcrce.ca')`
+  returns 6042 and the header widget = `getCurrentUpn` (both `user.upn ?? user.email`), so scoping
+  *should* work — need clean, environment-STAMPED reconciliation (empty screenshot may predate a live
+  cohort-TVF redeploy, or the app + SQL-editor are on different warehouses). Env attribution got mixed
+  up mid-debug (tired user + me not labelling each query) — RE-BASELINE cleanly on LIVE next.
+- **⚠ OPEN LIVE BUG 2 — documented adaptations not showing on live** (user flagged 2026-09-24).
+  LIKELY SHARED ROOT CAUSE with Bug 1: if a scoped identity read comes back empty on live, every
+  per-caller surface (Reports, Programming/adaptations) empties. Fix one, likely fix both.
+- **Next action**: re-establish clean LIVE-vs-DEV ground truth for Bug 1 (reload live /reports; run the
+  cohort count on the confirmed LIVE warehouse), then chase adaptations. Then back to the **teacher
+  how-to one-pagers** (the original task — `docs/user-guides/v0.6.0/`, mostly `[SCREENSHOT]` placeholders).
+- **Blockers**: None hard; the two live bugs affect the analyst/admin reporting view.
+
 ### Left Off — 2026-09-22 — 🟢 0.6.0 "The SCoR Hub" SHIPPED LIVE; demo dev data seeded
 - **Last completed**: **0.6.0 LIVE** on data.tcrce.ca — "The SCoR Hub" rename, French math answer key
   (`tvf_TeacherRosterMath`), **RegionalAnalyst RLS scoped by `StaffSchoolAccess`** (security fix, 13 TVFs),

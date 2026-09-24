@@ -895,27 +895,43 @@ export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]>
   }))
 }
 
-// Scope-wide Programming confirmation summary (for the picker landing). CELL-level: each
-// (student, subject, family) record is one "detail" being confirmed — total = records that exist,
-// confirmed = records with a set value (not NULL). Reuses the existing @UPN role-scoped reads.
+// Scope-wide Programming confirmation summary (for the picker landing). STUDENT-level: one STUDENT
+// is one unit of progress, NOT each (student, subject, family) cell. A student fans out to 2-5 fact
+// rows (Reading/Writing x English/FI tracks + Math), so a cell count reads as ~2-5x the headcount
+// ("almost every student on an adaptation"). Here total = distinct students carrying >=1 record;
+// confirmed = students whose records are ALL set; the gap (total - confirmed) = students with >=1
+// OUTSTANDING (unconfirmed) record. Reuses the existing @UPN role-scoped reads.
 export interface ProgrammingSummary {
   ipp: { confirmed: number; total: number }
   adaptation: { confirmed: number; total: number }
 }
-function cellLevel(sets: boolean[]): { confirmed: number; total: number } {
-  return { confirmed: sets.filter(Boolean).length, total: sets.length }
+// Collapse per-student records to a progress pair: a student counts as confirmed ONLY when every one
+// of their records is set (no NULL); any single unset record makes them outstanding.
+function studentLevel(rows: { key: string; set: boolean }[]): { confirmed: number; total: number } {
+  const outstandingByStudent = new Map<string, boolean>() // studentKey -> has >=1 unset record
+  for (const r of rows) {
+    outstandingByStudent.set(r.key, (outstandingByStudent.get(r.key) ?? false) || !r.set)
+  }
+  let confirmed = 0
+  for (const outstanding of outstandingByStudent.values()) if (!outstanding) confirmed++
+  return { confirmed, total: outstandingByStudent.size }
 }
 export async function getProgrammingSummary(upn: string): Promise<ProgrammingSummary> {
   const [ippRows, adapRows] = await Promise.all([
-    queryAsUser<{ IsIPP: boolean | number | null }>(upn, 'SELECT IsIPP FROM dbo.tvf_StudentIPP(@UPN)'),
-    queryAsUser<{ HasAdaptation: boolean | number | null }>(
+    queryAsUser<{ StudentKey: string; IsIPP: boolean | number | null }>(
       upn,
-      'SELECT HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
+      'SELECT StudentKey, IsIPP FROM dbo.tvf_StudentIPP(@UPN)',
+    ),
+    queryAsUser<{ StudentKey: string; HasAdaptation: boolean | number | null }>(
+      upn,
+      'SELECT StudentKey, HasAdaptation FROM dbo.tvf_StudentAdaptation(@UPN)',
     ),
   ])
   return {
-    ipp: cellLevel(ippRows.map((r) => r.IsIPP != null)),
-    adaptation: cellLevel(adapRows.map((r) => r.HasAdaptation != null)),
+    ipp: studentLevel(ippRows.map((r) => ({ key: String(r.StudentKey), set: r.IsIPP != null }))),
+    adaptation: studentLevel(
+      adapRows.map((r) => ({ key: String(r.StudentKey), set: r.HasAdaptation != null })),
+    ),
   }
 }
 

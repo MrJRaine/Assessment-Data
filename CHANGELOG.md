@@ -11,6 +11,38 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.6.3] — 2026-09-24
+
+### Changed
+- **Programming summary chips now count STUDENTS, not records.** The IPP/Adaptations progress chips on
+  the Programming picker were cell-level — one `(student, subject, family)` fact row each — so with the
+  per-student track fan-out (2–5 rows/student: Reading/Writing × English/FI + Math) the totals read as
+  ~2–5× the headcount (an adaptation total of 4088 against ~6000 students looked like "almost every
+  student"). `getProgrammingSummary` is now **student-level**: `total` = distinct students carrying ≥1
+  record, `confirmed` = students whose records are all set, and the gap (`total − confirmed`) = students
+  with ≥1 outstanding. App-only — both TVFs already return `StudentKey`; no schema change.
+
+### Fixed — live warehouse reconcile (stale-object drift; code was correct on `main`)
+- **Adaptations invisible on live.** `FactStudentAdaptation` had 0 current rows though `DimStudent.Adap = 1`
+  was set: the live `usp_MergeStudent` was a pre-2026-09-11 build that never ran the Step 6c/6d expansion
+  (the fix was merged to `main` 2026-09-17 but the `CREATE PROC` was never executed on the warehouse).
+  Backfilled with `sql/scripts/backfill_adaptation_facts_live.sql` (Step 6d verbatim, insert-only,
+  idempotent) → 4088 rows.
+- **Math IPPs missing on live.** Same stale merge predated Math IPPs, so `FactStudentIPP` held
+  Reading/Writing only (954 rows). Backfilled with `sql/scripts/backfill_ipp_facts_live.sql` (Step 6b,
+  including the Math P-6 branch) → +181 Math rows.
+- **Analyst-scoped reads empty on live** (Reports + Programming): the partial 2026-09-22 analyst-scoping
+  deploy left several `@UPN` TVFs stale. Reconciled with `sql/scripts/reconcile_scoped_tvfs_live.sql`
+  (all 14 `@UPN` TVFs, idempotent DROP/CREATE/GRANT).
+- Root cause across all three: **merging to `main` is not deploying to Fabric** — each changed DB object
+  must be executed and verified on live. Proposed as a standing release-checklist step.
+
+### SQL to deploy on live
+- **`sql/procedures/usp_MergeStudent.sql`** — durable redeploy so the next ingest keeps building
+  `FactStudentIPP` + `FactStudentAdaptation` and runs the closing side (Step 6a/6c).
+- One-time (run during this fix): `backfill_adaptation_facts_live.sql`, `backfill_ipp_facts_live.sql`,
+  `reconcile_scoped_tvfs_live.sql`.
+
 ## [0.6.2] — 2026-09-23
 
 ### Added
