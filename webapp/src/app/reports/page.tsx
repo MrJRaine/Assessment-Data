@@ -41,6 +41,12 @@ export default async function StudentsPage({
         <Link href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
           Writing
         </Link>
+        <Link href="/reports/math" className="toggle">
+          Math
+        </Link>
+        <Link href="/reports/rwm" className="toggle">
+          RWM
+        </Link>
       </div>
       {error ? (
         <ErrorNote message={error} />

@@ -158,6 +158,30 @@ BEGIN
         ;THROW 51032, 'usp_UpsertWritingAssessment: window is Upcoming (not yet started). No entries allowed before the window opens.', 1;
     END;
 
+    -- 51040: GRACE-LOCK (0.7.0). Past EndDate + the cycle's GraceHours (default 168h, from the close
+    -- moment = midnight after EndDate), the window is LOCKED: read-only for everyone EXCEPT a caller
+    -- holding the Literacy override (StaffAppAccess.CanOverrideLiteracy) or IsSysAdmin. Hour-granular,
+    -- so compare the Atlantic NOW timestamp. @IsLocked drives the audit note.
+    DECLARE @GraceHours INT, @LockBoundary DATETIME2(0), @IsLocked BIT = 0, @HasOverride BIT = 0;
+    SELECT @GraceHours = COALESCE(sc.GraceHours, 168)
+    FROM DimAssessmentWindow w
+    LEFT JOIN DimShortCycle sc ON sc.CycleGroupID = w.CycleGroupID
+    WHERE w.AssessmentWindowID = @AssessmentWindowID_BI;
+
+    SET @LockBoundary = DATEADD(HOUR, COALESCE(@GraceHours, 168), CAST(DATEADD(DAY, 1, @WindowEndDate) AS DATETIME2(0)));
+    IF CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATETIME2(0)) > @LockBoundary
+        SET @IsLocked = 1;
+
+    IF @IsLocked = 1
+    BEGIN
+        SELECT @HasOverride = CASE WHEN IsSysAdmin = 1 OR COALESCE(CanOverrideLiteracy, 0) = 1 THEN 1 ELSE 0 END
+        FROM StaffAppAccess WHERE LOWER(Email) = @CallerEmail;
+        IF @HasOverride = 0
+        BEGIN
+            ;THROW 51040, 'usp_UpsertWritingAssessment: this cycle is locked (grace period expired). You do not hold the Literacy override to enter data for it.', 1;
+        END;
+    END;
+
     -- 51011: student resolves via effective-date join on AssessmentDate
     SELECT TOP 1
         @StudentKey         = s.StudentKey,
@@ -280,7 +304,8 @@ BEGIN
             ' | StudentNumber=',      CAST(@StudentNumber AS VARCHAR(20)),
             ' | AssessmentWindowID=', @AssessmentWindowID,
             ' | Language=',           @AssessmentLanguage,
-            ' | Scores I/O/L/C=',     CONCAT(@IdeasScore, '/', @OrganizationScore, '/', @LanguageScore, '/', @ConventionsScore)
+            ' | Scores I/O/L/C=',     CONCAT(@IdeasScore, '/', @OrganizationScore, '/', @LanguageScore, '/', @ConventionsScore),
+            CASE WHEN @IsLocked = 1 THEN ' | GRACE-OVERRIDE' ELSE '' END   -- 0.7.0: save into a locked cycle via override
         ),
         1,
         @Now

@@ -33,7 +33,7 @@ export default async function Home() {
 
   return (
     <>
-      <PageHeader title="The SCoR Hub" subtitle={welcome} />
+      <PageHeader title="The SCoR Dashboard" subtitle={welcome} />
       <div className="card-grid">
         <CardLink
           href="/enter"
@@ -84,6 +84,14 @@ export default async function Home() {
                 title="Maintenance"
                 desc="Schedule or clear a maintenance window before a deploy or data refresh — teachers' work is saved before the app pauses. System administrators only."
                 cta="Open maintenance"
+              />
+            ) : null}
+            {caps.isSysAdmin ? (
+              <CardLink
+                href="/admin/staff-access"
+                title="Staff Access"
+                desc="Grant app capabilities to staff — cycle management, ingest, and the grace-lock overrides. System administrators only."
+                cta="Manage access"
               />
             ) : null}
           </div>

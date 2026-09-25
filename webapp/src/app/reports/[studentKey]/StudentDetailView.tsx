@@ -16,7 +16,7 @@ function TrendChart({
   gridlines,
   label,
 }: {
-  points: { value: number; date: string; key: string }[]
+  points: { value: number; date: string; key: string; label?: string }[]
   yMin: number
   yMax: number
   gridlines: number[]
@@ -49,7 +49,7 @@ function TrendChart({
         <g key={p.key}>
           <circle cx={x(i)} cy={y(p.value)} r={4} fill="var(--primary)" />
           <text x={x(i)} y={H - 8} fontSize={9} fill="var(--muted)" textAnchor="middle">
-            {fmt.format(new Date(p.date))}
+            {p.label ?? fmt.format(new Date(p.date))}
           </text>
         </g>
       ))}
@@ -215,6 +215,7 @@ export default function StudentDetailView({
                 <th>Cycle</th>
                 <th>Date</th>
                 <th>Level</th>
+                <th>Expected</th>
                 <th>Δ</th>
                 <th>Achievement</th>
               </tr>
@@ -225,6 +226,13 @@ export default function StudentDetailView({
                   <td>{h.windowName}{h.windowSchoolYear ? ` · ${h.windowSchoolYear}` : ''}</td>
                   <td className="muted">{h.assessmentDate ?? '—'}</td>
                   <td>{h.levelCode ?? '—'}</td>
+                  <td>
+                    {h.expectedMin && h.expectedMax
+                      ? h.expectedMin === h.expectedMax
+                        ? h.expectedMin
+                        : `${h.expectedMin}–${h.expectedMax}`
+                      : '—'}
+                  </td>
                   <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
                     {!measured ? (ippConfirmed ? 'IPP' : '—') : h.delta == null ? '—' : h.delta > 0 ? `+${h.delta}` : h.delta}
                   </td>
@@ -237,9 +245,24 @@ export default function StudentDetailView({
           <h2 className="section-title">Reading level over time</h2>
           <div className="chart-card">
             <TrendChart
-              points={(history as HistoryRow[])
-                .filter((h) => h.levelOrder != null && h.assessmentDate)
-                .map((h) => ({ value: h.levelOrder!, date: h.assessmentDate!, key: h.readingAssessmentId }))}
+              points={(() => {
+                const rh = history as HistoryRow[]
+                // The trend is THIS school year's progression from the Prev-June baseline. The June anchor
+                // IS the prior year's last reading, which is also a history row — so restrict the plotted
+                // points to the latest school year (else that June shows twice: as "Prev June" and "Jun").
+                const latestYear = rh.reduce<string | null>(
+                  (m, h) => (h.windowSchoolYear && (m == null || h.windowSchoolYear > m) ? h.windowSchoolYear : m),
+                  null,
+                )
+                const pts = rh
+                  .filter((h) => h.levelOrder != null && h.assessmentDate && (latestYear == null || h.windowSchoolYear === latestYear))
+                  .map((h) => ({ value: h.levelOrder!, date: h.assessmentDate!, key: h.readingAssessmentId }))
+                // Prev-June anchor as the first point (item 1a) — same value on every row.
+                const june = rh.find((h) => h.juneLevelOrder != null)
+                return june?.juneLevelOrder != null
+                  ? [{ value: june.juneLevelOrder, date: pts[0]?.date ?? new Date().toISOString(), key: 'june', label: 'Prev June' }, ...pts]
+                  : pts
+              })()}
               yMin={0}
               yMax={31}
               gridlines={[0, 8, 16, 24, 31]}

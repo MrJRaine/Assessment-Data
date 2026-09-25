@@ -3,8 +3,8 @@ import type { Metadata } from 'next'
 import AppShell from '@/components/AppShell'
 
 export const metadata: Metadata = {
-  title: 'The SCoR Hub',
-  description: 'Regional Student Assessment — The SCoR Hub',
+  title: 'The SCoR Dashboard',
+  description: 'Regional Student Assessment — The SCoR Dashboard',
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

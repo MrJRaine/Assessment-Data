@@ -23,6 +23,13 @@
  *                     gates on this table (not DimStaff) for exactly that reason.
  *   CanManageCycles - create/edit Short Cycles of Response (/cycles)
  *   CanRunIngest    - upload PowerSchool exports + run the ingest cycle (/ingest)
+ *   CanOverrideMath      - flip a MATH roster back to editable in a grace-locked cycle (0.7.0)
+ *   CanOverrideLiteracy  - same, for READING + WRITING rosters (0.7.0)
+ *   (Override columns are BIT NULL — added by ALTER to a populated table, which Fabric can't do as
+ *    NOT NULL; reads treat NULL as 0. IsSysAdmin implies both, like every capability.)
+ *
+ * NEW 2026-09-24: these grants are now managed from the in-app SysAdmin page /admin/staff-access
+ * (usp_SetStaffAppAccess), not only by hand. usp_SetStaffAppAccess is the sole writer.
  *
  * The web app (as the service principal) reads this to gate those screens, their
  * nav items, and their home cards. NOT cleared by the production reset (manual
@@ -34,11 +41,13 @@
  ******************************************************************************/
 
 CREATE TABLE StaffAppAccess (
-    Email             VARCHAR(255)  NOT NULL,   -- staff UPN / email (lowercased)
-    IsSysAdmin        BIT           NOT NULL,   -- super-user: implies all capabilities
-    CanManageCycles   BIT           NOT NULL,   -- /cycles admin
-    CanRunIngest      BIT           NOT NULL,   -- /ingest admin
-    LastUpdated       DATETIME2(0)  NOT NULL
+    Email                VARCHAR(255)  NOT NULL,   -- staff UPN / email (lowercased)
+    IsSysAdmin           BIT           NOT NULL,   -- super-user: implies all capabilities
+    CanManageCycles      BIT           NOT NULL,   -- /cycles admin
+    CanRunIngest         BIT           NOT NULL,   -- /ingest admin
+    CanOverrideMath      BIT           NULL,       -- grace-lock override, Math rosters (NULL = 0)
+    CanOverrideLiteracy  BIT           NULL,       -- grace-lock override, Reading+Writing rosters (NULL = 0)
+    LastUpdated          DATETIME2(0)  NOT NULL
 );
 GO
 

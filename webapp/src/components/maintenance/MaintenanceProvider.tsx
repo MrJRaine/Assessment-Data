@@ -293,7 +293,7 @@ function MaintenanceDown({
     <div className="maint-down-screen" role="alert">
       <div className="maint-down-card">
         <h1>We&rsquo;ll be right back</h1>
-        <p>{message || 'The SCoR Hub is being updated. Please check back in a few minutes — this page will return automatically.'}</p>
+        <p>{message || 'The SCoR Dashboard is being updated. Please check back in a few minutes — this page will return automatically.'}</p>
         {admin ? (
           <button className="btn" style={{ marginTop: '1.25rem' }} disabled={admin.clearing} onClick={admin.onClear}>
             {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}

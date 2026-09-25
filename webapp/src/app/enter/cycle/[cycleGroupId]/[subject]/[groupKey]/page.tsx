@@ -4,6 +4,8 @@ import { EmptyState, ErrorNote, Loading } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import {
   getTeacherGroups,
+  getTeacherWindows,
+  getCallerCapabilities,
   getShortCycles,
   getTeacherRoster,
   getTeacherRosterWriting,
@@ -125,6 +127,8 @@ async function RosterBody({
   let group: TeacherGroup | null = null
   const slices: Slice[] = []
   let error: string | null = null
+  let locked = false // this cycle is past its editable grace (read-only)
+  let canOverride = false // caller holds the subject's grace-override (or is sysadmin)
 
   try {
     let windowIds: string[]
@@ -157,6 +161,14 @@ async function RosterBody({
       // A combined roster spans the union of its classes' instances.
       windowIds = [...new Set(picked.flatMap((g) => g.windowIds ?? []))]
     }
+
+    // Grace-lock: is this cycle's window(s) past its editable grace, and does the caller hold the
+    // subject's override? Both are cached reads; the write proc re-enforces the lock server-side
+    // regardless, so this only governs whether the grid renders editable.
+    const [allWindows, caps] = await Promise.all([getTeacherWindows(upn), getCallerCapabilities(upn)])
+    const theseWindows = allWindows.filter((w) => windowIds.includes(w.id))
+    locked = theseWindows.length > 0 && theseWindows.some((w) => w.status === 'Locked')
+    canOverride = isMath ? caps.canOverrideMath : caps.canOverrideLiteracy
 
     // Usually one instance. A class straddles two when the cycle splits the same language by program
     // scope or grade band, and then each instance gets its own grid and its own Save — the same
@@ -280,9 +292,9 @@ async function RosterBody({
               </h2>
             )}
             {isWriting ? (
-              <WritingRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} roster={s.writingRoster} language={language} />
+              <WritingRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} roster={s.writingRoster} language={language} locked={locked} canOverride={canOverride} />
             ) : isMath ? (
-              <MathRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} rows={s.mathRoster} />
+              <MathRosterEntry windowId={s.windowId} groupKey={groupKeys.join(",")} rows={s.mathRoster} locked={locked} canOverride={canOverride} />
             ) : (
               <RosterEntry
                 windowId={s.windowId}
@@ -290,6 +302,8 @@ async function RosterBody({
                 roster={s.roster}
                 levels={s.levels}
                 achievementLevels={s.achievementLevels}
+                locked={locked}
+                canOverride={canOverride}
               />
             )}
           </section>
