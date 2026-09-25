@@ -11,7 +11,15 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.7.0] — unreleased (in development)
+## [0.7.1] — unreleased (in development)
+
+### Changed
+- **RWM report filters now collapse.** The grade / program / school / score chips sit behind a
+  **Show/Hide filters** toggle (collapsed by default), matching the Reading/Writing cohort page; the
+  Blanks, "All 3 areas only", and Reset controls stay in the bar, and the toggle shows "(active)"
+  when filters are applied while hidden. No SQL.
+
+## [0.7.0] — 2026-09-25 (LIVE)
 
 Rollup minor. Bundles the Math completion cards + Data Entry "done" relabel + the entry-load perf pass +
 the Short-Cycle **grace-lock / override / staff-access** below. The **Reports** changes land under this

@@ -119,57 +119,16 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   }
   const reset = () => { setGrades(new Set()); setPrograms(new Set()); setSchools(new Set()); setScores(new Set()); setCompleteOnly(false) }
   const anyFilter = grades.size || programs.size || schools.size || scores.size || completeOnly
+  // Filters collapse by default, matching the Reading/Writing cohort page.
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <>
-      <div className="filter-bar">
-        <div className="filter-group">
-          <label>Grade</label>
-          <div className="grade-chips">
-            {facetGrades.map((g) => (
-              <button key={g} className={`grade-chip${grades.has(g) ? ' on' : ''}`} onClick={() => toggle(grades, g, setGrades)}>{gradeLabel(g)}</button>
-            ))}
-          </div>
-        </div>
-        {allPrograms.length > 1 && (
-          <div className="filter-group">
-            <label>Program</label>
-            <div className="grade-chips">
-              {facetPrograms.map((p) => (
-                <button key={p} className={`grade-chip${programs.has(p) ? ' on' : ''}`} onClick={() => toggle(programs, p, setPrograms)}>{p}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {allSchools.length > 1 && (
-          <div className="filter-group">
-            <label>School</label>
-            <div className="grade-chips">
-              {facetSchools.map((sc) => (
-                <button key={sc} className={`grade-chip${schools.has(sc) ? ' on' : ''}`} onClick={() => toggle(schools, sc, setSchools)}>{sc}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        <div className="filter-group">
-          <label>RWM score</label>
-          <div className="grade-chips">
-            {[0, 1, 2, 3].map((n) => (
-              <button
-                key={n}
-                className={`grade-chip${scores.has(n) ? ' on' : ''}`}
-                onClick={() => toggle(scores, n, setScores)}
-                style={scores.has(n) ? { background: SCORE_HEX[n], borderColor: SCORE_HEX[n], color: '#fff' } : undefined}
-              >
-                {n} / 3
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
       <div className="cohort-bar">
         <span className="muted">{filtered.length} of {cohort.length} students</span>
+        <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
+          {expanded ? 'Hide filters' : 'Show filters'}{!expanded && anyFilter ? ' (active)' : ''}
+        </button>
         <button
           className="btn-ghost"
           onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}
@@ -189,6 +148,54 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
         ) : null}
         {anyFilter ? <button className="btn-ghost" onClick={reset}>Reset filters</button> : null}
       </div>
+
+      {expanded ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="grade-chips">
+              {facetGrades.map((g) => (
+                <button key={g} className={`grade-chip${grades.has(g) ? ' on' : ''}`} onClick={() => toggle(grades, g, setGrades)}>{gradeLabel(g)}</button>
+              ))}
+            </div>
+          </div>
+          {allPrograms.length > 1 && (
+            <div className="filter-group">
+              <label>Program</label>
+              <div className="grade-chips">
+                {facetPrograms.map((p) => (
+                  <button key={p} className={`grade-chip${programs.has(p) ? ' on' : ''}`} onClick={() => toggle(programs, p, setPrograms)}>{p}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {allSchools.length > 1 && (
+            <div className="filter-group">
+              <label>School</label>
+              <div className="grade-chips">
+                {facetSchools.map((sc) => (
+                  <button key={sc} className={`grade-chip${schools.has(sc) ? ' on' : ''}`} onClick={() => toggle(schools, sc, setSchools)}>{sc}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="filter-group">
+            <label>RWM score</label>
+            <div className="grade-chips">
+              {[0, 1, 2, 3].map((n) => (
+                <button
+                  key={n}
+                  className={`grade-chip${scores.has(n) ? ' on' : ''}`}
+                  onClick={() => toggle(scores, n, setScores)}
+                  style={scores.has(n) ? { background: SCORE_HEX[n], borderColor: SCORE_HEX[n], color: '#fff' } : undefined}
+                >
+                  {n} / 3
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="cohort-charts">
         <div className="chart-card">
