@@ -180,7 +180,11 @@ export default function CohortView({
     (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
     (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
-    (except === 'ach' || ach.size === 0 || (s.achievementCode != null && ach.has(s.achievementCode)))
+    // Match the achievement filter only for students whose achievement is actually SHOWN. IPP /
+    // unresolved-IPP students aren't measured against benchmarks (the table hides their band as
+    // "IPP"/"—"), yet the TVF still computes an achievementCode from their delta — so without the
+    // chartEligible guard they leaked into an achievement-level filter looking "scoreless".
+    (except === 'ach' || ach.size === 0 || (s.chartEligible && s.achievementCode != null && ach.has(s.achievementCode)))
 
   // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
   // until a SINGLE school is selected — region-wide it's an unusable wall of chips.

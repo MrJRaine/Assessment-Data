@@ -13,6 +13,13 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [0.7.1] — unreleased (in development)
 
+### Fixed
+- **Achievement filter no longer surfaces IPP students.** Filtering the Reading/Writing cohort by an
+  achievement level pulled in IPP / unresolved-IPP students (whose achievement is deliberately shown
+  as "IPP"/"—", not measured against benchmarks) because the filter matched the raw achievement code
+  the TVF still computes from their delta. The filter now respects `chartEligible`, so it returns only
+  students actually displayed at that level. App-only.
+
 ### Changed
 - **RWM report filters now collapse.** The grade / program / school / score chips sit behind a
   **Show/Hide filters** toggle (collapsed by default), matching the Reading/Writing cohort page; the
