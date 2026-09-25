@@ -14,11 +14,15 @@ with `0.3.0`, so earlier detail is approximate.
 ## [0.7.1] — unreleased (in development)
 
 ### Fixed
-- **Achievement filter no longer surfaces IPP students.** Filtering the Reading/Writing cohort by an
-  achievement level pulled in IPP / unresolved-IPP students (whose achievement is deliberately shown
-  as "IPP"/"—", not measured against benchmarks) because the filter matched the raw achievement code
-  the TVF still computes from their delta. The filter now respects `chartEligible`, so it returns only
-  students actually displayed at that level. App-only.
+- **Achievement filter no longer surfaces IPP students** (Reading/Writing cohort). An achievement-level
+  chip pulled in IPP / unresolved students (whose band is shown as "IPP"/"—", not measured against
+  benchmarks) because the filter matched the raw code the TVF computes from their delta. Each student
+  now maps to a single displayed category, so a band chip returns only students shown at that level.
+
+### Added
+- **"IPP" and "No Data" achievement chips** (Reading/Writing cohort). Alongside the four bands, filter
+  to students shown as **IPP** (on an individual program plan) or **No Data** (no result recorded yet,
+  or an unconfirmed IPP) — so those students can be found on purpose instead of just excluded.
 
 ### Changed
 - **RWM report filters now collapse.** The grade / program / school / score chips sit behind a

@@ -24,7 +24,7 @@ type CohortPersist = {
   hr?: string[]
   prog?: string[]
   sch?: string[]
-  ach?: number[]
+  ach?: (string | number)[] // string categories now ('1'..'4' | 'ipp' | 'nodata'); tolerate old numeric saves
 }
 function readCohortFilters(): CohortPersist {
   try {
@@ -103,7 +103,9 @@ export default function CohortView({
   const [hr, setHr] = useState<Set<string>>(new Set())
   const [prog, setProg] = useState<Set<string>>(new Set())
   const [sch, setSch] = useState<Set<string>>(new Set())
-  const [ach, setAch] = useState<Set<number>>(new Set())
+  // Achievement filter values are STRING categories: '1'..'4' (the bands), 'ipp' (shown as "IPP"),
+  // and 'nodata' (no achievement shown — measured-but-no-result, or unresolved IPP, both render "—").
+  const [ach, setAch] = useState<Set<string>>(new Set())
 
   function toggle<T>(set: Set<T>, v: T, setter: (s: Set<T>) => void) {
     const next = new Set(set)
@@ -142,7 +144,7 @@ export default function CohortView({
   useEffect(() => {
     const p = readCohortFilters()
     const schoolIds = allSchools.map((s) => s.id)
-    const achCodes = orderedBands.map((b) => Number(b.code))
+    const achKeys = [...orderedBands.map((b) => String(b.code)), 'ipp', 'nodata']
     if (typeof p.expanded === 'boolean') setExpanded(p.expanded)
     if (typeof p.gradeMin === 'number') setGradeMin(Math.min(Math.max(p.gradeMin, minOrd), maxOrd))
     if (typeof p.gradeMax === 'number') setGradeMax(Math.min(Math.max(p.gradeMax, minOrd), maxOrd))
@@ -152,7 +154,7 @@ export default function CohortView({
     if (p.hr) setHr(new Set(p.hr.filter((v) => allHomerooms.includes(v))))
     if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
-    if (p.ach) setAch(new Set(p.ach.filter((v) => achCodes.includes(v))))
+    if (p.ach) setAch(new Set(p.ach.map(String).filter((v) => achKeys.includes(v))))
     setReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -169,6 +171,14 @@ export default function CohortView({
     }
   }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach])
 
+  // Each student's single achievement-filter category, matching what the table shows:
+  //  '1'..'4' = the band; 'ipp' = a confirmed IPP student (shows "IPP"); 'nodata' = everyone else
+  //  without a band (measured-but-no-result, or unresolved IPP — both render "—").
+  const achCategory = (s: CohortStudent): string =>
+    s.chartEligible
+      ? (s.achievementCode != null ? String(s.achievementCode) : 'nodata')
+      : (s.ippStatusReading === 'IPP' ? 'ipp' : 'nodata')
+
   const oneSchool = sch.size === 1 // homeroom is only offered/applied once narrowed to one school
   // A student passes every ACTIVE filter except the named dimension — the basis for both the final
   // list (except='') and each filter's faceted options (so a filter never hides its own choices).
@@ -180,11 +190,9 @@ export default function CohortView({
     (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
     (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
-    // Match the achievement filter only for students whose achievement is actually SHOWN. IPP /
-    // unresolved-IPP students aren't measured against benchmarks (the table hides their band as
-    // "IPP"/"—"), yet the TVF still computes an achievementCode from their delta — so without the
-    // chartEligible guard they leaked into an achievement-level filter looking "scoreless".
-    (except === 'ach' || ach.size === 0 || (s.chartEligible && s.achievementCode != null && ach.has(s.achievementCode)))
+    // Achievement filter matches on the student's single displayed category (band / IPP / no-data),
+    // so a band chip never pulls in an IPP or unscored student, and the IPP / No Data chips find them.
+    (except === 'ach' || ach.size === 0 || ach.has(achCategory(s)))
 
   // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
   // until a SINGLE school is selected — region-wide it's an unusable wall of chips.
@@ -387,18 +395,35 @@ export default function CohortView({
             <label>Achievement</label>
             <div className="chips">
               {orderedBands.map((b) => {
-                const code = Number(b.code)
+                const key = String(b.code)
                 return (
                   <button
-                    key={b.code}
-                    className={ach.has(code) ? 'chip chip-on' : 'chip'}
-                    style={ach.has(code) ? { background: b.hexColor, borderColor: b.hexColor, color: '#fff' } : undefined}
-                    onClick={() => toggle(ach, code, setAch)}
+                    key={key}
+                    className={ach.has(key) ? 'chip chip-on' : 'chip'}
+                    style={ach.has(key) ? { background: b.hexColor, borderColor: b.hexColor, color: '#fff' } : undefined}
+                    onClick={() => toggle(ach, key, setAch)}
                   >
                     {b.name}
                   </button>
                 )
               })}
+              {/* Not achievement bands: students the report doesn't measure against benchmarks. */}
+              <button
+                className={ach.has('ipp') ? 'chip chip-on' : 'chip'}
+                style={ach.has('ipp') ? { background: '#6b4fbb', borderColor: '#6b4fbb', color: '#fff' } : undefined}
+                onClick={() => toggle(ach, 'ipp', setAch)}
+                title="Students on an individual program plan (not measured against benchmarks)"
+              >
+                IPP
+              </button>
+              <button
+                className={ach.has('nodata') ? 'chip chip-on' : 'chip'}
+                style={ach.has('nodata') ? { background: '#64748b', borderColor: '#64748b', color: '#fff' } : undefined}
+                onClick={() => toggle(ach, 'nodata', setAch)}
+                title="Students with no achievement to show yet (no result recorded, or an unconfirmed IPP)"
+              >
+                No Data
+              </button>
             </div>
           </div>
         </div>
