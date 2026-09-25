@@ -1,5 +1,5 @@
 import 'server-only'
-import type { TeacherGroup } from './data'
+import type { TeacherGroup, TeacherWindow } from './data'
 
 /**
  * Short-lived, per-process cache for tvf_TeacherGroups results.
@@ -47,13 +47,38 @@ export function writeGroups(upn: string, cycleGroupId: string, assessmentType: s
   cache.set(keyOf(upn, cycleGroupId, assessmentType), { at: now, groups })
 }
 
+// --- Cycles cache (the /enter landing) --------------------------------------------------------
+// tvf_UserAssessmentWindows is the landing's counterpart to tvf_TeacherGroups, and it was the ONE
+// hot entry-flow read with no cache -- so the landing paid the full TVF (now incl. the Math `done`
+// work) on EVERY navigation while the picker was cached. Same 30s TTL, but keyed by USER only:
+// getTeacherWindows(upn) returns all of that user's windows, not a per-(cycle,subject) slice. Its
+// counts move on the same saves, so it rides the SAME invalidation as groups (below) -- no extra
+// wiring in the save actions.
+type WinEntry = { at: number; windows: TeacherWindow[] }
+const winCache = new Map<string, WinEntry>()
+
+export function readWindows(upn: string): TeacherWindow[] | null {
+  const hit = winCache.get(upn.toLowerCase())
+  if (!hit) return null
+  if (Date.now() - hit.at > TTL_MS) return null
+  return hit.windows
+}
+
+export function writeWindows(upn: string, windows: TeacherWindow[]): void {
+  const now = Date.now()
+  for (const [k, v] of winCache) if (now - v.at > TTL_MS) winCache.delete(k)
+  winCache.set(upn.toLowerCase(), { at: now, windows })
+}
+
 /** Drop every cached entry for one user — called after a save, so progress counts are never stale. */
 export function invalidateGroups(upn: string): void {
   const prefix = `${upn.toLowerCase()}|`
   for (const k of cache.keys()) if (k.startsWith(prefix)) cache.delete(k)
+  winCache.delete(upn.toLowerCase()) // the cycles cache shares the save-invalidation
 }
 
 /** Everyone — called after an ingest, which is precisely what moves students between sections. */
 export function invalidateAllGroups(): void {
   cache.clear()
+  winCache.clear()
 }

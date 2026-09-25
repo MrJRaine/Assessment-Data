@@ -44,7 +44,8 @@ AS
 RETURN
 (
     WITH AtlanticToday AS (
-        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today
+        SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)         AS Today,
+               CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATETIME2(0))  AS NowTs
     ),
     Caller AS (
         SELECT TOP 1 d.StaffKey, LOWER(d.Email) AS Email, d.AccessLevel
@@ -57,18 +58,23 @@ RETURN
             w.StartDate, w.EndDate, w.MinGrade, w.MaxGrade, w.ProgramFamily, w.ProgramScope, w.AssessmentLanguage, w.ScaleSystem,
             w.CycleGroupID,
             sc.DisplayName AS CycleName,   -- the HEADER's name ("SCoR 1"); the collapsed card's title
+            -- Grace-lock (0.7.0): a window stays EDITABLE through EndDate + the cycle's GraceHours
+            -- (default 168h), counted from the close moment (midnight after EndDate, Atlantic). Past
+            -- that it is Locked (read-only). GraceEndsAt is surfaced so the card can count down "N left".
+            DATEADD(HOUR, COALESCE(sc.GraceHours, 168), CAST(DATEADD(DAY, 1, w.EndDate) AS DATETIME2(0))) AS GraceEndsAt,
             CASE WHEN at.Today > w.EndDate THEN w.EndDate ELSE at.Today END AS EffectiveDate,
-            CASE WHEN at.Today < w.StartDate THEN 'Upcoming'
-                 WHEN at.Today > w.EndDate   THEN 'Closed'
-                 WHEN at.Today = w.EndDate   THEN 'ClosesToday'
-                 ELSE 'Open' END AS WindowStatus
+            CASE WHEN at.Today  < w.StartDate THEN 'Upcoming'
+                 WHEN at.Today  < w.EndDate   THEN 'Open'
+                 WHEN at.Today  = w.EndDate   THEN 'ClosesToday'
+                 WHEN at.NowTs <= DATEADD(HOUR, COALESCE(sc.GraceHours, 168), CAST(DATEADD(DAY, 1, w.EndDate) AS DATETIME2(0))) THEN 'Closed'
+                 ELSE 'Locked' END AS WindowStatus
         FROM DimAssessmentWindow w
         CROSS JOIN AtlanticToday at
         LEFT JOIN DimShortCycle sc ON sc.CycleGroupID = w.CycleGroupID
         WHERE w.ActiveFlag = 1
     ),
     TeacherStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN FactSectionTeachers fst
@@ -107,7 +113,7 @@ RETURN
     -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
     -- simply has every building in their list. Mirrors tvf_TeacherGroups' Oversight path.
     AdminStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
@@ -160,6 +166,48 @@ RETURN
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Math' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
+    ),
+    -- Math COMPLETION ("done", 0.6.4): a Math student is "done" when they have a latest result for
+    -- MORE THAN 80% of the tasks applicable to their grade at the window's benchmark month (DimMathTask
+    -- by GradeCode + AssessmentMonth). Reading/Writing have a single result, so done == entered and
+    -- these CTEs stay empty for them (MathBench is @AssessmentType-guarded to Math windows).
+    MathBench AS (   -- effective benchmark month per Math window (BenchmarkMonth, else dominant calendar month)
+        SELECT wed.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN wed.StartDate AND wed.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
+        FROM WindowEffectiveDates wed
+        INNER JOIN DimAssessmentWindow w ON w.AssessmentWindowID = wed.AssessmentWindowID
+        WHERE wed.AssessmentType = 'Math'
+    ),
+    MathApplicable AS (   -- # active tasks for a (window, grade) at that window's benchmark month
+        SELECT mb.AssessmentWindowID, mt.GradeCode, COUNT(*) AS ApplicableTasks
+        FROM MathBench mb
+        INNER JOIN DimMathTask mt ON mt.ActiveFlag = 1 AND mt.AssessmentMonth = mb.BenchMonth
+        GROUP BY mb.AssessmentWindowID, mt.GradeCode
+    ),
+    MathEnteredTasks AS (   -- distinct tasks each applicable student has a result for, with their grade
+        -- Grade is CARRIED from ApplicableStudents (which already joined DimStudent to grade-band the
+        -- student) -- no re-join. Gated to Math windows (INNER JOIN MathBench) so a Reading/Writing load
+        -- pays NOTHING here: MathBench is empty for non-Math windows, pruning the scan before it touches
+        -- FactAssessmentMath. (A clear DELETEs its row, so a distinct-task count is a true "has a mark"
+        -- count -- no NULL tombstones to over-count.)
+        SELECT a.AssessmentWindowID, a.StudentKey, a.Grade,
+               COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
+        FROM ApplicableStudents a
+        INNER JOIN MathBench mb ON mb.AssessmentWindowID = a.AssessmentWindowID
+        INNER JOIN FactAssessmentMath fm
+                ON fm.StudentKey = a.StudentKey AND fm.AssessmentWindowID = a.AssessmentWindowID
+        GROUP BY a.AssessmentWindowID, a.StudentKey, a.Grade
+    ),
+    MathDone AS (   -- (window, student) over the >80% bar; empty for R/W (MathApplicable empty there)
+        SELECT met.AssessmentWindowID, met.StudentKey
+        FROM MathEnteredTasks met
+        INNER JOIN MathApplicable ma
+                ON ma.AssessmentWindowID = met.AssessmentWindowID AND ma.GradeCode = met.Grade
+        WHERE ma.ApplicableTasks > 0
+          AND CAST(met.EnteredTasks AS DECIMAL(9,4)) / ma.ApplicableTasks > 0.8
     )
     SELECT
         CAST(wed.AssessmentWindowID AS VARCHAR(20)) AS AssessmentWindowID,
@@ -177,21 +225,27 @@ RETURN
         wed.CycleGroupID,   -- lets /enter collapse a cycle's instances into ONE card per subject
         wed.CycleName,      -- header name for that collapsed card (instance names differ per scope)
         wed.WindowStatus,
+        wed.GraceEndsAt,    -- when a Closed (in-grace) window flips to Locked; drives the "N left" countdown
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
         -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
         -- so a result on a sibling-language instance still counts and the card matches the group picker.
-        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount
+        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount,
+        -- Math "done" (0.6.4): >80% of the student's benchmark-month tasks marked. 0 for Reading/Writing.
+        COUNT(DISTINCT CASE WHEN mdn.StudentKey IS NOT NULL THEN a.StudentKey END) AS DoneStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
     LEFT JOIN CycleEntered ce
            ON ce.CycleGroupID   = wed.CycleGroupID
           AND ce.AssessmentType = wed.AssessmentType
           AND ce.StudentKey     = a.StudentKey
+    LEFT JOIN MathDone mdn
+           ON mdn.AssessmentWindowID = a.AssessmentWindowID
+          AND mdn.StudentKey         = a.StudentKey
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,
         wed.ProgramScope, wed.AssessmentLanguage, wed.ScaleSystem, wed.CycleGroupID, wed.CycleName,
-        wed.WindowStatus
+        wed.WindowStatus, wed.GraceEndsAt
 );
 GO
 

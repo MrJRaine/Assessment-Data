@@ -11,6 +11,67 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [0.7.0] — unreleased (in development)
+
+Rollup minor. Bundles the Math completion cards + Data Entry "done" relabel + the entry-load perf pass +
+the Short-Cycle **grace-lock / override / staff-access** below. The **Reports** changes land under this
+same version before it promotes to live.
+
+### Added
+- **Math cards show completion, not just participation.** The Math group-picker cards and the `/enter`
+  subject cards now read **"N/M started · K done"** instead of "N/M entered". "started" = ≥1 task marked
+  (unchanged); "done" = a student with a latest result for **>80% of their grade's tasks at the cycle's
+  benchmark month**. Reading/Writing cards are relabeled "entered" → **"done"** (one result already *is*
+  completion for a single-result subject), so every Data Entry card now reads as completion. Fixes the
+  misleading Math read where a class with one task marked showed "9/11 entered" while every student was
+  still "Incomplete" on the grid.
+- **Short-Cycle grace-lock + override.** After a cycle closes it stays editable for a configurable grace
+  period (`DimShortCycle.GraceHours`, default 168h / 7 days, set per-cycle on the Cycles form as days + hours),
+  then LOCKS to read-only. `/enter` shows "Late entry · N left" while in grace and "View only" once locked;
+  the roster grids disable inputs + hide Save when locked. Designated staff (Literacy / Math override roles,
+  or a sysadmin) get a one-shot **"Override lock for this group"** toggle that re-enables editing and reverts
+  after the next save; override saves are flagged in `FactSubmissionAudit`. The lock is enforced **server-side**
+  in the write procs (`THROW 51040`), not just in the UI.
+- **`/admin/staff-access` (SysAdmin-only).** A GUI over `StaffAppAccess` to grant app capabilities — Manage
+  Cycles, Run Ingest, and the new Math / Literacy grace overrides — per staff member. Sysadmin implies all;
+  a sysadmin can grant sysadmin (with a confirm) but can't revoke their own here.
+- **Reports — Reading "Expected" + "Diff from Prev June".** The Reading cohort table and the student page
+  now show, beside the level, the **expected** benchmark range for the most-recent displayed cycle's month;
+  the cohort table adds a **Diff from Prev June** column and the student trend now starts from the prior-June
+  baseline as its first point.
+- **Reports — Math cohort + student pages.** A new **Math** report: pick a homeroom or grade (Primary–6) to
+  see a **read-only results matrix** styled like the entry grid across the whole year's cycles (latest result
+  per task) — unit grouping/collapse, per-student + cohort roll-ups (average of unit averages), class-% heat,
+  an **achievement-by-unit** chart and a **roll-up donut**, a **tasks-down/students-across axis flip** (task
+  info on hover when transposed), and a **blanks excluded / count-as-0** toggle. Clicking a name opens that
+  student's math grid.
+- **Reports — RWM (new fourth category).** A **0–3** score per Primary–6 student: how many of Reading,
+  Writing, Math their most-recent result is meeting or exceeding (Math = current-year roll-up ≥ 75%).
+  Students with a confirmed IPP in any of the three are excluded. Cohort table with a **0–3 distribution
+  donut** and faceted grade/program/school/score filters; the student page shows a per-area snapshot, a
+  0–3-per-cycle table, and a score trend.
+- **Reports filters live-trim.** Cohort filter chips now hide options that no longer match the other active
+  filters; the homeroom filter waits until a single school is selected.
+
+### Changed (SQL — deploy to live)
+- `tvf_TeacherGroups` and `tvf_UserAssessmentWindows` gain a **`DoneStudentCount`** (Math branch): distinct
+  students over the >80% bar, computed from `DimMathTask` (grade × the window's benchmark/dominant month)
+  vs distinct `FactAssessmentMath` tasks. Read-only; returns 0 for Reading/Writing.
+- **Grace-lock**: `DimShortCycle.GraceHours` + `StaffAppAccess.CanOverrideMath`/`CanOverrideLiteracy` columns;
+  `tvf_UserAssessmentWindows` emits `Locked`/`GraceEndsAt`; the three `usp_Upsert*Assessment` procs gate a
+  locked window behind the override (`51040`); `usp_SetStaffAppAccess` (new grant proc); `usp_UpsertShortCycleHeader`
+  gains `@GraceHours`.
+
+### SQL to deploy on live
+- `sql/security/tvf_TeacherGroups.sql`, `sql/security/tvf_UserAssessmentWindows.sql` (Math done + Locked status).
+- **Grace-lock** — run `sql/scripts/migrate_0.7.0_grace_and_overrides.sql` **first** (adds columns + retro 168h),
+  then `usp_UpsertReadingAssessment.sql`, `usp_UpsertWritingAssessment.sql`, `usp_UpsertMathAssessment.sql`,
+  `usp_SetStaffAppAccess.sql`, `usp_UpsertShortCycleHeader.sql`.
+- **Reports** (all read-only TVFs, idempotent DROP/CREATE/GRANT):
+  `sql/security/tvf_StudentCohort.sql`, `tvf_StudentAssessmentHistory.sql` (Expected + Prev-June);
+  `tvf_MathCohortGroups.sql`, `tvf_StudentCohortMath.sql` (Math cohort);
+  `tvf_StudentCohortRWM.sql`, `tvf_StudentRWMHistory.sql` (RWM).
+
 ## [0.6.3] — 2026-09-24
 
 ### Changed

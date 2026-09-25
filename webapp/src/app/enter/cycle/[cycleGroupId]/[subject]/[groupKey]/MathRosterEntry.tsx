@@ -91,10 +91,14 @@ export default function MathRosterEntry({
   windowId,
   groupKey,
   rows,
+  locked = false,
+  canOverride = false,
 }: {
   windowId: string
   groupKey: string
   rows: MathRosterRow[]
+  locked?: boolean // cycle past its grace: read-only unless overridden
+  canOverride?: boolean // caller holds the Math override (or is sysadmin)
 }) {
   const grades = useMemo(() => buildGrades(rows), [rows])
   const baseMarks = useMemo(() => initialMarks(rows), [rows])
@@ -117,6 +121,11 @@ export default function MathRosterEntry({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [saving, startSave] = useTransition()
   const [result, setResult] = useState<{ saved: number; errors: { studentNumber: string; mathTaskKey: string; message: string }[] } | null>(null)
+  // Grace-lock: read-only when locked; an override-holder flips it on for THIS group with a one-shot
+  // toggle that reverts after the next save completes (see the save handler).
+  const [override, setOverride] = useState(false)
+  const editable = !locked || override
+  const ro = !editable
 
   const multi = grades.length > 1
   const activeTasks = (u: Unit) => u.tasks.filter((t) => !deselected.has(t.mathTaskKey))
@@ -125,6 +134,7 @@ export default function MathRosterEntry({
   const cellMark = (studentKey: string, taskKey: string): Mark => marks[rk(studentKey, taskKey)] ?? 'clear'
 
   function cycle(studentKey: string, taskKey: string, ipp: boolean) {
+    if (ro) return // grace-locked + not overridden: cells are read-only
     const key = rk(studentKey, taskKey)
     setMarks((prev) => {
       const v = prev[key] ?? (ipp ? 'ipp' : 'clear')
@@ -201,6 +211,7 @@ export default function MathRosterEntry({
         return nextC
       })
       markSaved() // at T-5 the next save is what locks input
+      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
     })
   }
 
@@ -240,7 +251,7 @@ export default function MathRosterEntry({
       <button className={`btn-ghost${editMode ? ' editing' : ''}`} onClick={() => setEditMode((e) => !e)}>
         {editMode ? 'Done editing' : 'Edit checklist'}
       </button>
-      <button className="btn" disabled={saving || dirtyKeys.length === 0} onClick={save}>
+      <button className="btn" disabled={saving || dirtyKeys.length === 0 || ro} onClick={save}>
         {saving ? 'Saving…' : dirtyKeys.length > 0 ? `Save ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}` : 'Save'}
       </button>
     </>
@@ -248,6 +259,27 @@ export default function MathRosterEntry({
 
   return (
     <div className="math-entry">
+      {locked && (
+        <div className="no-tasks">
+          {override ? (
+            <>
+              <strong>Lock overridden.</strong> You can enter data for this group; this reverts after you save.{' '}
+              <button type="button" className="btn-ghost" onClick={() => setOverride(false)}>
+                Cancel override
+              </button>
+            </>
+          ) : (
+            <>
+              <strong>This cycle is locked (view only).</strong> The grace period for late entry has ended.{' '}
+              {canOverride && (
+                <button type="button" className="btn-ghost" onClick={() => setOverride(true)}>
+                  Override lock for this group
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {/* grade filter */}
       {multi && (
         <>
@@ -465,7 +497,7 @@ export default function MathRosterEntry({
                                     <td className="cell stu" key={s.studentKey}>
                                       <button
                                         className={`mtoggle ${cls}`}
-                                        disabled={inputsLocked}
+                                        disabled={inputsLocked || ro}
                                         onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP)}
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >

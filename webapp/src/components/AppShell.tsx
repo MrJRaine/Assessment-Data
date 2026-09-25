@@ -41,13 +41,13 @@ export default async function AppShell({ children }: { children: React.ReactNode
       <header className="header">
         {/* The brand lockup is the way home — standard convention, and the only home affordance now
             that the landing page has no nav entry of its own. */}
-        <Link href="/" className="brand" aria-label="The SCoR Hub — home">
+        <Link href="/" className="brand" aria-label="The SCoR Dashboard — home">
           {/* TCRCE logo at webapp/public/logo.png */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
-          <span className="brand-app">The SCoR Hub</span>
+          <span className="brand-app">The SCoR Dashboard</span>
         </Link>
-        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} />
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} showStaffAccess={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
         </div>

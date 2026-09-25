@@ -1,6 +1,6 @@
 import 'server-only'
 import { queryAsUser, query } from './db'
-import { readGroups, writeGroups } from './groupCache'
+import { readGroups, writeGroups, readWindows, writeWindows } from './groupCache'
 import { readAccessLevel, writeAccessLevel, readCapabilities, writeCapabilities } from './identityCache'
 import { readRef, writeRef } from './refCache'
 
@@ -27,7 +27,8 @@ export interface TeacherWindow {
   cycleName: string | null // the HEADER's name ('SCoR 1'); the collapsed card's title, since instance names differ
   name: string
   assessmentType: string // 'Reading' | 'Writing' | 'Math' -- groups the window-select screen
-  status: string // Upcoming | Open | ClosesToday | Closed
+  status: string // Upcoming | Open | ClosesToday | Closed (in grace) | Locked (grace expired, read-only)
+  graceEndsAt: string | null // ISO ts a Closed window flips to Locked; drives the "N left" countdown
   scaleSystem: string | null
   language: string | null // 'English' | 'French' | null (Both) — distinguishes same-name instances
   programScope: string[] // {English, Early Immersion, Late Immersion}; [] = all programs
@@ -37,6 +38,7 @@ export interface TeacherWindow {
   endDate: string // 'YYYY-MM-DD' (window closes on the last day of its month)
   applicableCount: number
   enteredCount: number
+  doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks (0 for R/W)
 }
 
 // DATE columns come back from tedious as a JS Date (UTC midnight) or a string; normalize to 'YYYY-MM-DD'.
@@ -60,15 +62,21 @@ export interface TeacherGroup {
   grades: string[] // ALL grades present in the group (e.g. ['P','1'] for a split); drives the grade filter
   applicableCount: number
   enteredCount: number
+  doneCount: number // Math only: students who've completed >80% of their benchmark-month tasks (0 for R/W + Programming)
 }
 
 /** Assessment windows applicable to the signed-in user (any role), with per-window progress counts. */
 export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
+  // Cached per user for 30s, invalidated on save/ingest (shares groupCache's invalidation) — the
+  // /enter landing was the only hot entry read hitting the TVF fresh on every navigation.
+  const cached = readWindows(upn)
+  if (cached) return cached
   const rows = await queryAsUser<{
     AssessmentWindowID: string
     WindowName: string
     AssessmentType: string
     WindowStatus: string
+    GraceEndsAt: unknown
     ScaleSystem: string | null
     AssessmentLanguage: string | null
     ProgramScope: string | null
@@ -80,14 +88,16 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     EndDate: unknown
     ApplicableStudentCount: number
     EnteredStudentCount: number
+    DoneStudentCount: number
   }>(upn, 'SELECT * FROM dbo.tvf_UserAssessmentWindows(@UPN) ORDER BY StartDate, WindowName')
-  return rows.map((r) => ({
+  const windows = rows.map((r) => ({
     id: String(r.AssessmentWindowID),
     cycleGroupId: r.CycleGroupID ?? null,
     cycleName: r.CycleName ?? null,
     name: r.WindowName,
     assessmentType: r.AssessmentType,
     status: r.WindowStatus,
+    graceEndsAt: r.GraceEndsAt instanceof Date ? r.GraceEndsAt.toISOString() : r.GraceEndsAt ? String(r.GraceEndsAt) : null,
     scaleSystem: r.ScaleSystem,
     language: r.AssessmentLanguage ?? null,
     programScope: r.ProgramScope ? r.ProgramScope.split(',').map((s) => s.trim()).filter(Boolean) : [],
@@ -97,7 +107,10 @@ export async function getTeacherWindows(upn: string): Promise<TeacherWindow[]> {
     endDate: toYMD(r.EndDate),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
     enteredCount: Number(r.EnteredStudentCount ?? 0),
+    doneCount: Number(r.DoneStudentCount ?? 0),
   }))
+  writeWindows(upn, windows)
+  return windows
 }
 
 // One scoped assessment INSTANCE within a cycle: a DimAssessmentWindow row (subject x language x
@@ -122,6 +135,7 @@ export interface ShortCycle {
   startDate: string // 'YYYY-MM-DD'
   endDate: string
   active: boolean // header active
+  graceHours: number | null // editable-after-close grace in hours (null = 168 default)
   instances: ShortCycleInstance[]
 }
 
@@ -139,9 +153,10 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     EndDate: unknown
     SchoolYear: string
     ActiveFlag: boolean
+    GraceHours: number | null
     Status: string
   }>(`
-    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag,
+    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag, GraceHours,
       CASE
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) < StartDate THEN 'Upcoming'
         WHEN CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) > EndDate   THEN 'Closed'
@@ -193,6 +208,7 @@ export async function getShortCycles(): Promise<ShortCycle[]> {
     startDate: toYMD(h.StartDate),
     endDate: toYMD(h.EndDate),
     active: Boolean(h.ActiveFlag),
+    graceHours: h.GraceHours == null ? null : Number(h.GraceHours),
     instances: byGroup.get(h.CycleGroupID) ?? [],
   }))
 }
@@ -242,6 +258,7 @@ export async function getTeacherGroups(
     WindowIDs: string | null
     ApplicableStudentCount: number
     EnteredStudentCount: number
+    DoneStudentCount: number
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) ORDER BY GroupKey',
@@ -270,6 +287,7 @@ export async function getTeacherGroups(
       grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
       applicableCount: Number(r.ApplicableStudentCount ?? 0),
       enteredCount: Number(r.EnteredStudentCount ?? 0),
+      doneCount: Number(r.DoneStudentCount ?? 0),
     }
   })
   writeGroups(upn, cycleGroupId, assessmentType, groups)
@@ -511,6 +529,8 @@ export interface CallerCapabilities {
   isSysAdmin: boolean // super-user: implies all capabilities
   canManageCycles: boolean // /cycles admin
   canRunIngest: boolean // /ingest admin
+  canOverrideMath: boolean // flip a Math roster editable in a grace-locked cycle (0.7.0)
+  canOverrideLiteracy: boolean // same, for Reading + Writing rosters (0.7.0)
 }
 
 /**
@@ -541,8 +561,15 @@ export async function getCallerCapabilities(
   let lastErr: unknown
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const rows = await query<{ IsSysAdmin: boolean; CanManageCycles: boolean; CanRunIngest: boolean }>(
-        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
+      const rows = await query<{
+        IsSysAdmin: boolean
+        CanManageCycles: boolean
+        CanRunIngest: boolean
+        CanOverrideMath: boolean | null
+        CanOverrideLiteracy: boolean | null
+      }>(
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy
+         FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
         { UPN: upn },
       )
       const r = rows[0]
@@ -551,6 +578,8 @@ export async function getCallerCapabilities(
         isSysAdmin: sysAdmin,
         canManageCycles: sysAdmin || Boolean(r?.CanManageCycles),
         canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
+        canOverrideMath: sysAdmin || Boolean(r?.CanOverrideMath),
+        canOverrideLiteracy: sysAdmin || Boolean(r?.CanOverrideLiteracy),
       }
       // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
       // poison the cache with a "no capabilities" answer for an hour.
@@ -562,6 +591,62 @@ export async function getCallerCapabilities(
     }
   }
   throw lastErr
+}
+
+// ---------------------------------------------------------------------------
+// Staff app-access administration (/admin/staff-access, SysAdmin-only).
+// ---------------------------------------------------------------------------
+export interface StaffAccessRow {
+  email: string
+  name: string
+  isSysAdmin: boolean
+  canManageCycles: boolean
+  canRunIngest: boolean
+  canOverrideMath: boolean
+  canOverrideLiteracy: boolean
+}
+
+/** Only staff who ALREADY hold a StaffAppAccess row (the curated access list) — NOT all ~500 staff.
+ *  New people are added via lookupStaffByEmail + the grant proc. LEFT JOIN DimStaff for the display
+ *  name (a bootstrap sysadmin may not have a DimStaff row yet -> name falls back to the email).
+ *  SysAdmin-only screen; a plain SP read. Gated by the page + the write action. */
+export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
+  const rows = await query<{
+    Email: string
+    FirstName: string | null
+    LastName: string | null
+    IsSysAdmin: boolean | null
+    CanManageCycles: boolean | null
+    CanRunIngest: boolean | null
+    CanOverrideMath: boolean | null
+    CanOverrideLiteracy: boolean | null
+  }>(`
+    SELECT a.Email, d.FirstName, d.LastName,
+           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy
+    FROM StaffAppAccess a
+    LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(a.Email) AND d.IsCurrent = 1
+    ORDER BY d.LastName, d.FirstName, a.Email`)
+  return rows.map((r) => ({
+    email: r.Email,
+    name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email,
+    isSysAdmin: Boolean(r.IsSysAdmin),
+    canManageCycles: Boolean(r.CanManageCycles),
+    canRunIngest: Boolean(r.CanRunIngest),
+    canOverrideMath: Boolean(r.CanOverrideMath),
+    canOverrideLiteracy: Boolean(r.CanOverrideLiteracy),
+  }))
+}
+
+/** Look up a current staff member by email (for the Staff Access "add by email" field). Returns the
+ *  match's email + display name, or null if no current DimStaff row. SysAdmin-only path (via the action). */
+export async function lookupStaffByEmail(email: string): Promise<{ email: string; name: string } | null> {
+  const rows = await query<{ Email: string; FirstName: string | null; LastName: string | null }>(
+    `SELECT TOP 1 Email, FirstName, LastName FROM dbo.DimStaff WHERE LOWER(Email) = LOWER(@Email) AND IsCurrent = 1`,
+    { Email: email.trim() },
+  )
+  if (!rows.length) return null
+  const r = rows[0]
+  return { email: r.Email, name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email }
 }
 
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
@@ -606,6 +691,10 @@ export interface CohortStudent {
   mostRecentLevelCode: string | null
   mostRecentLevelOrder: number | null
   mostRecentDelta: number | null
+  expectedMin: string | null // reading benchmark min for the recent window (item 2); null for Writing
+  expectedMax: string | null
+  juneReadingLevel: string | null // prev-June anchor (item 1); Reading only
+  diffFromPrevJune: number | null
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -653,6 +742,10 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
     mostRecentLevelCode: (r.MostRecentLevelCode as string) ?? null,
     mostRecentLevelOrder: r.MostRecentLevelOrder == null ? null : Number(r.MostRecentLevelOrder),
     mostRecentDelta: r.MostRecentReadingDelta == null ? null : Number(r.MostRecentReadingDelta),
+    expectedMin: (r.ExpectedMinLevel as string) ?? null,
+    expectedMax: (r.ExpectedMaxLevel as string) ?? null,
+    juneReadingLevel: (r.JuneReadingLevel as string) ?? null,
+    diffFromPrevJune: r.DiffFromPrevJune == null ? null : Number(r.DiffFromPrevJune),
     achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
@@ -695,6 +788,10 @@ export async function getStudentCohortWriting(upn: string): Promise<CohortStuden
     mostRecentLevelCode: r.MostRecentAvgScore == null ? null : Number(r.MostRecentAvgScore).toFixed(2),
     mostRecentLevelOrder: null,
     mostRecentDelta: null,
+    expectedMin: null, // reading-only fields — not applicable to Writing
+    expectedMax: null,
+    juneReadingLevel: null,
+    diffFromPrevJune: null,
     achievementCode: r.MostRecentAchievementLevelCode == null ? null : Number(r.MostRecentAchievementLevelCode),
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
@@ -749,6 +846,10 @@ export interface HistoryRow {
   levelCode: string | null
   levelOrder: number | null
   delta: number | null
+  expectedMin: string | null // benchmark range for this row's window (item 2)
+  expectedMax: string | null
+  juneLevel: string | null // prev-June anchor (item 1a; same on every row)
+  juneLevelOrder: number | null
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -773,6 +874,10 @@ export async function getStudentHistory(upn: string, studentKey: string): Promis
     levelCode: (r.LevelCode as string) ?? null,
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
     delta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
+    expectedMin: (r.ExpectedMinLevel as string) ?? null,
+    expectedMax: (r.ExpectedMaxLevel as string) ?? null,
+    juneLevel: (r.JuneReadingLevel as string) ?? null,
+    juneLevelOrder: r.JuneReadingLevelOrder == null ? null : Number(r.JuneReadingLevelOrder),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
@@ -892,6 +997,7 @@ export async function getProgrammingGroups(upn: string): Promise<TeacherGroup[]>
     grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
     applicableCount: Number(r.ApplicableStudentCount ?? 0),
     enteredCount: Number(r.NeedsConfirmCount ?? 0), // reuses the slot: shown as "N need confirmation"
+    doneCount: 0, // Programming has no completion metric
   }))
 }
 
@@ -1126,5 +1232,198 @@ export async function getMathRoster(
     mathIPPStatus: r.MathIPPStatus ?? null,
     mathIPPNeedsConfirmation: Boolean(r.MathIPPNeedsConfirmation),
     ippProgramFamily: r.IPPProgramFamily ?? null,
+  }))
+}
+
+// ---- Reports > Math cohort (0.7.0, item 4) ----------------------------------
+// Read-only matrix, group-scoped, ALL of the current year's math cycles (latest result per task).
+// Mirrors the choose-a-group + roster split of Data Entry, but points at the Reports TVFs.
+
+/** Group picker for the Math cohort report (homeroom / grade lenses, P-6). Same shape as Data Entry. */
+export async function getMathCohortGroups(upn: string): Promise<TeacherGroup[]> {
+  const rows = await queryAsUser<{
+    GroupKey: string
+    GroupLabel: string | null
+    Scope: string
+    GroupType: string
+    SchoolName: string | null
+    Grade: string | null
+    Grades: string | null
+    ApplicableStudentCount: number
+    EnteredStudentCount: number
+  }>(upn, 'SELECT * FROM dbo.tvf_MathCohortGroups(@UPN) ORDER BY GroupKey')
+  return rows.map((r) => ({
+    key: String(r.GroupKey),
+    label: r.GroupLabel ?? String(r.GroupKey),
+    scope: r.Scope === 'Oversight' ? 'Oversight' : 'Taught',
+    groupType: r.GroupType === 'Section' ? 'Section' : r.GroupType === 'Grade' ? 'Grade' : 'Homeroom',
+    schoolName: r.SchoolName ?? null,
+    grade: r.Grade ?? null,
+    grades: (r.Grades ?? '').split(',').map((g) => g.trim()).filter(Boolean),
+    applicableCount: Number(r.ApplicableStudentCount ?? 0),
+    enteredCount: 0, // reports picker: no entered count
+    doneCount: 0,
+  }))
+}
+
+/** One row per (student × their-grade task) for a group, carrying the LATEST result. Client pivots. */
+export interface MathCohortRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  programFamily: string | null
+  mathTaskKey: string
+  unitName: string | null
+  unitOrder: number | null
+  questionNumber: string | null
+  displayOrder: number | null
+  outcomeCode: string | null
+  description: string | null
+  result: boolean | null // latest 0/1 (BIT), or null if never marked (a blank cell)
+  mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
+}
+
+export async function getMathCohort(upn: string, groupKey: string): Promise<MathCohortRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    StudentNumber: number | string
+    FirstName: string
+    LastName: string
+    Grade: string | null
+    Homeroom: string | null
+    SchoolName: string | null
+    ProgramFamily: string | null
+    MathTaskKey: string
+    UnitName: string | null
+    UnitOrder: number | null
+    QuestionNumber: string | null
+    DisplayOrder: number | null
+    OutcomeCode: string | null
+    TaskDescription: string | null
+    ExistingResult: boolean | null
+    MathIPPStatus: boolean | null
+  }>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { GroupKey: groupKey },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: r.FirstName,
+    lastName: r.LastName,
+    grade: r.Grade ?? null,
+    homeroom: r.Homeroom ?? null,
+    schoolName: r.SchoolName ?? null,
+    programFamily: r.ProgramFamily ?? null,
+    mathTaskKey: String(r.MathTaskKey),
+    unitName: r.UnitName ?? null,
+    unitOrder: r.UnitOrder ?? null,
+    questionNumber: r.QuestionNumber ?? null,
+    displayOrder: r.DisplayOrder ?? null,
+    outcomeCode: r.OutcomeCode ?? null,
+    description: r.TaskDescription ?? null,
+    result: r.ExistingResult ?? null,
+    mathIPPStatus: r.MathIPPStatus ?? null,
+  }))
+}
+
+// ---- Reports > RWM (0.7.0, item 5): Reading·Writing·Math achievement roll-up ------------------
+// Cohort-wide (like Reading/Writing), P-6 only, IPP-in-any-area students excluded (in the TVF).
+
+export interface RWMStudent {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  fullName: string
+  grade: string | null
+  gradeOrder: number
+  schoolId: string | null
+  schoolName: string | null
+  schoolAbbrev: string | null
+  programCode: string | null
+  programFamily: string | null
+  homeroom: string | null
+  readingCode: number | null // most-recent reading achievement code (3-4 = meeting/exceeding)
+  writingCode: number | null
+  mathRollupPct: number | null // 0-1 current-year roll-up, blanks EXCLUDED (avg of unit averages)
+  mathRollupPctZero: number | null // 0-1 roll-up, blanks COUNT AS 0 (denominator = configured tasks)
+  readingMeeting: boolean
+  writingMeeting: boolean
+  mathMeeting: boolean
+  rwmScore: number // 0-3
+  hasReading: boolean // any evidence yet — lets the UI show "no result" vs "not meeting"
+  hasWriting: boolean
+  hasMath: boolean
+}
+
+export async function getStudentCohortRWM(upn: string): Promise<RWMStudent[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN)',
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: (r.FirstName as string) ?? '',
+    lastName: (r.LastName as string) ?? '',
+    fullName: (r.FullName as string) ?? '',
+    grade: (r.Grade as string) ?? null,
+    gradeOrder: Number(r.GradeOrder ?? 99),
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    schoolAbbrev: (r.SchoolAbbreviation as string) ?? null,
+    programCode: (r.ProgramCode as string) ?? null,
+    programFamily: (r.ProgramFamily as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
+    writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
+    mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    mathRollupPctZero: r.MathRollupPctZero == null ? null : Number(r.MathRollupPctZero),
+    readingMeeting: Boolean(r.ReadingMeeting),
+    writingMeeting: Boolean(r.WritingMeeting),
+    mathMeeting: Boolean(r.MathMeeting),
+    rwmScore: Number(r.RWMScore ?? 0),
+    hasReading: Boolean(r.HasReading),
+    hasWriting: Boolean(r.HasWriting),
+    hasMath: Boolean(r.HasMath),
+  }))
+}
+
+export interface RWMHistoryRow {
+  cycleDate: string | null
+  cycleLabel: string
+  readingCode: number | null
+  writingCode: number | null
+  mathRollupPct: number | null
+  mathRollupPctZero: number | null
+  readingMeeting: boolean
+  writingMeeting: boolean
+  mathMeeting: boolean
+  rwmScore: number
+}
+
+export async function getStudentRWMHistory(upn: string, studentKey: string): Promise<RWMHistoryRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentRWMHistory(@UPN, @StudentKey) ORDER BY CycleDate',
+    { StudentKey: studentKey },
+  )
+  return rows.map((r) => ({
+    cycleDate: toDateStr(r.CycleDate as Date | string | null),
+    cycleLabel: (r.CycleLabel as string) ?? '',
+    readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
+    writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
+    mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
+    mathRollupPctZero: r.MathRollupPctZero == null ? null : Number(r.MathRollupPctZero),
+    readingMeeting: Boolean(r.ReadingMeeting),
+    writingMeeting: Boolean(r.WritingMeeting),
+    mathMeeting: Boolean(r.MathMeeting),
+    rwmScore: Number(r.RWMScore ?? 0),
   }))
 }

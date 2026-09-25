@@ -1,4 +1,10 @@
-﻿# Builds the v0.6.0 teacher how-to one-pagers (.docx) via Word COM, from a single
+﻿# TODO (0.7.0 grace-lock): document the GRACE WINDOW where appropriate — in the reading/writing/math
+#   "enter data" guides (03/04/05) and the "choose a cycle" guide: after a cycle closes it stays editable
+#   for a grace period (default 7 days / 168h, per-cycle configurable), shows under "Past cycles — late
+#   entry (N left)", then LOCKS to read-only ("View only"); designated Literacy/Math override staff can
+#   flip a locked group back on via "Override lock for this group". Add once 0.7.0 ships.
+#
+# Builds the v0.6.0 teacher how-to one-pagers (.docx) via Word COM, from a single
 # consistent template. Regenerates docs/user-guides/v0.6.0/*.docx from the content below.
 # Run:  powershell -ExecutionPolicy Bypass -File scripts\build_user_guides.ps1
 # NOTE: this .ps1 is UTF-8 + BOM so the Δ ✓ ✗ → • · — characters render.
@@ -20,7 +26,7 @@ $cNoteBg= RGBv 234 244 239    # light green note
 $Docs = @(
 @{ file='01-access-and-sign-in.docx'; title='Access the App and Sign In'; blocks=@(
   @{t='h';v='Purpose'}
-  @{t='p';v='This guide tells you how to open The SCoR Hub. It also tells you how to sign in with your TCRCE Microsoft account.'}
+  @{t='p';v='This guide tells you how to open The SCoR Dashboard. It also tells you how to sign in with your TCRCE Microsoft account.'}
   @{t='h';v='Before you start'}
   @{t='bullets';v=@('Use a supported web browser. For example, use Google Chrome, Microsoft Edge, or Firefox.','Get your TCRCE Microsoft account (Entra ID) and your Multi-Factor Authentication (MFA) app or device ready.')}
   @{t='h';v='Sign in'}
@@ -31,7 +37,7 @@ $Docs = @(
   @{t='note';v='You do not see every card or menu item. The app shows only the ones for your role. Regional analysts also see "Cycles", "Ingest", and "Maintenance".'}
   @{t='h';v='Sign out'}
   @{t='steps';v=@('Find your name at the top right.','Click "Sign out".')}
-  @{t='shot';v='The SCoR Hub home page after sign-in. Show the header (top-left "The SCoR Hub"), the top menu, and the task cards.'}
+  @{t='shot';v='The SCoR Dashboard home page after sign-in. Show the header (top-left "The SCoR Dashboard"), the top menu, and the task cards.'}
 )}
 @{ file='02-choose-a-class-or-group.docx'; title='Choose a Class or Group'; blocks=@(
   @{t='h';v='Purpose'}
@@ -174,7 +180,7 @@ try {
     $sel.TypeText($doc.title); $sel.TypeParagraph()
     # Meta line
     Style 9 $false $cGrey $true 8
-    $sel.TypeText("The SCoR Hub  $DOT  How-to guide  $DOT  v0.6.0"); $sel.TypeParagraph()
+    $sel.TypeText("The SCoR Dashboard  $DOT  How-to guide  $DOT  v0.6.0"); $sel.TypeParagraph()
 
     foreach ($b in $doc.blocks) {
       switch ($b.t) {

@@ -27,6 +27,7 @@ CREATE PROCEDURE dbo.usp_UpsertShortCycleHeader
     @StartDate    DATE,
     @EndDate      DATE,
     @ActiveFlag   BIT          = 1,
+    @GraceHours   INT          = NULL,          -- editable-after-close grace in HOURS; NULL -> keep existing / 168 default
     @CallerUPN    VARCHAR(255) = NULL           -- recorded as CreatedBy (audit)
 AS
 BEGIN
@@ -56,7 +57,8 @@ BEGIN
     BEGIN
         UPDATE DimShortCycle
         SET DisplayName = @DisplayName, StartDate = @StartDate, EndDate = @EndDate,
-            SchoolYear = @SchoolYear, ActiveFlag = @ActiveFlag, LastUpdated = @Now
+            SchoolYear = @SchoolYear, ActiveFlag = @ActiveFlag,
+            GraceHours = COALESCE(@GraceHours, GraceHours, 168), LastUpdated = @Now
         WHERE CycleGroupID = @CycleGroupID;
 
         -- Keep the cycle's instance windows in sync (name/dates/year live once on the header).
@@ -67,11 +69,11 @@ BEGIN
     END
     ELSE
     BEGIN
-        INSERT INTO DimShortCycle (CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag, CreatedDate, CreatedBy, LastUpdated)
-        VALUES (@CycleGroupID, @DisplayName, @StartDate, @EndDate, @SchoolYear, @ActiveFlag, @Now, @CallerUPN, @Now);
+        INSERT INTO DimShortCycle (CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag, GraceHours, CreatedDate, CreatedBy, LastUpdated)
+        VALUES (@CycleGroupID, @DisplayName, @StartDate, @EndDate, @SchoolYear, @ActiveFlag, COALESCE(@GraceHours, 168), @Now, @CallerUPN, @Now);
     END;
 
-    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag
+    SELECT CycleGroupID, DisplayName, StartDate, EndDate, SchoolYear, ActiveFlag, GraceHours
     FROM DimShortCycle WHERE CycleGroupID = @CycleGroupID;
 END;
 GO

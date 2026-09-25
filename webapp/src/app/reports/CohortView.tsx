@@ -81,9 +81,11 @@ export default function CohortView({
     [cohort],
   )
   const genders = useMemo(() => distinct(cohort.map((s) => s.gender).filter(Boolean) as string[]).sort(), [cohort])
-  const homerooms = useMemo(() => distinct(cohort.map((s) => s.homeroom).filter(Boolean) as string[]).sort(), [cohort])
-  const programs = useMemo(() => distinct(cohort.map((s) => s.programFamily).filter(Boolean) as string[]).sort(), [cohort])
-  const schools = useMemo(() => {
+  // FULL-cohort option lists — used only to validate restored filters (a saved homeroom stays valid
+  // even before its school is re-selected). Display uses the faceted lists further down.
+  const allHomerooms = useMemo(() => distinct(cohort.map((s) => s.homeroom).filter(Boolean) as string[]).sort(), [cohort])
+  const allPrograms = useMemo(() => distinct(cohort.map((s) => s.programFamily).filter(Boolean) as string[]).sort(), [cohort])
+  const allSchools = useMemo(() => {
     const seen = new Map<string, string>()
     for (const s of cohort) if (s.schoolId) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
     return Array.from(seen, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
@@ -110,6 +112,16 @@ export default function CohortView({
     setter(next)
   }
 
+  // School toggle: homeroom only makes sense within ONE school, so leaving the single-school state
+  // (deselecting the school, or picking a second) clears any homeroom selection with it.
+  function toggleSchool(id: string) {
+    const next = new Set(sch)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSch(next)
+    if (next.size !== 1) setHr(new Set())
+  }
+
   function reset() {
     setGradeMin(minOrd)
     setGradeMax(maxOrd)
@@ -129,7 +141,7 @@ export default function CohortView({
   const [ready, setReady] = useState(false)
   useEffect(() => {
     const p = readCohortFilters()
-    const schoolIds = schools.map((s) => s.id)
+    const schoolIds = allSchools.map((s) => s.id)
     const achCodes = orderedBands.map((b) => Number(b.code))
     if (typeof p.expanded === 'boolean') setExpanded(p.expanded)
     if (typeof p.gradeMin === 'number') setGradeMin(Math.min(Math.max(p.gradeMin, minOrd), maxOrd))
@@ -137,8 +149,8 @@ export default function CohortView({
     if (p.gender === 'All' || (p.gender && genders.includes(p.gender))) setGender(p.gender)
     if (p.african === 'All' || p.african === 'Yes' || p.african === 'No') setAfrican(p.african)
     if (p.indigenous === 'All' || p.indigenous === 'Yes' || p.indigenous === 'No') setIndigenous(p.indigenous)
-    if (p.hr) setHr(new Set(p.hr.filter((v) => homerooms.includes(v))))
-    if (p.prog) setProg(new Set(p.prog.filter((v) => programs.includes(v))))
+    if (p.hr) setHr(new Set(p.hr.filter((v) => allHomerooms.includes(v))))
+    if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
     if (p.ach) setAch(new Set(p.ach.filter((v) => achCodes.includes(v))))
     setReady(true)
@@ -157,19 +169,41 @@ export default function CohortView({
     }
   }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach])
 
+  const oneSchool = sch.size === 1 // homeroom is only offered/applied once narrowed to one school
+  // A student passes every ACTIVE filter except the named dimension — the basis for both the final
+  // list (except='') and each filter's faceted options (so a filter never hides its own choices).
+  const matchExcept = (s: CohortStudent, except: string) =>
+    (except === 'grade' || s.gradeOrder == null || (s.gradeOrder >= gradeMin && s.gradeOrder <= gradeMax)) &&
+    (except === 'gender' || gender === 'All' || s.gender === gender) &&
+    (except === 'african' || triMatch(african, s.selfIDAfrican)) &&
+    (except === 'indigenous' || triMatch(indigenous, s.selfIDIndigenous)) &&
+    (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
+    (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
+    (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
+    (except === 'ach' || ach.size === 0 || (s.achievementCode != null && ach.has(s.achievementCode)))
+
+  // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
+  // until a SINGLE school is selected — region-wide it's an unusable wall of chips.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const homerooms = useMemo(
+    () => (oneSchool ? distinct(cohort.filter((s) => matchExcept(s, 'hr')).map((s) => s.homeroom).filter(Boolean) as string[]).sort() : []),
+    [cohort, oneSchool, gradeMin, gradeMax, gender, african, indigenous, prog, sch, ach],
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const programs = useMemo(
+    () => distinct(cohort.filter((s) => matchExcept(s, 'prog')).map((s) => s.programFamily).filter(Boolean) as string[]).sort(),
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, sch, ach],
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const schools = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const s of cohort) if (s.schoolId && matchExcept(s, 'sch')) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
+    return Array.from(seen, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
+  }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach])
+
   const filtered = useMemo(
-    () =>
-      cohort.filter(
-        (s) =>
-          (s.gradeOrder == null || (s.gradeOrder >= gradeMin && s.gradeOrder <= gradeMax)) &&
-          (gender === 'All' || s.gender === gender) &&
-          triMatch(african, s.selfIDAfrican) &&
-          triMatch(indigenous, s.selfIDIndigenous) &&
-          (hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
-          (prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
-          (sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
-          (ach.size === 0 || (s.achievementCode != null && ach.has(s.achievementCode))),
-      ),
+    () => cohort.filter((s) => matchExcept(s, '')),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach],
   )
 
@@ -289,7 +323,7 @@ export default function CohortView({
             </select>
           </div>
 
-          {homerooms.length > 1 ? (
+          {oneSchool && homerooms.length > 0 ? (
             <div className="filter-group">
               <label>Homeroom</label>
               <div className="chips">
@@ -304,9 +338,14 @@ export default function CohortView({
                 ))}
               </div>
             </div>
+          ) : !oneSchool && allHomerooms.length > 1 && allSchools.length > 1 ? (
+            <div className="filter-group">
+              <label>Homeroom</label>
+              <span className="muted small">Select a single school to filter by homeroom.</span>
+            </div>
           ) : null}
 
-          {programs.length > 1 ? (
+          {programs.length > 1 || prog.size > 0 ? (
             <div className="filter-group">
               <label>Program</label>
               <div className="chips">
@@ -323,7 +362,7 @@ export default function CohortView({
             </div>
           ) : null}
 
-          {schools.length > 1 ? (
+          {schools.length > 1 || sch.size > 0 ? (
             <div className="filter-group">
               <label>School</label>
               <div className="chips">
@@ -331,7 +370,7 @@ export default function CohortView({
                   <button
                     key={s.id}
                     className={sch.has(s.id) ? 'chip chip-on' : 'chip'}
-                    onClick={() => toggle(sch, s.id, setSch)}
+                    onClick={() => toggleSchool(s.id)}
                   >
                     {s.label}
                   </button>
@@ -433,6 +472,12 @@ export default function CohortView({
               <th>Program</th>
               <th>School</th>
               <th>{subject === 'Writing' ? 'Avg' : 'Level'}</th>
+              {subject === 'Reading' ? <th>Expected</th> : null}
+              {subject === 'Reading' ? (
+                <th>
+                  Diff from<br />Prev June
+                </th>
+              ) : null}
               <th>Achievement</th>
             </tr>
           </thead>
@@ -452,6 +497,26 @@ export default function CohortView({
                   <td>{s.programFamily ?? '—'}</td>
                   <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
                   <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
+                  {subject === 'Reading' ? (
+                    <td>
+                      {s.expectedMin && s.expectedMax ? (
+                        s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                  {subject === 'Reading' ? (
+                    <td style={{ textAlign: 'center' }}>
+                      {s.diffFromPrevJune == null ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <strong style={{ color: s.diffFromPrevJune > 0 ? '#137333' : s.diffFromPrevJune < 0 ? '#a50e0e' : 'inherit' }}>
+                          {s.diffFromPrevJune > 0 ? `+${s.diffFromPrevJune}` : s.diffFromPrevJune}
+                        </strong>
+                      )}
+                    </td>
+                  ) : null}
                   <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
                     {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
                   </td>

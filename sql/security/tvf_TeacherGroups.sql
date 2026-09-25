@@ -43,7 +43,10 @@
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted.
  * NOTE: EnteredStudentCount covers Reading, Writing, AND Math (Math added 2026-09-23; a student is
- *       "entered" once they have any task result). Deploy the updated TVF to live + dev.
+ *       "entered"/"started" once they have any task result). Deploy the updated TVF to live + dev.
+ *       2026-09-24 — +DoneStudentCount (0.6.4): Math COMPLETION = distinct students with a latest
+ *       result for >80% of their grade's tasks at the window's benchmark month. 0 for Reading/Writing
+ *       (their single result already means done). The Math card shows "N started · M done".
  ******************************************************************************/
 
 DROP FUNCTION IF EXISTS dbo.tvf_TeacherGroups;
@@ -183,6 +186,49 @@ RETURN
         INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Math'
     ),
+    -- Math COMPLETION ("done") for the card. A Math student is "done" when they have a latest result
+    -- for MORE THAN 80% of the tasks applicable to their grade at the cycle's benchmark month
+    -- (DimMathTask by GradeCode + AssessmentMonth). Reading/Writing have a single result, so their
+    -- "done" == "entered"; these CTEs stay empty for them (MathBench is @AssessmentType-guarded).
+    MathBench AS (   -- effective benchmark month per Math window (BenchmarkMonth, else dominant calendar month)
+        SELECT win.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN win.WindowStartDate AND win.WindowEndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
+        FROM Wins win
+        INNER JOIN DimAssessmentWindow w ON w.AssessmentWindowID = win.AssessmentWindowID
+        WHERE @AssessmentType = 'Math'
+    ),
+    MathApplicable AS (   -- # active tasks for a (window, grade) at that window's benchmark month
+        SELECT mb.AssessmentWindowID, mt.GradeCode, COUNT(*) AS ApplicableTasks
+        FROM MathBench mb
+        INNER JOIN DimMathTask mt ON mt.ActiveFlag = 1 AND mt.AssessmentMonth = mb.BenchMonth
+        GROUP BY mb.AssessmentWindowID, mt.GradeCode
+    ),
+    MathStudentWindow AS (   -- (student, window, grade) triples in play, de-duped
+        SELECT DISTINCT StudentKey, AssessmentWindowID, Grade FROM SectionStudents
+    ),
+    MathEnteredTasks AS (   -- distinct tasks each student has a result for, per window
+        -- Gated to Math windows (INNER JOIN MathBench, itself @AssessmentType='Math'-guarded) so a
+        -- Reading/Writing picker pays NOTHING here -- MathBench is empty then, pruning this scan.
+        SELECT msw.StudentKey, msw.AssessmentWindowID, COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
+        FROM MathStudentWindow msw
+        INNER JOIN MathBench mb ON mb.AssessmentWindowID = msw.AssessmentWindowID
+        INNER JOIN FactAssessmentMath fm
+                ON fm.StudentKey = msw.StudentKey AND fm.AssessmentWindowID = msw.AssessmentWindowID
+        GROUP BY msw.StudentKey, msw.AssessmentWindowID
+    ),
+    MathDone AS (   -- students over the >80% bar (empty for R/W since MathApplicable is empty there)
+        SELECT DISTINCT msw.StudentKey
+        FROM MathStudentWindow msw
+        INNER JOIN MathApplicable ma
+                ON ma.AssessmentWindowID = msw.AssessmentWindowID AND ma.GradeCode = msw.Grade
+        INNER JOIN MathEnteredTasks me
+                ON me.StudentKey = msw.StudentKey AND me.AssessmentWindowID = msw.AssessmentWindowID
+        WHERE ma.ApplicableTasks > 0
+          AND CAST(me.EnteredTasks AS DECIMAL(9,4)) / ma.ApplicableTasks > 0.8
+    ),
     -- The cycle instance(s) this section's students actually fall under. Normally exactly ONE (the
     -- course's language pins it), but a cycle can be configured so one section straddles two — e.g. an
     -- English instance split by program scope. The roster step needs the list to route a save to the
@@ -214,10 +260,12 @@ RETURN
         MAX(gg.Grades)        AS Grades,
         MAX(sw.WindowIDs)     AS WindowIDs,   -- cycle instance(s) behind this card; roster routes saves by it
         COUNT(DISTINCT ss.StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT es.StudentKey) AS EnteredStudentCount
+        COUNT(DISTINCT es.StudentKey) AS EnteredStudentCount,   -- "started" (>=1 result) for Math; the single result for R/W
+        COUNT(DISTINCT md.StudentKey) AS DoneStudentCount        -- Math only: >80% of grade's benchmark-month tasks marked (0 for R/W)
     FROM SectionStudents ss
     LEFT JOIN SectionTeacherNames stn ON stn.SectionID = ss.SectionID
     LEFT JOIN EnteredStudents es      ON es.StudentKey = ss.StudentKey
+    LEFT JOIN MathDone md             ON md.StudentKey = ss.StudentKey
     LEFT JOIN GroupGrades gg
            ON gg.Scope     = ss.Scope
           AND gg.SectionID = ss.SectionID

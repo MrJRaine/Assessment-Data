@@ -47,6 +47,17 @@ RETURN
         SELECT fsi.StudentKey, fsi.ProgramFamily, fsi.IsIPP
         FROM FactStudentIPP fsi
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
+    ),
+    -- Effective benchmark month per reading window (BenchmarkMonth, else the window's dominant calendar
+    -- month) — matched against DimReadingBenchmark for the Expected range (item 2).
+    WindowMonth AS (
+        SELECT w.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
+        FROM DimAssessmentWindow w
+        WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
     )
     SELECT
         CAST(s.StudentKey AS VARCHAR(20))                       AS StudentKey,
@@ -85,6 +96,15 @@ RETURN
         drs.LevelCode                                           AS MostRecentLevelCode,
         drs.LevelOrder                                          AS MostRecentLevelOrder,
         lr.ReadingDelta                                         AS MostRecentReadingDelta,
+        -- Expected benchmark range for the MOST-RECENT evidence's window month + the student's reading
+        -- family (item 2) — so a SCoR 1 level shows the SCoR 1 expectation.
+        drb.ExpectedMinLevel                                    AS ExpectedMinLevel,
+        drb.ExpectedMaxLevel                                    AS ExpectedMaxLevel,
+        -- Prev-June prior-year starting point + Diff from it (item 1); Reading only. NULL when either
+        -- the June anchor or the current level is missing.
+        sp.StartingLevelCode                                    AS JuneReadingLevel,
+        CASE WHEN drs.LevelOrder IS NOT NULL AND jrs.LevelOrder IS NOT NULL
+             THEN drs.LevelOrder - jrs.LevelOrder END           AS DiffFromPrevJune,
         dal.AchievementLevelCode                                AS MostRecentAchievementLevelCode,
         dal.AchievementLevelName                                AS MostRecentAchievementLevelName,
         dal.HexColor                                            AS MostRecentAchievementHexColor,
@@ -99,6 +119,23 @@ RETURN
     LEFT JOIN LatestReading lr ON lr.StudentKey = s.StudentKey AND lr.rn = 1
     LEFT JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = lr.AssessmentWindowID
     LEFT JOIN DimReadingScale drs ON drs.ReadingScaleID = lr.ReadingScaleID
+    -- Expected range for the most-recent window's month + the student's reading family (J020 -> English).
+    LEFT JOIN WindowMonth wm ON wm.AssessmentWindowID = lr.AssessmentWindowID
+    LEFT JOIN DimReadingBenchmark drb
+           ON drb.GradeCode       = s.Grade
+          AND drb.AssessmentMonth = wm.BenchMonth
+          AND drb.ProgramFamily   = CASE WHEN s.ProgramCode = 'J020' THEN 'English' ELSE p.ProgramFamily END
+    -- Prev-June anchor (by family scale, J020 -> EN_Reading) + its order, for Diff from Prev June.
+    LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
+           ON sp.StudentNumber = s.StudentNumber
+          AND sp.ScaleSystem   = CASE WHEN s.ProgramCode  = 'J020'             THEN 'EN_Reading'
+                                      WHEN p.ProgramFamily = 'English'          THEN 'EN_Reading'
+                                      WHEN p.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END
+    LEFT JOIN DimReadingScale jrs
+           ON jrs.LevelCode   = sp.StartingLevelCode
+          AND jrs.ScaleSystem = CASE WHEN s.ProgramCode  = 'J020'             THEN 'EN_Reading'
+                                     WHEN p.ProgramFamily = 'English'          THEN 'EN_Reading'
+                                     WHEN p.ProgramFamily = 'French Immersion' THEN 'FR_Reading' END
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
           AND lr.ReadingDelta IS NOT NULL

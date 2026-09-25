@@ -11,20 +11,23 @@ const ITEMS = [
   { href: '/cycles', label: 'Cycles', cap: 'cycles' as const },
   { href: '/ingest', label: 'Ingest', cap: 'ingest' as const },
   { href: '/admin/maintenance', label: 'Maintenance', cap: 'maintenance' as const },
+  { href: '/admin/staff-access', label: 'Staff Access', cap: 'staffAccess' as const },
 ]
 
 export default function Nav({
   showCycles = false,
   showIngest = false,
   showMaintenance = false,
+  showStaffAccess = false,
 }: {
   showCycles?: boolean
   showIngest?: boolean
   showMaintenance?: boolean
+  showStaffAccess?: boolean
 }) {
   const path = usePathname()
-  // Cycles + Ingest + Maintenance are capability-gated (StaffAppAccess) — hide them from anyone
-  // without the capability (the pages/actions also enforce it server-side).
+  // Cycles + Ingest + Maintenance + Staff Access are capability-gated (StaffAppAccess) — hide them
+  // from anyone without the capability (the pages/actions also enforce it server-side).
   const items = ITEMS.filter((it) =>
     it.cap === 'cycles'
       ? showCycles
@@ -32,7 +35,9 @@ export default function Nav({
         ? showIngest
         : it.cap === 'maintenance'
           ? showMaintenance
-          : true,
+          : it.cap === 'staffAccess'
+            ? showStaffAccess
+            : true,
   )
   return (
     <nav className="nav">
