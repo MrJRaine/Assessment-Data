@@ -1,8 +1,9 @@
 import 'server-only'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { auth } from '@/auth'
 import { authMode } from './authMode'
 import { getCallerCapabilities } from './data'
+import { loadtestBypassEnabled, resolveLoadtestUser, LOADTEST_USER_HEADER } from './loadtest'
 
 /** Cookie that overrides the EFFECTIVE UPN so an operator can view the app as another user. Honoured
  *  ungated in dev mode (local synthetic), and in entra mode ONLY when impersonation is enabled AND the
@@ -60,6 +61,14 @@ export async function isSysAdmin(upn: string, opts: { fresh?: boolean } = {}): P
  */
 export async function getCurrentUpn(): Promise<string> {
   if (authMode() === 'dev') {
+    // LOAD-TEST: the per-request identity comes from the X-Loadtest-User header (the middleware has
+    // already checked the key), validated against the LOADTEST_USERS allow-list so a run can only
+    // impersonate sanctioned synthetic personas — real RLS still applies. Falls through to the cookie
+    // / DEV_FAKE_UPN default when the header is absent or not allow-listed.
+    if (loadtestBypassEnabled()) {
+      const lt = resolveLoadtestUser((await headers()).get(LOADTEST_USER_HEADER))
+      if (lt) return lt
+    }
     const override = (await cookies()).get(DEV_IMPERSONATE_COOKIE)?.value?.trim()
     const upn = override && override.length > 0 ? override : process.env.DEV_FAKE_UPN
     if (!upn) throw new Error('AUTH_MODE=dev requires DEV_FAKE_UPN to be set')
