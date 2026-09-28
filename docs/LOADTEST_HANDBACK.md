@@ -62,4 +62,9 @@ Run the `0.7.1-loadtest` image with, at minimum:
 - **Dev auth:** `AUTH_MODE=dev`, `ALLOW_DEV_AUTH=true`, `DEV_FAKE_UPN` (fallback identity), `AUTH_SECRET`, `AUTH_URL=http://<staging-ip>:<port>`, `AUTH_TRUST_HOST=true`.
 - **Load test:** `LOADTEST_AUTH_BYPASS=true`, `LOADTEST_KEY` (secret), `LOADTEST_USERS` (allow-list), `LOADTEST_ALLOWED_CIDRS` (optional).
 
-Bind host **port 3001** to the LAN interface (`-p 0.0.0.0:3001:3000`) — off the live deploy's 3000. Sweep the pool between runs with `FABRIC_POOL_MAX` (e.g. 20 → 40 → 60). Pre-test: `curl http://<ip>:3001/api/health` → `200`.
+Bind host **port 3001** — off the live deploy's 3000, which is the only port IIS reverse-proxies to
+the internet, so 3001 is never exposed on `data.tcrce.ca`. On a **multi-homed** box, pin the publish to
+the **LAN/VLAN interface IP** so 3001 can't be reached from the public NIC either:
+`-p <lan-ip>:3001:3000` (use `-p 0.0.0.0:3001:3000` only if the box is single-homed on the LAN, and
+confirm the perimeter firewall blocks 3001 inbound). Sweep the pool between runs with `FABRIC_POOL_MAX`
+(e.g. 20 → 40 → 60). Pre-test: `curl http://<lan-ip>:3001/api/health` → `200`.
