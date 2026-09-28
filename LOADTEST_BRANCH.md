@@ -10,7 +10,10 @@ or `dev`, and the load-test image must **never** run against production or the l
 - `webapp/src/instrumentation.ts` — boot-time fail-closed guard + banner.
 - `webapp/src/middleware.ts` — the `LOADTEST_AUTH_BYPASS` branch.
 - `webapp/src/lib/auth.ts` — the `X-Loadtest-User` header path in `getCurrentUpn`.
-- `scripts/loadtest_guard_check.mjs`, `docs/LOADTEST_HANDBACK.md`, `sql/scripts/list_loadtest_identities.sql`.
+- `webapp/src/app/api/debug/pool/route.ts` — pool + event-loop telemetry (key-gated).
+- `webapp/src/app/api/loadtest/seed/route.ts` — per-user real-path seed (key-gated).
+- `webapp/src/lib/db.ts` — the added `poolSnapshot()` export (only that function is load-test-specific).
+- `scripts/loadtest_guard_check.mjs`, `docs/LOADTEST_HANDBACK.md`, `sql/scripts/list_loadtest_identities.sql`, `webapp/.env.loadtest.example`.
 
 ## Safeguards already in place
 

@@ -121,6 +121,16 @@ export function getPool(): Promise<sql.ConnectionPool> {
   return poolPromise
 }
 
+/**
+ * LOAD-TEST introspection: the pool's live occupancy, for /api/debug/pool. `pending` climbing while
+ * `borrowed` sits at `max` is the connection-pool bottleneck signature. Reads mssql's ConnectionPool
+ * getters (size/available/borrowed/pending); awaits getPool so under load it reports the warm pool.
+ */
+export async function poolSnapshot(): Promise<{ max: number; size: number; available: number; borrowed: number; pending: number }> {
+  const p = (await getPool()) as sql.ConnectionPool & { size: number; available: number; borrowed: number; pending: number }
+  return { max: poolMax(), size: p.size ?? 0, available: p.available ?? 0, borrowed: p.borrowed ?? 0, pending: p.pending ?? 0 }
+}
+
 // Connection/auth-level failures that mean "the pooled connection is dead / its token expired" —
 // as opposed to a SQL error from the query itself (e.g. a proc THROW). On these we rebuild the pool.
 function isStalePoolError(err: unknown): boolean {

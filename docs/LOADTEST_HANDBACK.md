@@ -54,6 +54,20 @@ Served **by the app container** (`next start` standalone serves `/_next/static/*
 
 `GET /api/health` → `200 {"status":"ok"}` (public, no key). Also `GET /api/status`. Use `/api/health` for the pre-test sanity gate.
 
+## Telemetry + seed endpoints (key-gated; 404 unless the bypass is on; send `X-Loadtest-Key`)
+
+- **`GET /api/debug/pool`** — poll every few seconds during a run. JSON:
+  `{ pool: { max, size, available, borrowed, pending }, eventLoop: { meanMs, maxMs, p99Ms } }`
+  (event-loop figures are the delta since the last poll). **Reading it:** `pending > 0` while `borrowed == max`
+  ⇒ the **connection pool** is the wall (raise `FABRIC_POOL_MAX`, re-run); `eventLoop.p99` climbing with CPU
+  ⇒ the **Node/VM** is the wall. Idle reads show zeros — the numbers move only under load.
+- **`GET /api/loadtest/seed`** — call **once per virtual user at start** (send `X-Loadtest-Key` + `X-Loadtest-User`).
+  Returns that user's real, RLS-scoped ready paths so the script never guesses IDs:
+  `{ user, windowCount, enter: [ { cycleGroupId, subject, path, groups: [ { groupKey, path } ] } ],
+     reports: { cohort, writing, math, rwm, students: [ "/reports/<studentKey>", … ] } }`.
+  Pick from `enter[].path` (step-2 pages), `enter[].groups[].path` (roster grids — the heavy reads), and
+  `reports.students[]` (drill-downs). Analysts/admins return far more here; teachers a handful.
+
 ## Deployment (staging) — env var NAMES only
 
 Run the `0.7.1-loadtest` image with, at minimum:
