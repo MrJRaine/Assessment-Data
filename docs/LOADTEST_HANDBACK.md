@@ -16,8 +16,8 @@ Answers to the "what to hand back" list in `LOADTEST_HANDOFF.md`. The load-test 
 
 ## Staging address
 
-- **Direct to the container over HTTP** — `http://<staging-ip>:<port>` — **not** through IIS/the provincial CDN (avoids DDoS flagging; the container speaks HTTP in prod too, behind IIS TLS). The container binds `0.0.0.0:<port>` so the Pi VLAN can reach it.
-- **TBD tomorrow:** the staging server IP and the chosen `<port>`. Locust `host` = `http://<ip>:<port>`; pin the IP via `hostAliases` only if you address by name. **Open that port in the VLAN firewall** (not just 443) — HTTPS/TLS/host-checks are moot on this path.
+- **Direct to the container over HTTP** — `http://<staging-ip>:3001` — **not** through IIS/the provincial CDN (avoids DDoS flagging; the container speaks HTTP in prod too, behind IIS TLS). **Host port 3001** (mapped to the container's 3000) to stay clear of the live deploy's 3000; binds `0.0.0.0:3001` so the Pi VLAN can reach it.
+- **TBD tomorrow:** the staging server IP. Locust `host` = `http://<ip>:3001`; pin the IP via `hostAliases` only if you address by name. **Open port 3001 in the VLAN firewall** (not just 443) — HTTPS/TLS/host-checks are moot on this path.
 
 ## Identities (`LOADTEST_USERS`)
 
@@ -62,4 +62,4 @@ Run the `0.7.1-loadtest` image with, at minimum:
 - **Dev auth:** `AUTH_MODE=dev`, `ALLOW_DEV_AUTH=true`, `DEV_FAKE_UPN` (fallback identity), `AUTH_SECRET`, `AUTH_URL=http://<staging-ip>:<port>`, `AUTH_TRUST_HOST=true`.
 - **Load test:** `LOADTEST_AUTH_BYPASS=true`, `LOADTEST_KEY` (secret), `LOADTEST_USERS` (allow-list), `LOADTEST_ALLOWED_CIDRS` (optional).
 
-Bind the port to the LAN interface (`-p 0.0.0.0:<port>:3000`). Sweep the pool between runs with `FABRIC_POOL_MAX` (e.g. 20 → 40 → 60). Pre-test: `curl http://<ip>:<port>/api/health` → `200`.
+Bind host **port 3001** to the LAN interface (`-p 0.0.0.0:3001:3000`) — off the live deploy's 3000. Sweep the pool between runs with `FABRIC_POOL_MAX` (e.g. 20 → 40 → 60). Pre-test: `curl http://<ip>:3001/api/health` → `200`.
