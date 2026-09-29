@@ -6,7 +6,7 @@
   Type: READ-ONLY report (single SELECT; no writes). Run against LIVE Assessment_Warehouse.
   Region: Canada East.
 
-  Reads: DimSchool, DimSection, FactEnrollment, DimStudent, DimProgram, FactSectionTeachers, DimStaff.
+  Reads: DimSchool, DimSection, DimTerm, FactEnrollment, DimStudent, DimProgram, FactSectionTeachers, DimStaff.
 
   Schools pinned by SchoolID: '0709' = Digby Regional High (DRHS), '0716' = Shelburne Regional High (SRHS).
 
@@ -19,7 +19,7 @@
 ───────────────────────────────────────────────────────────────────────────────────────────*/
 
 WITH Enrol AS (   -- current, active enrollments in the two schools' current sections
-    SELECT sec.SectionKey, sec.SectionID, sec.SchoolID,
+    SELECT sec.SectionKey, sec.SectionID, sec.SchoolID, sec.TermID,
            sec.CourseName, sec.CourseCode, sec.SectionNumber,
            s.StudentKey,
            CASE WHEN p.SpecialtyType = 'O2' THEN 1 ELSE 0 END AS IsO2
@@ -31,11 +31,11 @@ WITH Enrol AS (   -- current, active enrollments in the two schools' current sec
     WHERE e.ActiveFlag = 1
 ),
 SectionAgg AS (
-    SELECT SectionKey, SectionID, SchoolID, CourseName, CourseCode, SectionNumber,
+    SELECT SectionKey, SectionID, SchoolID, TermID, CourseName, CourseCode, SectionNumber,
            COUNT(DISTINCT StudentKey) AS TotalEnrollment,
            COUNT(DISTINCT CASE WHEN IsO2 = 1 THEN StudentKey END) AS O2Enrollment
     FROM Enrol
-    GROUP BY SectionKey, SectionID, SchoolID, CourseName, CourseCode, SectionNumber
+    GROUP BY SectionKey, SectionID, SchoolID, TermID, CourseName, CourseCode, SectionNumber
 ),
 SectionTeachers AS (   -- all current teachers per section (primary + co-teachers), names from DimStaff
     SELECT fst.SectionID,
@@ -50,13 +50,15 @@ SELECT
     sa.CourseName,
     sa.CourseCode                          AS CourseNumber,
     sa.SectionNumber                       AS Section,
+    COALESCE(dt.TermName, '(unknown)')     AS Semester,
     COALESCE(t.Teachers, '(none on file)') AS Teachers,
     sa.TotalEnrollment,
     sa.O2Enrollment                        AS O2Enrolled,
     CAST(100.0 * sa.O2Enrollment / NULLIF(sa.TotalEnrollment, 0) AS DECIMAL(5,1)) AS O2Percent
 FROM SectionAgg sa
 INNER JOIN DimSchool sch ON sch.SchoolID = sa.SchoolID
+LEFT  JOIN DimTerm dt ON dt.TermID = sa.TermID
 LEFT  JOIN SectionTeachers t ON t.SectionID = sa.SectionID
 WHERE sa.TotalEnrollment > 0
   AND sa.O2Enrollment * 2 >= sa.TotalEnrollment   -- O2 is >= 50% of the section
-ORDER BY sch.SchoolName, O2Percent DESC, sa.CourseName, sa.SectionNumber;
+ORDER BY sch.SchoolName, dt.TermCode, O2Percent DESC, sa.CourseName, sa.SectionNumber;
