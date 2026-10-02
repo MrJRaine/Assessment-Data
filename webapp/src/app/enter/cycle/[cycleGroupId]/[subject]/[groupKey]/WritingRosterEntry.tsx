@@ -23,10 +23,19 @@ interface ScoreSet {
   conventions: ConvValue
 }
 
-// '1'–'4' / 'SCR' / null (from the roster read) -> ConvValue.
+// '1'–'4' / 'SCR' / '-' (excluded) / null (from the roster read) -> ConvValue. '-' and other non-numeric
+// (except 'SCR') parse to null — the cell's exclusion is carried separately (excludedTraits), and the
+// dropdown is hidden either way.
 function toConv(v: string | null): ConvValue {
   if (v == null) return null
   if (v === 'SCR') return 'SCR'
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+// '1'–'4' / '-' (excluded) / null -> numeric trait value. '-' and anything non-numeric -> null (the
+// excluded cell is hidden and dropped from the average via excludedTraits regardless).
+function toScore(v: string | null): number | null {
+  if (v == null) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
@@ -45,9 +54,19 @@ function writingBand(avg: number | null): { name: string; hex: string; tint: str
   return { name: 'Not Yet Meeting', hex: '#D1495B', tint: '#FCEDEF' }
 }
 
-// Average over the SCORED traits only — Conventions='SCR' drops from BOTH numerator and denominator.
-function avgOf(s: ScoreSet): number | null {
-  const vals = [s.ideas, s.organization, s.language, numOf(s.conventions)].filter((v): v is number => v != null)
+// Average over the SCORED traits only — Conventions='SCR' drops from BOTH numerator and denominator,
+// and an EXCLUDED trait (WritingTraitExclusion) is dropped too. The exclusion check is defensive: the
+// proc forces an excluded trait to NULL on save, but a legacy/seeded row can still carry a stale value
+// under the hidden cell, and the on-screen average must match the VISIBLE traits regardless.
+function avgOf(s: ScoreSet, excluded: Set<TraitKey>): number | null {
+  const vals = ([
+    ['ideas', s.ideas],
+    ['organization', s.organization],
+    ['language', s.language],
+    ['conventions', numOf(s.conventions)],
+  ] as [TraitKey, number | null][])
+    .filter(([k, v]) => !excluded.has(k) && v != null)
+    .map(([, v]) => v as number)
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
 }
 // A row is COMPLETE (saveable) when every trait is set — Conventions counts 'SCR' as set. A trait
@@ -93,7 +112,7 @@ export default function WritingRosterEntry({
 
   const baselineFromProps: Record<string, ScoreSet> = {}
   for (const s of roster)
-    baselineFromProps[s.studentKey] = { ideas: s.ideas, organization: s.organization, language: s.language, conventions: toConv(s.conventions) }
+    baselineFromProps[s.studentKey] = { ideas: toScore(s.ideas), organization: toScore(s.organization), language: toScore(s.language), conventions: toConv(s.conventions) }
 
   const [base, setBase] = useState(baselineFromProps)
   const [sel, setSel] = useState(baselineFromProps)
@@ -253,7 +272,7 @@ export default function WritingRosterEntry({
             const isIPP = s.ippStatus === true
             const ippStaged = s.studentKey in ippSel
             const dirty = isChecked(s.studentKey) || ippStaged
-            const avg = avgOf(cur)
+            const avg = avgOf(cur, excluded)
             // IPP students + unresolved gates carry no achievement band (mirrors the reading grid).
             const band = isIPP || needsConfirm ? null : writingBand(avg)
             return (
@@ -264,10 +283,13 @@ export default function WritingRosterEntry({
                 <td>{s.grade ?? '—'}</td>
                 {TRAITS.map((t) => (
                   <td key={t.key}>
-                    {needsConfirm || excluded.has(t.key) ? (
-                      // Excluded trait (or unresolved IPP): no dropdown. A dash reads as "not assessed",
-                      // matching the saved NULL and how the reports render it.
-                      <span className="muted" title={excluded.has(t.key) ? 'Not assessed this cycle' : undefined}>—</span>
+                    {excluded.has(t.key) ? (
+                      // Excluded trait: no dropdown. Show the intentional '-' (hyphen) — "deliberately
+                      // not assessed this cycle" — which is what the proc stores and the reports render,
+                      // and is visually distinct from the '—' (em-dash) used for no-data / IPP-gate below.
+                      <span className="muted" title="Not assessed this cycle">-</span>
+                    ) : needsConfirm ? (
+                      <span className="muted">—</span>
                     ) : (
                       <select
                         value={cur[t.key] ?? ''}

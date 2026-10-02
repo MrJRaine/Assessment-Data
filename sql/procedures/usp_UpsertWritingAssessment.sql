@@ -23,10 +23,11 @@
  *   @StudentNumber      BIGINT       required, provincial 10-digit student #
  *   @AssessmentWindowID VARCHAR(20)  required, must resolve to ActiveFlag=1
  *                                    (BIGINT IDENTITY surfaced as VARCHAR for Power Fx)
- *   @IdeasScore         INT          required, 1–4
- *   @OrganizationScore  INT          required, 1–4
- *   @LanguageScore      INT          required, 1–4
- *   @ConventionsScore   VARCHAR(10)  required, '1'–'4' or 'SCR' (Scribed; omitted from the average)
+ *   @IdeasScore         INT          1–4; required UNLESS excluded for this grade/program/benchmark
+ *   @OrganizationScore  INT          month (WritingTraitExclusion) — an excluded trait is passed NULL
+ *   @LanguageScore      INT          by the app (dropdown hidden) and STORED as '-' (deliberately NOT
+ *                                    assessed), distinct from a true NULL. '-' drops from the average.
+ *   @ConventionsScore   VARCHAR(10)  '1'–'4' or 'SCR' (Scribed; omitted from the average); '-' if excluded
  *   @AssessmentDate     DATE         required (effective-date StudentKey resolution + stored)
  *   @AssessmentLanguage VARCHAR(10)  'English'|'French' writing track (part of the grain); NULL ->
  *                                    derive from program family (single-language students)
@@ -71,8 +72,10 @@ BEGIN
     DECLARE @Today                  DATE          = CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE);
     DECLARE @CallerEmail            VARCHAR(255)  = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
     DECLARE @CallerStaffKey         BIGINT;
-    DECLARE @WritingAverage         DECIMAL(4,2);   -- SCR-aware average, stamped on the fact (as-was)
-    DECLARE @ConvNum                INT;            -- numeric Conventions, or NULL when 'SCR'
+    DECLARE @WritingAverage         DECIMAL(4,2);   -- SCR/'-'-aware average, stamped on the fact (as-was)
+    -- Store values actually written to the (VARCHAR) trait columns: '1'-'4' | 'SCR' (Conv only) |
+    -- '-' (excluded = deliberately NOT assessed) | NULL (never recorded).
+    DECLARE @IdeasStore VARCHAR(10), @OrgStore VARCHAR(10), @LangStore VARCHAR(10), @ConvStore VARCHAR(10);
     DECLARE @AssessmentWindowID_BI  BIGINT;
     DECLARE @WindowStartDate        DATE;
     DECLARE @WindowEndDate          DATE;
@@ -249,10 +252,14 @@ BEGIN
       AND ProgramFamily  = @StudentProgramFamily
       AND BenchmarkMonth = @EffectiveBenchMonth;
 
-    IF @ExclIdeas = 1 SET @IdeasScore        = NULL;
-    IF @ExclOrg   = 1 SET @OrganizationScore = NULL;
-    IF @ExclLang  = 1 SET @LanguageScore     = NULL;
-    IF @ExclConv  = 1 SET @ConventionsScore  = NULL;
+    -- Store value per trait: an excluded trait is recorded as the intentional '-' (deliberately NOT
+    -- assessed this cycle), which is DISTINCT from NULL (never recorded). Non-excluded traits store
+    -- their score as text ('1'-'4', or 'SCR' for Conventions). The stored value is authoritative: even
+    -- if a crafted request sent a number for an excluded trait, it is overwritten with '-'.
+    SET @IdeasStore = CASE WHEN @ExclIdeas = 1 THEN '-' ELSE CAST(@IdeasScore        AS VARCHAR(10)) END;
+    SET @OrgStore   = CASE WHEN @ExclOrg   = 1 THEN '-' ELSE CAST(@OrganizationScore AS VARCHAR(10)) END;
+    SET @LangStore  = CASE WHEN @ExclLang  = 1 THEN '-' ELSE CAST(@LanguageScore     AS VARCHAR(10)) END;
+    SET @ConvStore  = CASE WHEN @ExclConv  = 1 THEN '-' ELSE @ConventionsScore                       END;
 
     -- 51010 (trait presence): every NON-excluded trait is required.
     IF (@ExclIdeas = 0 AND @IdeasScore        IS NULL)
@@ -293,22 +300,24 @@ BEGIN
     -- Writing average, stamped on the row (as-was) so the exclusion/SCR rules live in the DATA, not
     -- only the read logic: ANY NULL trait (excluded for this cell, or Conventions='SCR') drops from
     -- BOTH numerator and denominator — identical to how the cohort/history reads compute AvgScore.
-    SET @ConvNum = TRY_CAST(@ConventionsScore AS INT);   -- 'SCR' or excluded -> NULL
+    -- Average over the numerically-scored traits only: TRY_CAST drops '-' (excluded), 'SCR' (scribed)
+    -- and NULL from BOTH numerator and denominator. Computed from the STORE values so it matches what
+    -- lands in the columns (and what the read TVFs recompute). All non-numeric -> NULL average.
     SET @WritingAverage =
-        CAST(COALESCE(@IdeasScore, 0) + COALESCE(@OrganizationScore, 0)
-             + COALESCE(@LanguageScore, 0) + COALESCE(@ConvNum, 0) AS DECIMAL(6,4))
-        / NULLIF( (CASE WHEN @IdeasScore        IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN @OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN @LanguageScore     IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN @ConvNum           IS NOT NULL THEN 1 ELSE 0 END), 0);
+        CAST(COALESCE(TRY_CAST(@IdeasStore AS INT), 0) + COALESCE(TRY_CAST(@OrgStore AS INT), 0)
+             + COALESCE(TRY_CAST(@LangStore AS INT), 0) + COALESCE(TRY_CAST(@ConvStore AS INT), 0) AS DECIMAL(6,4))
+        / NULLIF( (CASE WHEN TRY_CAST(@IdeasStore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN TRY_CAST(@OrgStore   AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN TRY_CAST(@LangStore  AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN TRY_CAST(@ConvStore  AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0);
 
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN
         UPDATE FactAssessmentWriting
-        SET IdeasScore          = @IdeasScore,
-            OrganizationScore   = @OrganizationScore,
-            LanguageScore       = @LanguageScore,
-            ConventionsScore    = @ConventionsScore,
+        SET IdeasScore          = @IdeasStore,
+            OrganizationScore   = @OrgStore,
+            LanguageScore       = @LangStore,
+            ConventionsScore    = @ConvStore,
             WritingAverage      = @WritingAverage,
             EnteredByStaffKey   = @CallerStaffKey,
             SubmissionTimestamp = @Now,
@@ -323,8 +332,8 @@ BEGIN
             SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasScore, @OrganizationScore,
-            @LanguageScore, @ConventionsScore, @WritingAverage, @AssessmentDate, @CallerStaffKey,
+            @StudentKey, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasStore, @OrgStore,
+            @LangStore, @ConvStore, @WritingAverage, @AssessmentDate, @CallerStaffKey,
             @Now, @Now
         );
     END;
@@ -345,7 +354,7 @@ BEGIN
             ' | StudentNumber=',      CAST(@StudentNumber AS VARCHAR(20)),
             ' | AssessmentWindowID=', @AssessmentWindowID,
             ' | Language=',           @AssessmentLanguage,
-            ' | Scores I/O/L/C=',     CONCAT(@IdeasScore, '/', @OrganizationScore, '/', @LanguageScore, '/', @ConventionsScore),
+            ' | Scores I/O/L/C=',     CONCAT(@IdeasStore, '/', @OrgStore, '/', @LangStore, '/', @ConvStore),
             CASE WHEN @IsLocked = 1 THEN ' | GRACE-OVERRIDE' ELSE '' END   -- 0.7.0: save into a locked cycle via override
         ),
         1,

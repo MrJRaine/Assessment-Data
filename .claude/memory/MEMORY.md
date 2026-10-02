@@ -20,6 +20,7 @@
 - [Commit Cadence](feedback_commit_cadence.md) — commit AND push proactively at logical checkpoints; keeping GitHub backed up is mine. PRs only when instructed.
 - [Changelog As We Go](feedback_changelog_as_you_go.md) — update CHANGELOG.md (+ patchNotes.ts for user-visible changes) AS each change lands, not at release. Footer version = package.json.
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; user owns scope. ESPECIALLY never hardcode ASSESSMENT-METHODOLOGY rules (which grades/programs/languages assessed how) — build the config knob, let the admin decide.
+- [Implement Exactly / Flag the Cost](feedback_implement_exactly_flag_cost.md) — do the instruction to the letter; NEVER silently substitute a cheaper near-equivalent to dodge a migration/refactor. If it's expensive, SURFACE the cost and let the user choose. (Stored NULL instead of the specified "-" to avoid a column migration, 2026-10-02 — repeated pattern, infuriating.)
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
 - [Troubleshooting Method](feedback_troubleshooting_method.md) — gather facts before pinning a cause; one diagnostic at a time; wait for promised results.
 - [Don't Report Back Confirmed Facts](feedback_dont_report_back_confirmed_facts.md) — when the user states a fact, take it as given; verify quietly for the exact reference but don't narrate that their statement was confirmed, and never call it "good news."

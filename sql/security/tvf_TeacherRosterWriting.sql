@@ -82,14 +82,15 @@ RETURN
     LatestWritingInWindow AS (
         SELECT
             StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
-            -- Average over the SCORED traits only: Conventions may be 'SCR' (Scribed) -> TRY_CAST NULL,
-            -- which drops it from BOTH the sum and the count (never counted as 0). All-scribed -> NULL.
+            -- Average over the NUMERICALLY-SCORED traits only. All four traits are VARCHAR now, so
+            -- TRY_CAST each: '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all
+            -- return NULL and drop from BOTH the sum and the count (never counted as 0). All-dropped -> NULL.
             CAST(
-                (COALESCE(IdeasScore, 0) + COALESCE(OrganizationScore, 0) + COALESCE(LanguageScore, 0)
-                 + COALESCE(TRY_CAST(ConventionsScore AS INT), 0)) * 1.0
-                / NULLIF((CASE WHEN IdeasScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN LanguageScore IS NOT NULL THEN 1 ELSE 0 END)
+                (COALESCE(TRY_CAST(IdeasScore AS INT), 0) + COALESCE(TRY_CAST(OrganizationScore AS INT), 0)
+                 + COALESCE(TRY_CAST(LanguageScore AS INT), 0) + COALESCE(TRY_CAST(ConventionsScore AS INT), 0)) * 1.0
+                / NULLIF((CASE WHEN TRY_CAST(IdeasScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN TRY_CAST(OrganizationScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN TRY_CAST(LanguageScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
                        + (CASE WHEN TRY_CAST(ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
                 AS DECIMAL(5,2)) AS AvgScore,
             AssessmentDate,
