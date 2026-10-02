@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-02T20:49:04.993Z
+  modified: 2026-10-02T20:50:54.954Z
 ---
 
 **v1.0.0 release framing (user instruction, 2026-10-02):** 1.0.0 is a milestone, so its
@@ -21,7 +21,8 @@ habit, but the 1.0.0 ENTRY itself is the exception — summary note, not a rollu
 same clean-slate treatment in `patchNotes.ts` (teacher-facing "what's new": a 1.0.0 release
 note, not the stacked 0.x items).
 
-OPEN (confirm at the cut): whether the older `[0.X.X]` history SECTIONS stay in CHANGELOG.md
-below the 1.0.0 entry (standard Keep-a-Changelog history) or are removed entirely. The
-instruction was explicitly about the 1.0.0 entry not INCLUDING 0.x items; don't assume the
-history sections are deleted without checking.
+**History is PRESERVED (user confirmed 2026-10-02):** the old 0.X.X items are kept as a
+historical change log — do NOT delete them. So the file reads: clean 1.0.0 released note at
+the top, then the full `[0.X.X]` entries retained below as history (under a clear
+"Historical (pre-1.0)" demarcation). The 1.0.0 entry doesn't INCLUDE/roll-up the 0.x items,
+but the 0.x items still EXIST in the changelog as the historical record.
