@@ -125,7 +125,7 @@ App: **`Student Data Staff Portal`** (broader than MVP — Phase 5 adds viewer/a
 ## Deployment state (current — watch this)
 
 - **THE LIVE PRODUCT IS THE WEB APP, not Power Apps** (2026-09-22). `assessment-webapp` container on
-  `data.tcrce.ca` (IIS/ARR → 127.0.0.1:3000), **0.6.0 LIVE** ("The SCoR Hub"). Release ritual: semver-tagged
+  `data.tcrce.ca` (IIS/ARR → 127.0.0.1:3000), **0.6.0 LIVE** (app name "The SCoR Hub"; **renamed to "The SCoR Dashboard" in 0.7.0**). Release ritual: semver-tagged
   image + tar → dev→main squash + `vX.Y.Z` tag + **mandatory main→dev back-merge** → prod swap by the
   project lead over RDP. Local dev containers: **awlive :3000** (live) / **awdev :3001** (dev) /
   **awdev-impersonation :3002** (dev, impersonation image from the `dev-impersonation` branch) —
