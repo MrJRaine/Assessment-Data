@@ -1,28 +1,32 @@
 ---
 name: project_v1_release_changelog
-description: "At the v1.0.0 cut, the CHANGELOG 1.0.0 entry is a single clean \"v1.0.0 released\" note — do NOT roll up / re-list the item-level entries from the 0.X.X dev line."
+description: "v1.0.0: the in-app What's New (patchNotes.ts) holds ONLY the 1.0.0 entry (no 0.x at all); CHANGELOG.md has a bare 1.0.0 line + full pre-1.0 history below. Two DIFFERENT rules — do not conflate."
 metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-02T20:50:54.954Z
+  modified: 2026-10-02T21:50:21.688Z
 ---
 
-**v1.0.0 release framing (user instruction, 2026-10-02):** 1.0.0 is a milestone, so its
-CHANGELOG entry is a single clean **"v1.0.0 released"** note. Do NOT carry forward or
-re-list the granular per-item changelog entries from the pre-1.0 (0.X.X) releases into the
-1.0.0 entry — the 1.0.0 note stands on its own and does not include 0.X.X change-log items.
+**TWO SEPARATE SURFACES, TWO DIFFERENT RULES (user instruction, 2026-10-02 — I conflated them
+THREE times and the user was furious each time):**
 
-**How to apply at the cut:** when the release ritual bumps package.json + the CHANGELOG
-heading 0.7.1 → 1.0.0 (see the deploy/release flow), replace the accumulated in-dev
-`[0.7.1]` item list with the clean 1.0.0 released note rather than relabeling the whole
-pile of 0.x items as 1.0.0. Keep [[feedback_changelog_as_you_go]] for the ongoing-update
-habit, but the 1.0.0 ENTRY itself is the exception — summary note, not a rollup. Mirror the
-same clean-slate treatment in `patchNotes.ts` (teacher-facing "what's new": a 1.0.0 release
-note, not the stacked 0.x items).
+1. **In-app "What's New" popup = `webapp/src/lib/patchNotes.ts`** — holds **ONLY the single 1.0.0
+   entry**. NO 0.7.x, NO 0.6.x, NONE of the pre-1.0 notes. The popup renders `recentNotes()` (current
+   minor + previous minor), so leaving old entries in the array makes them SHOW — they must be DELETED
+   from the file, not just left below. The teacher-facing app starts fresh at the 1.0.0 launch. The
+   pre-1.0 history does NOT belong in the app; it lives only in CHANGELOG.md. **patchNotes is COMPILED
+   INTO THE IMAGE** — changing it requires a rebuild + redeploy, so get it right before building the tar.
 
-**History is PRESERVED (user confirmed 2026-10-02):** the old 0.X.X items are kept as a
-historical change log — do NOT delete them. So the file reads: clean 1.0.0 released note at
-the top, then the full `[0.X.X]` entries retained below as history (under a clear
-"Historical (pre-1.0)" demarcation). The 1.0.0 entry doesn't INCLUDE/roll-up the 0.x items,
-but the 0.x items still EXIST in the changelog as the historical record.
+2. **`CHANGELOG.md` (developer record)** — a **bare `[1.0.0]` release line** ("First production release
+   of the SCoR Dashboard."), then `## Historical (pre-1.0)`, then the FULL `[0.X.X]` entries kept as
+   history. The 1.0.0 production release IS the **0.7.1** dev increment (version bumped at cutover), so
+   its items (achievement-filter fix, IPP/No-Data chips, writing trait exclusion, RWM collapse, etc.)
+   are recorded under a `[0.7.1]` historical entry — NOT dropped (no gap in the record), NOT folded into
+   the 1.0.0 entry. The 1.0.0 entry itself carries no feature bullets / no SQL list.
+
+**The trap I kept falling into:** "keep the history" (true for CHANGELOG.md) is NOT the same as "show it
+in the app" (false — the app shows only 1.0.0). And "only the release" for the 1.0.0 ENTRY does not
+license deleting the 0.7.1 work from CHANGELOG.md's history. Keep [[feedback_changelog_as_you_go]] for
+the ongoing habit, and [[feedback_implement_exactly_flag_cost]] — these were explicit instructions I
+overrode on my own, repeatedly.

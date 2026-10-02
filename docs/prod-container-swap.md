@@ -1,9 +1,10 @@
 # Production Image Swap — `aw` container
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.6.1` → `0.6.2` on 2026-09-23
-(roster perf pass — materialized membership + card-metadata pass-through + dead-column trim;
-**requires live SQL first** — see the prerequisite section below).
+running Podman container for a new one. Most recent cutover: `0.7.0` → `1.0.0` on 2026-10-02
+(writing trait exclusion — **requires live SQL first**, see the prerequisite section below; this
+cutover also forced the move to `-p 0.0.0.0:3000:3000` and surfaced the WSL recovery gotchas —
+see the Troubleshooting section).
 
 ## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
 
@@ -30,7 +31,10 @@ need re-applying if IIS/ARR is reinstalled or the config is rebuilt.
   - `aw_auth_secret` → `AUTH_SECRET_FILE`
   - `aw_login_secret` → `AUTH_ENTRA_CLIENT_SECRET_FILE`
   - `aw_wh_secret` → `ENTRA_CLIENT_SECRET_FILE`
-- **Port binding:** `-p 127.0.0.1:3000:3000` (localhost only; IIS fronts it).
+- **Port binding:** `-p 0.0.0.0:3000:3000` (bind the port on ALL interfaces *inside the WSL VM*).
+  **Do NOT use `127.0.0.1` here** — see the WSL networking section below. Still host-only: the VM's
+  `eth0` sits on WSL's private NAT network, unreachable from the LAN; IIS (443) remains the only public
+  door, and the Windows Firewall blocks inbound 3000.
 - **Restart policy:** `--restart=unless-stopped`.
 - **Health endpoint:** `GET /api/health` → `200 {"status":"ok"}`.
 
@@ -82,7 +86,9 @@ and run any listed scripts against live **before** swapping the container.
 
 ## 1. Pre-flight (nothing changes yet)
 
-Run in **PowerShell as Administrator** on the prod host:
+Run on the prod host **as Administrator** — these `wsl -u appuser bash -c "…"` lines are just calls to
+`wsl.exe`, so they run identically in **Command Prompt (cmd)** or PowerShell; use whichever you keep the
+runbook in. (Only PowerShell-specific redirects like `Out-File` differ — in cmd redirect with `>`.)
 
 ```powershell
 wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman secret ls && podman inspect aw --format 'current image: {{.Image}} ({{.ImageName}})'"
@@ -105,7 +111,7 @@ ready to run — no retag step). `skipped: already exists` lines are shared base
 ## 3. Swap the container  ← brief outage (~seconds of HTTP 502)
 
 ```powershell
-wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw && podman rm aw && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 127.0.0.1:3000:3000 localhost/assessment-webapp:<NEW>"
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw && podman rm aw && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 0.0.0.0:3000:3000 localhost/assessment-webapp:<NEW>"
 ```
 
 Output: `aw` (stopped), `aw` (removed), then a 64-char container ID (new container started).
@@ -127,19 +133,57 @@ IT's "container missing" relaunch command pins the image by reference. Update it
 to the **new** version tag, or a future full relaunch will revert the deploy:
 
 ```powershell
-wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 127.0.0.1:3000:3000 localhost/assessment-webapp:<NEW>"
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 0.0.0.0:3000:3000 localhost/assessment-webapp:<NEW>"
 ```
 
 Everything else in the DR runbook (IIS check, `podman start aw`, `/api/health`) is unchanged.
 
 ---
 
+## Troubleshooting: 502 after the swap (WSL networking — learned the hard way 2026-10-02)
+
+The prod container runs under **rootless Podman inside a WSL2 VM**, and that adds two failure modes that
+look like the app is broken but aren't. Both bit us during the 1.0.0 cutover.
+
+**Symptom: IIS shows 502, but the container is healthy.** Diagnose by hitting the backend directly from
+the prod host (bypassing IIS), both from Windows and from inside WSL:
+```
+curl -i http://127.0.0.1:3000/api/health
+wsl -u appuser bash -c "curl -i http://127.0.0.1:3000/api/health"
+```
+- **WSL returns 200, Windows is `curl: (56) Recv failure: Connection was reset`** → the container is fine;
+  the **Windows→WSL loopback relay** didn't re-attach after the swap's socket teardown. This is why the
+  port binding is `-p 0.0.0.0:3000:3000`, **not** `127.0.0.1`: WSL2 forwards Windows `localhost:3000` to
+  the VM's `eth0` interface, so a container that only published on the VM's **loopback** is unreachable
+  from Windows (hence IIS 502) even though it answers inside WSL. Publishing on `0.0.0.0` makes the
+  container listen on `eth0` too, so the forwarded connection lands. If an old container is still on
+  `127.0.0.1`, re-run it with `-p 0.0.0.0:3000:3000` (step 3 command) and Windows-side curl flips to 200.
+- Do **NOT** roll back the image for this — rollback is another stop/rm/run through the same relay, same
+  result. The image is not the cause.
+
+**`wsl --shutdown` leaves the container unable to start** (`Failed to get rootless runtime dir … /run/user/1001:
+no such file or directory`, `mkdir /run/user/1001: permission denied`). The per-user runtime dir is created
+by systemd-logind at login — and on this host **systemd isn't starting because `/etc/wsl.conf` is malformed**
+(`wsl: Expected ' ' or '\n' in /etc/wsl.conf:1`). Until that's fixed, after any `wsl --shutdown`/reboot
+recreate the dir as root, then start as appuser:
+```
+wsl -u root bash -c "install -d -o appuser -g appuser -m 700 /run/user/1001"
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman start aw"
+```
+**Proper fix (do when there's time):** repair `/etc/wsl.conf` so systemd runs (then logind recreates
+`/run/user/1001` and the loopback relay behaves on boot). `wsl -u root bash -c "cat -A /etc/wsl.conf"` to
+see the offending line. `0.0.0.0` publishing is the resilient standard regardless.
+
+**NAT vs mirrored caveat:** `0.0.0.0` is host-only under WSL2's **default NAT** networking (VM `eth0` on a
+private, non-LAN-routable network). If this host is ever switched to **mirrored** networking mode,
+`0.0.0.0` binds the host's real interfaces — then rely on the Windows Firewall to block inbound 3000.
+
 ## Rollback
 
 The previous image stays on the host, so rollback is a re-run against `:<PREV>`:
 
 ```powershell
-wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw && podman rm aw && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 127.0.0.1:3000:3000 localhost/assessment-webapp:<PREV>"
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw && podman rm aw && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 0.0.0.0:3000:3000 localhost/assessment-webapp:<PREV>"
 ```
 
 If `:<PREV>` was pruned, reload it first: `podman load -i /mnt/c/temp/assessment-webapp-<PREV>.tar`.
