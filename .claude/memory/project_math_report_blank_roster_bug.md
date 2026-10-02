@@ -34,9 +34,12 @@ grades (esp. 4/5+) have been added. If so, seed them (grade CSVs → `usp_LoadMa
 populates those grades' matrices AND shrinks this bug's footprint. Tracks the "full P-6 seed" TODO in
 [[project_math_assessment_model]].
 
-**Fix direction (NOT built — candidate 0.7.1):** mirror the entry grid, which does NOT hide these
-students — it shows them under a "Math tasks for {grade} aren't available yet" note. So either
-LEFT JOIN the tasks (keep the students, render a per-grade "no tasks yet" note) or make the page's
-empty state distinguish "no students" from "students present but no tasks configured for their
-grades." The current message is also just wrong ("No students" when there ARE students). This is the
-app-side safety net regardless of seeding progress. Relates to [[project_math_assessment_model]].
+**App-side fix — DEFERRED (user call 2026-10-02): do NOT build for now.** This resolves itself once
+grades 4/5 are seeded (imminent), so the multi-file change isn't worth the overhead for a transient
+state. Don't re-propose it. **Revisit ONLY if** grades stay unseeded long-term, OR the misleading
+"No students in this group" message (when there ARE students) becomes a real problem.
+
+The fix, if ever needed: mirror the entry grid — `LEFT JOIN` the tasks in `tvf_StudentCohortMath` so
+students in task-less grades aren't dropped, render a per-grade "Math tasks for {grade} aren't
+available yet" note, and make the empty state distinguish "no students" from "no tasks configured."
+Relates to [[project_math_assessment_model]].
