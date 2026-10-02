@@ -39,6 +39,7 @@
 - [Fabric Stale Preview](feedback_fabric_stale_preview.md) — the table preview pane caches; verify via SQL COUNT(*).
 - [Full-Reset Truncate-All](feedback_full_reset_truncate_all.md) — resetting for usp_RunFullIngestCycle: truncate all 6 orchestrator tables, never selectively.
 - [Capacity Right-Sizing Intent](project_capacity_rightsizing_intent.md) — F8 is a DELIBERATE high ceiling so real usage runs unrestricted and can be measured, then the right SKU is bought at renewal. Do NOT design as if F2 is the target (that under-measures and risks under-buying); avoid waste, never trade UX for speculative capacity savings.
+- [Load-Test Findings (2026-10)](project_loadtest_findings_2026_10.md) — First load test: app is **Fabric-bound**, not app/VM/pool-bound (VM CPU ~20% at 100 users). F8 ceiling ~6-7 RPS; pool knee `FABRIC_POOL_MAX=20` (10 starves, 30/40 no gain); usable latency to ~20 concurrent. Scale via Fabric SKU / cheaper queries, NOT replicas/CPU/pool. Detail on the `loadtest` branch.
 - [Podman Windows Dev Container](reference_podman_windows_dev_container.md) — publish `127.0.0.1:PORT:3000` explicitly; THREE containers: awlive=.env :3000, awdev=.env.dev :3001, awdev-impersonation :3002 (`-imp` image from dev-impersonation branch, `-e AUTH_MODE=dev`); typecheck via image build (no node/gh).
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 
