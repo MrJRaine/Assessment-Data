@@ -82,16 +82,19 @@ RETURN
     LatestWritingInWindow AS (
         SELECT
             StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
-            -- Average over the NUMERICALLY-SCORED traits only. All four traits are VARCHAR now, so
-            -- TRY_CAST each: '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all
-            -- return NULL and drop from BOTH the sum and the count (never counted as 0). All-dropped -> NULL.
+            -- Average over the NUMERICALLY-SCORED traits only. Count a trait ONLY when it is explicitly
+            -- '1'-'4': '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all drop from
+            -- BOTH the sum and the count (never counted as 0). All-dropped -> NULL. NB (Fabric gotcha):
+            -- TRY_CAST('-' AS INT) returns 0, NOT NULL — so gate on the explicit allow-list, not TRY_CAST.
             CAST(
-                (COALESCE(TRY_CAST(IdeasScore AS INT), 0) + COALESCE(TRY_CAST(OrganizationScore AS INT), 0)
-                 + COALESCE(TRY_CAST(LanguageScore AS INT), 0) + COALESCE(TRY_CAST(ConventionsScore AS INT), 0)) * 1.0
-                / NULLIF((CASE WHEN TRY_CAST(IdeasScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN TRY_CAST(OrganizationScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN TRY_CAST(LanguageScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN TRY_CAST(ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
+                (COALESCE(CASE WHEN IdeasScore        IN ('1','2','3','4') THEN CAST(IdeasScore        AS INT) END, 0)
+                 + COALESCE(CASE WHEN OrganizationScore IN ('1','2','3','4') THEN CAST(OrganizationScore AS INT) END, 0)
+                 + COALESCE(CASE WHEN LanguageScore     IN ('1','2','3','4') THEN CAST(LanguageScore     AS INT) END, 0)
+                 + COALESCE(CASE WHEN ConventionsScore  IN ('1','2','3','4') THEN CAST(ConventionsScore  AS INT) END, 0)) * 1.0
+                / NULLIF((CASE WHEN IdeasScore        IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN OrganizationScore IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                 AS DECIMAL(5,2)) AS AvgScore,
             AssessmentDate,
             ROW_NUMBER() OVER (

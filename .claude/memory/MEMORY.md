@@ -17,8 +17,9 @@
 - [Project Email](feedback_project_email.md) — use jeffrey.raine@tcrce.ca; ignore auto-memory userEmail (personal, unrelated).
 - [No Wrap Prompts](feedback_no_wrap_prompts.md) — never suggest wrapping; only run wrap on explicit trigger.
 - [Left Off Notes Newest-First](feedback_left_off_newest_first.md) — insert each Left Off note at the TOP of the chain in docs/implementation-plan.md, NEVER append at the bottom (session-start trusts the first heading); keep .claude/ + .github/ skill mirrors in sync.
-- [Commit Cadence](feedback_commit_cadence.md) — commit AND push proactively at logical checkpoints; keeping GitHub backed up is mine. PRs only when instructed.
+- [Commit Cadence](feedback_commit_cadence.md) — commit AND push proactively at logical checkpoints; keeping GitHub backed up is mine. PRs only when instructed — BUT the full release ritual (dev→main, tag vX.Y.Z, gh release, back-merge, reconcile imp) fires automatically on a SUCCESSFUL LIVE DEPLOY, NOT a separate user trigger.
 - [Changelog As We Go](feedback_changelog_as_you_go.md) — update CHANGELOG.md (+ patchNotes.ts for user-visible changes) AS each change lands, not at release. Footer version = package.json.
+- [v1.0.0 Release Changelog](project_v1_release_changelog.md) — TWO surfaces, DON'T conflate: in-app What's New (`patchNotes.ts`) holds ONLY the 1.0.0 entry (delete all 0.x, or they SHOW); CHANGELOG.md = bare 1.0.0 line + full 0.x history below (incl `[0.7.1]`). "Only the release" ≠ delete the 0.7.1 work from history. (Got conflated 3×, 2026-10-02.)
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; user owns scope. ESPECIALLY never hardcode ASSESSMENT-METHODOLOGY rules (which grades/programs/languages assessed how) — build the config knob, let the admin decide.
 - [Implement Exactly / Flag the Cost](feedback_implement_exactly_flag_cost.md) — do the instruction to the letter; NEVER silently substitute a cheaper near-equivalent to dodge a migration/refactor. If it's expensive, SURFACE the cost and let the user choose. (Stored NULL instead of the specified "-" to avoid a column migration, 2026-10-02 — repeated pattern, infuriating.)
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
@@ -92,6 +93,7 @@
 - [Homeroom Chips Unwieldy](project_homeroom_chips_unwieldy.md) — homeroom smart-chips don't scale; denser/searchable picker (superseded by group redesign).
 
 ## Shipped / in-flight features
+- [Writing Trait Exclusion (v1.0.0 LIVE)](project_writing_trait_exclusion.md) — data-driven `WritingTraitExclusion` (trait×grade×program×benchmark-month); excluded trait stored as `-` (≠NULL), dropped from avg/reports. FI·P·Sep-Oct-Nov·Organization. Traits now VARCHAR; average via `IN ('1'..'4')` allow-list (Fabric `TRY_CAST('-')=0`). LIVE 2026-10-02 (bundle `sql/deploy/live_1.0.0/`).
 - [Roster Materialization (0.6.2 LIVE)](project_roster_materialization.md) — membership tables (`SectionRosterMembership`/`TeacherRosterMembership`) + card-metadata pass-through + dead-column cut; warm roster ~3.47s→~2.3s. Two tables in **LOCKSTEP** with the roster TVFs; D (fast-path routing) parked.
 - [Image Versioning Scheme (DONE)](project_image_versioning_scheme.md) — RESOLVED 2026-09-08: semver-tagged prod images, tar by version, CHANGELOG + git tag; first = v0.3.0.
 - [Prior-Year Baseline (v0.4.0 SHIPPED)](project_prior_year_baseline.md) — Reading prior-year starting point LIVE 2026-09-10; COALESCE(prior facts, baseline seed). Writing has NO baseline.

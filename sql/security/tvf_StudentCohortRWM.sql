@@ -95,15 +95,20 @@ RETURN
         WHERE rl.rn = 1
     ),
     -- Most-recent writing -> trait average -> band code (same cut scores as tvf_StudentCohortWriting).
+    -- Traits are VARCHAR: count one ONLY when it is explicitly '1'-'4'; '-' (excluded), 'SCR' and NULL
+    -- all drop. NB (Fabric gotcha): TRY_CAST('-' AS INT) = 0 (not NULL), and a bare COALESCE(IdeasScore,0)
+    -- would hard-CAST '-' and error — so gate on the explicit allow-list.
     WriteLatest AS (
         SELECT faw.StudentKey,
                CAST(
-                   (COALESCE(faw.IdeasScore, 0) + COALESCE(faw.OrganizationScore, 0) + COALESCE(faw.LanguageScore, 0)
-                    + COALESCE(TRY_CAST(faw.ConventionsScore AS INT), 0)) * 1.0
-                   / NULLIF((CASE WHEN faw.IdeasScore IS NOT NULL THEN 1 ELSE 0 END)
-                          + (CASE WHEN faw.OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
-                          + (CASE WHEN faw.LanguageScore IS NOT NULL THEN 1 ELSE 0 END)
-                          + (CASE WHEN TRY_CAST(faw.ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
+                   (COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
+                    + COALESCE(CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN CAST(faw.OrganizationScore AS INT) END, 0)
+                    + COALESCE(CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN CAST(faw.LanguageScore     AS INT) END, 0)
+                    + COALESCE(CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN CAST(faw.ConventionsScore  AS INT) END, 0)) * 1.0
+                   / NULLIF((CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                          + (CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                          + (CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                          + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                    AS DECIMAL(5,2)) AS AvgScore,
                ROW_NUMBER() OVER (PARTITION BY faw.StudentKey
                                   ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
