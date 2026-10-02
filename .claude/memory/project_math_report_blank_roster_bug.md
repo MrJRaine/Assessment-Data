@@ -26,9 +26,17 @@ math tasks = full card count, blank matrix. Consistent with "some schools fine, 
 shows the homeroom's students by grade vs active task count per grade, plus the full task universe.
 If the affected grades show `ActiveMathTasksForGrade = 0`, the hypothesis holds.
 
+**CONFIRMED 2026-10-02:** Homeroom Doucette is a **grade 4/5** class and grades 4/5 have **no math
+tasks seeded yet** (still being authored) — so the INNER JOIN drops all 23. Hypothesis holds.
+
+**📌 TODO (USER) — pull the latest math tasks from the shared authoring doc** and check whether new
+grades (esp. 4/5+) have been added. If so, seed them (grade CSVs → `usp_LoadMathTasks`) — that both
+populates those grades' matrices AND shrinks this bug's footprint. Tracks the "full P-6 seed" TODO in
+[[project_math_assessment_model]].
+
 **Fix direction (NOT built — candidate 0.7.1):** mirror the entry grid, which does NOT hide these
 students — it shows them under a "Math tasks for {grade} aren't available yet" note. So either
 LEFT JOIN the tasks (keep the students, render a per-grade "no tasks yet" note) or make the page's
 empty state distinguish "no students" from "students present but no tasks configured for their
-grades." The current message is also just wrong ("No students" when there ARE students).
-Relates to [[project_math_assessment_model]] and the reports build.
+grades." The current message is also just wrong ("No students" when there ARE students). This is the
+app-side safety net regardless of seeding progress. Relates to [[project_math_assessment_model]].
