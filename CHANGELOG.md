@@ -11,7 +11,58 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.7.0] — unreleased (in development)
+## [1.0.0] — 2026-10-02
+
+First production release of the SCoR Dashboard.
+
+## Historical (pre-1.0)
+
+Per-release detail through the pre-1.0 development line is retained below. The 1.0.0 production
+release *is* the 0.7.1 development increment (version bumped at cutover) — its items are recorded
+here under `0.7.1` so the build history has no gap.
+
+## [0.7.1] — built on dev; shipped to production as 1.0.0
+
+### Fixed
+- **Achievement filter no longer surfaces IPP students** (Reading/Writing cohort). An achievement-level
+  chip pulled in IPP / unresolved students (whose band is shown as "IPP"/"—", not measured against
+  benchmarks) because the filter matched the raw code the TVF computes from their delta. Each student
+  now maps to a single displayed category, so a band chip returns only students shown at that level.
+
+### Added
+- **"IPP" and "No Data" achievement chips** (Reading/Writing cohort). Alongside the four bands, filter
+  to students shown as **IPP** (on an individual program plan) or **No Data** (no result recorded yet,
+  or an unconfirmed IPP) — so those students can be found on purpose instead of just excluded.
+- **Writing traits can be marked "not assessed" for a grade/program/cycle.** A data-driven config
+  (`WritingTraitExclusion`) lists trait × grade × program × benchmark-month combinations that aren't
+  assessed. For a matching student the entry grid hides that trait's dropdown and records the
+  intentional **`-`** ("deliberately not assessed" — a distinct fact from a blank/never-recorded cell),
+  and the average + reports drop it — same effect as a Scribed (`SCR`) Conventions score. First rule
+  shipped: **Organization is not assessed for French Immersion grade-Primary in Sept/Oct/Nov cycles.**
+  The rule lives entirely in the table — add/remove rows to change it; nothing is hardcoded.
+
+### Changed
+- **RWM report filters now collapse.** The grade / program / school / score chips sit behind a
+  **Show/Hide filters** toggle (collapsed by default), matching the Reading/Writing cohort page; the
+  Blanks, "All 3 areas only", and Reset controls stay in the bar, and the toggle shows "(active)"
+  when filters are applied while hidden. No SQL.
+
+### SQL
+- Writing-trait-exclusion deploy, **run in this order**:
+  1. **`migrate_FactWriting_traits_varchar.sql`** — `IdeasScore` / `OrganizationScore` / `LanguageScore`
+     INT → VARCHAR(10) so a trait can hold the `-` sentinel (mirrors the earlier Conventions swap).
+     Idempotent, run-once-per-warehouse.
+  2. **`WritingTraitExclusion.sql`** — new config table + idempotent seed (FI · grade-P · months 9/10/11 · Organization).
+  3. **`usp_UpsertWritingAssessment.sql`** — stores `-` for an excluded trait; average over the scored
+     traits only; exclusion-aware required/range checks.
+  4. The five writing TVFs — **`tvf_TeacherRosterWriting.sql`** (returns `ExcludedTraits`),
+     **`tvf_StudentCohortWriting.sql`**, **`tvf_StudentAssessmentHistoryWriting.sql`**,
+     **`tvf_StudentCohortRWM.sql`**, **`tvf_StudentRWMHistory.sql`** — average via the
+     `IN ('1','2','3','4')` allow-list (Fabric `TRY_CAST('-' AS INT)` returns 0, not NULL).
+  5. **`remediate_writing_trait_exclusion.sql`** — one-time (and re-run when a rule is added): marks
+     existing excluded cells `-` and recomputes their stored `WritingAverage`.
+
+## [0.7.0] — 2026-09-25 (LIVE)
 
 Rollup minor. Bundles the Math completion cards + Data Entry "done" relabel + the entry-load perf pass +
 the Short-Cycle **grace-lock / override / staff-access** below. The **Reports** changes land under this

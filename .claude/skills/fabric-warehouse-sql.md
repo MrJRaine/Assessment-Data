@@ -385,3 +385,20 @@ evaluates per row AND is **reproducible** (same input → same value, so a re-se
 numbers). Different salts or byte windows give independent draws; sum 3 uniforms − 1.5 ≈ N(0, 0.5²) for a
 bell. Confirmed working alongside this: `HASHBYTES` `SHA2_256`, `SUBSTRING` on `varbinary`,
 `CONVERT(BIGINT, varbinary)`, and multi-table `DELETE f FROM … JOIN … WHERE …`.
+
+## `TRY_CAST('-' AS INT)` returns 0, NOT NULL (2026-10-02)
+
+Fabric parses a lone sign char as a number: `TRY_CAST('-' AS INT) = 0` (and `TRY_CAST('+' AS INT) = 0`),
+where SQL Server returns `NULL`. So `TRY_CAST` is NOT a safe way to reject a non-numeric sentinel. Bit
+us on the writing-trait `-` ("deliberately not assessed") sentinel: an average built as
+`COALESCE(TRY_CAST(col AS INT),0)` / `NULLIF(Σ CASE WHEN TRY_CAST(col AS INT) IS NOT NULL THEN 1 END,0)`
+counted `-` as a scored **0** — it landed in the denominator (÷4 not ÷3) and dragged every average down
+(2/-/2/2 → 1.50 instead of 2.00), and an `IS NOT NULL` "is it still numeric?" check false-flagged every
+`-` cell. `'SCR'` was fine only because letters can't parse — don't rely on that.
+
+**Rule: gate on an explicit value allow-list, never on `TRY_CAST(...) IS NULL`.** For writing traits:
+`CASE WHEN col IN ('1','2','3','4') THEN CAST(col AS INT) END` in the numerator and
+`CASE WHEN col IN ('1','2','3','4') THEN 1 ELSE 0 END` in the denominator. (This supersedes the earlier
+"TRY_CAST is supported" note — it runs, but its string→int parsing is looser than SQL Server's.) Also
+note: a bare `COALESCE(varcharCol, 0)` has INT precedence and HARD-casts the string (errors on `-`), so
+it's not a workaround either.

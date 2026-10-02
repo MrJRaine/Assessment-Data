@@ -409,14 +409,19 @@ export interface WritingRosterStudent {
   groupKey: string // which selected class this student came from (combined-roster headings)
   schoolName: string | null
   programFamily: string | null // IPP row's ProgramFamily (window-over-student) — passed to the IPP proc
-  ideas: number | null // existing 1–4 trait scores for this window (latest entry), or null if none
-  organization: number | null
-  language: number | null
-  conventions: string | null // '1'–'4' or 'SCR' (Scribed) — Conventions can be scribed
+  // Existing trait values for this window (latest entry). All VARCHAR now: '1'–'4', or '-' (a trait
+  // EXCLUDED for this student this cycle — deliberately not assessed), or null (never recorded).
+  // Conventions additionally carries 'SCR' (Scribed). The grid parses these; '-'/'SCR' drop from the avg.
+  ideas: string | null
+  organization: string | null
+  language: string | null
+  conventions: string | null // '1'–'4' | 'SCR' (Scribed) | '-' (excluded)
   avgScore: number | null
   assessmentDate: string | null
   ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
   ippNeedsConfirmation: boolean
+  excludedTraits: string[] // trait keys (lowercased) NOT assessed for this student this cycle (data-driven
+  // via WritingTraitExclusion) — the grid hides these dropdowns and they drop from the average.
   // Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the roster
   // TVF no longer returns it.
 }
@@ -434,10 +439,10 @@ export async function getTeacherRosterWriting(
     FirstName: string
     LastName: string
     Grade: string | null
-    ExistingIdeasScore: number | null
-    ExistingOrganizationScore: number | null
-    ExistingLanguageScore: number | null
-    ExistingConventionsScore: string | null // VARCHAR: '1'–'4' or 'SCR'
+    ExistingIdeasScore: string | null // VARCHAR: '1'–'4' | '-' (excluded)
+    ExistingOrganizationScore: string | null
+    ExistingLanguageScore: string | null
+    ExistingConventionsScore: string | null // VARCHAR: '1'–'4' | 'SCR' | '-' (excluded)
     ExistingAvgScore: number | null
     ExistingAssessmentDate: Date | string | null
     Homeroom: string | null
@@ -446,6 +451,7 @@ export async function getTeacherRosterWriting(
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
+    ExcludedTraits: string | null // comma-list of trait names ('Organization'), or null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language) ORDER BY LastName, FirstName',
@@ -472,6 +478,7 @@ export async function getTeacherRosterWriting(
         : (r.ExistingAssessmentDate ?? null),
     ippStatus: r.WritingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.WritingIPPNeedsConfirmation),
+    excludedTraits: (r.ExcludedTraits ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
   }))
 }
 
@@ -890,10 +897,13 @@ export interface WritingHistoryRow {
   windowName: string
   windowSchoolYear: string | null
   assessmentDate: string | null
-  ideas: number | null
-  organization: number | null
-  language: number | null
-  conventions: string | null // '1'–'4' or 'SCR' (Scribed)
+  // All four traits are VARCHAR: '1'–'4', '-' (excluded = deliberately not assessed), or null (never
+  // recorded); Conventions additionally 'SCR'. Kept as strings so the detail view shows '-' / 'SCR'
+  // verbatim and never coerces them to NaN. '-'/'SCR'/null drop from avgScore (computed server-side).
+  ideas: string | null
+  organization: string | null
+  language: string | null
+  conventions: string | null // '1'–'4' | 'SCR' (Scribed) | '-' (excluded)
   avgScore: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -913,9 +923,9 @@ export async function getStudentHistoryWriting(upn: string, studentKey: string):
     windowName: String(r.WindowName),
     windowSchoolYear: (r.WindowSchoolYear as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
-    ideas: r.IdeasScore == null ? null : Number(r.IdeasScore),
-    organization: r.OrganizationScore == null ? null : Number(r.OrganizationScore),
-    language: r.LanguageScore == null ? null : Number(r.LanguageScore),
+    ideas: r.IdeasScore == null ? null : String(r.IdeasScore),
+    organization: r.OrganizationScore == null ? null : String(r.OrganizationScore),
+    language: r.LanguageScore == null ? null : String(r.LanguageScore),
     conventions: r.ConventionsScore == null ? null : String(r.ConventionsScore),
     avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementName: (r.AchievementLevelName as string) ?? null,

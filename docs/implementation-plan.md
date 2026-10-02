@@ -131,6 +131,26 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-02 (eve) — 🟢 v1.0.0 LIVE (SQL): writing trait exclusion deployed; prod container swap + git ritual PENDING
+- **Last completed step**: **Writing TRAIT-exclusion** feature built, dev-verified, and **live SQL deployed + verified** — bundle `sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql` (migration → config table → proc → 5 TVFs → remediation); verified 4 trait cols VARCHAR/167 + remediation 0 rows. **Live warehouse is at 1.0.0.** Data-driven `WritingTraitExclusion`; excluded trait stored as `-` (≠NULL); FI·P·Sep/Oct/Nov·Organization. [[project_writing_trait_exclusion]]. Fabric gotcha found: `TRY_CAST('-' AS INT)=0` → averages gate on `IN ('1'..'4')`.
+- **In progress**: final prod **CONTAINER** swap to the corrected 1.0.0 image (patchNotes fix — in-app What's New must show ONLY 1.0.0). Corrected tar `assessment-webapp-1.0.0.tar` built (sha `da38fbce…`); user was uploading/swapping over RDP at session end. Prod publish standard changed to `-p 0.0.0.0:3000:3000` (WSL loopback-relay 502 fix — `docs/prod-container-swap.md`).
+- **Next action**: (1) confirm the prod container swap landed (What's New = only 1.0.0; `/api/health` 200). (2) Run the **git release ritual** (user's trigger): `dev→main --no-ff`, tag `v1.0.0`, gh release, main→dev back-merge, and reconcile `dev-impersonation` with the final SQL-fix + patchNotes commits.
+- **Blockers**: None. (Prod-host `/etc/wsl.conf` is malformed ⇒ systemd + `/run/user/1001` don't auto-recover after a reboot; recovery steps are in the runbook — hardening, not blocking.)
+
+### Left Off — 2026-10-02 — 🔬 First load test complete: app is FABRIC-BOUND (capacity data)
+- **Load-tested the web app** (single box, `0.7.1-loadtest` Entra-bypass build vs **dev** warehouse, Locust
+  on the same VM). Full write-up + raw reports are on the **`loadtest` branch** (`loadtest/HANDOVER-2026-10-02.md`,
+  `loadtest/results/*.md`, `loadtest/Locust_2026-10-02-*.html`); findings distilled in [[project_loadtest_findings_2026_10]].
+- **Result:** app is **Fabric-bound, not app/VM/pool-bound** — VM CPU only ~20% at 100 concurrent users
+  (generator included). F8 throughput ceiling ~6–7 RPS; connection-pool knee `FABRIC_POOL_MAX=20` (10
+  starves, 30/40 no gain + worse tails); usable latency to ~20 concurrent; no error wall past that, just slow.
+- **Feeds the capacity decision** ([[project_capacity_rightsizing_intent]]): scale via Fabric SKU / cheaper
+  queries (roster + analyst cohort are the hogs) — NOT app replicas/CPU/pool.
+- **Next (optional):** capture Fabric Capacity Metrics CU% during a 100-user run to quantify the ceiling;
+  fix the `loadtest.ts` `allowedLoadtestUsers()` `:role`-strip bug; revert `FABRIC_POOL_MAX` to 20 on any deploy.
+- **Dev/main code unchanged this session** — this was measurement only. (Earlier this session, on a now-merged
+  branch, small-group filtering was added to the Reading/Writing entry grids — in `dev` already.)
+
 ### Left Off — 2026-09-24 (later) — 🟢 0.6.3 SHIPPED LIVE; both live bugs + Math IPPs RESOLVED (all stale-object drift)
 - **0.6.3 LIVE** (noon cutover, prod-swap of `aw` to `:0.6.3`). Change: **Programming summary chips now count
   STUDENTS, not records** — `getProgrammingSummary`/`studentLevel` in [data.ts]; the old cell count read

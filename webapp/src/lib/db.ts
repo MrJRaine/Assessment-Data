@@ -44,6 +44,12 @@ export function getCredential(): ClientSecretCredential {
   return credential
 }
 
+// Connection-pool ceiling, env-overridable (FABRIC_POOL_MAX) for load-test sweeps; default 20.
+function poolMax(): number {
+  const n = Number(process.env.FABRIC_POOL_MAX)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 20
+}
+
 async function buildConfig(): Promise<sql.config> {
   const server = process.env.FABRIC_SQL_SERVER
   const database = process.env.FABRIC_SQL_DATABASE
@@ -70,8 +76,9 @@ async function buildConfig(): Promise<sql.config> {
     // decision — a 10-connection pool would queue concurrent teachers in the app, so Fabric would
     // never see true peak demand and Capacity Metrics would under-report (risking an under-buy).
     // Keep it high enough not to throttle in-app, low enough not to provoke Fabric-side throttling.
-    // See memory project_capacity_rightsizing_intent.
-    pool: { max: 20 },
+    // Overridable via FABRIC_POOL_MAX so a load test can sweep the pool size without a rebuild;
+    // default stays 20. See memory project_capacity_rightsizing_intent.
+    pool: { max: poolMax() },
   }
 }
 

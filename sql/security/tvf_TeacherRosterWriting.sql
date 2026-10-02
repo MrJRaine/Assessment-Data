@@ -42,7 +42,7 @@ RETURN
         WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
     ),
     WindowEffectiveDates AS (
-        SELECT w.AssessmentWindowID, w.AssessmentLanguage
+        SELECT w.AssessmentWindowID, w.AssessmentLanguage, w.BenchmarkMonth, w.StartDate
         FROM DimAssessmentWindow w
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
@@ -82,15 +82,19 @@ RETURN
     LatestWritingInWindow AS (
         SELECT
             StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
-            -- Average over the SCORED traits only: Conventions may be 'SCR' (Scribed) -> TRY_CAST NULL,
-            -- which drops it from BOTH the sum and the count (never counted as 0). All-scribed -> NULL.
+            -- Average over the NUMERICALLY-SCORED traits only. Count a trait ONLY when it is explicitly
+            -- '1'-'4': '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all drop from
+            -- BOTH the sum and the count (never counted as 0). All-dropped -> NULL. NB (Fabric gotcha):
+            -- TRY_CAST('-' AS INT) returns 0, NOT NULL — so gate on the explicit allow-list, not TRY_CAST.
             CAST(
-                (COALESCE(IdeasScore, 0) + COALESCE(OrganizationScore, 0) + COALESCE(LanguageScore, 0)
-                 + COALESCE(TRY_CAST(ConventionsScore AS INT), 0)) * 1.0
-                / NULLIF((CASE WHEN IdeasScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN LanguageScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN TRY_CAST(ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
+                (COALESCE(CASE WHEN IdeasScore        IN ('1','2','3','4') THEN CAST(IdeasScore        AS INT) END, 0)
+                 + COALESCE(CASE WHEN OrganizationScore IN ('1','2','3','4') THEN CAST(OrganizationScore AS INT) END, 0)
+                 + COALESCE(CASE WHEN LanguageScore     IN ('1','2','3','4') THEN CAST(LanguageScore     AS INT) END, 0)
+                 + COALESCE(CASE WHEN ConventionsScore  IN ('1','2','3','4') THEN CAST(ConventionsScore  AS INT) END, 0)) * 1.0
+                / NULLIF((CASE WHEN IdeasScore        IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN OrganizationScore IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                       + (CASE WHEN ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                 AS DECIMAL(5,2)) AS AvgScore,
             AssessmentDate,
             ROW_NUMBER() OVER (
@@ -125,9 +129,20 @@ RETURN
         -- Writing IPP family follows the effective language track (cycle scope, else toggle).
         -- Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the
         -- DimAchievementLevel join + its columns were dead server work; removed 2026-09-23.
-        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily
+        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
+        -- Data-driven trait exclusions for this student's grade x ACTUAL program family x the cycle's
+        -- benchmark month (WritingTraitExclusion) — the grid hides these dropdowns; the upsert enforces
+        -- the NULL. Keyed on the student's real ProgramFamily (matches the upsert), not the language track.
+        (SELECT STRING_AGG(wte.Trait, ',')
+         FROM WritingTraitExclusion wte
+         WHERE wte.ActiveFlag = 1
+           AND wte.GradeCode      = sg.Grade
+           AND wte.ProgramFamily  = dp.ProgramFamily
+           AND wte.BenchmarkMonth = COALESCE(wed.BenchmarkMonth, MONTH(wed.StartDate))) AS ExcludedTraits
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
+    LEFT JOIN DimStudent ds ON ds.StudentKey = sg.StudentKey AND ds.IsCurrent = 1
+    LEFT JOIN DimProgram dp ON dp.ProgramCode = ds.ProgramCode
     LEFT JOIN LatestWritingInWindow faw
            ON faw.AssessmentWindowID = sg.AssessmentWindowID
           AND faw.StudentKey         = sg.StudentKey
