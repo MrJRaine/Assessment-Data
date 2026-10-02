@@ -17,8 +17,10 @@ Same effect as a Conventions `'SCR'`. First (only) active rule: **FI · grade P 
 months 9/10/11 · Organization.** NOTHING is hardcoded — add/remove rows to change the rule
 ([[feedback_no_unilateral_scope_decisions]]).
 
-**Status:** BUILT + dev-verified 2026-10-02 (grid, cohort/history/RWM reports, stored avg all
-agree). Ships in **v1.0.0** (see [[project_v1_release_changelog]]); **LIVE PENDING.**
+**Status:** **LIVE 2026-10-02** as **v1.0.0** (see [[project_v1_release_changelog]]). Dev-verified then
+deployed to live via `sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql` — migration verify showed
+all four trait cols VARCHAR/167, remediation verify returned 0 rows. Grid, cohort/history/RWM reports,
+and stored avg all agree.
 
 **All four trait columns are VARCHAR(10)** now (Ideas/Org/Lang migrated from INT; Conventions
 already was): hold `'1'`–`'4'` | `'SCR'` (Conv only) | `'-'` (excluded) | NULL. Averages count a
