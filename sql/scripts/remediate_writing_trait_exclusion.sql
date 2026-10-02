@@ -105,18 +105,21 @@ WHERE (faw.ConventionsScore IS NULL OR faw.ConventionsScore <> '-')
                 AND wte.BenchmarkMonth = COALESCE(w.BenchmarkMonth, MONTH(w.StartDate)));
 GO
 
--- Recompute the stored WritingAverage over the scored traits, for every row that matches
--- ANY active exclusion rule. Same formula as usp_UpsertWritingAssessment and the read TVFs:
--- TRY_CAST drops '-' (excluded), 'SCR' (scribed) and NULL from BOTH numerator and denominator.
--- All-dropped -> NULL average.
+-- Recompute the stored WritingAverage over the scored traits, for every row that matches ANY
+-- active exclusion rule. Same formula as usp_UpsertWritingAssessment and the read TVFs: count a
+-- trait ONLY when it is explicitly '1'-'4' — '-' (excluded), 'SCR' (scribed) and NULL all drop
+-- from BOTH numerator and denominator. All-dropped -> NULL. NB (Fabric gotcha): TRY_CAST('-' AS
+-- INT) returns 0, NOT NULL, so gating on TRY_CAST would wrongly count '-' as a scored 0.
 UPDATE faw
 SET faw.WritingAverage =
-        CAST(COALESCE(TRY_CAST(faw.IdeasScore AS INT), 0) + COALESCE(TRY_CAST(faw.OrganizationScore AS INT), 0)
-             + COALESCE(TRY_CAST(faw.LanguageScore AS INT), 0) + COALESCE(TRY_CAST(faw.ConventionsScore AS INT), 0) AS DECIMAL(6,4))
-        / NULLIF( (CASE WHEN TRY_CAST(faw.IdeasScore        AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(faw.OrganizationScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(faw.LanguageScore     AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(faw.ConventionsScore  AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0),
+        CAST(COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
+             + COALESCE(CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN CAST(faw.OrganizationScore AS INT) END, 0)
+             + COALESCE(CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN CAST(faw.LanguageScore     AS INT) END, 0)
+             + COALESCE(CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN CAST(faw.ConventionsScore  AS INT) END, 0) AS DECIMAL(6,4))
+        / NULLIF( (CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0),
     faw.LastUpdated = GETDATE()
 FROM FactAssessmentWriting faw
 JOIN DimStudent         ds ON ds.StudentKey        = faw.StudentKey
@@ -129,8 +132,10 @@ WHERE EXISTS (SELECT 1 FROM WritingTraitExclusion wte
                 AND wte.BenchmarkMonth = COALESCE(w.BenchmarkMonth, MONTH(w.StartDate)));
 GO
 
--- Verify: after remediation this should return 0 rows (no excluded trait still holds a
--- numeric value — each matching cell now reads '-').
+-- Verify: after remediation this should return 0 rows (no excluded trait still holds a real
+-- score '1'-'4' — each matching cell now reads '-'). NB: test membership in the score allow-list,
+-- NOT "TRY_CAST(... ) IS NOT NULL" — on Fabric TRY_CAST('-' AS INT) = 0, which would false-flag
+-- every correctly-remediated '-' cell.
 SELECT faw.WritingAssessmentID, ds.Grade, dp.ProgramFamily,
        COALESCE(w.BenchmarkMonth, MONTH(w.StartDate)) AS BenchMonth,
        faw.IdeasScore, faw.OrganizationScore, faw.LanguageScore, faw.ConventionsScore, faw.WritingAverage
@@ -143,8 +148,8 @@ JOIN WritingTraitExclusion wte
      AND wte.GradeCode      = ds.Grade
      AND wte.ProgramFamily  = dp.ProgramFamily
      AND wte.BenchmarkMonth = COALESCE(w.BenchmarkMonth, MONTH(w.StartDate))
-WHERE (wte.Trait = 'Ideas'        AND TRY_CAST(faw.IdeasScore        AS INT) IS NOT NULL)
-   OR (wte.Trait = 'Organization' AND TRY_CAST(faw.OrganizationScore AS INT) IS NOT NULL)
-   OR (wte.Trait = 'Language'     AND TRY_CAST(faw.LanguageScore     AS INT) IS NOT NULL)
-   OR (wte.Trait = 'Conventions'  AND TRY_CAST(faw.ConventionsScore  AS INT) IS NOT NULL);
+WHERE (wte.Trait = 'Ideas'        AND faw.IdeasScore        IN ('1','2','3','4'))
+   OR (wte.Trait = 'Organization' AND faw.OrganizationScore IN ('1','2','3','4'))
+   OR (wte.Trait = 'Language'     AND faw.LanguageScore     IN ('1','2','3','4'))
+   OR (wte.Trait = 'Conventions'  AND faw.ConventionsScore  IN ('1','2','3','4'));
 GO

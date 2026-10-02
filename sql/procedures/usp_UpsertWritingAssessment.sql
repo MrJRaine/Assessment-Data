@@ -300,16 +300,20 @@ BEGIN
     -- Writing average, stamped on the row (as-was) so the exclusion/SCR rules live in the DATA, not
     -- only the read logic: ANY NULL trait (excluded for this cell, or Conventions='SCR') drops from
     -- BOTH numerator and denominator — identical to how the cohort/history reads compute AvgScore.
-    -- Average over the numerically-scored traits only: TRY_CAST drops '-' (excluded), 'SCR' (scribed)
-    -- and NULL from BOTH numerator and denominator. Computed from the STORE values so it matches what
-    -- lands in the columns (and what the read TVFs recompute). All non-numeric -> NULL average.
+    -- Average over the numerically-scored traits only. Count a trait ONLY when it is explicitly a
+    -- score '1'-'4' — '-' (excluded), 'SCR' (scribed) and NULL all drop from BOTH numerator and
+    -- denominator. NB (Fabric gotcha): TRY_CAST('-' AS INT) returns 0, NOT NULL, so we must gate on
+    -- an explicit allow-list, never on TRY_CAST being NULL. Computed from the STORE values so it
+    -- matches what lands in the columns (and what the read TVFs recompute). All non-scored -> NULL.
     SET @WritingAverage =
-        CAST(COALESCE(TRY_CAST(@IdeasStore AS INT), 0) + COALESCE(TRY_CAST(@OrgStore AS INT), 0)
-             + COALESCE(TRY_CAST(@LangStore AS INT), 0) + COALESCE(TRY_CAST(@ConvStore AS INT), 0) AS DECIMAL(6,4))
-        / NULLIF( (CASE WHEN TRY_CAST(@IdeasStore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(@OrgStore   AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(@LangStore  AS INT) IS NOT NULL THEN 1 ELSE 0 END)
-                + (CASE WHEN TRY_CAST(@ConvStore  AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0);
+        CAST(COALESCE(CASE WHEN @IdeasStore IN ('1','2','3','4') THEN CAST(@IdeasStore AS INT) END, 0)
+             + COALESCE(CASE WHEN @OrgStore  IN ('1','2','3','4') THEN CAST(@OrgStore  AS INT) END, 0)
+             + COALESCE(CASE WHEN @LangStore IN ('1','2','3','4') THEN CAST(@LangStore AS INT) END, 0)
+             + COALESCE(CASE WHEN @ConvStore IN ('1','2','3','4') THEN CAST(@ConvStore AS INT) END, 0) AS DECIMAL(6,4))
+        / NULLIF( (CASE WHEN @IdeasStore IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN @OrgStore   IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN @LangStore  IN ('1','2','3','4') THEN 1 ELSE 0 END)
+                + (CASE WHEN @ConvStore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0);
 
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN
