@@ -11,7 +11,39 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.7.0] — unreleased (in development)
+## [0.7.1] — unreleased (in development)
+
+### Fixed
+- **Achievement filter no longer surfaces IPP students** (Reading/Writing cohort). An achievement-level
+  chip pulled in IPP / unresolved students (whose band is shown as "IPP"/"—", not measured against
+  benchmarks) because the filter matched the raw code the TVF computes from their delta. Each student
+  now maps to a single displayed category, so a band chip returns only students shown at that level.
+
+### Added
+- **"IPP" and "No Data" achievement chips** (Reading/Writing cohort). Alongside the four bands, filter
+  to students shown as **IPP** (on an individual program plan) or **No Data** (no result recorded yet,
+  or an unconfirmed IPP) — so those students can be found on purpose instead of just excluded.
+- **Writing traits can be marked "not assessed" for a grade/program/cycle.** A data-driven config
+  (`WritingTraitExclusion`) lists trait × grade × program × benchmark-month combinations that aren't
+  assessed. For a matching student the entry grid hides that trait's dropdown (shows a dash) and the
+  average + reports drop it — same effect as a Scribed (`SCR`) Conventions score. First rule shipped:
+  **Organization is not assessed for French Immersion grade-Primary in Sept/Oct/Nov cycles.** The rule
+  lives entirely in the table — add/remove rows to change it; nothing is hardcoded.
+
+### Changed
+- **RWM report filters now collapse.** The grade / program / school / score chips sit behind a
+  **Show/Hide filters** toggle (collapsed by default), matching the Reading/Writing cohort page; the
+  Blanks, "All 3 areas only", and Reset controls stay in the bar, and the toggle shows "(active)"
+  when filters are applied while hidden. No SQL.
+
+### SQL
+- **`WritingTraitExclusion`** (new config table + seed), **`usp_UpsertWritingAssessment`** (forces an
+  excluded trait to NULL + drops it from the average; exclusion-aware required/range checks), and
+  **`tvf_TeacherRosterWriting`** (returns the per-student `ExcludedTraits` list). Deploy in that order
+  (table → proc → TVF). All idempotent; no `FactAssessmentWriting` schema change (trait columns already
+  nullable).
+
+## [0.7.0] — 2026-09-25 (LIVE)
 
 Rollup minor. Bundles the Math completion cards + Data Entry "done" relabel + the entry-load perf pass +
 the Short-Cycle **grace-lock / override / staff-access** below. The **Reports** changes land under this

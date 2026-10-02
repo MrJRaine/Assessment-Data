@@ -1446,3 +1446,33 @@ pre-warm TIED at lowest priority; `J020`-refs cleanup lowest priority). Deferred
 consistency audit** (findings list before editing). Git-workflow reminders re-applied: mandatory main→dev
 back-merge (missed then fixed same turn); worktree consistency (impersonation merge done in a dedicated temp
 worktree, not by flipping the dev/prod worktrees; main mutations only in the prod worktree).
+
+## Session 2026-10-02 — First load test of the web app (Fabric-bound) + multi-machine worktree setup
+
+Measurement-only session (no dev/main code changes). Ran the first real load test of the Phase-3b web app.
+
+**Setup saga (all now captured on the `loadtest` branch + [[reference_podman_windows_dev_container]]).** Set
+up a fresh machine's worktrees (dev + prod/main + dev-impersonation + loadtest as sibling dirs). Built the
+`0.7.1-loadtest` image (package.json 0.7.0; `.1` is the image-tag convention), ran `awlt` on the prod box
+(rootless Podman in WSL as appuser, `-p 0.0.0.0:3001:3000`, `--env-file .env.loadtest` vs the **dev**
+warehouse). Hit a chain of gotchas before it worked: missing `LOADTEST_KEY`/`AUTH_SECRET`/`ENTRA_CLIENT_SECRET`
+in the dropped env (guard refuses to boot / seed 500s); **403 on all pages from two causes** — (1) the
+`LOADTEST_USERS` format mismatch (`allowedLoadtestUsers()` doesn't strip `:role`, so the container needs BARE
+UPNs while Locust needs `upn:role`), and (2) `LOADTEST_ALLOWED_CIDRS=127.0.0.1/32` rejecting the WSL/pasta
+client IP (fix: blank it). Pivoted the generator to run **inside the same WSL VM** (a `virtualenv` — distro is
+PEP-668 externally-managed, and `pip --user` collides with system `zope`). Windows loopback reaches the
+rootless container (wslrelay), same as IIS→`aw`.
+
+**Findings → [[project_loadtest_findings_2026_10]].** App is **Fabric-bound, not app/VM/pool-bound**: VM CPU
+~20% at 100 users (generator on the same box). F8 throughput ceiling ~6–7 RPS. Connection-pool knee
+`FABRIC_POOL_MAX=20` (swept 10/20/30/40: 10 starves, 20 best, 30/40 no gain + worse tails). Latency p50
+1.6 s@20u → 3.1 s@40u → 9.5 s@100u; roster + analyst cohort are the heavy reads; no error wall (1–3 transient
+keep-alive resets/run). Scale via Fabric SKU / cheaper queries, not replicas/CPU/pool. The `/api/loadtest/seed`
+~16 s is harness-only (7 serial queries), not a user path.
+
+**Also corrected a mistake:** initially read the single-user baseline's request counts 10× too high from a
+run-together UI paste; the dropped HTML report's embedded JSON fixed it (20 requests, not 200).
+
+**Open:** capture Fabric Capacity Metrics CU% during a 100-user run to quantify the ceiling; fix the
+`loadtest.ts` `:role`-strip bug; revert pool to 20 on deploy. All artifacts (handover, results, raw HTML) are
+on the never-merged `loadtest` branch.

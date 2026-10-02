@@ -7,6 +7,7 @@
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over. Reads are not assumed either.
 - [RLS Review: Verify Every Role Branch](feedback_rls_review_verify_per_role.md) — check each role's scoping against the documented design (DimRole/StaffSchoolAccess) across the WHOLE surface; a region-wide branch is a red flag; never assert an access claim unverified or double down when challenged. (RegionalAnalyst region-wide bug, fixed 2026-09-22.)
 - [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — never hand over SQL with a `<placeholder>`; substitute real values from the conversation or DECLARE them at the top. An empty result = suspect the parameters first.
+- [Resolve Reference Data From Seeds](feedback_resolve_reference_data_from_seeds.md) — grep the repo's seed files (DimSchool/DimProgram/DimRole) to resolve names→exact IDs/codes locally instead of a fuzzy LIKE or asking; it's in my lane. (Digby `LIKE` grabbed the Alternative high, 2026-09-29.)
 - [Licensing Gate on Every Design Decision](feedback_licensing_gate_on_design.md) — state a connector/service's license class + end-user cost at full scale in the same breath; maker-account tests prove nothing.
 - [Chat Abbreviations](feedback_abbreviations.md) — user's shorthand (e.g. PS = PowerSchool).
 - [Number Formatting](feedback_number_formatting.md) — never comma as thousands separator (reads as decimal, French education).
@@ -38,6 +39,7 @@
 - [Fabric Stale Preview](feedback_fabric_stale_preview.md) — the table preview pane caches; verify via SQL COUNT(*).
 - [Full-Reset Truncate-All](feedback_full_reset_truncate_all.md) — resetting for usp_RunFullIngestCycle: truncate all 6 orchestrator tables, never selectively.
 - [Capacity Right-Sizing Intent](project_capacity_rightsizing_intent.md) — F8 is a DELIBERATE high ceiling so real usage runs unrestricted and can be measured, then the right SKU is bought at renewal. Do NOT design as if F2 is the target (that under-measures and risks under-buying); avoid waste, never trade UX for speculative capacity savings.
+- [Load-Test Findings (2026-10)](project_loadtest_findings_2026_10.md) — First load test: app is **Fabric-bound**, not app/VM/pool-bound (VM CPU ~20% at 100 users). F8 ceiling ~6-7 RPS; pool knee `FABRIC_POOL_MAX=20` (10 starves, 30/40 no gain); usable latency to ~20 concurrent. Scale via Fabric SKU / cheaper queries, NOT replicas/CPU/pool. Detail on the `loadtest` branch.
 - [Podman Windows Dev Container](reference_podman_windows_dev_container.md) — publish `127.0.0.1:PORT:3000` explicitly; THREE containers: awlive=.env :3000, awdev=.env.dev :3001, awdev-impersonation :3002 (`-imp` image from dev-impersonation branch, `-e AUTH_MODE=dev`); typecheck via image build (no node/gh).
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 
@@ -55,6 +57,7 @@
 - [Assessment Types](project_assessment_types.md) — Reading / Writing / Math; one type per window; Math in 1.0. ScaleSystem reading-only.
 - [Math P-6 Assessment Model](project_math_assessment_model.md) — task-based binary mastery; entry UI built on dev. TODO: Math IPP flow, cohort/reporting, DQ, FR + full seed.
 - [Math Split-Grade Pacing Model](project_math_split_pacing_model.md) — DESIGN 2026-09-21 (not built): default month on task + SCD composition exceptions; carry-forward via edge links w/ per-record provenance; DimHomeroom SCD from ingest (school-qualified). Structural footprint locked.
+- [Math Report Blank-Roster Bug](project_math_report_blank_roster_bug.md) — CONFIRMED 2026-10-02: grades 4/5 have no seeded math tasks → tvf_StudentCohortMath INNER JOIN Tasks drops the whole class (blank matrix vs student count on the card). **App-side fix DEFERRED (user call) — self-resolves on seeding; don't re-propose.** **TODO(user): pull latest math tasks from the share doc** (seed new grades via usp_LoadMathTasks).
 - [User-Authored Data Is Auditable](project_user_authored_is_auditable.md) — app-wide rule: anything a user authors/edits in the app tracks WHO created + who changed/removed it (SCD: created/ended-by per version; Type-1 editable dims: separate audit log). TODO soon: extend audit logs to maintenance / ingest / cycles ops.
 - [Reading Scale Design](project_reading_scale_design.md) — DimReadingScale/Benchmark; EN_Reading naming; ReadingDelta; dominant-month; Grade 7 carry-over.
 - [Fact-Table SCD Linking Policy](project_assessment_fact_scd_policy.md) — when surrogate links freeze vs re-resolve; assessment-fact insert-time-only resolution.
@@ -88,6 +91,7 @@
 - [Homeroom Chips Unwieldy](project_homeroom_chips_unwieldy.md) — homeroom smart-chips don't scale; denser/searchable picker (superseded by group redesign).
 
 ## Shipped / in-flight features
+- [Roster Materialization (0.6.2 LIVE)](project_roster_materialization.md) — membership tables (`SectionRosterMembership`/`TeacherRosterMembership`) + card-metadata pass-through + dead-column cut; warm roster ~3.47s→~2.3s. Two tables in **LOCKSTEP** with the roster TVFs; D (fast-path routing) parked.
 - [Image Versioning Scheme (DONE)](project_image_versioning_scheme.md) — RESOLVED 2026-09-08: semver-tagged prod images, tar by version, CHANGELOG + git tag; first = v0.3.0.
 - [Prior-Year Baseline (v0.4.0 SHIPPED)](project_prior_year_baseline.md) — Reading prior-year starting point LIVE 2026-09-10; COALESCE(prior facts, baseline seed). Writing has NO baseline.
 - [Group Display Redesign](project_group_display_redesign.md) — shared choose-a-group picker (teacher own classes / oversight lenses + filters). Built via the makeover Phase 1.

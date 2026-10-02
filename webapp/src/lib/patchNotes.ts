@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '0.7.1',
+    date: '2026-10-02',
+    kind: 'feature',
+    summary:
+      'For French Immersion Primary classes, the Organization trait is no longer entered in the fall (September, October, and November) Short Cycles — that box is hidden and the overall score is worked out from the other traits, matching how it is reported.',
+  },
+  {
     version: '0.7.0',
     date: '2026-09-24',
     kind: 'feature',
