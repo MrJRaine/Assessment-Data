@@ -131,6 +131,20 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-02 — 🔬 First load test complete: app is FABRIC-BOUND (capacity data)
+- **Load-tested the web app** (single box, `0.7.1-loadtest` Entra-bypass build vs **dev** warehouse, Locust
+  on the same VM). Full write-up + raw reports are on the **`loadtest` branch** (`loadtest/HANDOVER-2026-10-02.md`,
+  `loadtest/results/*.md`, `loadtest/Locust_2026-10-02-*.html`); findings distilled in [[project_loadtest_findings_2026_10]].
+- **Result:** app is **Fabric-bound, not app/VM/pool-bound** — VM CPU only ~20% at 100 concurrent users
+  (generator included). F8 throughput ceiling ~6–7 RPS; connection-pool knee `FABRIC_POOL_MAX=20` (10
+  starves, 30/40 no gain + worse tails); usable latency to ~20 concurrent; no error wall past that, just slow.
+- **Feeds the capacity decision** ([[project_capacity_rightsizing_intent]]): scale via Fabric SKU / cheaper
+  queries (roster + analyst cohort are the hogs) — NOT app replicas/CPU/pool.
+- **Next (optional):** capture Fabric Capacity Metrics CU% during a 100-user run to quantify the ceiling;
+  fix the `loadtest.ts` `allowedLoadtestUsers()` `:role`-strip bug; revert `FABRIC_POOL_MAX` to 20 on any deploy.
+- **Dev/main code unchanged this session** — this was measurement only. (Earlier this session, on a now-merged
+  branch, small-group filtering was added to the Reading/Writing entry grids — in `dev` already.)
+
 ### Left Off — 2026-09-24 (later) — 🟢 0.6.3 SHIPPED LIVE; both live bugs + Math IPPs RESOLVED (all stale-object drift)
 - **0.6.3 LIVE** (noon cutover, prod-swap of `aw` to `:0.6.3`). Change: **Programming summary chips now count
   STUDENTS, not records** — `getProgrammingSummary`/`studentLevel` in [data.ts]; the old cell count read
