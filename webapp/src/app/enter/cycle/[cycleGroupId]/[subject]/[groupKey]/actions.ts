@@ -81,10 +81,12 @@ export async function saveReadingAssessments(
 
 export interface WritingEntry {
   studentNumber: string
-  ideas: number
-  organization: number
-  language: number
-  conventions: string // '1'–'4' or 'SCR' (Scribed); proc validates
+  // null = trait not assessed for this student this cycle (data-driven WritingTraitExclusion); the
+  // proc re-derives + enforces the exclusion and drops a NULL trait from the average.
+  ideas: number | null
+  organization: number | null
+  language: number | null
+  conventions: string | null // '1'–'4' or 'SCR' (Scribed), or null if excluded; proc validates
 }
 
 /**

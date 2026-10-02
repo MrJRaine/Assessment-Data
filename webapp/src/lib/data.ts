@@ -417,6 +417,8 @@ export interface WritingRosterStudent {
   assessmentDate: string | null
   ippStatus: boolean | null // IsIPP (Writing): true/false/null(=unresolved)
   ippNeedsConfirmation: boolean
+  excludedTraits: string[] // trait keys (lowercased) NOT assessed for this student this cycle (data-driven
+  // via WritingTraitExclusion) — the grid hides these dropdowns and they drop from the average.
   // Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the roster
   // TVF no longer returns it.
 }
@@ -446,6 +448,7 @@ export async function getTeacherRosterWriting(
     WritingIPPStatus: boolean | null
     WritingIPPNeedsConfirmation: boolean | null
     IPPProgramFamily: string | null
+    ExcludedTraits: string | null // comma-list of trait names ('Organization'), or null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language) ORDER BY LastName, FirstName',
@@ -472,6 +475,7 @@ export async function getTeacherRosterWriting(
         : (r.ExistingAssessmentDate ?? null),
     ippStatus: r.WritingIPPStatus ?? null,
     ippNeedsConfirmation: Boolean(r.WritingIPPNeedsConfirmation),
+    excludedTraits: (r.ExcludedTraits ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean),
   }))
 }
 

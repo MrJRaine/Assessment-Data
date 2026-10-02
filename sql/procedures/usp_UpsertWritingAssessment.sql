@@ -89,29 +89,19 @@ BEGIN
     DECLARE @MinGradeOrder          INT;
     DECLARE @MaxGradeOrder          INT;
     DECLARE @ExistingAssessmentID   BIGINT;
+    DECLARE @WindowBenchmarkMonth   INT;
+    DECLARE @EffectiveBenchMonth    INT;
+    DECLARE @ExclIdeas BIT = 0, @ExclOrg BIT = 0, @ExclLang BIT = 0, @ExclConv BIT = 0;  -- trait-exclusion flags
 
-    -- 51010: required params
+    -- 51010: required identifiers (trait requirements are checked below, AFTER the trait-exclusion
+    -- rules resolve — a trait excluded for this grade x program x benchmark month may be NULL).
     IF @StudentNumber IS NULL OR @AssessmentWindowID IS NULL OR @AssessmentDate IS NULL
-       OR @IdeasScore IS NULL OR @OrganizationScore IS NULL
-       OR @LanguageScore IS NULL OR @ConventionsScore IS NULL
     BEGIN
-        ;THROW 51010, 'usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, all four trait scores, and @AssessmentDate are required (no NULLs).', 1;
+        ;THROW 51010, 'usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, and @AssessmentDate are required.', 1;
     END;
 
-    -- 51018: Ideas/Organization/Language in 1..4 (numeric); Conventions is '1'-'4' OR 'SCR' (Scribed,
-    -- the only non-numeric code allowed, and only on Conventions). SCR is omitted from the read-side
-    -- average (sum/count over scored traits).
-    IF @IdeasScore        NOT BETWEEN 1 AND 4
-       OR @OrganizationScore NOT BETWEEN 1 AND 4
-       OR @LanguageScore  NOT BETWEEN 1 AND 4
-    BEGIN
-        ;THROW 51018, 'usp_UpsertWritingAssessment: Ideas, Organization, and Language must each be an integer 1-4.', 1;
-    END;
-
-    IF @ConventionsScore NOT IN ('1', '2', '3', '4', 'SCR')
-    BEGIN
-        ;THROW 51018, 'usp_UpsertWritingAssessment: Conventions must be ''1''-''4'' or ''SCR'' (Scribed).', 1;
-    END;
+    -- (Trait presence/range validation (51010/51018) is exclusion-aware → moved below, after the
+    --  student/window/exclusion lookups, since a trait can be legitimately not-assessed for a cell.)
 
     SET @AssessmentWindowID_BI = CAST(@AssessmentWindowID AS BIGINT);
 
@@ -131,7 +121,8 @@ BEGIN
         @WindowMinGrade       = MinGrade,
         @WindowMaxGrade       = MaxGrade,
         @WindowProgramFamily  = ProgramFamily,
-        @WindowAssessmentType = AssessmentType
+        @WindowAssessmentType = AssessmentType,
+        @WindowBenchmarkMonth = BenchmarkMonth
     FROM DimAssessmentWindow
     WHERE AssessmentWindowID = @AssessmentWindowID_BI AND ActiveFlag = 1;
 
@@ -240,6 +231,52 @@ BEGIN
         ;THROW 51019, 'usp_UpsertWritingAssessment: @AssessmentLanguage is not valid for this student (French writing requires French Immersion; English writing for an immersion student requires grade 3+).', 1;
     END;
 
+    -- -------------------------------------------------------------------------
+    -- TRAIT-EXCLUSION rules (data-driven: WritingTraitExclusion). A trait listed for this student's
+    -- Grade x ProgramFamily x the cycle's benchmark month is NOT assessed: force its value to NULL
+    -- (recorded as "not assessed", shown as a dash in the grid/reports) so it drops from the average.
+    -- Benchmark month = the window's BenchmarkMonth, else the month its StartDate falls in (monthly bins).
+    -- NEVER hardcode which traits — add/remove rows in WritingTraitExclusion.
+    -- -------------------------------------------------------------------------
+    SET @EffectiveBenchMonth = COALESCE(@WindowBenchmarkMonth, MONTH(@WindowStartDate));
+    SELECT @ExclIdeas = COALESCE(MAX(CASE WHEN Trait = 'Ideas'        THEN 1 END), 0),
+           @ExclOrg   = COALESCE(MAX(CASE WHEN Trait = 'Organization' THEN 1 END), 0),
+           @ExclLang  = COALESCE(MAX(CASE WHEN Trait = 'Language'     THEN 1 END), 0),
+           @ExclConv  = COALESCE(MAX(CASE WHEN Trait = 'Conventions'  THEN 1 END), 0)
+    FROM WritingTraitExclusion
+    WHERE ActiveFlag = 1
+      AND GradeCode      = @StudentGrade
+      AND ProgramFamily  = @StudentProgramFamily
+      AND BenchmarkMonth = @EffectiveBenchMonth;
+
+    IF @ExclIdeas = 1 SET @IdeasScore        = NULL;
+    IF @ExclOrg   = 1 SET @OrganizationScore = NULL;
+    IF @ExclLang  = 1 SET @LanguageScore     = NULL;
+    IF @ExclConv  = 1 SET @ConventionsScore  = NULL;
+
+    -- 51010 (trait presence): every NON-excluded trait is required.
+    IF (@ExclIdeas = 0 AND @IdeasScore        IS NULL)
+       OR (@ExclOrg  = 0 AND @OrganizationScore IS NULL)
+       OR (@ExclLang = 0 AND @LanguageScore     IS NULL)
+       OR (@ExclConv = 0 AND @ConventionsScore  IS NULL)
+    BEGIN
+        ;THROW 51010, 'usp_UpsertWritingAssessment: every non-excluded trait score is required (no NULLs).', 1;
+    END;
+
+    -- 51018 (trait range): non-excluded Ideas/Organization/Language are integers 1-4; Conventions is
+    -- '1'-'4' or 'SCR'. Excluded traits are NULL and skipped.
+    IF (@ExclIdeas = 0 AND @IdeasScore        NOT BETWEEN 1 AND 4)
+       OR (@ExclOrg  = 0 AND @OrganizationScore NOT BETWEEN 1 AND 4)
+       OR (@ExclLang = 0 AND @LanguageScore     NOT BETWEEN 1 AND 4)
+    BEGIN
+        ;THROW 51018, 'usp_UpsertWritingAssessment: Ideas, Organization, and Language must each be an integer 1-4 (unless excluded for this grade/program/month).', 1;
+    END;
+
+    IF @ExclConv = 0 AND @ConventionsScore NOT IN ('1', '2', '3', '4', 'SCR')
+    BEGIN
+        ;THROW 51018, 'usp_UpsertWritingAssessment: Conventions must be ''1''-''4'' or ''SCR'' (Scribed).', 1;
+    END;
+
     -- =========================================================================
     -- UPSERT into FactAssessmentWriting, grain = (StudentKey, AssessmentWindowID,
     -- AssessmentLanguage, AssessmentDate). A student may hold an English AND a French
@@ -253,13 +290,17 @@ BEGIN
       AND AssessmentLanguage = @AssessmentLanguage
       AND AssessmentDate = @AssessmentDate;
 
-    -- Writing average, stamped on the row (as-was) so the SCR rule lives in the DATA, not only in
-    -- the read logic: Conventions='SCR' drops from BOTH numerator and denominator. Ideas/Org/Language
-    -- are validated 1-4 (always present, 3 values); Conventions is 1-4 or 'SCR'.
-    SET @ConvNum = TRY_CAST(@ConventionsScore AS INT);   -- 'SCR' -> NULL
+    -- Writing average, stamped on the row (as-was) so the exclusion/SCR rules live in the DATA, not
+    -- only the read logic: ANY NULL trait (excluded for this cell, or Conventions='SCR') drops from
+    -- BOTH numerator and denominator — identical to how the cohort/history reads compute AvgScore.
+    SET @ConvNum = TRY_CAST(@ConventionsScore AS INT);   -- 'SCR' or excluded -> NULL
     SET @WritingAverage =
-        CAST(@IdeasScore + @OrganizationScore + @LanguageScore + COALESCE(@ConvNum, 0) AS DECIMAL(6,4))
-        / (3 + CASE WHEN @ConvNum IS NULL THEN 0 ELSE 1 END);
+        CAST(COALESCE(@IdeasScore, 0) + COALESCE(@OrganizationScore, 0)
+             + COALESCE(@LanguageScore, 0) + COALESCE(@ConvNum, 0) AS DECIMAL(6,4))
+        / NULLIF( (CASE WHEN @IdeasScore        IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN @OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN @LanguageScore     IS NOT NULL THEN 1 ELSE 0 END)
+                + (CASE WHEN @ConvNum           IS NOT NULL THEN 1 ELSE 0 END), 0);
 
     IF @ExistingAssessmentID IS NOT NULL
     BEGIN

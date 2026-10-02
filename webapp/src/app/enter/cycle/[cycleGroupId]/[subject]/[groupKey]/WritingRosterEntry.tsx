@@ -50,9 +50,12 @@ function avgOf(s: ScoreSet): number | null {
   const vals = [s.ideas, s.organization, s.language, numOf(s.conventions)].filter((v): v is number => v != null)
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
 }
-// A row is COMPLETE (saveable) when every trait is set — Conventions counts 'SCR' as set.
-function isComplete(s: ScoreSet): boolean {
-  return s.ideas != null && s.organization != null && s.language != null && s.conventions != null
+// A row is COMPLETE (saveable) when every trait is set — Conventions counts 'SCR' as set. A trait
+// EXCLUDED for this student's grade×program×benchmark month (WritingTraitExclusion) is never asked
+// for, so it counts as satisfied: the grid hides its dropdown and the proc forces its score NULL.
+function isComplete(s: ScoreSet, excluded: Set<TraitKey>): boolean {
+  const ok = (key: TraitKey, v: number | ConvValue) => excluded.has(key) || v != null
+  return ok('ideas', s.ideas) && ok('organization', s.organization) && ok('language', s.language) && ok('conventions', s.conventions)
 }
 function eqSet(a: ScoreSet, b: ScoreSet): boolean {
   return a.ideas === b.ideas && a.organization === b.organization && a.language === b.language && a.conventions === b.conventions
@@ -79,6 +82,14 @@ export default function WritingRosterEntry({
   const nameByKey = new Map(roster.map((s) => [s.studentKey, `${s.lastName}, ${s.firstName}`] as const))
   const nameByNum = new Map(roster.map((s) => [s.studentNumber, `${s.lastName}, ${s.firstName}`] as const))
   const pfByKey = new Map(roster.map((s) => [s.studentKey, s.programFamily] as const))
+  // Traits NOT assessed for each student this cycle (data-driven WritingTraitExclusion). The grid
+  // hides these dropdowns, they don't gate completeness, and they save as NULL (dropped from the avg).
+  const TRAIT_KEYS = new Set<string>(TRAITS.map((t) => t.key))
+  const excludedByKey = new Map(
+    roster.map((s) => [s.studentKey, new Set(s.excludedTraits.filter((t) => TRAIT_KEYS.has(t)) as TraitKey[])] as const),
+  )
+  const emptyExcluded = new Set<TraitKey>()
+  const exclOf = (k: string) => excludedByKey.get(k) ?? emptyExcluded
 
   const baselineFromProps: Record<string, ScoreSet> = {}
   for (const s of roster)
@@ -137,15 +148,20 @@ export default function WritingRosterEntry({
   function onSave() {
     // A writing result needs ALL FOUR traits set (Conventions counts 'SCR' as set); incomplete rows
     // are flagged, not sent. Conventions goes as a string ('1'-'4' or 'SCR'); the proc validates it.
-    const ready = checkedKeys.filter((k) => isComplete(sel[k]))
-    const incomplete = checkedKeys.filter((k) => !isComplete(sel[k]))
-    const writingEntries: WritingEntry[] = ready.map((k) => ({
-      studentNumber: numByKey.get(k)!,
-      ideas: sel[k].ideas!,
-      organization: sel[k].organization!,
-      language: sel[k].language!,
-      conventions: String(sel[k].conventions),
-    }))
+    const ready = checkedKeys.filter((k) => isComplete(sel[k], exclOf(k)))
+    const incomplete = checkedKeys.filter((k) => !isComplete(sel[k], exclOf(k)))
+    const writingEntries: WritingEntry[] = ready.map((k) => {
+      const ex = exclOf(k)
+      // Excluded traits save as NULL (the proc re-derives + enforces this; sending null keeps the
+      // client honest). Conventions carries '1'-'4' or 'SCR' as a string, or null when unset/excluded.
+      return {
+        studentNumber: numByKey.get(k)!,
+        ideas: ex.has('ideas') ? null : sel[k].ideas,
+        organization: ex.has('organization') ? null : sel[k].organization,
+        language: ex.has('language') ? null : sel[k].language,
+        conventions: ex.has('conventions') || sel[k].conventions == null ? null : String(sel[k].conventions),
+      }
+    })
     const missingPf = ippKeys.filter((k) => !pfByKey.get(k))
     const ippEntries: IppEntry[] = ippKeys
       .map((k) => (pfByKey.get(k) ? { studentKey: k, programFamily: pfByKey.get(k)!, isIPP: ippSel[k] } : null))
@@ -162,7 +178,7 @@ export default function WritingRosterEntry({
       const errs: SaveSummary['errors'] = []
       for (const e of wRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
       for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
-      for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All four traits required — not saved.' })
+      for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
       for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
       setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
 
@@ -232,6 +248,7 @@ export default function WritingRosterEntry({
         <tbody>
           {roster.filter(sg.isShown).map((s) => {
             const cur = sel[s.studentKey]
+            const excluded = exclOf(s.studentKey)
             const needsConfirm = s.ippNeedsConfirmation
             const isIPP = s.ippStatus === true
             const ippStaged = s.studentKey in ippSel
@@ -247,8 +264,10 @@ export default function WritingRosterEntry({
                 <td>{s.grade ?? '—'}</td>
                 {TRAITS.map((t) => (
                   <td key={t.key}>
-                    {needsConfirm ? (
-                      <span className="muted">—</span>
+                    {needsConfirm || excluded.has(t.key) ? (
+                      // Excluded trait (or unresolved IPP): no dropdown. A dash reads as "not assessed",
+                      // matching the saved NULL and how the reports render it.
+                      <span className="muted" title={excluded.has(t.key) ? 'Not assessed this cycle' : undefined}>—</span>
                     ) : (
                       <select
                         value={cur[t.key] ?? ''}
@@ -309,7 +328,7 @@ export default function WritingRosterEntry({
                     <input
                       type="checkbox"
                       checked={isChecked(s.studentKey)}
-                      disabled={pending || inputsLocked || ro || (eqSet(cur, base[s.studentKey]) && !isComplete(cur))}
+                      disabled={pending || inputsLocked || ro || (eqSet(cur, base[s.studentKey]) && !isComplete(cur, excluded))}
                       onChange={() => toggleEvidence(s.studentKey)}
                       aria-label={`New data for ${s.lastName}, ${s.firstName}`}
                     />

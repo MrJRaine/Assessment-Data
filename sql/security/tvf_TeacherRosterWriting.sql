@@ -42,7 +42,7 @@ RETURN
         WHERE LOWER(d.Email) = LOWER(@UPN) AND d.IsCurrent = 1
     ),
     WindowEffectiveDates AS (
-        SELECT w.AssessmentWindowID, w.AssessmentLanguage
+        SELECT w.AssessmentWindowID, w.AssessmentLanguage, w.BenchmarkMonth, w.StartDate
         FROM DimAssessmentWindow w
         WHERE w.ActiveFlag = 1
           AND w.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
@@ -125,9 +125,20 @@ RETURN
         -- Writing IPP family follows the effective language track (cycle scope, else toggle).
         -- Achievement band is computed CLIENT-SIDE in WritingRosterEntry (writingBand), so the
         -- DimAchievementLevel join + its columns were dead server work; removed 2026-09-23.
-        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily
+        CASE WHEN COALESCE(wed.AssessmentLanguage, @Language) = 'French' THEN 'French Immersion' ELSE 'English' END AS IPPProgramFamily,
+        -- Data-driven trait exclusions for this student's grade x ACTUAL program family x the cycle's
+        -- benchmark month (WritingTraitExclusion) — the grid hides these dropdowns; the upsert enforces
+        -- the NULL. Keyed on the student's real ProgramFamily (matches the upsert), not the language track.
+        (SELECT STRING_AGG(wte.Trait, ',')
+         FROM WritingTraitExclusion wte
+         WHERE wte.ActiveFlag = 1
+           AND wte.GradeCode      = sg.Grade
+           AND wte.ProgramFamily  = dp.ProgramFamily
+           AND wte.BenchmarkMonth = COALESCE(wed.BenchmarkMonth, MONTH(wed.StartDate))) AS ExcludedTraits
     FROM StudentGroups sg
     INNER JOIN WindowEffectiveDates wed ON wed.AssessmentWindowID = sg.AssessmentWindowID
+    LEFT JOIN DimStudent ds ON ds.StudentKey = sg.StudentKey AND ds.IsCurrent = 1
+    LEFT JOIN DimProgram dp ON dp.ProgramCode = ds.ProgramCode
     LEFT JOIN LatestWritingInWindow faw
            ON faw.AssessmentWindowID = sg.AssessmentWindowID
           AND faw.StudentKey         = sg.StudentKey
