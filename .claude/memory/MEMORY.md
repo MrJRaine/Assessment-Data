@@ -93,6 +93,7 @@
 - [Homeroom Chips Unwieldy](project_homeroom_chips_unwieldy.md) — homeroom smart-chips don't scale; denser/searchable picker (superseded by group redesign).
 
 ## Shipped / in-flight features
+- [Writing Trait Exclusion (v1.0.0, dev-verified)](project_writing_trait_exclusion.md) — data-driven `WritingTraitExclusion` (trait×grade×program×benchmark-month); excluded trait stored as `-` (≠NULL), dropped from avg/reports. FI·P·Sep-Oct-Nov·Organization. Traits now VARCHAR; average via `IN ('1'..'4')` allow-list (Fabric `TRY_CAST('-')=0`). Dev-verified 2026-10-02; LIVE PENDING (5-step deploy order in the note).
 - [Roster Materialization (0.6.2 LIVE)](project_roster_materialization.md) — membership tables (`SectionRosterMembership`/`TeacherRosterMembership`) + card-metadata pass-through + dead-column cut; warm roster ~3.47s→~2.3s. Two tables in **LOCKSTEP** with the roster TVFs; D (fast-path routing) parked.
 - [Image Versioning Scheme (DONE)](project_image_versioning_scheme.md) — RESOLVED 2026-09-08: semver-tagged prod images, tar by version, CHANGELOG + git tag; first = v0.3.0.
 - [Prior-Year Baseline (v0.4.0 SHIPPED)](project_prior_year_baseline.md) — Reading prior-year starting point LIVE 2026-09-10; COALESCE(prior facts, baseline seed). Writing has NO baseline.
