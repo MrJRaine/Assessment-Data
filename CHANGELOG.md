@@ -25,10 +25,11 @@ with `0.3.0`, so earlier detail is approximate.
   or an unconfirmed IPP) — so those students can be found on purpose instead of just excluded.
 - **Writing traits can be marked "not assessed" for a grade/program/cycle.** A data-driven config
   (`WritingTraitExclusion`) lists trait × grade × program × benchmark-month combinations that aren't
-  assessed. For a matching student the entry grid hides that trait's dropdown (shows a dash) and the
-  average + reports drop it — same effect as a Scribed (`SCR`) Conventions score. First rule shipped:
-  **Organization is not assessed for French Immersion grade-Primary in Sept/Oct/Nov cycles.** The rule
-  lives entirely in the table — add/remove rows to change it; nothing is hardcoded.
+  assessed. For a matching student the entry grid hides that trait's dropdown and records the
+  intentional **`-`** ("deliberately not assessed" — a distinct fact from a blank/never-recorded cell),
+  and the average + reports drop it — same effect as a Scribed (`SCR`) Conventions score. First rule
+  shipped: **Organization is not assessed for French Immersion grade-Primary in Sept/Oct/Nov cycles.**
+  The rule lives entirely in the table — add/remove rows to change it; nothing is hardcoded.
 
 ### Changed
 - **RWM report filters now collapse.** The grade / program / school / score chips sit behind a
@@ -37,11 +38,17 @@ with `0.3.0`, so earlier detail is approximate.
   when filters are applied while hidden. No SQL.
 
 ### SQL
-- **`WritingTraitExclusion`** (new config table + seed), **`usp_UpsertWritingAssessment`** (forces an
-  excluded trait to NULL + drops it from the average; exclusion-aware required/range checks), and
-  **`tvf_TeacherRosterWriting`** (returns the per-student `ExcludedTraits` list). Deploy in that order
-  (table → proc → TVF). All idempotent; no `FactAssessmentWriting` schema change (trait columns already
-  nullable).
+- Writing-trait-exclusion deploy, **run in this order** (dev then live):
+  1. **`migrate_FactWriting_traits_varchar.sql`** — `IdeasScore` / `OrganizationScore` / `LanguageScore`
+     INT → VARCHAR(10) so a trait can hold the `-` sentinel (mirrors the earlier Conventions swap).
+     Idempotent, run-once-per-warehouse.
+  2. **`WritingTraitExclusion.sql`** — new config table + idempotent seed (FI · grade-P · months 9/10/11 · Organization).
+  3. **`usp_UpsertWritingAssessment.sql`** — stores `-` for an excluded trait; average via `TRY_CAST`
+     (`-` / `SCR` / NULL all drop); exclusion-aware required/range checks.
+  4. **`tvf_TeacherRosterWriting.sql`** (returns `ExcludedTraits`), **`tvf_StudentCohortWriting.sql`**,
+     **`tvf_StudentAssessmentHistoryWriting.sql`** — all average via `TRY_CAST` over the now-VARCHAR traits.
+  5. **`remediate_writing_trait_exclusion.sql`** — one-time (and re-run when a rule is added): marks
+     existing excluded cells `-` and recomputes their stored `WritingAverage`.
 
 ## [0.7.0] — 2026-09-25 (LIVE)
 

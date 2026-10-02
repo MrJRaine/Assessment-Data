@@ -36,12 +36,14 @@ RETURN
             faw.LanguageScore,
             faw.ConventionsScore,
             faw.AssessmentDate,
+            -- All four traits are VARCHAR: TRY_CAST each so '-' (excluded), 'SCR' (scribed) and NULL
+            -- drop from BOTH numerator and denominator (never counted as 0). All-dropped -> NULL.
             CAST(
-                (COALESCE(faw.IdeasScore, 0) + COALESCE(faw.OrganizationScore, 0) + COALESCE(faw.LanguageScore, 0)
-                 + COALESCE(TRY_CAST(faw.ConventionsScore AS INT), 0)) * 1.0
-                / NULLIF((CASE WHEN faw.IdeasScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN faw.OrganizationScore IS NOT NULL THEN 1 ELSE 0 END)
-                       + (CASE WHEN faw.LanguageScore IS NOT NULL THEN 1 ELSE 0 END)
+                (COALESCE(TRY_CAST(faw.IdeasScore AS INT), 0) + COALESCE(TRY_CAST(faw.OrganizationScore AS INT), 0)
+                 + COALESCE(TRY_CAST(faw.LanguageScore AS INT), 0) + COALESCE(TRY_CAST(faw.ConventionsScore AS INT), 0)) * 1.0
+                / NULLIF((CASE WHEN TRY_CAST(faw.IdeasScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN TRY_CAST(faw.OrganizationScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
+                       + (CASE WHEN TRY_CAST(faw.LanguageScore AS INT) IS NOT NULL THEN 1 ELSE 0 END)
                        + (CASE WHEN TRY_CAST(faw.ConventionsScore AS INT) IS NOT NULL THEN 1 ELSE 0 END), 0)
                 AS DECIMAL(5,2)) AS AvgScore
         FROM FactAssessmentWriting faw
