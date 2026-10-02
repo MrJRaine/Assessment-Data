@@ -11,7 +11,17 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [0.7.1] — unreleased (in development)
+## [1.0.0] — 2026-10-02
+
+First production release of the SCoR Dashboard.
+
+## Historical (pre-1.0)
+
+Per-release detail through the pre-1.0 development line is retained below. The 1.0.0 production
+release *is* the 0.7.1 development increment (version bumped at cutover) — its items are recorded
+here under `0.7.1` so the build history has no gap.
+
+## [0.7.1] — built on dev; shipped to production as 1.0.0
 
 ### Fixed
 - **Achievement filter no longer surfaces IPP students** (Reading/Writing cohort). An achievement-level
@@ -38,15 +48,17 @@ with `0.3.0`, so earlier detail is approximate.
   when filters are applied while hidden. No SQL.
 
 ### SQL
-- Writing-trait-exclusion deploy, **run in this order** (dev then live):
+- Writing-trait-exclusion deploy, **run in this order**:
   1. **`migrate_FactWriting_traits_varchar.sql`** — `IdeasScore` / `OrganizationScore` / `LanguageScore`
      INT → VARCHAR(10) so a trait can hold the `-` sentinel (mirrors the earlier Conventions swap).
      Idempotent, run-once-per-warehouse.
   2. **`WritingTraitExclusion.sql`** — new config table + idempotent seed (FI · grade-P · months 9/10/11 · Organization).
-  3. **`usp_UpsertWritingAssessment.sql`** — stores `-` for an excluded trait; average via `TRY_CAST`
-     (`-` / `SCR` / NULL all drop); exclusion-aware required/range checks.
-  4. **`tvf_TeacherRosterWriting.sql`** (returns `ExcludedTraits`), **`tvf_StudentCohortWriting.sql`**,
-     **`tvf_StudentAssessmentHistoryWriting.sql`** — all average via `TRY_CAST` over the now-VARCHAR traits.
+  3. **`usp_UpsertWritingAssessment.sql`** — stores `-` for an excluded trait; average over the scored
+     traits only; exclusion-aware required/range checks.
+  4. The five writing TVFs — **`tvf_TeacherRosterWriting.sql`** (returns `ExcludedTraits`),
+     **`tvf_StudentCohortWriting.sql`**, **`tvf_StudentAssessmentHistoryWriting.sql`**,
+     **`tvf_StudentCohortRWM.sql`**, **`tvf_StudentRWMHistory.sql`** — average via the
+     `IN ('1','2','3','4')` allow-list (Fabric `TRY_CAST('-' AS INT)` returns 0, not NULL).
   5. **`remediate_writing_trait_exclusion.sql`** — one-time (and re-run when a rule is added): marks
      existing excluded cells `-` and recomputes their stored `WritingAverage`.
 

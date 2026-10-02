@@ -16,11 +16,17 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.0.0',
+    date: '2026-10-02',
+    kind: 'feature',
+    summary: 'Version 1.0 — the first full release of the SCoR Dashboard.',
+  },
+  {
     version: '0.7.1',
     date: '2026-10-02',
     kind: 'feature',
     summary:
-      'For French Immersion Primary classes, the Organization trait is no longer entered in the fall (September, October, and November) Short Cycles — that box is hidden and the overall score is worked out from the other traits, matching how it is reported.',
+      'For French Immersion Primary classes, the Organization writing trait is no longer entered in the fall (September–November) Short Cycles: it shows a dash and the overall score is worked out from the other traits.',
   },
   {
     version: '0.7.0',
