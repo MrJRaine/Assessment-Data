@@ -131,6 +131,23 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-04 (later) — 🟢 Math tasks 2026-27 loaded (dev+live); user-guide audit done; IT request STILL top
+- **🔴 STILL THE TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md)
+  to restore the data SP's OneLake `COPY INTO` access (app-triggered ingest still broken; full detail in the note below). Not touched this session.
+- **✅ DONE — math task 2026-27 differential loaded on dev + live.** Transcribed the math team's workbook
+  (`data/imports/Math SCoR App Data Spreadsheet 2026-27.xlsx`) → `data/mathtasks/MathTasks_2026-27.csv` (428 rows) and loaded via
+  `usp_LoadMathTasks`. Differential vs the prior load: **+58 new** (grade 3 November 35, grade 4 September 23), 0 removed,
+  0 genuine content edits, 27 code-strip cleanups. **Grades 5 & 6 still empty** (blank sheets) — shrinks but doesn't close
+  [[project_math_report_blank_roster_bug]]. Tracked bank + reusable tooling now committed: `data/mathtasks/` (+ `baseline-2026-09/`)
+  and `scripts/mathtasks/` (transform/diff/parse); workflow in `data/mathtasks/README.md`. Conventions: month 10→9, `UnitName="Unit "+Unit#`,
+  strip trailing outcome-code parenthetical from descriptions, preserve internal whitespace. See [[reference_read_xlsx_and_check_logs_first]].
+- **✅ DONE — v0.6.0 → v1.0.0 user-guide audit.** Of the 8 teacher one-pagers (gen'd by `scripts/build_user_guides.ps1`), only **06 Reports: cohort**
+  and **07 Reports: a student** need real edits (Math + the new RWM report now exist; "Math reporting is not in Reports yet" is false). 01/02/03/04/05/08
+  are a clean relabel. **By design, the grace window and the writing four-trait exception stay OUT of teacher docs** ([[project_grace_period_hidden_from_teachers]],
+  [[project_writing_trait_exclusion]]) — fixed a misleading TODO in the build script. User hand-edits their own screenshot copies; I was NOT asked to regenerate.
+- **1.1.0 still HELD OPEN** for tomorrow's (2026-10-05) first-full-staff-load batch (see note below).
+- **Blockers:** IT-side SP/OneLake fix (top item).
+
 ### Left Off — 2026-10-04 — 🔴 APP INGEST BROKEN (SP→OneLake); run-log shipped; 1.1.0 held open
 - **🔴 TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md).
   The **app-triggered ingest fails**: the data SP (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`)
