@@ -33,6 +33,10 @@ The math team's workbook does NOT line up with our schema — it needs these twe
    still says 10, so the NEXT `usp_LoadMathTasks` REVERTS it. Grade P already uses 9.
 2. **Column titles differ** — their headers don't match ours; map them onto our column order (re-derive per
    workbook — their titles drift between versions, so read the dump and map fresh).
+   **Strip the trailing outcome-code parenthetical** from TaskDescriptionEN/FR (e.g. ` (N01.01)`): the code
+   lives in its own OutcomeCode column and was never in the team's sheet (user-confirmed convention, both
+   prior loads). **Preserve internal whitespace** (only neutralize newlines/tabs + trim) — collapsing
+   double-spaces churns ~70 existing rows for nothing and muddies the differential.
 3. **Target CSV = 12 columns** (`Stg_MathTask` order; comma, header row skipped, double-quote qualifier):
    `GradeCode, AssessmentMonth, UnitName, UnitOrder, QuestionNumber, DisplayOrder, OutcomeCode,
    TaskDescriptionEN, TaskDescriptionFR, AnswerKey, AnswerKeyFR, ActiveFlag`. (AnswerKeyFR was added by
@@ -43,6 +47,12 @@ The math team's workbook does NOT line up with our schema — it needs these twe
    `PerformanceIndicator Number`→OutcomeCode, EN/FR task + AnswerKeyEN/FR direct; drop
    `PerformanceIndicatorDescription`. Read it with `parse-xlsx.ps1` (XmlDocument.Load for UTF-8 French).
    CONFIRM the UnitName/UnitOrder convention against current DimMathTask before loading (NK depends on it).
+
+**Tracked tooling + reference (2026-10-04):** CSVs now live in `data/mathtasks/` (NOT git-ignored, unlike
+`data/imports/*`): `MathTasks_2026-27.csv` (current authoritative bank, overwrite per update so `git diff` =
+the differential) + `baseline-2026-09/` (prior per-grade load, as received). Reusable scripts in
+`scripts/mathtasks/`: `transform-mathtasks.ps1` (xlsx -> load CSV, does all the tweaks), `diff-mathtasks.ps1`
+(old-vs-new, normalizes old 10->9 first), `parse-xlsx.ps1` (dump xlsx to text). See `data/mathtasks/README.md`.
 
 Load + differential: upload to `Files/imports/mathtasks/`, then
 `EXEC usp_LoadMathTasks @SourceUri='…/mathtasks/MathTasks_*'` (`sql/scripts/run_math_task_ingest_live.sql` /

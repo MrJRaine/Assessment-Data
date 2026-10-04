@@ -9,7 +9,7 @@
  *      is a LIVE safety: on DEV, if DimMathTask already holds old synthetic tasks that
  *      is FINE — recreating + reloading is expected (dev is disposable). Proceed.
  *   2. Deploy the updated usp_LoadMathTasks.sql on DEV.
- *   3. Upload data/imports/MathTasks_2026-27.csv to the DEV lakehouse Files/imports/mathtasks/.
+ *   3. Upload data/mathtasks/MathTasks_2026-27.csv to the DEV lakehouse Files/imports/mathtasks/.
  *
  * 2026-10-04 load: MathTasks_2026-27.csv (428 rows, P/1/2/3/4; grades 5-6 sheets empty).
  * Source month 10 remapped -> 9 (fall = September) in the CSV. SourceUri points at the EXACT

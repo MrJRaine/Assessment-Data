@@ -16,7 +16,7 @@
  * AssessmentMonth) pairs present in this batch, so loading one grade's sheet never
  * touches another grade. Re-run any time to refresh; it returns Inserted/Updated/Retired.
  *
- * 2026-10-04 load: data/imports/MathTasks_2026-27.csv (428 rows, P/1/2/3/4; grades 5-6
+ * 2026-10-04 load: data/mathtasks/MathTasks_2026-27.csv (428 rows, P/1/2/3/4; grades 5-6
  * sheets were empty). Source month 10 was remapped -> 9 (fall cycle = September) in the CSV.
  * SourceUri points at the EXACT file (not MathTasks_*) so a stale file left in the folder
  * can't be picked up by the wildcard. Switch to '.../mathtasks/MathTasks_*' only if the

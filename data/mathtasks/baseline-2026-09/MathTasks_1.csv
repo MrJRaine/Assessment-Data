@@ -1,0 +1,101 @@
+GradeCode,AssessmentMonth,UnitName,UnitOrder,QuestionNumber,DisplayOrder,OutcomeCode,TaskDescriptionEN,TaskDescriptionFR,AnswerKey,AnswerKeyFR,ActiveFlag
+1,10,Unit 1,1,1,1,N01.01,"Start at 8, count forward by 1",Commencer à compter en ordre croissant par sauts de 1 à partir de 8.,"8, 9, 10, 11, 12, 13, 14","8, 9, 10, 11, 12, 13, 14",1
+1,10,Unit 1,1,2,2,N01.02,"Start at 16, count backward by 1",Commencer à compter par sauts de 1 en ordre décroissant à partir de 16.,"16, 15, 14, 13, 12, 11, 10, 9","16, 15, 14, 13, 12, 11, 10, 9",1
+1,10,Unit 1,1,3,3,N01.05,"Start at 0, count forward by 2s.",Commencer à compter à partir de 0 par sauts de 2.,"0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20","0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20",1
+1,10,Unit 1,1,4a,4,N02.01,Subitize dice,Reconnaitre sans compter la disposition des points sur le dé,6,6,1
+1,10,Unit 1,1,4b,5,N02.02,Subitize ten frame configuration,Reconnaitre sans compter la disposition des points sur la grille de dix,7,7,1
+1,10,Unit 1,1,5a,6,N03.01,Count the counters (N03.01).,Compter les jetons,12,12,1
+1,10,Unit 1,1,5b,7,N03.04,Record the numeral,Écrire le chiffre correspondant,12,12,1
+1,10,Unit 1,1,5c,8,N03.03,order irrelevance,non-pertinence de l’ordre,12,12,1
+1,10,Unit 1,1,6a,9,N04.01,Make a set,Faire un ensemble,11,11,1
+1,10,Unit 1,1,6b,10,N04.05,Partition counters,Séparer un ensemble en deux parties,"1 and 10, 2 and 9, 3 and 8, 4 and 7, 5 and 6, 6 and 5, 7 and 4, 8 and 3, 9 and 2,  10 and 1","1 et10, 2 et 9, 3 et 8, 4 et 7, 5 et 6, 6 et 5, 7 et 4, 8 et 3, 9 et 2,  10 et 1",1
+1,10,Unit 1,1,6c,11,N04.05,Name the two parts,Nommer les deux parties d'un ensemble,"1 and 10, 2 and 9, 3 and 8, 4 and 7, 5 and 6, 6 and 5, 7 and 4, 8 and 3, 9 and 2,  10 and 1","1 et10, 2 et 9, 3 et 8, 4 et 7, 5 et 6, 6 et 5, 7 et 4, 8 et 3, 9 et 2,  10 et 1",1
+1,10,Unit 1,1,7a,12,N08.01,Name one more (N08.01).,Dire un de plus,10,10,1
+1,10,Unit 1,1,7b,13,N08.01,Name one less (N08.01).,Dire un de moins,8,8,1
+1,11,Unit 3,3,1,14,N01.01,"Start at 27, count forward by 1",Commencer à compter en ordre croissant par sauts de 1 à partir de 27.,27 28 29 30 31 32 33,27 28 29 30 31 32 33,1
+1,11,Unit 3,3,2,15,N01.02,"Start at 24, count backward by 1",Commencer à compter en ordre décroissant pas sauts de 1 à partir de 24,24 23 22 21 20 19 18,24 23 22 21 20 19 18,1
+1,11,Unit 3,3,3a,16,N04.02,Represent in ten frame,Représenter le nombre dans la grille de dix,11,11,1
+1,11,Unit 3,3,3b,17,N03.05,Counting on,"Sans recompter, continuer de réciter les nombres",12 13,12 13,1
+1,11,Unit 3,3,3c,18,N04.01,Represent in ten frame,Représenter le nombre dans la grille de dix,16,16,1
+1,11,Unit 3,3,3d,19,N01.03,Write numeral (N01.03).,Écrire le numéral,"16 (if they write 61 and say ""sixteen"", score 1).",16,1
+1,11,Unit 3,3,4a,20,N01.04,Read a numeral (N01.04).,Lire le numéral,13,13,1
+1,11,Unit 3,3,4b,21,N01.05,Skip count by 2s (N01.05).,Compter par sauts de 2,0 2 4 6 8 10 12 14 16 18 20,0 2 4 6 8 10 12 14 16 18 20,1
+1,11,Unit 3,3,4c,22,N01.06,Skip count by 5s (N01.06).,Compter par sauts de 5,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,1
+1,11,Unit 3,3,4d,23,N01.07,Skip count by 10s (N01.07).,Compter par sauts de 10,0 10 20 30 40 50 60 70 80 90 100,0 10 20 30 40 50 60 70 80 90 100,1
+1,11,Unit 3,3,5a,24,N02.01,Subitize Rekenrek (N02.01).,Reconnaitre sans compter la disposition des billes sur un Rekenrek,7,7,1
+1,11,Unit 3,3,5b,25,N02.02,Subitize ten frame configuration N02.02).,Reconnaitre sans compter la disposition des points dans un grille de dix,8,8,1
+1,11,Unit 3,3,6a,26,N03.01,Count the counters (N03.01).,Compter les jetons,15,15,1
+1,11,Unit 3,3,6b,27,N07.01,Number conservation,conservation du nombre,15,15,1
+1,11,Unit 3,3,7a,28,N04.01,Make a set,Faire un ensemble,12,,1
+1,11,Unit 3,3,7b,29,N04.05,Partition counters,Séparer un ensemble en deux parties,"1 and 11, 2 and 10, 3 and 9, 4 and 8, 5 and 7, 6 and 6, 7 and 5, 8 and 4, 9 and 3, 10 and 2, 11 and 1","1 et 11, 2 et 10, 3 et 9, 4 et 8, 5 et 7, 6 et 6, 7 et 5, 8 et 4, 9 et 3, 10 et 2, 11 et 1",1
+1,11,Unit 3,3,7c,30,N04.05,How many counters are in the whole?,Quel est le nombre de jetons dans le tout?,11,11,1
+1,11,Unit 3,3,7d,31,N04.06,Make a set of 11,Faire un ensemble de 11,creates set of 11,fait un ensemble de 11,1
+1,11,Unit 3,3,8a,32,N08.01,Identify 2 more,Identifier 2 de plus,10,10,1
+1,11,Unit 3,3,8b,33,N08.01,Identify 1 less,Identifier 1 de moins,7,7,1
+1,11,Unit 3,3,9a,34,N03.02,Identify counting error,Identifier une erreur dans la séquence de nombres,no,non,1
+1,11,Unit 3,3,9b,35,N03.02,Identify counting error,Corriger la séquence de compte,14 15 16 17 18 19 20 or says 16 was missing,14 15 16 17 18 19 20 ou dire que 16 n'était pas là,1
+1,11,Unit 3,3,10,36,N06.02,"Estimate with a referent and select from possible estimates (N06.01, N06.02)",Estimer à l'aide d'un référant et choisir une des estimations possibles,10,10,1
+1,2,Unit 5,5,1,38,N01.01,"Start at 47, count forward by 1",Commencer à compter en ordre croissant par sauts de 1 à partir de 47 .,47 48 49 50 51 52 53,47 48 49 50 51 52 53,1
+1,2,Unit 5,5,2,39,N01.02,"Start at 34, count backward by 1",Commencer à compter en ordre décroissant pas sauts de 1 à partir de 34,34 33 32 31 30 29 28,34 33 32 31 30 29 28,1
+1,2,Unit 5,5,3a,40,N01.04,Read a numeral (N01.04).,Lire le numéral,50,50,1
+1,2,Unit 5,5,3b,41,N01.05,Skip count by 2s (N01.05).,Compter par sauts de 2,0 2 4 6 8 10 12 14 16 18 20,0 2 4 6 8 10 12 14 16 18 20,1
+1,2,Unit 5,5,3c,42,N01.06,Skip count by 5s (N01.06).,Compter par sauts de 5,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,1
+1,2,Unit 5,5,3d,43,N01.07,Skip count by 10s (N01.07).,Compter par sauts de 10,0 10 20 30 40 50 60 70 80 90 100,0 10 20 30 40 50 60 70 80 90 100,1
+1,2,Unit 5,5,4a,44,N02.01,Subitize Rekenrek (N02.01).,Reconnaitre sans compter la disposition des billes sur un Rekenrek,8,8,1
+1,2,Unit 5,5,4b,45,N02.02,Subitize ten frame configuration,Reconnaitre sans compter la disposition des points sur la grille de dix,9,9,1
+1,2,Unit 5,5,5a,46,N04.01,Create a set,Faire un ensemble,13,13,1
+1,2,Unit 5,5,5b,47,N04.05,Partition counters,Séparer un ensemble en deux parties,"1 and 12, 2 and 11, 3 and 10, 4 and 9, 5 and 8, 6 and 7, 7 and 6, 8 and 5, 9 and 4, 10 and 3, 11 and 2, 12 and 1","1 et 12, 2 et 11, 3 et 10, 4 et 9, 5 et 8, 6 et 7, 7 et 6, 8 et 5, 9 et 4, 10 et 3, 11 et 2, 12 et 1",1
+1,2,Unit 5,5,5c,48,N04.05,Identify whole,Identifier le tout,13,13,1
+1,2,Unit 5,5,6,49,N04.02,Represent in ten frame,Repésenter un nombre dans une grille de dix,14,14,1
+1,2,Unit 5,5,7,50,N04.04,Identify number on a numberline,Identifier un nombre sur une droite numérique,17,17,1
+1,2,Unit 5,5,8a,51,N08.01,Identify 1 more,Identifier 1 de plus,10,10,1
+1,2,Unit 5,5,8b,52,N08.01,Identify 2 less,Identifier 2 de moins,6,6,1
+1,2,Unit 5,5,9a,53,N09.02,Model a story problem with manipulatives,Modeler une histoire de mathématique avec du matériel manipulatif,5 red counters and 5 yellow counters,5 jetons rouges et 5 jetons jaunes,1
+1,2,Unit 5,5,9b,54,N10.01,Use a strategy to determine a sum,Utiliser une stratégie pour trouver une somme,"Counts on from 5, knows 5+5=10, or double five. Score ""0"" if they count all.","Compte à partir de 5, sait qu 5+5=10, ou double 5. Score ""0"" si recompte tout.",1
+1,2,Unit 5,5,9c,55,N09.02,Record number sentence (N09.02).,Écrire une phrase numérique,5+5=10,5+5=10,1
+1,2,Unit 5,5,9d,56,N09.04,Create story problems for given number sentences,Créer des problèmes contextualisés correspondant à la phrase numérique donnée,Story must match 3+7=10.,Invente une histoire qui va avec la phrase numérique 3+7=10.,1
+1,3,Unit 7,7,1,57,N01.01,"Start at 57, count forward by 1",Commencer à compter en ordre croissant par sauts de 1 à partir de 57.,57 58 59 60 61 62 63,57 58 59 60 61 62 63,1
+1,3,Unit 7,7,2,58,N01.02,"Start at 44, count backward by 1",Commencer à compter en ordre décroissant par sauts de 1 à partir de 44.,44 43 42 41 40 39 38,44 43 42 41 40 39 38,1
+1,3,Unit 7,7,3a,59,N01.05,Skip count by 2s (N01.05).,Compter par sauts de 2,0 2 4 6 8 10 12 14 16 18 20,0 2 4 6 8 10 12 14 16 18 20,1
+1,3,Unit 7,7,3b,60,N01.06,Skip count by 5s (N01.06).,Compter par sauts de 5,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,1
+1,3,Unit 7,7,3c,61,N01.07,Skip count by 10s (N01.07).,Compter par sauts de 10,0 10 20 30 40 50 60 70 80 90 100,0 10 20 30 40 50 60 70 80 90 100,1
+1,3,Unit 7,7,4a,62,N02.01,Subitize domino (N02.01).,Reconnaitre sans compter la disposition des points sur un domino,9,9,1
+1,3,Unit 7,7,4b,63,N02.02,Subitize ten frame configuration,Reconnaitre sans compter la disposition des points sur la grille de dix,10,10,1
+1,3,Unit 7,7,5a,64,N04.01,Create a set,Faire un ensemble,15,15,1
+1,3,Unit 7,7,5b,65,N04.05,Partition counters,Séparer un ensemble en deux parties,Describes the amount that give a correct combination.,Décrit une combinaison correcte des deux quantités,1
+1,3,Unit 7,7,5c,66,N04.05,Identify whole,Identifier le tout,15,15,1
+1,3,Unit 7,7,6,67,N04.02,Represent in ten frame,Représenter un nombre dans une grille de dix,16,16,1
+1,3,Unit 7,7,7,68,N04.04,Identify number on a numberline,Identifier un nombre sur une droite numérique,18,18,1
+1,3,Unit 7,7,8a,69,N08.01,Identify 2 more,Identifier 2 de plus,12,12,1
+1,3,Unit 7,7,8b,70,N08.01,Identify 1 less,Identifier 1 de moins,9,9,1
+1,3,Unit 7,7,9a,71,N09.02,Model a story problem with manipulatives,Modeler une histoire de mathématique avec du matériel manipulatif.,4 counters and then 6 more counters.,"4 jetons et ensuite, 6 jetons de plus",1
+1,3,Unit 7,7,9b,72,N10.01,Use a strategy to determine a sum,Utiliser une stratégie pour trouver une somme,Counted on from 4 or knew 4+6=10.,Compte à partir de 4 ou sait que 4+6=10.,1
+1,3,Unit 7,7,9c,73,N09.02,Record number sentence (N09.02).,Écrire une phrase numérique,4+6=10 or 10-4=6.,4+6=10 ou 10-4=6.,1
+1,3,Unit 7,7,9d,74,N09.04,Create story problems for given number sentences,Créer des problèmes contextualisés correspondant à la phrase numérique donnée,Story must match 8+2=10.,Invente une histoire qui va avec la phrase numérique  8+2=10.,1
+1,5,Unit 9,9,1,75,N01.01,"Start at 77, count forward by 1",Commencer à compter en ordre croissant par sauts de 1 à partir de 77.,77 78 79 80 81 82 83,77 78 79 80 81 82 83,1
+1,5,Unit 9,9,2,76,N01.02,"Start at 64, count backward by 1",Commencer à compter en ordre décroissant par sauts de 1 à partir de 64.,64 63 62 61 60 59 58,64 63 62 61 60 59 58,1
+1,5,Unit 9,9,3a,77,N01.05,Skip count by 2s (N01.05).,Compter par sauts de 2,0 2 4 6 8 10 12 14 16 18 20,0 2 4 6 8 10 12 14 16 18 20,1
+1,5,Unit 9,9,3b,78,N01.06,Skip count by 5s (N01.06).,Compter par sauts de 5,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,0 5 10 15 20 25 30 35 40 45 50 55 60 65 70  75 80 85 90 95 100,1
+1,5,Unit 9,9,3c,79,N01.07,Skip count by 10s (N01.07).,Compter par sauts de 10,0 10 20 30 40 50 60 70 80 90 100,0 10 20 30 40 50 60 70 80 90 100,1
+1,5,Unit 9,9,4a,80,N02.01,Subitize domino (N02.01).,Reconnaitre sans compter la disposition des points sur un domino,8,8,1
+1,5,Unit 9,9,4b,81,N02.02,Subitize dot card,Reconnaitre sans compter la disposition des points sur une carte,9,9,1
+1,5,Unit 9,9,5a,82,N04.01,Create a set,Faire un ensemble,16,16,1
+1,5,Unit 9,9,5b,83,N04.05,Partition counters,Séparer un ensemble en deux parties,Describes the amount that give a correct combination.,Décrit une combinaison correcte des deux quantités,1
+1,5,Unit 9,9,5c,84,N04.05,Identify whole,Identifier le tout,16,16,1
+1,5,Unit 9,9,6,85,N04.02,Represent in ten frame,Représenter un nombre dans une grille de dix,17,17,1
+1,5,Unit 9,9,7,86,N04.04,Place numbers on a numberline,Placer les nombres sur une droite numérique,"4, 8, 7 placed correctly.","Place correctement 4, 8 et 7",1
+1,5,Unit 9,9,8a,87,N08.01,Identify 1 more,Identifier 1 de plus,15,15,1
+1,5,Unit 9,9,8b,88,N08.01,Identify 2 less,Identifier 2 de moins,13,13,1
+1,5,Unit 9,9,9a,89,N09.02,Model a story problem with manipulatives,Modeler une histoire de mathématique avec du matériel manipulatif.,3 yellow counters and 7 red counters.,3 jetons jaunes et 7 jetons rouges.,1
+1,5,Unit 9,9,9b,90,N10.01,Use a strategy to determine a sum,Utiliser une stratégie pour trouver une somme,Count on from 3 to 10 or knew that 3+7 makes 10.,Compte à partir de 3 jusqu'à 10 ou sait que 3+7 fait 10.,1
+1,5,Unit 9,9,9c,91,N09.02,Record number sentence (N09.02).,Écrire une phrase numérique,3+7=10 or 10-3=7,3+7=10 ou 10-3=7,1
+1,5,Unit 9,9,9d,92,N09.04,Create story problems for given number sentences,Créer des problèmes contextualisés correspondant à la phrase numérique donnée,Story matches 2+8=10,Invente une histoire qui va avec la phrase numérique  2+8=10.,1
+1,5,Unit 9,9,9e,93,N10.02,Use a strategy to determine a difference,Utiliser une stratégie pour trouver une différence,"Counts back from 10 or knew that 4+6=10.  Score ""0"" if they count all counters.",Compte à rebours à partir de 10 ou sait que 4+6=10.,1
+1,6,Unit 11,11,1a,1,N10.01,7+1,7+1,8,8,1
+1,6,Unit 11,11,1b,2,N10.01,6+2,6+2,8,8,1
+1,6,Unit 11,11,1c,3,N10.01,7+3,7+3,10,10,1
+1,6,Unit 11,11,1d,4,N10.01,6+4,6+4,10,10,1
+1,6,Unit 11,11,1e,5,N10.01,6+6,6+6,12,12,1
+1,6,Unit 11,11,1f,6,N10.01,10+4,10+4,14,14,1
+1,6,Unit 11,11,1g,7,N10.04,9-1,9-1,8,8,1
+1,6,Unit 11,11,1h,8,N10.04,8-2,8-2,6,6,1

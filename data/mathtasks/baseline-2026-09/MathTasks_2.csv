@@ -1,0 +1,122 @@
+GradeCode,AssessmentMonth,UnitName,UnitOrder,QuestionNumber,DisplayOrder,OutcomeCode,TaskDescriptionEN,TaskDescriptionFR,AnswerKey,AnswerKeyFR,ActiveFlag
+2,10,Unit 1,1,1,1,N01.04,Correct counting errors,Corrige les erreurs dans une suite numérique,Both counting errors must be corrected to score check,les deux erreurs de comptage doivent être corrigées pour obtenir le crochet,1
+2,10,Unit 1,1,2,2,N01.05,Counting coins,Compter la monnaie,30 cents,30 cents,1
+2,10,Unit 1,1,3,3,N02.01,Determine odd or even numbers,Détermine si un nombre est pair ou impair,7- odd    12-even,7- impair 12-pair,1
+2,10,Unit 1,1,4,4,N02.02,Identify odd or even numbers,Identifie les nombres impairs ou pairs,Circles only and all odd numbers,"encercle tous les nombres impairs, et seulement les nombre impairs",1
+2,10,Unit 1,1,5,5,N04.01,Represent a number with ten-frames,Représente un nombre dans une grille de dix,47,47,1
+2,10,Unit 1,1,6,6,N04.02,Represent a number with coins,Représente un nombre avec de la monnaie,3 nickels drawn,3 pièces de 5 cents sont dessinées,1
+2,10,Unit 1,1,7,7,N04.03,Represent a number with tallies,Représente un nombre avec des marques de pointage,4 groups of 5 tally marks and 1 tally mark,4 groupes de 5 marques et une marque de pointage,1
+2,10,Unit 1,1,8,8,N04.04,Partition a number,Décompose un nombre,Any combination of 18 that shows partitioning in three different ways,toute combinaison de 18 montrant des partitions de trois manières différentes,1
+2,10,Unit 1,1,9,9,N04.06,Represent a number with expressions,Représente un nombre avec des expressions,"Circles 30+6, 40-4 and 28+8","encercle 30+6, 40-4 et 28+8",1
+2,10,Unit 1,1,10,10,N04.08,Record numbers to 20 in words,Écris un nombre jusqu'à 20 en mots,"five  sixteen  (students may access their word wall: however, correct spelling is not required)","cinq    seize    (les élèves peuvent consulter leur mur de mots; cependant, l'orthographe exacte n'est pas requise)",1
+2,10,Unit 1,1,11,11,N04.09,Record a number symbolically.,Écris un nombre sous forme symbolique,43  17  30,43  17  30,1
+2,10,Unit 1,1,12a,12,N01.01,"Start at 57, count forward by 1s",Commence à 57. Compte en ordre croissant par sauts de 1.,57 58 59 60 61 62 63,57 58 59 60 61 62 63,1
+2,10,Unit 1,1,12b,13,N01.01,"Start at 44, count backwards by 1",Commence à 44. Compte à rebours par sauts de 1.,44 43 42 41 40 39 38,44 43 42 41 40 39 38,1
+2,10,Unit 1,1,13a,14,N01.02,"Start at 10, count forward by 2s",Compte en ordre croissant par sauts de 2 - Commence à 10.,10 12 14 16 18 20 22,10 12 14 16 18 20 22,1
+2,10,Unit 1,1,13b,15,N01.02,"Start at 10, count forward by 5s",Compte en ordre croissant par sauts de 5 - Commence à 10.,10 15 20 25 30 35,10 15 20 25 30 35,1
+2,10,Unit 1,1,13c,16,N01.02,"Start at 10, count forward by 10s",Compte en ordre croissant par sauts de 10 - Commence à 10.,10 20 30 40 50 60,10 20 30 40 50 60,1
+2,10,Unit 1,1,14,17,N01.03,"Start at 24, count forward by 10s (provide 100s chart)",Compte par sauts de 10 en ordre croissant. Commence à 24.,24 34 44 54 64,24 34 44 54 64,1
+2,10,Unit 1,1,15,18,N01.06,Counts a set,Compte un ensemble,Explains the total would not change,Explique que le total ne change pas,1
+2,10,Unit 1,1,16,19,N04.07,Reads a number,Lis un nombre,"twenty-one, nineteen, fifty-seven, fifteen","vingt et un, dix-neuf, cinquante-sept, quinze",1
+2,10,Unit 1,1,17,20,N06.01,Estimate with a referent,Estime avec un référent,Estimate is between 10-20,Estime un nombre entre 10 et 20,1
+2,10,Unit 1,1,18a,21,N08.01,Plus zero fact: 9 + 0,Plus 0: 9 + 0,9,9,1
+2,10,Unit 1,1,18b,22,N10.01,Plus one fact: 1 + 5,Plus 1: 1 + 5,6,6,1
+2,10,Unit 1,1,18c,23,N10.01,Plus two fact: 2 + 6,Plus 2: 2 + 6,8,8,1
+2,10,Unit 1,1,18d,24,N10.01,10+__ fact: 10 + 5,10+__ : 10 + 5,15,15,1
+2,10,Unit 1,1,18e,25,N10.01,Combos of 10: 4 + 6,Combinaisons de 10:  4 + 6,10,10,1
+2,10,Unit 1,1,18f,26,N10.01,Doubles fact 7,Double de 7,14,14,1
+2,10,Unit 1,1,18g,27,N10.01,Doubles fact 6,Double de 6,12,12,1
+2,10,Unit 1,1,18h,28,N08.02,Subtract zero fact: 6 - 0,Soustrait Zéro: 6  -  0,6,6,1
+2,10,Unit 1,1,18i,29,N10.05,Subtract 1 fact: 10 - 1,Soustrait Un:  10  -  1,9,9,1
+2,10,Unit 1,1,18j,30,N10.05,Subtract 2 fact: 8 - 2,Soustrait Deux :  8  -  2,6,6,1
+2,11,Unit 3,3,1,31,N04.01,Represent a number with ten-frames,Représente un nombre avec une grille de dix,57,57,1
+2,11,Unit 3,3,2,32,N04.02,Represent a number with coins,Représente un nombre avec de la monnaie,Any combination to make 17 cents.,toute combinaison représentant 17 cents,1
+2,11,Unit 3,3,3,33,N04.03,Represent a number with tallies,Représente un nombre avec des marques de pointage,5 groups of 5 and one tally mark,5 groupes de 5 et une marque de pointage,1
+2,11,Unit 3,3,4,34,N04.04,Partition a number,Décompose un nombre,Any combination of 26 that shows partitioning in three different ways,toute combinaison de 26 qui montre le nombre décomposé de trois façons différentes,1
+2,11,Unit 3,3,5,35,N04.06,Represent a number with expressions,Représente un nombre avec des expressions,"Circles 10+10+10+3+10+10, 56-3, and 30+23","Encercle 10+10+10+3+10+10, 56-3, et 30+23",1
+2,11,Unit 3,3,6,36,N04.08,Record numbers to 20 in words,Écris un nombre jusqu'à 20 en mots,Seven   twenty (students may access their word wall:  correct spelling is not required),"Sept      Vingt     (les élèves peuvent consulter leur mur de mots; cependant, l'orthographe exacte n'est pas requise)",1
+2,11,Unit 3,3,7,37,N05.01,Compare and order a set of numbers,Compare et ordonne un groupe de nombres,Numbers are near/in the correct  placement.,Les nombres sont placés proches de/dans leur position exacte,1
+2,11,Unit 3,3,8,38,N05.02,Identify errors in a sequence,Trouver l'erreur dans une séquence de nombres,Numbers are sorted in ascending order.,Les nombres sont placés dans l'ordre croissant,1
+2,11,Unit 3,3,9,39,N05.03,Identify missing numbers in a hundred chart.,identifie les nombres manquants,Numbers are written in correct box.,Identifie les nombres manquants,1
+2,11,Unit 3,3,10,40,N05.04,Identify errors in a hundred chart,Identifier les erreurs dans une grille de cent,18,18,1
+2,11,Unit 3,3,11,41,N04.09,Record a number symbolically.,Écris un nombre en forme symbolique,74  18  12,74  18  12,1
+2,11,Unit 3,3,12,42,N07.02,Count objects and record tens and ones.,Compter les objets et écrire les dizaines et les unités,"3 tens, 7 ones","3 dizaines, 7 unités",1
+2,11,Unit 3,3,13,43,N07.03,Show a number different ways with tens and ones.,Montre un nombre de différentes façons avec des dizaines et des unités,"Any 2 of the following: 4 tens, 6 ones 3 tens, 16 ones 2 tens, 26 ones 1 ten, 36 ones","Construit 2 des examples suivants: 4 dizaines, 6 unités 3 dizaines, 16 unités 2 dizaines, 26 unités 1 dizaine, 36 unités",1
+2,11,Unit 3,3,14,44,N07.04,Illustrate a numeral with ten-frames,Illustre un numéral avec des grilles de dix,Represents 53  correctly,Représente 53 correctement,1
+2,11,Unit 3,3,15,45,N07.05,Illustrate a numeral with tens and ones,Illustre un numéral avec des dizaines et des unités,Set of 2 tens and 13 ones,Ensemble de 2 dizaines et 13 unités,1
+2,11,Unit 3,3,16,46,N07.07,Sketch a base-ten model of a numeral,Fais un dessin de blocs de base dix pour un numéral,4 lines drawn,Dessine 4 lignes,1
+2,11,Unit 3,3,17a,47,N01.01,Start at 87 count forward by 1s.,Commence à 87. Compte en ordre croissant par sauts de 1.,87 88 89 90 91 92 93,87 88 89 90 91 92 93,1
+2,11,Unit 3,3,17b,48,N01.01,"Start at 64, count backwards by 1s.",Commence à 64. Compte à rebours par sauts de 1.,64 63 62 61 60 59 58,64 63 62 61 60 59 58,1
+2,11,Unit 3,3,18a,49,N01.02,"Start at 11, count forward by 2s.","Commence à 11, compte par ordre croissant par sauts de 2.",11 13 15 17 19 21 23,11 13 15 17 19 21 23,1
+2,11,Unit 3,3,18b,50,N01.02,"Start at 55, count forward by 5s","Commence à 55, compte par ordre croissant par sauts de 5.",55 60 65 70 75 80,55 60 65 70 75 80,1
+2,11,Unit 3,3,18c,51,N01.02,"Start at 60, count forward by 10s","Commence à 60, compte par ordre croissant par sauts de 10.",60 70 80 90 100,60 70 80 90 100,1
+2,11,Unit 3,3,19,52,N01.03,Counting on a hundred chart,Compte avec une grille de cent,13 23 33 43 53 63,13 23 33 43 53 63,1
+2,11,Unit 3,3,20,53,N01.06,Counting a set,Compte un ensemble,"Regardless of what count they get when counting by 2s, students should be able to explain that the total would not change if they counted by 5s.  Score ""◯"" if the student recounts by 5s (or 1s).","Peu importe le résultat en comptant par sauts de 2, l’élève devrait être capables d'expliquer que le total ne change pas en comptant par sauts de 5. Attribuez la note «◯» si l'élève recompte l'ensemble par sauts de 5 (ou de 1).",1
+2,11,Unit 3,3,21,54,N04.07,Read a number,Lire un nombre,twenty-one  nineteen  fifty-seven  fifteen,vingt et un    dix-neuf       cinquante-sept      quinze,1
+2,11,Unit 3,3,22,55,N06.01,Estimate using a referent,Estime en utilisant un référent,"Estimate is between 10-20.  Score ""◯"" if out of range or if the student counts the cubes in the longer train.",L'estimation se situe entre 10 et 20. Attribuez la note «◯» si l'estimation est hors de cet intervalle ou si l'élève compte les cubes du train le plus long.,1
+2,11,Unit 3,3,23a,56,N07.01,Illustrates the meaning of place value.,Explique la valeur de la position et ce qu'un chiffre signifie.,"Explains two ten towers represent 20, and two individual cubes represent 2.",Explique que deux tours de dix représentent 20 et que deux cubes seuls représentent 2.,1
+2,11,Unit 3,3,23b,57,N07.06,Explains the value of the digits.,Explique la valeur des chiffres dans un nombre.,Explains two in the ones place of 12 represents two and two in the tens place of 21 represents twenty.  Shows understanding that the position of a digit matters and explains why the value of a digit depends on its placement within a numeral.,"Explique que le 2 à la place des unités dans 12 représente 2, et que le 2 à la place des dizaines dans 21 représente 20. Démontre que la valeur d'un chiffre dépend de sa position dans le nombre.",1
+2,11,Unit 3,3,24a,58,N08.01,Plus zero fact: 9 + 0,Plus 0: 9 + 0,9,9,1
+2,11,Unit 3,3,24b,59,N10.01,Plus one fact: 1 + 5,Plus 1: 1 + 5,6,6,1
+2,11,Unit 3,3,24c,60,N10.01,Plus two fact: 2 + 6,Plus 2: 2 + 6,8,8,1
+2,11,Unit 3,3,24d,61,N10.01,10+__ fact: 10 + 5,10+__ : 10 + 5,15,15,1
+2,11,Unit 3,3,24e,62,N10.01,Combos of 10: 4 + 6,Combinaisons de 10:  4 + 6,10,10,1
+2,11,Unit 3,3,24f,63,N10.01,Doubles fact 7,Double de 7,14,14,1
+2,11,Unit 3,3,24g,64,N10.01,Doubles fact 6,Double de 6,12,12,1
+2,11,Unit 3,3,24h,65,N08.02,Subtract zero fact: 6 - 0,Soustrait Zéro: 6  -  0,6,6,1
+2,11,Unit 3,3,24i,66,N10.05,Subtract 1 fact: 10 - 1,Soustrait Un:  10  -  1,9,9,1
+2,11,Unit 3,3,24j,67,N10.05,Subtract 2 fact: 8 - 2,Soustrait Deux :  8  -  2,6,6,1
+2,2,Unit 5,5,1,68,N01.05,Counting coins,Compter la monnaie,36 cents,36 cents,1
+2,2,Unit 5,5,2,69,N04.01,Represent a number with base-ten blocks,Représente un nombre avec des blocs de base dix,A combination of 4 lines and 5 dots,Une combinaison de 4 lignes et 5 points,1
+2,2,Unit 5,5,3,70,N04.02,Represent a number with coins,Représente un nombre avec de la monnaie,Any combination of coins that shows 66 cents,Toute combinaison représentant 66 cents,1
+2,2,Unit 5,5,4,71,N04.06,Represent a number with expressions,Représente un nombre avec des expressions,"Circles 10+10+42, 71-9, and 55+7","Encercle 10+10+42, 71-9, et 55+7",1
+2,2,Unit 5,5,5,72,N05.01,Compare and order a set of numbers,Compare et ordonne un ensemble de nombres,Numbers are correctly sorted in descending order,Les nombres sont placés dans l'ordre décroissant,1
+2,2,Unit 5,5,6,73,N05.02,Compare and order a set of numbers,Compare et ordonne un ensemble de nombres,Numbers are near/in the correct  placement.,Les nombres sont placés proches de/dans leur position exacte,1
+2,2,Unit 5,5,7,74,N06.03,Select and explain the best estimate,Choisis et explique la meilleure estimation,65 and a reasonable explanation is given,65 et donne une explication raisonnable,1
+2,2,Unit 5,5,8,75,N07.03,Show a number in different ways,Montre un nombre d'une autre façon,23,23,1
+2,2,Unit 5,5,9,76,N07.03,Show a number in different ways,Montre un nombre d'une autre façon,23,23,1
+2,2,Unit 5,5,10,77,N09.01,Solve a story problem and write a number sentence,Résous un problème contextualisé et écris la phrase numérique,Sketches 9 counters writes a number sentence such as 11-2=9 or 2+9=11,Dessine 9 jetons et écris une phrase numérique telle que 11-2=9 ou 2+9=11,1
+2,2,Unit 5,5,11,78,N09.03,Match a number sentence and a story problem,Associe la phrase numérique pour un problème donné,9-3=6,9-3=6,1
+2,2,Unit 5,5,12,79,N09.04,Create a subtraction number sentence and a story problem,crée une phrase numérique de soustraction ainsi qu’un problème contextualisé,Create an addtion number sentence and corresponding story problem with 7 markers as the solution,crée une phrase numérique de soustraction ainsi qu'un problème contextualisé ayant 7 marqueurs comme solution,1
+2,2,Unit 5,5,13,80,N09.05,Model addition and subtraction using visual representations and record the process symbolically,modèle l’addition et la soustraction à l’aide de représentations visuelles et noter le processus de manière symbolique.,Creates number sentence and models a representation of their thinking,crée une phrase numérique et modèle une représentation de leur réflexion,1
+2,2,Unit 5,5,14a,81,N01.01,Start at 98 count forward by 1s.,Commence à compter à 98 en ordre croissant par sauts de 1.,98  99 100 101 102 103,98  99 100 101 102 103,1
+2,2,Unit 5,5,14b,82,N01.01,"Start at 74, count backwards by 1s",Commence à compter à 74 en ordre décroissant par sauts de 1.,74 73 72 71 70 69 68,74 73 72 71 70 69 68,1
+2,2,Unit 5,5,15a,83,N01.02,"Start at 23, count backward by 2s",Commence à compter à 23 par sauts de 2 en ordre croissant,23 21 19 17 15 13 11,23 21 19 17 15 13 11,1
+2,2,Unit 5,5,15b,84,N01.02,"Start at 80, count backward by 5s",Commence à compter à 80 par sauts de 5 en ordre décroissant,80 75 70 65 60 55,80 75 70 65 60 55,1
+2,2,Unit 5,5,15c,85,N01.02,"Start at 100, count back by 10s",Commence à compter à 100 par sauts de 10 en ordre décroissant,100 90 80 70 60,100 90 80 70 60,1
+2,2,Unit 5,5,16,86,N01.03,Count on a hundred chart,Compte avec une grille de cent,63 53 43 33 23 13,63 53 43 33 23 13,1
+2,2,Unit 5,5,17,87,N01.06,Counting a set,Compte un ensemble,"Regardless of what count they get when counting by 2s, students should be able to explain that the total would not change if they counted by 5s.  Score ""◯"" if the student recounts by 5s (or 1s).","Peu importe le résultat qu'ils obtiennent en comptant par sauts de 2, l’élève devrait être capables d'expliquer que le total ne changerait pas en comptant par sauts de 5. Attribuez la note «◯» si l'élève recompte l'ensemble par sauts de 5 (ou de 1).",1
+2,2,Unit 5,5,18a,88,N08.01,Plus zero fact: 9 + 0,Plus 0: 9 + 0,9,9,1
+2,2,Unit 5,5,18b,89,N10.01,Combos of 10: 3 + 7,Combinaisons de 10: 3 + 7,10,10,1
+2,2,Unit 5,5,18c,90,N10.01,10 + ____ : 10 + 6,10 + ___ : 10 +  6,16,16,1
+2,2,Unit 5,5,18d,91,N10.01,Doubles fact 7,Double de 7,14,14,1
+2,2,Unit 5,5,18e,92,N10.01,Doubles fact 8,Double de 8,16,16,1
+2,2,Unit 5,5,18f,93,N10.01,Near Doubles: 7 + 6,Quasi double: 7 + 6,13,13,1
+2,2,Unit 5,5,18g,94,N10.01,Make ten: 9 + 6,Obtenir-10:  9 + 6,15,15,1
+2,2,Unit 5,5,18h,95,N08.02,Subtract zero fact: 6 - 0,Soustrait Zéro: 6 - 0,6,6,1
+2,2,Unit 5,5,18i,96,N10.05,Subtract 1 fact: 10 - 1,Soustrait Un: 10 - 1,9,9,1
+2,2,Unit 5,5,18j,97,N10.05,Subtract 2 fact: 8 - 2,Soustrait Deux:  8 - 2,6,6,1
+2,3,Unit 7,7,1a,98,N04.01,Represent a number with base-ten blocks,Représente un nombre avec des blocs de base dix,Any combination of blocks that value 49,Toute combinaison de blocs représentant la valeur de 49,1
+2,3,Unit 7,7,1b,99,N04.02,Representing a number with coins,Représente un nombre avec de la monnaie,Any combination of coins that value 49,Toute combinaison de pièces de monnaie représentant la valeur de 49,1
+2,3,Unit 7,7,1c,100,N04.03,Representing a number with tallies,Représente un nombre avec des marques de pointage,Nine groups of 5 tally marks and 4 tally marks,Neuf groups de 5 marques et 4 marques de pointage,1
+2,3,Unit 7,7,1d,101,N04.06,Representing a number with a subtraction expression,Représente un nombre avec une expression de soustraction,Any subtraction expression that represents 49 ie. 59-10 (an equation is incorrect ie. 59-10=49),oute expression de soustraction qui représente 49,1
+2,3,Unit 7,7,2,102,N09.01,Solve a story problem and write a number sentence,"Résous un problème contextualisé donné, écris une phrase numérique pour représenter la réflexion dans la solution.",Sketches a value of 18 in base-ten blocks and writes a numbersentence such as 23-5=18 or 5+18=23,dessine la valeur de 18 à l’aide de dessins de blocs de base dix et écris une phrase numérique telle que: 23 - 5 = 18 ou 5 + 18 = 23,1
+2,3,Unit 7,7,3,103,N09.03,Match a number sentence and a story problem,Associe la phrase numérique pour un problème donné,17-8=9,17-8=9,1
+2,3,Unit 7,7,4,104,N09.03,Create an addtion number sentence and corresponding story problem for a given solution,Crée une phrase numérique d’addition ainsi qu’un problème contextualisé pour une solution donnée,Create an addtion number sentence and corresponding story problem with 12 stuffed animals as the solution,créé une phrase numérique d’addition et un problème contextualisé ayant 12 oursons en peluche comme solution,1
+2,3,Unit 7,7,5,105,N09.05,Model addition and subtraction using visual representations and record the process symbolically,Modèle l’addition et la soustraction à l’aide de représentations visuelles et noter le processus de manière symbolique.,model addition and subtraction using visual representations and record the process symbolically,crée une phrase numérique et modèle une représentation de leur réflexion,1
+2,3,Unit 7,7,6a,106,N01.01,"Start at 188, count forward by 1s",Commence à compter à 188 en ordre croissant par sauts de 1.,188 189 190 191 192,188 189 190 191 192,1
+2,3,Unit 7,7,6b,107,N01.01,"Start at 103, count backward by 1s",Commence à compter à 103 en ordre décroissant par sauts de 1.,103 102 101 100 99 98,103 102 101 100 99 98,1
+2,3,Unit 7,7,7a,108,N01.02,"Start at 23, count backward by 2s",Commence à compter à 23 par sauts de 2 en ordre croissant,23 21 19 17 15 13 11,23 21 19 17 15 13 11,1
+2,3,Unit 7,7,7b,109,N01.02,"Start at 80, count backward by 5s",Commence à compter à 80 par sauts de 5 en ordre décroissant,80 75 70 65 60,80 75 70 65 60,1
+2,3,Unit 7,7,7c,110,N01.02,"Start at 100, count back by 10s",Commence à compter à 100 par sauts de 10 en ordre décroissant,100 90 80 70 60,100 90 80 70 60,1
+2,3,Unit 7,7,8,111,N01.03,Count on a hundred chart,Compte avec une grille de cent,63 53 43 33 23 13,63 53 43 33 23 10,1
+2,3,Unit 7,7,9a,112,N08.01,Plus zero fact: 9 + 0,Plus 0: 9 + 0,9,9,1
+2,3,Unit 7,7,9b,113,N10.01,Combos of 10: 3 + 7,Combinaisons de 10: 3 + 7,10,10,1
+2,3,Unit 7,7,9c,114,N10.01,10 + ____ : 10 + 6,10 + ___ : 10 +  6,16,16,1
+2,3,Unit 7,7,9d,115,N10.01,Doubles fact 7,Double de 7,14,14,1
+2,3,Unit 7,7,9e,116,N10.01,Doubles fact 8,Double de 8,16,16,1
+2,3,Unit 7,7,9f,117,N10.01,Near Doubles: 7 + 6,Quasi double: 7 + 6,13,13,1
+2,3,Unit 7,7,9g,118,N10.01,Make ten: 9 + 6,Obtenir-10:  9 + 6,15,15,1
+2,3,Unit 7,7,9h,119,N08.02,Subtract zero fact: 6 - 0,Soustrait Zéro: 6 - 0,6,6,1
+2,3,Unit 7,7,9i,120,N10.05,Subtract 1 fact: 10 - 1,Soustrait Un: 10 - 1,9,9,1
+2,3,Unit 7,7,9j,121,N10.05,Subtract 2 fact: 8 - 2,Soustrait Deux:  8 - 2,6,6,1
