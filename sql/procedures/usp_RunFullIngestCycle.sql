@@ -75,23 +75,55 @@ GO
 
 CREATE PROCEDURE usp_RunFullIngestCycle
     @EffectiveDate    DATE = NULL,
-    @SkipCoTeachers   BIT  = 0
+    @SkipCoTeachers   BIT  = 0,                         -- DEPRECATED + IGNORED (co-teachers always load now); kept only so a pre-1.1.0 container that still passes it does not error. Remove once 1.1.0 is the live build.
+    @CallerUPN        VARCHAR(255) = NULL,              -- app passes the signed-in UPN; a direct EXEC leaves NULL -> CURRENT_USER
+    @Source           VARCHAR(20)  = 'FabricSQL'        -- usp_TriggerIngestCycle passes 'App'; a direct EXEC is 'FabricSQL'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     DECLARE @CycleStart DATETIME2(0) = GETDATE();
+    DECLARE @Caller     VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
+    DECLARE @Rows       INT;
+
+    -- Run-log 'Started' (IngestRunLog). Fabric Warehouse has no TRY/CATCH, so a failed load aborts
+    -- the proc: a run with a 'Started' row but no terminal 'Completed'/'Failed' row died at the load
+    -- after its last 'Load' row. See sql/facts/IngestRunLog.sql.
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', NULL, NULL, 'Started',
+            'ingest started', GETDATE());
 
     -- ------------------------------------------------------------------------
-    -- Phase 1: Load all staging tables. Independent of each other.
+    -- Phase 1: Load all staging tables. Independent of each other. Each logs its
+    -- post-load staging count (= rows loaded for that file) to IngestRunLog.
     -- ------------------------------------------------------------------------
     EXEC usp_LoadStudentsStaging;
-    EXEC usp_LoadStaffStaging;
-    EXEC usp_LoadSectionStaging;
-    EXEC usp_LoadEnrollmentStaging;
+    SET @Rows = (SELECT COUNT(*) FROM dbo.Stg_Student);
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'students', @Rows, 'Loaded', NULL, GETDATE());
 
-    IF @SkipCoTeachers = 0
-        EXEC usp_LoadCoTeacherStaging;
+    EXEC usp_LoadStaffStaging;
+    SET @Rows = (SELECT COUNT(*) FROM dbo.Stg_Staff);
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'staff', @Rows, 'Loaded', NULL, GETDATE());
+
+    EXEC usp_LoadSectionStaging;
+    SET @Rows = (SELECT COUNT(*) FROM dbo.Stg_Section);
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'sections', @Rows, 'Loaded', NULL, GETDATE());
+
+    EXEC usp_LoadEnrollmentStaging;
+    SET @Rows = (SELECT COUNT(*) FROM dbo.Stg_Enrollment);
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'enrollments', @Rows, 'Loaded', NULL, GETDATE());
+
+    -- Co-teachers ALWAYS load now. The old @SkipCoTeachers skip was a silent trap that dropped
+    -- co-teachers' section access; it's gone. (@SkipCoTeachers stays on the signature, ignored, only
+    -- for pre-1.1.0 container compat -- see the param comment.)
+    EXEC usp_LoadCoTeacherStaging;
+    SET @Rows = (SELECT COUNT(*) FROM dbo.Stg_CoTeacher);
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'section-teachers', @Rows, 'Loaded', NULL, GETDATE());
 
     -- ------------------------------------------------------------------------
     -- Phase 2: Merge in dependency order. Each proc writes its own
@@ -134,6 +166,10 @@ BEGIN
             GETDATE()
         );
 
+        INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+        VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', NULL, NULL, 'Failed',
+                CONCAT('data quality gate FAILED | ', CAST(@DqViolations AS VARCHAR(10)), ' violations'), GETDATE());
+
         THROW 51000, 'usp_RunFullIngestCycle halted: data quality checks failed. See FactDataQualityAudit for details.', 1;
     END;
 
@@ -165,13 +201,15 @@ BEGIN
         CONCAT(
             'usp_RunFullIngestCycle: cycle complete | ',
             'duration ', CAST(DATEDIFF(SECOND, @CycleStart, GETDATE()) AS VARCHAR(10)), 's',
-            CASE WHEN @SkipCoTeachers = 1
-                 THEN ' | co-teachers SKIPPED'
-                 ELSE '' END,
             ' | 5 merge procs executed (see preceding audit rows for per-table counts)',
             ' | data quality gate PASSED'
         ),
         0,
         GETDATE()
     );
+
+    -- Run-log 'Completed' -- reached only on a clean cycle (DQ gate passed, membership rebuilt).
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', NULL, NULL, 'Completed',
+            CONCAT('cycle complete | duration ', CAST(DATEDIFF(SECOND, @CycleStart, GETDATE()) AS VARCHAR(10)), 's'), GETDATE());
 END;

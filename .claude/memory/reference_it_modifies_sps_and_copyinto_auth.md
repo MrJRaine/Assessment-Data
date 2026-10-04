@@ -1,0 +1,39 @@
+---
+name: reference_it_modifies_sps_and_copyinto_auth
+description: "When app sign-in or ingest breaks with 'nothing changed in our code', suspect IT modified the Entra app registrations / service principals or tenant SP settings — check those FIRST. Plus: Fabric COPY INTO from OneLake is caller-passthrough only (no Managed Identity)."
+metadata:
+  node_type: memory
+  type: reference
+---
+
+**Set 2026-10-04**, after a multi-hour ingest debug.
+
+## IT changes the Entra apps / SPs without notifying us — check that FIRST
+Two prod-auth breakages traced to IT modifying the app registrations / service principals / tenant SP
+settings with no notice:
+- **Local sign-in broke** — the **login app** lost its `http://localhost:3000/api/auth/callback/microsoft-entra-id` redirect URI (AADSTS50011).
+- **In-app ingest broke** — the **data SP** (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`) can still connect + run SQL + is workspace **Contributor**, but can no longer get a **OneLake token for `COPY INTO`**. Worked at the 2026-08-27 cutover (first ingest ran via the app as the SP); broke ~09-29. Cause is a **tenant-level SP/OneLake access change** (the "service principals can use Fabric APIs"/OneLake setting or its security group), not the workspace role (intact) and not our code.
+
+**Rule:** when auth or ingest breaks and our code/deploys didn't change the relevant path, **check the Entra side before deep-diving the code** — login-app redirect URIs, the data SP's tenant OneLake access + group membership. "Nothing changed on our side" usually means something changed on IT's. IT request template: `docs/it-request-restore-sp-onelake.md`.
+
+## Fabric COPY INTO from OneLake = caller-passthrough only (no Managed Identity)
+`COPY INTO` reads OneLake as a **different Entra token** than the SQL-connection token (storage audience
+vs SQL audience), acquired for the **executing identity**:
+- **User** (Fabric SQL editor): works (delegated identity gets the OneLake token).
+- **Service principal** (the app): needs the warehouse to broker a OneLake token for the SP — gated by
+  the tenant SP/OneLake setting above, separately from workspace RBAC.
+- The app's **direct upload** works regardless (it mints the SP's own `storage.azure.com` token via
+  `@azure/identity` → ADLS REST — a different path than `COPY INTO`'s brokered token).
+
+**You cannot route `COPY INTO` around the caller via Managed Identity** — Fabric Warehouse rejects it:
+`Msg 13838 "...using 'Managed Identity' credential is not supported"` (tested on dev 2026-10-04). Fabric
+`COPY INTO` supports EntraID-passthrough (default), SAS, and Storage Account Key — not MI. So an SP that
+needs to `COPY INTO` OneLake must have its OneLake token access restored (IT), OR use a SAS credential
+(extra secret + rotation; last resort), OR run the ingest as a user. See [[project_webapp_fabric_connection]].
+
+## The ingest run-log (added same session)
+`dbo.IngestRunLog` (sql/facts/IngestRunLog.sql) + instrumented `usp_RunFullIngestCycle` now record per
+cycle: who (`CallerUPN`), when, **App vs FabricSQL** (`@Source`), and rows loaded per file. `COPY INTO`
+has no OneLake-token dependency change here — it's purely logging. Co-teacher skip was removed at the
+same time (co-teachers always load); `@SkipCoTeachers` is a deprecated no-op kept only for pre-1.1.0
+container compat.
