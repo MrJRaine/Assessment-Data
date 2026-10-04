@@ -92,6 +92,7 @@
 ## Stakeholders / product
 - [Stakeholder Preferences](project_stakeholder_preferences.md) — FSL + English Literacy coordinators diverge; don't auto-extend one's asks to both.
 - [Teacher-Testing Sprint (deadlines)](project_teacher_testing_sprint.md) — testing week of 2026-09-14; time-boxed.
+- [Grace Period Hidden From Teachers](project_grace_period_hidden_from_teachers.md) — the post-close grace window stays OUT of all teacher-facing comms (guides/help), by design, so teachers don't rely on it and procrastinate. Admin/CHANGELOG docs still cover it.
 - [Homeroom Chips Unwieldy](project_homeroom_chips_unwieldy.md) — homeroom smart-chips don't scale; denser/searchable picker (superseded by group redesign).
 
 ## Shipped / in-flight features
