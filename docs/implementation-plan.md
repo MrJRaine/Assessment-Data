@@ -131,6 +131,26 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-04 — 🔴 APP INGEST BROKEN (SP→OneLake); run-log shipped; 1.1.0 held open
+- **🔴 TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md).
+  The **app-triggered ingest fails**: the data SP (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`)
+  can connect + run SQL + is workspace Contributor, but can no longer get a **OneLake token for `COPY INTO`**
+  (a tenant SP setting changed outside our code — worked at the 08-27 cutover, broke ~09-29). Fabric `COPY INTO`
+  is caller-passthrough only — **no Managed Identity** (Msg 13838, tested on dev) — so there is NO code workaround;
+  **IT must restore the SP's OneLake access**. Interim: run ingest manually in Fabric SQL as yourself (works + now logs).
+  Only affects the project lead right now (other ingest users not scoped until this is fixed). See [[reference_it_modifies_sps_and_copyinto_auth]].
+- **SHIPPED (dev + live):** ingest **run-log** — `IngestRunLog` + instrumented `usp_RunFullIngestCycle` / `usp_TriggerIngestCycle`
+  (who / when / App-vs-FabricSQL / rows-per-file). Collate a run by `CycleStart`, order steps by `LoggedAt`; do NOT sort on
+  `IngestRunLogID` (Fabric IDENTITY is non-monotonic). Co-teacher **silent-skip removed** — co-teachers always load;
+  `@SkipCoTeachers` is a deprecated no-op kept only for pre-1.1.0 container compat (remove once 1.1.0 is live).
+- **1.1.0 HELD OPEN deliberately** — batching tomorrow's (2026-10-05) first-full-staff-load fixes into one patch instead of
+  many swaps. Pending for the 1.1.0 cut: version bump + CHANGELOG/patchNotes (carry the ingest-page checkbox removal + the
+  run-log) + container swap. (`FABRIC_POOL_MAX=20` from the load test already shipped in 1.0.0.)
+- **ALSO QUEUED — math tasks:** check PowerSchool/source for **math-task updates** and load only the **differential** vs what's
+  already in `DimMathTask` (loader `usp_LoadMathTasks`, @SourceUri; re-derive the Excel→CSV format from `DimMathTask.sql` /
+  `sql/staging/Stg_MathTask.sql` / an existing grade CSV — the CSV mirrors the table columns, EN+FR on one key). See [[project_math_assessment_model]].
+- **Blockers:** the SP/OneLake fix is IT-side (top item).
+
 ### Left Off — 2026-10-02 (eve) — 🟢 v1.0.0 FULLY LIVE + released; writing trait exclusion shipped
 - **Done — 1.0.0 is LIVE end-to-end**: live warehouse SQL deployed + verified (bundle `sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql`; 4 trait cols VARCHAR/167, remediation 0 rows) **AND** the corrected 1.0.0 container is swapped on prod (What's New shows only 1.0.0; `/api/health` 200). **Writing TRAIT-exclusion** feature live: data-driven `WritingTraitExclusion`, excluded trait stored as `-` (≠NULL), FI·P·Sep/Oct/Nov·Organization. [[project_writing_trait_exclusion]]. Fabric gotcha found + fixed: `TRY_CAST('-' AS INT)=0` → averages gate on `IN ('1'..'4')`.
 - **Done — git release ritual** (triggered by the live deploy, NOT a separate ask): `dev→main --no-ff`, tag **`v1.0.0`** pushed, **gh release** created (https://github.com/MrJRaine/Assessment-Data/releases/tag/v1.0.0), `main→dev` back-merge (dev == main @ 5940e52). Prod publish standard is now `-p 0.0.0.0:3000:3000` (WSL loopback-relay 502 fix — `docs/prod-container-swap.md`).
