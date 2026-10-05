@@ -6,31 +6,38 @@ import {
   getStudentCohortWriting,
   getAchievementLevels,
   getAssessableGradeRange,
+  getReportCycles,
   type CohortStudent,
   type AchievementBand,
+  type ReportCycle,
 } from '@/lib/data'
 import CohortView from './CohortView'
+import CycleSelector from './CycleSelector'
 
 export const dynamic = 'force-dynamic'
 
 export default async function StudentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ subject?: string }>
+  searchParams: Promise<{ subject?: string; cycle?: string }>
 }) {
-  const { subject } = await searchParams
+  const { subject, cycle: cycleParam } = await searchParams
   const isWriting = subject === 'writing'
   const upn = await getCurrentUpn()
+  // Cycle selector is Reading-only for now (Writing/Math/RWM join in the fan-out); Writing ignores ?cycle.
+  const cycle = isWriting ? null : (cycleParam ?? null)
 
   let cohort: CohortStudent[] = []
   let bands: AchievementBand[] = []
   let assessableRange: { minOrder: number; maxOrder: number } | null = null
+  let cycles: ReportCycle[] = []
   let error: string | null = null
   try {
-    cohort = isWriting ? await getStudentCohortWriting(upn) : await getStudentCohort(upn)
+    cohort = isWriting ? await getStudentCohortWriting(upn) : await getStudentCohort(upn, cycle)
     bands = await getAchievementLevels()
-    // Assessable grade scope for this subject (e.g. Reading = P–8) — drives the "Assessable only" default.
-    assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading')
+    // Assessable grade scope (e.g. Reading = P–8) — scoped to the selected cycle's window when one is picked.
+    assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading', cycle)
+    if (!isWriting) cycles = await getReportCycles()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -52,6 +59,7 @@ export default async function StudentsPage({
           RWM
         </Link>
       </div>
+      {!isWriting && cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       {error ? (
         <ErrorNote message={error} />
       ) : cohort.length === 0 ? (

@@ -175,6 +175,11 @@ a { color: inherit; text-decoration: none; }
 .subject-toggle button { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; }
 .subject-toggle button:hover { color: var(--ink); }
 .subject-toggle button.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
+.cycle-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0 0 1.1rem; }
+.cycle-label { font-size: 0.75rem; color: var(--muted); font-weight: 700; margin-right: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.cycle-btn { padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; color: var(--muted); background: var(--card); white-space: nowrap; }
+.cycle-btn:hover { color: var(--ink); border-color: var(--muted); }
+.cycle-btn.cycle-on { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
 
 /* placeholder */
 .placeholder {
