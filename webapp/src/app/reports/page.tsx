@@ -5,6 +5,7 @@ import {
   getStudentCohort,
   getStudentCohortWriting,
   getAchievementLevels,
+  getAssessableGradeRange,
   type CohortStudent,
   type AchievementBand,
 } from '@/lib/data'
@@ -23,10 +24,13 @@ export default async function StudentsPage({
 
   let cohort: CohortStudent[] = []
   let bands: AchievementBand[] = []
+  let assessableRange: { minOrder: number; maxOrder: number } | null = null
   let error: string | null = null
   try {
     cohort = isWriting ? await getStudentCohortWriting(upn) : await getStudentCohort(upn)
     bands = await getAchievementLevels()
+    // Assessable grade scope for this subject (e.g. Reading = P–8) — drives the "Assessable only" default.
+    assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading')
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -56,7 +60,7 @@ export default async function StudentsPage({
           hint={`${isWriting ? 'Writing' : 'Reading'} assessments and demographics appear here for students you can see.`}
         />
       ) : (
-        <CohortView cohort={cohort} bands={bands} subject={isWriting ? 'Writing' : 'Reading'} />
+        <CohortView cohort={cohort} bands={bands} subject={isWriting ? 'Writing' : 'Reading'} assessableRange={assessableRange} />
       )}
     </>
   )

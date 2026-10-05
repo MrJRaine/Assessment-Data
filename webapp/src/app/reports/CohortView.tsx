@@ -27,6 +27,7 @@ type CohortPersist = {
   ach?: (string | number)[] // string categories now ('1'..'4' | 'ipp' | 'nodata'); tolerate old numeric saves
   sortKey?: string | null
   sortDir?: 'asc' | 'desc'
+  assessableOnly?: boolean
 }
 function readCohortFilters(): CohortPersist {
   try {
@@ -111,10 +112,15 @@ export default function CohortView({
   cohort,
   bands,
   subject = 'Reading',
+  assessableRange = null,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
   subject?: 'Reading' | 'Writing'
+  // Grade-order range of students actually assessed for this subject (e.g. Reading = P–8), from the
+  // window metadata. When set, the "Assessable grades only" toggle (default ON) narrows the table +
+  // total to this range. null = no scope known → toggle hidden, all students shown.
+  assessableRange?: { minOrder: number; maxOrder: number } | null
 }) {
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
@@ -160,6 +166,13 @@ export default function CohortView({
   // Achievement filter values are STRING categories: '1'..'4' (the bands), 'ipp' (shown as "IPP"),
   // and 'nodata' (no achievement shown — measured-but-no-result, or unresolved IPP, both render "—").
   const [ach, setAch] = useState<Set<string>>(new Set())
+  // Assessable-only (default ON when a scope is known): narrow the table + total to the subject's
+  // assessed grades. The grade range comes from the window metadata (config-driven).
+  const [assessableOnly, setAssessableOnly] = useState(true)
+  const inAssessable = (s: CohortStudent) =>
+    !assessableOnly ||
+    assessableRange == null ||
+    (s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder)
 
   // Column sort — 2-state (click a header → ascending; click the SAME header → flip to descending; a
   // DIFFERENT header starts fresh at ascending). null = the DEFAULT_ORDER. "Reset sort order" → null.
@@ -227,6 +240,7 @@ export default function CohortView({
       setSortKey(p.sortKey as SortKey)
       setSortDir(p.sortDir === 'desc' ? 'desc' : 'asc')
     }
+    if (typeof p.assessableOnly === 'boolean') setAssessableOnly(p.assessableOnly)
     setReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -236,12 +250,12 @@ export default function CohortView({
     try {
       sessionStorage.setItem(
         COHORT_FILTER_KEY,
-        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], sortKey, sortDir }),
+        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], sortKey, sortDir, assessableOnly }),
       )
     } catch {
       /* private mode / storage blocked — filters just won't persist */
     }
-  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, sortKey, sortDir])
+  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, sortKey, sortDir, assessableOnly])
 
   // Each student's single achievement-filter category, matching what the table shows:
   //  '1'..'4' = the band; 'ipp' = a confirmed IPP student (shows "IPP"); 'nodata' = everyone else
@@ -286,9 +300,18 @@ export default function CohortView({
   }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach])
 
   const filtered = useMemo(
-    () => cohort.filter((s) => matchExcept(s, '')),
+    () => cohort.filter((s) => matchExcept(s, '') && inAssessable(s)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
+  )
+
+  // Total (the M in "N of M"): the assessable population when the toggle is ON, else the full cohort.
+  const baseTotal = useMemo(
+    () =>
+      assessableOnly && assessableRange
+        ? cohort.filter((s) => s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder).length
+        : cohort.length,
+    [cohort, assessableOnly, assessableRange],
   )
 
   // Display order: a clicked column as the PRIMARY key, then DEFAULT_ORDER as the tiebreak (so the
@@ -356,7 +379,13 @@ export default function CohortView({
   return (
     <>
       <div className="cohort-bar">
-        <span className="muted">{filtered.length} of {cohort.length} students match</span>
+        <span className="muted">{filtered.length} of {baseTotal} students match</span>
+        {assessableRange ? (
+          <label className="assessable-toggle" title={`Show only students in the assessed grades for ${subject} (the rest aren't assessed, so they'd only pad the total).`}>
+            <input type="checkbox" checked={assessableOnly} onChange={(e) => setAssessableOnly(e.target.checked)} />
+            Assessable grades only
+          </label>
+        ) : null}
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
           {expanded ? 'Hide filters' : 'Show filters'}
         </button>

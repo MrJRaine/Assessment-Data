@@ -761,6 +761,35 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
 }
 
 /**
+ * The assessable GRADE-ORDER range for a subject this school year, derived from the subject's active
+ * assessment windows (DimAssessmentWindow MinGrade/MaxGrade → DimGrade.GradeOrder). Config-driven, so
+ * "Reading = P–8" comes from the window metadata, not a literal. Powers the cohort report's
+ * "Assessable only" default (narrow the total to the students actually in the assessed grades). Returns
+ * null if the subject has no active windows this year (caller then shows all students).
+ */
+export async function getAssessableGradeRange(
+  subject: 'Reading' | 'Writing' | 'Math',
+): Promise<{ minOrder: number; maxOrder: number } | null> {
+  const rows = await query<{ MinOrder: number | null; MaxOrder: number | null }>(
+    `WITH CurYear AS (
+       SELECT CASE WHEN MONTH(d.Today) >= 9 THEN CONCAT(YEAR(d.Today), '-', YEAR(d.Today) + 1)
+                   ELSE CONCAT(YEAR(d.Today) - 1, '-', YEAR(d.Today)) END AS Yr
+       FROM (SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today) d
+     )
+     SELECT MIN(gmin.GradeOrder) AS MinOrder, MAX(gmax.GradeOrder) AS MaxOrder
+     FROM DimAssessmentWindow w
+     CROSS JOIN CurYear cy
+     JOIN DimGrade gmin ON gmin.GradeCode = w.MinGrade
+     JOIN DimGrade gmax ON gmax.GradeCode = w.MaxGrade
+     WHERE w.ActiveFlag = 1 AND w.AssessmentType = @Subject AND w.SchoolYear = cy.Yr`,
+    { Subject: subject },
+  )
+  const r = rows[0]
+  if (!r || r.MinOrder == null || r.MaxOrder == null) return null
+  return { minOrder: Number(r.MinOrder), maxOrder: Number(r.MaxOrder) }
+}
+
+/**
  * Writing cohort in the same CohortStudent shape so CohortView renders it unchanged: the 4-trait
  * average fills the "Level" slot (shown as a 2-dec score) and the writing band fills the achievement
  * fields. ippStatusReading carries the WRITING IPP status here (the field is reused for the table's
