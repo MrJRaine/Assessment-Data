@@ -299,6 +299,7 @@ a { color: inherit; text-decoration: none; }
 .ipp-tip { flex: 1; }
 .grid th.sortable { cursor: pointer; user-select: none; }
 .grid th.sortable:hover { color: var(--ink); }
+.grid th.sorted { color: var(--ink); background: var(--border); }
 /* Maintenance banner (sticky, full-width; tone escalates warn -> lock -> down). */
 .maint-banner { position: sticky; top: 0; z-index: 200; padding: 0.6rem 1rem; text-align: center; font-size: 0.9rem; font-weight: 600; line-height: 1.35; }
 .maint-warn { background: #fff7e6; color: #8a5711; border-bottom: 1px solid #f0d9a8; }

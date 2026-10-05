@@ -40,3 +40,9 @@ correct even while the SQL was wrong — the REPORTS are the ones that exposed t
 
 App side: `data.ts` writing trait fields are strings; grid shows `-` (hyphen) on an excluded
 cell, `—` (em-dash) for no-data/IPP-gate. No `FactAssessmentWriting` grain change.
+
+**Teacher docs (2026-10-04):** the writing how-to one-pager (`04-enter-writing-data`) deliberately
+KEEPS the "you must give all four scores" wording — do NOT add the trait-exclusion exception to it.
+The handful of FI-Primary teachers it affects were briefed directly, and the grid already hides the
+excluded dropdown for them. Same spirit as [[project_grace_period_hidden_from_teachers]]: don't
+document a narrow edge case to all teachers when the affected few were told out-of-band.

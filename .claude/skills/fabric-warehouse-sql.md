@@ -402,3 +402,23 @@ counted `-` as a scored **0** — it landed in the denominator (÷4 not ÷3) and
 "TRY_CAST is supported" note — it runs, but its string→int parsing is looser than SQL Server's.) Also
 note: a bare `COALESCE(varcharCol, 0)` has INT precedence and HARD-casts the string (errors on `-`), so
 it's not a workaround either.
+
+---
+
+## COPY INTO from OneLake — authentication (caller-passthrough; NO Managed Identity)
+
+`COPY INTO ... FROM 'abfss://…onelake…'` reads OneLake as a **separate Entra token** from the
+SQL-connection token (storage audience vs SQL audience), acquired for the **executing identity**:
+- A **user** in the Fabric SQL editor: works (delegated identity gets the OneLake token).
+- A **service principal** (the app's connection): needs the warehouse to broker a OneLake token for the
+  SP — gated by the tenant "service principals can use Fabric APIs / OneLake" setting **separately** from
+  workspace RBAC. An SP can be a workspace Contributor and still fail `COPY INTO` if that tenant gate is
+  off. (This was the 2026-10 ingest outage — see memory [[reference_it_modifies_sps_and_copyinto_auth]].)
+
+**You cannot use a Managed Identity credential to dodge the caller.** Fabric Warehouse rejects it:
+`Msg 13838, Level 16 — "Accessing storage path '…' using 'Managed Identity' credential is not supported"`
+(tested dev 2026-10-04). Fabric `COPY INTO` credential options are **EntraID passthrough (default), SAS,
+and Storage Account Key** — not MI. So if an SP must `COPY INTO` OneLake: restore the SP's tenant OneLake
+access, OR supply a SAS credential (`CREDENTIAL = (IDENTITY='Shared Access Signature', SECRET='…')` —
+extra secret + rotation), OR run the load as a user. The app's direct ADLS **upload** is unaffected — it
+mints the SP's own `storage.azure.com` token via `@azure/identity`, a different path than `COPY INTO`.

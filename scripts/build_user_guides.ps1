@@ -1,8 +1,7 @@
-﻿# TODO (0.7.0 grace-lock): document the GRACE WINDOW where appropriate — in the reading/writing/math
-#   "enter data" guides (03/04/05) and the "choose a cycle" guide: after a cycle closes it stays editable
-#   for a grace period (default 7 days / 168h, per-cycle configurable), shows under "Past cycles — late
-#   entry (N left)", then LOCKS to read-only ("View only"); designated Literacy/Math override staff can
-#   flip a locked group back on via "Override lock for this group". Add once 0.7.0 ships.
+﻿# DECISION (do NOT revert): the post-close GRACE WINDOW is deliberately LEFT OUT of all teacher-facing
+#   guides. It's a quiet safety net — documenting it would make teachers rely on it and leave entry to the
+#   last moment. Keep it out of 03/04/05 and the choose-cycle guide. (The override flow is admin-only and
+#   also stays out of the teacher one-pagers.)
 #
 # Builds the v0.6.0 teacher how-to one-pagers (.docx) via Word COM, from a single
 # consistent template. Regenerates docs/user-guides/v0.6.0/*.docx from the content below.

@@ -11,6 +11,26 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [1.1.0] — unreleased (in development)
+
+### Added
+- **Reading cohort report — "Diff from Expected" column.** Each student's most-recent reading score now
+  shows its signed distance from the expected benchmark (±N levels), next to the existing "Diff from Prev June".
+- **Sortable cohort table** (Reading & Writing). Click a column header to sort ascending; click the same
+  header to flip to descending; a different header starts fresh ascending. The active column is highlighted
+  with a ▲/▼, blanks sort to the bottom, and a **"Reset sort order"** button returns to the default. Default
+  order = **School → Homeroom → Grade → Last name → First name → provincial Student #** (all ascending); a
+  clicked column becomes the primary key with that order as the tiebreak, so rows are always deterministic.
+  Sort persists for the tab session alongside the filters.
+- **Ingest run-log** (`IngestRunLog`) — every ingest records who ran it, when, app-vs-Fabric-SQL, and
+  rows-per-file; `usp_RunFullIngestCycle` / `usp_TriggerIngestCycle` instrumented. (Deployed dev + live 2026-10-04.)
+
+### Changed
+- **Cohort table shows Homeroom instead of Program** (Reading & Writing). Program stays a filter — it's just
+  no longer a displayed column.
+- **Co-teachers always load on ingest.** The silent co-teacher skip was removed (`@SkipCoTeachers` is now a
+  deprecated no-op, kept only for pre-1.1.0 container compatibility); the ingest page's skip checkbox is removed.
+
 ## [1.0.0] — 2026-10-02
 
 First production release of the SCoR Dashboard.

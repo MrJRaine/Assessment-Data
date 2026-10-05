@@ -76,7 +76,9 @@ BEGIN
     -- =========================================================================
     -- Run the orchestrator. Errors bubble to Power Apps directly.
     -- =========================================================================
-    EXEC usp_RunFullIngestCycle @SkipCoTeachers = @SkipCoTeachers;
+    -- @SkipCoTeachers is accepted (a pre-1.1.0 container still passes it) but NO LONGER forwarded --
+    -- co-teachers always load. Drop the param here once 1.1.0 is the live build.
+    EXEC usp_RunFullIngestCycle @CallerUPN = @CallerUPN, @Source = 'App';
 END;
 GO
 

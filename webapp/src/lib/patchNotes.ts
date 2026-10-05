@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.1.0',
+    date: '2026-10-05',
+    kind: 'feature',
+    summary:
+      'On the Reports cohort table you can now sort by any column — click a heading to sort, click it again to reverse. The table shows Homeroom instead of Program (Program is still a filter), and Reading adds a "Diff from Expected" column showing how far each student’s latest level is above or below the expected benchmark.',
+  },
+  {
     version: '1.0.0',
     date: '2026-10-02',
     kind: 'feature',
