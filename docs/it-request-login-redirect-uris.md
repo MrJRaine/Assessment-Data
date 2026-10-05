@@ -14,9 +14,12 @@ works whether the container is on port 3000 or 3001:
 — it must stay.
 
 ## The application (the LOGIN app — user sign-in; NOT the data SP)
+- **Name:** `TCRCE Data Web App`
 - **Role:** the Entra app the SCoR Dashboard uses for **user sign-in** (the "login" app in our login/data split).
 - **App (client) ID:** `819f9480-5e65-469e-be27-89ac30381f1f`
 - **Tenant ID:** `0320ef6f-7349-4acf-b62a-e780da155b7e`
+- **Confirmed 2026-10-05:** the `localhost` redirect URIs are **not currently present** on this app's
+  Authentication → Web → Redirect URIs (only the production URI remains), which is what breaks local sign-in.
 - This is a **different** app from the data service principal in the OneLake request
   (`StudentDataAssessment`, `c33fb2d3-…`). That one is about `COPY INTO`; this one is about sign-in.
 
