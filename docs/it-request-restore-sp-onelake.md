@@ -3,8 +3,10 @@
 ## Summary
 The in-app PowerSchool ingest on `data.tcrce.ca` is failing at the warehouse load step. The data
 service principal can still **connect to the warehouse, run SQL, and is a workspace Contributor**, but
-it can **no longer obtain a OneLake storage token for `COPY INTO`**. This started after 2026-09-29;
-it worked at the 2026-08-27 production cutover with the same role. The most likely cause is a
+it can **no longer obtain a OneLake storage token for `COPY INTO`**. The **last successful app-triggered
+ingest was 2026-09-12**; by **2026-09-29** the app ingest was already failing and had to be run manually,
+so the break occurred **sometime between Sept 12 and Sept 29, 2026**. It worked at the 2026-08-27
+production cutover with the same role. The most likely cause is a
 **tenant-level change to service-principal / OneLake access** (the setting or its backing security
 group). Only a Fabric tenant admin can confirm and restore this.
 
@@ -31,7 +33,8 @@ That last one is a distinct permission from the workspace Contributor role, whic
 healthy but the load fails.
 
 ## What we need
-1. **Confirm**: since ~2026-09-29, was there a change to the tenant setting **"Service principals can
+1. **Confirm**: between **2026-09-12** (last successful app-triggered ingest) and **2026-09-29**
+   (confirmed failing — ingest run manually), was there a change to the tenant setting **"Service principals can
    use Fabric APIs"** (or any OneLake / "service principals can access data" setting) — including the
    **security group** that backs it — and is `StudentDataAssessment` (`c33fb2d3…`) still in scope?
 2. **Restore** the SP's ability to obtain a OneLake token (re-add it to the allowed group / re-enable
