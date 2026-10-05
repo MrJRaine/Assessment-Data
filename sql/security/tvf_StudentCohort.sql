@@ -24,7 +24,10 @@
 DROP FUNCTION IF EXISTS dbo.tvf_StudentCohort;
 GO
 
-CREATE FUNCTION dbo.tvf_StudentCohort(@UPN VARCHAR(255))
+-- @CycleGroupID (added 2026-10-05): NULL = lifetime most-recent reading (the "Current" view, unchanged);
+-- a DimShortCycle.CycleGroupID scopes the latest-pick to that cycle's Reading window(s) so the report
+-- is time-bound to one cycle. Callers must pass both args (TVF params can't be omitted even with a default).
+CREATE FUNCTION dbo.tvf_StudentCohort(@UPN VARCHAR(255), @CycleGroupID VARCHAR(36) = NULL)
 RETURNS TABLE
 AS
 RETURN
@@ -42,6 +45,13 @@ RETURN
                 ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentReading far
+        -- Cycle scoping: NULL = lifetime most-recent; a cycle id restricts to that cycle's Reading
+        -- window(s), so the latest-pick becomes the latest result WITHIN the selected cycle.
+        WHERE @CycleGroupID IS NULL
+           OR far.AssessmentWindowID IN (
+                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
+              )
     ),
     CurrentReadingIPP AS (
         SELECT fsi.StudentKey, fsi.ProgramFamily, fsi.IsIPP
