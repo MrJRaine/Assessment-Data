@@ -381,9 +381,9 @@ export default function CohortView({
       <div className="cohort-bar">
         <span className="muted">{filtered.length} of {baseTotal} students match</span>
         {assessableRange ? (
-          <label className="assessable-toggle" title={`Show only students in the assessed grades for ${subject} (the rest aren't assessed, so they'd only pad the total).`}>
+          <label className="assessable-toggle" title={`Show only the grades that participate in ${subject} — the rest don't take part, so they'd only pad the total.`}>
             <input type="checkbox" checked={assessableOnly} onChange={(e) => setAssessableOnly(e.target.checked)} />
-            Assessable grades only
+            Participating grades only
           </label>
         ) : null}
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>

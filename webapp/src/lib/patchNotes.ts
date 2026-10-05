@@ -20,7 +20,7 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-10-05',
     kind: 'feature',
     summary:
-      'On the Reports cohort table you can now sort by any column — click a heading to sort, click it again to reverse. The table shows Homeroom instead of Program (Program is still a filter), and Reading adds a "Diff from Expected" column showing how far each student’s latest level is above or below the expected benchmark. The total now counts only the students actually assessed for the subject (e.g. Reading grades Primary–8) — flip "Assessable grades only" off to include everyone.',
+      'On the Reports cohort table you can now sort by any column — click a heading to sort, click it again to reverse. The table shows Homeroom instead of Program (Program is still a filter), and Reading adds a "Diff from Expected" column showing how far each student’s latest level is above or below the expected benchmark. The total now counts only the grades that participate in the subject (e.g. Reading grades Primary–8) — flip "Participating grades only" off to include everyone.',
   },
   {
     version: '1.0.0',

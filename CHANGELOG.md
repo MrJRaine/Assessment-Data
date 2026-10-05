@@ -22,10 +22,10 @@ with `0.3.0`, so earlier detail is approximate.
   order = **School → Homeroom → Grade → Last name → First name → provincial Student #** (all ascending); a
   clicked column becomes the primary key with that order as the tiebreak, so rows are always deterministic.
   Sort persists for the tab session alongside the filters.
-- **Reports cohort — "Assessable grades only" (default on).** The total and the table now count only the
-  students actually assessed for the subject (Reading = P–8), instead of all enrolled PP–12. The grade
-  range is config-driven — derived from the subject's assessment-window `MinGrade`/`MaxGrade` — and a
-  toggle in the bar shows all grades. (Reading/Writing cohort.)
+- **Reports cohort — "Participating grades only" (default on).** The total and the table now count only the
+  grades that participate in the subject (Reading = P–8), instead of all enrolled PP–12. The grade range is
+  config-driven — derived from the subject's assessment-window `MinGrade`/`MaxGrade` — and a toggle in the
+  bar shows all grades. (Reading/Writing cohort.)
 - **Ingest run-log** (`IngestRunLog`) — every ingest records who ran it, when, app-vs-Fabric-SQL, and
   rows-per-file; `usp_RunFullIngestCycle` / `usp_TriggerIngestCycle` instrumented. (Deployed dev + live 2026-10-04.)
 
