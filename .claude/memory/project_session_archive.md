@@ -1564,3 +1564,39 @@ Two working sessions on 2026-10-04 (the first was compacted before it could wrap
 
 **End state:** all code/docs/memory committed + pushed to `origin/dev` (through `3c95c48` + this wrap). Math tasks live on
 dev + live. App ingest still blocked pending the IT SP/OneLake fix (top next action). 1.1.0 held open for 2026-10-05.
+
+## Session 2026-10-05 — 1.1.0 cohort-report work: table QoL + cycle time-binding (Reading); a long dev-scope red herring
+
+**Built the Reports cohort enhancements the user scoped (all in the 1.1.0 dev line; app + one deployed TVF):**
+- **Cohort table QoL (`CohortView`, Reading/Writing):** click-to-sort (2-state — asc→flip desc, a different column restarts
+  asc; active-header highlight + ▲/▼; blanks last; **"Reset sort order"** button; default order
+  School→Homeroom→Grade→Last→First→**provincial Student #**, used as the tiebreak under any clicked column — built a multi-key
+  comparator); **Program→Homeroom** column (Program stays a filter); Reading **"Diff from Expected"** column (`mostRecentDelta`).
+  UX decisions the user drove: **2-state** sort (file-explorer model, not the data-grid-library 3-state — I overstated "most
+  people expect 3-state" and was corrected), wire **Reset** to also clear sort.
+- **"Participating grades only"** (renamed from "Assessable" — avoid the assess term): default ON, narrows the total + table to
+  the subject's window grade range (Reading P–8), **config-driven** from `DimAssessmentWindow MinGrade/MaxGrade` via new
+  `getAssessableGradeRange` — NOT hardcoded.
+- **Cycle time-binding — Reading end-to-end:** shared `CycleSelector` (Current + this-year STARTED cycles, hover=date range,
+  `?cycle=<CycleGroupID>` URL param); `tvf_StudentCohort` gained optional `@CycleGroupID` (deployed to dev); `getReportCycles`.
+  **Design correction (twice):** RWM is NOT month-based — **R/W/M share the same cycles**, so one shared cycle selector drives
+  all four reports and a cycle scopes each subject *within that cycle*. Fan-out to Writing/Math/RWM is the next task.
+
+**Dev troubleshooting (user's scope went empty — a multi-step red herring):** yesterday's dev re-ingest (a) re-applied the
+synthetic 2025-2026 `FactEnrollment` dates (880 rows, 0 current by date; `ActiveFlag` still 1 so Reports resolve, rosters
+don't) and (b) **closed the project-lead's manually-granted `DimStaff`/`StaffSchoolAccess`** (anti-join — the staff file omits
+that email), so `jeffrey.raine` self-view saw nothing in R/W/M. I **wrongly blamed my Part B "assessable" filter** first; the
+grey "No students in your scope" (TVF returned 0, not a client filter) + Math-also-empty proved it was scope. Fix: ran
+`grant_dev_projectlead_access.sql` (restores DimStaff analyst + **StaffSchoolAccess** + sysadmin). The *other* "analysts see
+Math not R/W" turned out to be a **persisted grade-10 filter with the panel collapsed** (no "(active)" hint on Reading/Writing
+like RWM has — offered to add it). Built two tracked diagnostics: `diag_cohort_base_dev.sql`, `diag_cohort_scope_dev.sql`.
+Lesson reinforced: gather facts before pinning a cause; the EmptyState-vs-in-table-notice distinction tells scope from filter.
+
+**Also:** wrote the login-redirect IT request (`docs/it-request-login-redirect-uris.md` — add localhost:3000+3001 to "TCRCE
+Data Web App" `819f9480…`; recurred — [[reference_it_modifies_sps_and_copyinto_auth]]). Corrected the SP-OneLake request's
+break window to Sept 12→29 (last good app ingest was the 12th, not "after the 29th").
+
+**End state:** everything committed + pushed to `origin/dev` and reconciled to `dev-impersonation`. Reading cycle-scoping TVF
+deployed to dev. NEXT: fan the cycle selector to Writing/Math/RWM (3 TVFs get `@CycleGroupID` + page wiring), optional
+"(active)" filter hint, then cut 1.1.0 (version bump + CHANGELOG/patchNotes + container swap, carrying the 10-04 ingest items).
+Containers need a rebuild to pick up the "Participating grades only" rename.

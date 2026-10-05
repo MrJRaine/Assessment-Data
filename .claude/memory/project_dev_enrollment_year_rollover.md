@@ -14,3 +14,12 @@ The dev synthetic data (`_Dev` warehouse) has a fixed **single-school-year** `Fa
 **Note:** roll-forward keeps students at their prior-year GRADE (the enrollment's `StudentKey` points to that DimStudent version). Fine for band testing; a realistic new-year set would also promote grades (+1) — a separate DimStudent change, not done.
 
 **Diagnostics built (all `sql/scripts/*_dev.sql`, 2026-09-04):** `who_sees_open_cycle_dev` (CROSS APPLY `tvf_UserAssessmentWindows` per staff → who sees an open cycle + subjects), `classroom_teacher_grades_dev` (per-teacher grade span via the roster chain), `staff_roster_linkage_dev` (SectionsByStaffKey vs SectionsByFST vs ResolvableStudents — pinpoints where the chain breaks), `enrollment_currency_dev` (FactEnrollment date span + CurrentToday). Trap noted: the impersonation dropdown counts sections off `DimSection.TeacherStaffKey`, but rosters resolve off `FactSectionTeachers.TeacherEmail` — a teacher can show sections yet resolve none. Related: [[project_dev_live_environment_split]], [[feedback_live_pii_boundary]].
+
+**After a dev RE-INGEST, two things break together (2026-10-05):** the ingest (a) re-applies the old
+synthetic enrollment dates (expired → run `rollforward_enrollment_dev.sql` for the date-gated ENTRY/roster
+side; note Reports use `FactEnrollment.ActiveFlag` not dates, so cohort reports can still resolve while
+rosters are empty) AND (b) CLOSES the project lead's manually-granted `DimStaff`/`StaffSchoolAccess` (the
+synthetic staff file omits that email → anti-join deactivation), so the project-lead SELF-VIEW shows "No
+students in your scope" everywhere → run `grant_dev_projectlead_access.sql` (restores DimStaff analyst +
+StaffSchoolAccess + sysadmin). Treat the two scripts as the standard "post dev re-ingest" pair. Diagnose
+with `diag_cohort_scope_dev.sql` (per-user cohort row counts + who holds StaffSchoolAccess).
