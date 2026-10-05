@@ -131,6 +131,38 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-05 — 🟡 1.1.0 report work in dev (cohort QoL + cycle time-binding Reading); fan-out + cut pending
+- **DONE this session (on dev; app + one deployed TVF; all committed + pushed to `dev` and reconciled to `dev-impersonation`):**
+  - **Cohort table QoL (Reading/Writing cohort — `CohortView`):** sortable columns (2-state click: asc→flip desc, other
+    column restarts asc; active-header highlight + ▲/▼; blanks last; **"Reset sort order"** button; default order
+    School→Homeroom→Grade→Last→First→provincial Student #, used as the tiebreak under any clicked column); **Program→Homeroom**
+    column (Program stays a filter); Reading **"Diff from Expected"** column (`mostRecentDelta`); **"Participating grades only"**
+    toggle (default ON — narrows the total + table to the subject's window grade range, Reading P–8, config-driven via
+    `getAssessableGradeRange`; renamed from "Assessable" to avoid the assess term). Sort/filters/toggle persist per tab.
+  - **Cycle time-binding — READING done end-to-end:** shared `CycleSelector` (Current + this-year STARTED cycles, hover=date
+    range, rides `?cycle=<CycleGroupID>`); `tvf_StudentCohort` gained optional `@CycleGroupID` (**DEPLOYED TO DEV today** —
+    NULL=lifetime "Current", a cycle id scopes the latest-pick to that cycle's Reading window); `getReportCycles` +
+    `getAssessableGradeRange(subject, cycle)` per-cycle scope.
+- **NEXT ACTION — fan the cycle selector out to Writing / Math / RWM:** add `@CycleGroupID` to `tvf_StudentCohortWriting`,
+  `tvf_StudentCohortMath`, `tvf_StudentCohortRWM` (same `WHERE AssessmentWindowID IN (<the cycle's subject windows>)` pattern;
+  **cycles are SHARED across R/W/M — NOT month-based**; RWM scopes R+W+M within the shared cycle) + wire each page's `?cycle=`
+  and render the shared selector. SQL deploys to dev, then live at the 1.1.0 cut. Optional after: "(active)" hint on the
+  collapsed Reading/Writing filter toggle (RWM already shows it — a stuck grade filter read as "empty" today).
+- **THEN cut 1.1.0:** version bump + finalize CHANGELOG/patchNotes (also carries the 2026-10-04 **ingest run-log** +
+  co-teacher-always-load + ingest-page checkbox removal), container swap. Live SQL = the cycle-scoped cohort TVFs.
+- **Dev data note (resolved):** yesterday's dev re-ingest re-expired `FactEnrollment` (880 rows back to 2025-2026, 0 current
+  by DATE, but `ActiveFlag=1` so REPORTS still resolve) AND wiped the project-lead's manual access. **Access RESTORED** via
+  `sql/scripts/grant_dev_projectlead_access.sql` (DimStaff analyst + StaffSchoolAccess + sysadmin). **Enrollment NOT rolled
+  forward** — run `sql/scripts/rollforward_enrollment_dev.sql` only if testing the DATE-gated DATA-ENTRY/roster side; Reports
+  are fine without it. New diagnostics committed: `diag_cohort_base_dev.sql`, `diag_cohort_scope_dev.sql`.
+- **IT requests to SEND (user's action):** login redirect URIs — [`docs/it-request-login-redirect-uris.md`](it-request-login-redirect-uris.md)
+  (add `localhost:3000`+`3001` to "TCRCE Data Web App" `819f9480…`; local sign-in broken on :3000 until then) + the SP OneLake
+  `COPY INTO` request [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md).
+- **Containers (dev):** `awdev` :3000 (real Entra login — BLOCKED until the redirect-URI fix), `awdev-impersonation` :3002
+  (impersonation, testable). Both on 1.1.0 builds through the Reading-cycle deploy; **a rebuild is needed to pick up the
+  "Participating grades only" rename** (committed, not yet built).
+- **Blockers:** none code-side; IT-side = the two Entra/SP requests above.
+
 ### Left Off — 2026-10-04 (later) — 🟢 Math tasks 2026-27 loaded (dev+live); user-guide audit done; IT request STILL top
 - **🔴 STILL THE TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md)
   to restore the data SP's OneLake `COPY INTO` access (app-triggered ingest still broken; full detail in the note below). Not touched this session.
