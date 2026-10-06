@@ -21,5 +21,16 @@ side; note Reports use `FactEnrollment.ActiveFlag` not dates, so cohort reports 
 rosters are empty) AND (b) CLOSES the project lead's manually-granted `DimStaff`/`StaffSchoolAccess` (the
 synthetic staff file omits that email → anti-join deactivation), so the project-lead SELF-VIEW shows "No
 students in your scope" everywhere → run `grant_dev_projectlead_access.sql` (restores DimStaff analyst +
-StaffSchoolAccess + sysadmin). Treat the two scripts as the standard "post dev re-ingest" pair. Diagnose
-with `diag_cohort_scope_dev.sql` (per-user cohort row counts + who holds StaffSchoolAccess).
+StaffSchoolAccess + sysadmin). Diagnose with `diag_cohort_scope_dev.sql` (per-user cohort row counts +
+who holds StaffSchoolAccess).
+
+**FIX for half of that pair, at the SOURCE (2026-10-06):** the dev ingest CSV
+`data/imports/enrollments/EnrollmentsExport.csv` was shifted +1 year (all 880 rows
+`09/02/2025→09/02/2026`, `06/30/2026→06/30/2027`) so a fresh ingest now lands **current** rosters for
+school year 2026-27 — **`rollforward_enrollment_dev.sql` is no longer needed after ingest** (keep it only
+if the calendar later crosses past 2027-06-30; then re-shift the CSV instead). Only EnrollmentsExport
+carries school-year dates: `StudentsExport.DOB` (real birth dates) and mathtasks `AssessmentMonth` (month
+bins) were deliberately NOT shifted. **The access-grant half is separate and still required after a
+re-ingest** — `grant_dev_projectlead_access.sql` is IDENTITY-driven (project-lead email omitted from the
+synthetic `StaffExport` → anti-join deactivation), not date-driven, so the CSV shift does not touch it.
+(Could be killed too by adding the project-lead to StaffExport — not done, scope/mechanism differs.)
