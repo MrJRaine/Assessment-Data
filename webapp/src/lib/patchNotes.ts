@@ -17,6 +17,13 @@ export interface PatchNote {
 export const PATCH_NOTES: PatchNote[] = [
   {
     version: '1.1.0',
+    date: '2026-10-06',
+    kind: 'fix',
+    summary:
+      'Late French Immersion classes can now record English reading levels. The English sections already showed the English scale, but saving a level was being blocked — that’s fixed, so a level now saves against whichever reading scale the cycle uses.',
+  },
+  {
+    version: '1.1.0',
     date: '2026-10-05',
     kind: 'feature',
     summary:

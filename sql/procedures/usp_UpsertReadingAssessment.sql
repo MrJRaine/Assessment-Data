@@ -29,6 +29,14 @@
  *                       "closed window" block (51031) was removed. The 51017 date
  *                       gate upper bound is now MIN(today, window EndDate) so a
  *                       late entry is dated inside that window's month.
+ * Modified: 2026-10-06 — 51014 is now INSTANCE-based, not program-based. The entered
+ *                       scale is validated against the cycle INSTANCE's ScaleSystem
+ *                       (COALESCE(window.ScaleSystem, program-family fallback)),
+ *                       mirroring tvf_TeacherRoster — so a Late-Immersion student can
+ *                       enter English reading against a Reading·English instance (the
+ *                       roster already showed EN_Reading; only the write path was still
+ *                       hardcoding FI->FR_Reading). The cycle instance is the single
+ *                       source of truth — see project_assessment_language_tracks.
  * Region: Canada East (PIIDPA compliant)
  *
  * Behavior (grain = StudentKey x AssessmentWindowID x AssessmentDate):
@@ -78,7 +86,8 @@
  *   51011  @StudentNumber does not resolve to a DimStudent row at @AssessmentDate
  *   51012  @AssessmentWindowID does not resolve to an active window
  *   51013  @ReadingScaleID does not resolve to an active scale
- *   51014  @ReadingScaleID.ScaleSystem does not match window's ScaleSystem
+ *   51014  entered scale <> the cycle instance's ScaleSystem (window.ScaleSystem,
+ *          or the student's program-family fallback for a region-wide cycle)
  *   51015  window AssessmentType is not 'Reading'
  *   51016  student grade (at AssessmentDate) outside window's [MinGrade, MaxGrade]
  *   51017  @AssessmentDate outside [window.StartDate, MIN(today_atlantic, window.EndDate)]
@@ -252,10 +261,10 @@ BEGIN
 
     -- =========================================================================
     -- Layer 2 — 51013: scale resolves and is active. @ScaleSystem is the scale of
-    -- the ENTERED level (EN_Reading / FR_Reading), which under the region-wide
-    -- "Short Cycle of Response" model is the student's scale — the cycle no longer
-    -- carries a ScaleSystem. The 51014 "right language for this student" check now
-    -- runs AFTER the student's program is resolved (below), not against the cycle.
+    -- the ENTERED level (EN_Reading / FR_Reading). The 51014 "right scale for this
+    -- entry" check (below, after the student's program resolves) validates it against
+    -- the CYCLE INSTANCE's ScaleSystem, falling back to the student's program family
+    -- only for a region-wide window that carries no ScaleSystem.
     -- =========================================================================
     SELECT
         @StudentLevelOrder = LevelOrder,
@@ -293,22 +302,29 @@ BEGIN
     WHERE ProgramCode = @StudentProgramCode;
 
     -- =========================================================================
-    -- Layer 2 — 51014: the entered scale must be the reading scale for the
-    -- student's PROGRAM family (English -> EN_Reading, French Immersion ->
-    -- FR_Reading). Region-wide "Short Cycles of Response" carry no ScaleSystem,
-    -- so this "right language for this student" guard is program-based, not
-    -- cycle-based. Programs with no reading scale (e.g. French Second Language)
-    -- map to NULL and skip the check (they have no benchmark either — tolerated).
+    -- Layer 2 — 51014: the entered scale must match THIS CYCLE INSTANCE's reading
+    -- scale. The instance (DimAssessmentWindow) is the lever: a scoped reading window
+    -- carries its own ScaleSystem (EN_Reading / FR_Reading), so a Late-Immersion
+    -- student entering against a Reading·English instance is correctly held to
+    -- EN_Reading — NOT forced to FR_Reading by a hardcoded program rule. The student's
+    -- PROGRAM family is only a FALLBACK, for a region-wide "Short Cycle of Response"
+    -- window that carries no ScaleSystem. This mirrors tvf_TeacherRoster
+    -- (COALESCE(window.ScaleSystem, family fallback)) so entry validates exactly what
+    -- the roster displayed — the cycle instance is the single source of truth, never a
+    -- hardcoded per-program rule (see project_assessment_language_tracks). Programs with
+    -- no reading scale (e.g. French Second Language) and no window ScaleSystem map to
+    -- NULL and skip the check (they have no benchmark either — tolerated).
     -- =========================================================================
     DECLARE @ExpectedScaleSystem VARCHAR(20) =
-        CASE @StudentProgramFamily
-             WHEN 'English'          THEN 'EN_Reading'
-             WHEN 'French Immersion' THEN 'FR_Reading'
-             ELSE NULL END;
+        COALESCE(@WindowScaleSystem,
+                 CASE @StudentProgramFamily
+                      WHEN 'English'          THEN 'EN_Reading'
+                      WHEN 'French Immersion' THEN 'FR_Reading'
+                      ELSE NULL END);
 
     IF @ExpectedScaleSystem IS NOT NULL AND @ScaleSystem <> @ExpectedScaleSystem
     BEGIN
-        ;THROW 51014, 'usp_UpsertReadingAssessment: entered scale does not match the student''s program reading scale (e.g. EN_Reading levels for a French Immersion student).', 1;
+        ;THROW 51014, 'usp_UpsertReadingAssessment: entered scale does not match this reading cycle''s scale (the cycle instance''s language sets the scale).', 1;
     END;
 
     -- =========================================================================
