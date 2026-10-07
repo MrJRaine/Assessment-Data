@@ -221,6 +221,7 @@ export default function MathRosterEntry({
       try {
         const res = await saveMathAssessments(windowId, groupKey, entries)
         setResult(res)
+        if (res.errors.length === 0) setRestored(null) // restored marks are now saved — drop the banner
         // Clear dirty for cells that saved (everything not in the error list), matched by student+task.
         const failed = new Set(res.errors.map((e) => `${e.studentNumber}:${e.mathTaskKey}`))
         setCommitted((prev) => {
