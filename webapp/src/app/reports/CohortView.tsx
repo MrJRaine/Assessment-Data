@@ -68,7 +68,9 @@ function sortVal(s: CohortStudent, key: SortKey): number | string | null {
     // Diff-from-Expected — return null so they sort as blank (to the bottom), not by a stray value.
     case 'diffExpected': return s.chartEligible ? s.mostRecentDelta : null
     case 'diffJune': return s.diffFromPrevJune
-    case 'achievement': return s.achievementCode
+    // IPP / unresolved (unconfirmed-IPP) students show no achievement band, so they must not sort by
+    // a stray code — null sorts them blank (to the bottom), treating unconfirmed IPPs like IPPs.
+    case 'achievement': return s.chartEligible ? s.achievementCode : null
     default: return null
   }
 }
