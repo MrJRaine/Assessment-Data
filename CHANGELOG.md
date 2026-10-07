@@ -34,6 +34,8 @@ with `0.3.0`, so earlier detail is approximate.
   no longer a displayed column.
 - **Co-teachers always load on ingest.** The silent co-teacher skip was removed (`@SkipCoTeachers` is now a
   deprecated no-op, kept only for pre-1.1.0 container compatibility); the ingest page's skip checkbox is removed.
+- **Ingest run-time hint reworded** "can take a minute" → "can take a few minutes," since every cycle now
+  loads all five files and runs the full merge + data-quality gate.
 
 ### Fixed
 - **Reading entry: Late French Immersion can now record English reading levels.** The entry validation
