@@ -423,10 +423,11 @@ access, OR supply a SAS credential (`CREDENTIAL = (IDENTITY='Shared Access Signa
 extra secret + rotation), OR run the load as a user. The app's direct ADLS **upload** is unaffected — it
 mints the SP's own `storage.azure.com` token via `@azure/identity`, a different path than `COPY INTO`.
 
-### Workspace Identity credential — the #1119 fix for SP COPY INTO (RESOLVED 2026-10-07)
+### Workspace Identity credential — the #1119 WORKAROUND for SP COPY INTO (2026-10-07)
 When the app's **service principal** can't mint a OneLake passthrough token for `COPY INTO` (the #1119
-outage — a tenant-side change broke the SP's passthrough, both abfss AND https passthrough fail), authorize
-the source read as the **workspace identity** instead: add `CREDENTIAL = (IDENTITY = 'Workspace Identity')`
+outage — a tenant-side change broke the SP's passthrough, both abfss AND https passthrough fail; the root
+cause was never diagnosed, so this is a work-around, not a fix), authorize the source read as the
+**workspace identity** instead: add `CREDENTIAL = (IDENTITY = 'Workspace Identity')`
 to each loader's `COPY INTO WITH (...)`. This is a supported OneLake credential (NOT the rejected 'Managed
 Identity', Msg 13838). It is the WHOLE fix — the **URL scheme is irrelevant** (abfss and https both work with
 the credential). Prereqs, in ORDER: (1) provision a Workspace Identity (Workspace settings → Workspace

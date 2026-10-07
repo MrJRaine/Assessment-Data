@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 81b06086-0f59-47db-b6fb-84b7a577c17f
-  modified: 2026-10-07T15:08:19.990Z
+  modified: 2026-10-07T15:22:25.018Z
 ---
 
 **Set 2026-10-04**, after a multi-hour ingest debug.
@@ -16,10 +16,13 @@ settings with no notice:
 - **Local sign-in broke** — the **login app** (`TCRCE Data Web App`, client ID `819f9480-5e65-469e-be27-89ac30381f1f`, tenant `0320ef6f-7349-4acf-b62a-e780da155b7e`) lost its `http://localhost:3000/api/auth/callback/microsoft-entra-id` redirect URI (AADSTS50011). **RECURRED 2026-10-05** (localhost confirmed absent again) → IT request now asks for BOTH `:3000` and `:3001` localhost redirect URIs: `docs/it-request-login-redirect-uris.md`. Callback path = `/api/auth/callback/microsoft-entra-id`; keep the prod URI `https://data.tcrce.ca/...`.
 - **In-app ingest broke** — the **data SP** (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`) can still connect + run SQL + is workspace **Contributor**, but can no longer get a **OneLake token for `COPY INTO`**. **IT ticket #1119**. **UPDATE 2026-10-06 — tenant-setting hypothesis DISPROVEN:** IT confirmed **"Service principals can call Fabric public APIs" = Enabled for the ENTIRE org, no security-group exceptions** (screenshot). So the SP is NOT blocked by that toggle. **RESOLVED 2026-10-07 — the fix is a Workspace Identity CREDENTIAL on the loaders, NOT a control-plane token bootstrap** (that theory was wrong; `az login` was never run). See the RESOLVED paragraph below.
 
-**#1119 RESOLVED on dev 2026-10-07 — the fix is the Workspace Identity CREDENTIAL; the URL scheme (abfss vs
-https) is IRRELEVANT.** Add `CREDENTIAL = (IDENTITY = 'Workspace Identity')` to each loader's `COPY INTO
-WITH (...)` so the OneLake read authorizes as the WORKSPACE identity, not the SP's (still-broken)
-caller-passthrough token. Proven by a full 2×2 on dev via the APP (SP) run — the ONLY valid test (a Fabric
+**#1119 — ingest UNBLOCKED 2026-10-07 via a WORKAROUND (Workspace Identity CREDENTIAL); the ROOT CAUSE is
+NOT resolved.** We never identified WHY the SP's OneLake passthrough token broke tenant-side (~Sept 12) — the
+SP passthrough is STILL broken (both passthrough tests still fail). We routed around it: add
+`CREDENTIAL = (IDENTITY = 'Workspace Identity')` to each loader's `COPY INTO WITH (...)` so the OneLake read
+authorizes as the WORKSPACE identity, not the SP's caller-passthrough token. The URL scheme (abfss vs https)
+is IRRELEVANT. This is a work-around, not a fix — if the real passthrough breakage ever needs resolving,
+this ticket's underlying question is still open. Proven by a full 2×2 on dev via the APP (SP) run — the ONLY valid test (a Fabric
 SQL-editor EXEC runs as a USER, and user passthrough always worked): passthrough+abfss ❌ (the outage) ·
 passthrough+https ❌ "Access token couldn't be fetched" · **WI+abfss ✅** · WI+https ✅. The 2026-10-06
 WI+abfss failure (Msg 13840 "unsupported URL") was a **FALSE NEGATIVE** — the WI's Contributor grant had not
@@ -29,8 +32,9 @@ scheme, an https rewrite, or a token bootstrap. **Root cause stands:** the SP's 
 genuinely broken tenant-side (both passthrough tests still fail); the WI credential routes around it.
 **LIVE — DONE 2026-10-07:** the one `CREDENTIAL` line is committed into the 5 abfss procs
 `sql/procedures/usp_Load*Staging.sql` (+ a `DROP IF EXISTS` guard); deployed to the live warehouse and a
-**live app ingest ran clean over the SP path on data.tcrce.ca** → #1119 closed on prod. (Source PR to `main`
-still pending — warehouse-only fix, no semver.) Dev working form = `deploy_dev_loaders_workspace_identity.sql`
+**live app ingest ran clean over the SP path on data.tcrce.ca** → ingest UNBLOCKED on prod via the workaround
+(root cause of the passthrough breakage still undiagnosed). (Source PR to `main` still pending —
+warehouse-only change, no semver.) Dev working form = `deploy_dev_loaders_workspace_identity.sql`
 (WI+abfss); revert-to-passthrough = `deploy_dev_cutover_loaders.sql`. The https-form scripts
 (`deploy_dev_loaders_workspace_identity_https.sql`, `deploy_dev_loaders_https_passthrough.sql`) are
 record-only now.

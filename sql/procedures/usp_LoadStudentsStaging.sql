@@ -49,10 +49,10 @@ BEGIN
         FIELDTERMINATOR = ',',
         FIELDQUOTE      = '"',
         FIRSTROW        = 2,
-        -- #1119 fix (2026-10-07): the app SERVICE PRINCIPAL cannot mint a OneLake passthrough
-        -- token for COPY INTO (broke tenant-side ~2026-09). Authorize the source read as the
-        -- WORKSPACE IDENTITY instead (provisioned + Contributor on Regional_Data_Portal). URL
-        -- scheme is irrelevant (abfss works); the credential is the fix. See fabric-warehouse-sql.
+        -- #1119 WORKAROUND (2026-10-07): the app SERVICE PRINCIPAL cannot mint a OneLake passthrough
+        -- token for COPY INTO (broke tenant-side ~2026-09; root cause NOT diagnosed). Route around it
+        -- by authorizing the source read as the WORKSPACE IDENTITY instead (provisioned + Contributor
+        -- on Regional_Data_Portal). URL scheme is irrelevant (abfss works). See fabric-warehouse-sql.
         CREDENTIAL      = (IDENTITY = 'Workspace Identity')
     );
 END;

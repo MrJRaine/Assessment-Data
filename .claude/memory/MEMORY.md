@@ -25,6 +25,7 @@
 - [No Agency Between Turns](feedback_no_agency_between_turns.md) — no "I'll have X ready"; work only in the current turn.
 - [Troubleshooting Method](feedback_troubleshooting_method.md) — gather facts before pinning a cause; one diagnostic at a time; wait for promised results.
 - [Don't Report Back Confirmed Facts](feedback_dont_report_back_confirmed_facts.md) — when the user states a fact, take it as given; verify quietly for the exact reference but don't narrate that their statement was confirmed, and never call it "good news."
+- [Fix vs Workaround](feedback_fix_vs_workaround.md) — "fix" = root cause identified AND resolved; routing around an undiagnosed problem is a WORKAROUND — name it that and say the root cause is still open (#1119 WI-credential ingest workaround, 2026-10-07).
 - [Keep Memories Current](feedback_keep_memories_current.md) — update/DELETE a memory at its source the moment its item ships or reverses; record provenance; one source of truth; prune running lists. Stale notes are what cause repetitive re-litigation — "it's stale" is a defect I made, not an excuse.
 - [Idempotent Deploy Bundles](feedback_idempotent_deploy_bundles.md) — before handing over a bundled SQL deploy, scan sources so every object is idempotent (DROP-IF-EXISTS + GO, guarded ALTERs, EXEC-wrapped column DML); don't surface these one failed dev run at a time. New-table CREATEs are the intentional run-once exception.
 - [Loading States](feedback_loading_states.md) — show a loading indicator through the WHOLE async save→refresh (gate on isPending).
