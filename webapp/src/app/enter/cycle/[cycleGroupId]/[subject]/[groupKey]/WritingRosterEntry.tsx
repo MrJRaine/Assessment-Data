@@ -221,6 +221,7 @@ export default function WritingRosterEntry({
         for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
         for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
         setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
+        if (errs.length === 0) setRestored(null) // restored work is now saved — drop the banner
 
         const erroredNums = new Set(wRes.errors.map((e) => e.studentNumber))
         setBase((prev) => {

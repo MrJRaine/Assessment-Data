@@ -177,6 +177,7 @@ export default function RosterEntry({
         for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
         for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRoster.' })
         setResult({ saved: levelRes.saved + ippRes.saved, errors: errs })
+        if (errs.length === 0) setRestored(null) // restored work is now saved — drop the banner
 
         // Clear saved level baselines (skip errored).
         const erroredNums = new Set(levelRes.errors.map((e) => e.studentNumber))
