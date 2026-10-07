@@ -198,20 +198,25 @@ export default function MathRosterEntry({
       }
     })
     startSave(async () => {
-      const res = await saveMathAssessments(windowId, groupKey, entries)
-      setResult(res)
-      // Clear dirty for cells that saved (everything not in the error list), matched by student+task.
-      const failed = new Set(res.errors.map((e) => `${e.studentNumber}:${e.mathTaskKey}`))
-      setCommitted((prev) => {
-        const nextC = { ...prev }
-        for (const k of dirtyKeys) {
-          const [studentKey, taskKey] = k.split(':')
-          if (!failed.has(`${studentNumberByKey[studentKey]}:${taskKey}`)) nextC[k] = marks[k]
-        }
-        return nextC
-      })
-      markSaved() // at T-5 the next save is what locks input
-      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      try {
+        const res = await saveMathAssessments(windowId, groupKey, entries)
+        setResult(res)
+        // Clear dirty for cells that saved (everything not in the error list), matched by student+task.
+        const failed = new Set(res.errors.map((e) => `${e.studentNumber}:${e.mathTaskKey}`))
+        setCommitted((prev) => {
+          const nextC = { ...prev }
+          for (const k of dirtyKeys) {
+            const [studentKey, taskKey] = k.split(':')
+            if (!failed.has(`${studentNumberByKey[studentKey]}:${taskKey}`)) nextC[k] = marks[k]
+          }
+          return nextC
+        })
+        markSaved() // at T-5 the next save is what locks input
+        if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      } catch {
+        // Backstop: keep the grid mounted + cells dirty if the save unexpectedly throws (no commit ran).
+        setResult({ saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: 'Could not save right now — your marks are still on screen. Please try again.' })) })
+      }
     })
   }
 

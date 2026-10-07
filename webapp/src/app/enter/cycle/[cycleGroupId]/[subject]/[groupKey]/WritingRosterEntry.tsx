@@ -187,40 +187,45 @@ export default function WritingRosterEntry({
       .filter((e): e is IppEntry => e !== null)
 
     startTransition(async () => {
-      const wRes = writingEntries.length
-        ? await saveWritingAssessments(windowId, groupKey, writingEntries, language)
-        : { saved: 0, errors: [] as { studentNumber: string; message: string }[] }
-      const ippRes = ippEntries.length
-        ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing', language)
-        : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
+      try {
+        const wRes = writingEntries.length
+          ? await saveWritingAssessments(windowId, groupKey, writingEntries, language)
+          : { saved: 0, errors: [] as { studentNumber: string; message: string }[] }
+        const ippRes = ippEntries.length
+          ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing', language)
+          : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
 
-      const errs: SaveSummary['errors'] = []
-      for (const e of wRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
-      for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
-      for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
-      for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
-      setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
+        const errs: SaveSummary['errors'] = []
+        for (const e of wRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
+        for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
+        for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
+        for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
+        setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
 
-      const erroredNums = new Set(wRes.errors.map((e) => e.studentNumber))
-      setBase((prev) => {
-        const next = { ...prev }
-        for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) next[k] = { ...sel[k] }
-        return next
-      })
-      // Un-check saved rows (baseline == sel now, so auto-check is false; drop any manual override).
-      setEvidenceManual((prev) => {
-        const next = { ...prev }
-        for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
-        return next
-      })
-      const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
-      setIppSel((prev) => {
-        const next = { ...prev }
-        for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
-        return next
-      })
-      markSaved() // at T-5 the next save is what locks input
-      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+        const erroredNums = new Set(wRes.errors.map((e) => e.studentNumber))
+        setBase((prev) => {
+          const next = { ...prev }
+          for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) next[k] = { ...sel[k] }
+          return next
+        })
+        // Un-check saved rows (baseline == sel now, so auto-check is false; drop any manual override).
+        setEvidenceManual((prev) => {
+          const next = { ...prev }
+          for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
+          return next
+        })
+        const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
+        setIppSel((prev) => {
+          const next = { ...prev }
+          for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
+          return next
+        })
+        markSaved() // at T-5 the next save is what locks input
+        if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      } catch {
+        // Backstop: keep the grid mounted + rows dirty if the save unexpectedly throws (no base advance ran).
+        setResult({ saved: 0, errors: [{ label: 'Save failed', message: 'Could not save right now — your entries are still on screen. Please try again.' }] })
+      }
     })
   }
 

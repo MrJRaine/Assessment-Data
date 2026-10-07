@@ -32,19 +32,30 @@ export async function saveReadingAssessments(
   groupKey: string,
   entries: SaveEntry[],
 ): Promise<SaveResult> {
-  const upn = await getCurrentUpn()
-  // Atlantic "today" (DST-aware). Closed (past) windows are still writeable for late entry, but the
-  // proc's 51017 gate caps the assessment date at the window's own month-end -- so date the entry at
-  // MIN(today, window EndDate). For the current open window that's just today; for a past window it
-  // bins the late entry into that window's month (a plain "today" would be rejected).
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
-  const windowEnd = await getWindowEndDate(windowId)
-  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
-
-  // SCOPE GATE: the write procs trust @CallerUPN but don't enforce per-student RLS, so verify
-  // each target is on THIS caller's RLS-scoped roster (via the @UPN TVF) before writing. Blocks a
-  // crafted request from saving for a student outside the caller's window/group scope.
-  const allowed = new Set((await getTeacherRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
+  // Resolve caller, assessment date, and the RLS roster up front. These touch the session + Fabric,
+  // so a transient failure (expired token, pool/connection hiccup, roster TVF error) must NOT throw
+  // the whole action: an uncaught server-action rejection trips the error boundary, blanks the page,
+  // and DROPS the teacher's unsaved entries (1.0.1 data-loss hotfix). Catch it and mark every row
+  // failed so the grid stays mounted and dirty for retry.
+  let upn: string
+  let assessmentDate: string
+  let allowed: Set<string>
+  try {
+    upn = await getCurrentUpn()
+    // Atlantic "today" (DST-aware). Closed (past) windows stay writeable for late entry, but the proc's
+    // 51017 gate caps the date at the window's month-end -- so date the entry at MIN(today, EndDate):
+    // today for the open window; the window's own month-end for a late entry (a plain "today" is rejected).
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+    const windowEnd = await getWindowEndDate(windowId)
+    assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+    // SCOPE GATE: the write procs trust @CallerUPN but don't enforce per-student RLS, so verify each
+    // target is on THIS caller's RLS-scoped roster (@UPN TVF) before writing -- blocks a crafted
+    // request saving for a student outside the caller's window/group scope.
+    allowed = new Set((await getTeacherRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
+  } catch (err) {
+    const msg = toUserMessage(err)
+    return { saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, message: msg })) }
+  }
 
   const errors: SaveResult['errors'] = []
   let saved = 0
@@ -100,14 +111,23 @@ export async function saveWritingAssessments(
   entries: WritingEntry[],
   language: WritingLanguage,
 ): Promise<SaveResult> {
-  const upn = await getCurrentUpn()
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
-  const windowEnd = await getWindowEndDate(windowId)
-  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
-
-  // Scope-gate against THIS language's roster (dual-language writing): an FI grade-3+ student is
-  // on both rosters, but an English-only student isn't on the French roster and vice-versa.
-  const allowed = new Set((await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)).map((r) => r.studentNumber))
+  // Pre-loop resolves (session + Fabric) guarded so a transient failure returns per-row errors
+  // instead of throwing, blanking the page, and dropping unsaved entries (1.0.1 data-loss hotfix).
+  let upn: string
+  let assessmentDate: string
+  let allowed: Set<string>
+  try {
+    upn = await getCurrentUpn()
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+    const windowEnd = await getWindowEndDate(windowId)
+    assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+    // Scope-gate against THIS language's roster (dual-language writing): an FI grade-3+ student is
+    // on both rosters, but an English-only student isn't on the French roster and vice-versa.
+    allowed = new Set((await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)).map((r) => r.studentNumber))
+  } catch (err) {
+    const msg = toUserMessage(err)
+    return { saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, message: msg })) }
+  }
 
   const errors: SaveResult['errors'] = []
   let saved = 0
@@ -158,12 +178,21 @@ export async function saveMathAssessments(
   groupKey: string,
   entries: MathEntry[],
 ): Promise<MathSaveResult> {
-  const upn = await getCurrentUpn()
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
-  const windowEnd = await getWindowEndDate(windowId)
-  const assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
-
-  const allowed = new Set((await getMathRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
+  // Pre-loop resolves (session + Fabric) guarded so a transient failure returns per-row errors
+  // instead of throwing, blanking the page, and dropping unsaved entries (1.0.1 data-loss hotfix).
+  let upn: string
+  let assessmentDate: string
+  let allowed: Set<string>
+  try {
+    upn = await getCurrentUpn()
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Halifax' })
+    const windowEnd = await getWindowEndDate(windowId)
+    assessmentDate = windowEnd && windowEnd < today ? windowEnd : today
+    allowed = new Set((await getMathRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentNumber))
+  } catch (err) {
+    const msg = toUserMessage(err)
+    return { saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: msg })) }
+  }
 
   const errors: MathSaveResult['errors'] = []
   let saved = 0
