@@ -63,7 +63,7 @@ function sortVal(s: CohortStudent, key: SortKey): number | string | null {
     case 'homeroom': return lc(s.homeroom)
     case 'school': return lc(s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
     case 'level': return s.mostRecentLevelOrder ?? (s.mostRecentLevelCode != null ? Number(s.mostRecentLevelCode) : null)
-    case 'expected': return lc(s.expectedMin)
+    case 'expected': return s.chartEligible ? lc(s.expectedMin) : null // IPP: no benchmark target -> sort blank
     // IPP / unresolved students are NOT compared to the expected benchmark, so they have no
     // Diff-from-Expected — return null so they sort as blank (to the bottom), not by a stray value.
     case 'diffExpected': return s.chartEligible ? s.mostRecentDelta : null
@@ -656,7 +656,8 @@ export default function CohortView({
                   <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
                   {subject === 'Reading' ? (
                     <td>
-                      {s.expectedMin && s.expectedMax ? (
+                      {/* IPP / unresolved students (!measured) have no benchmark target, so blank the Expected range. */}
+                      {measured && s.expectedMin && s.expectedMax ? (
                         s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
                       ) : (
                         <span className="muted">—</span>
