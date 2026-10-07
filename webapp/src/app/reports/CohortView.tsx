@@ -64,7 +64,9 @@ function sortVal(s: CohortStudent, key: SortKey): number | string | null {
     case 'school': return lc(s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
     case 'level': return s.mostRecentLevelOrder ?? (s.mostRecentLevelCode != null ? Number(s.mostRecentLevelCode) : null)
     case 'expected': return lc(s.expectedMin)
-    case 'diffExpected': return s.mostRecentDelta
+    // IPP / unresolved students are NOT compared to the expected benchmark, so they have no
+    // Diff-from-Expected — return null so they sort as blank (to the bottom), not by a stray value.
+    case 'diffExpected': return s.chartEligible ? s.mostRecentDelta : null
     case 'diffJune': return s.diffFromPrevJune
     case 'achievement': return s.achievementCode
     default: return null
@@ -663,8 +665,10 @@ export default function CohortView({
                   ) : null}
                   {subject === 'Reading' ? (
                     <td style={{ textAlign: 'center' }}>
-                      {/* Diff from Expected = the latest score's signed distance from its benchmark (ReadingDelta). */}
-                      {s.mostRecentDelta == null ? (
+                      {/* Diff from Expected = the latest score's signed distance from its benchmark (ReadingDelta).
+                          IPP / unresolved students (!measured) are NOT compared to the expected benchmark, so
+                          they show no value — the row's achievement column already marks them "IPP". */}
+                      {!measured || s.mostRecentDelta == null ? (
                         <span className="muted">—</span>
                       ) : (
                         <strong style={{ color: s.mostRecentDelta > 0 ? '#137333' : s.mostRecentDelta < 0 ? '#a50e0e' : 'inherit' }}>
