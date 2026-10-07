@@ -11,9 +11,17 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [1.1.0] — unreleased (in development)
+## [1.1.0] — 2026-10-07
 
 ### Added
+- **Unsaved-entry draft (localStorage).** Reading/Writing/Math entry grids persist in-progress entries on the
+  teacher's device — surrogate keys + scores only, no names/numbers — with a 90-minute TTL; restored on reload
+  with a "Restored N unsaved entries" notice, reconciled against the current roster, and cleared on Save. A
+  safety net alongside the save-crash fix below.
+- **Cycle time-binding on the cohort reports.** A shared cycle selector views a cohort as of a specific Short
+  Cycle (or "Current" = latest). Built on an optional `@CycleGroupID` on the cohort TVFs — `tvf_StudentCohort`
+  plus the fanned-out `tvf_StudentCohortWriting` / `tvf_StudentCohortMath` / `tvf_StudentCohortRWM` — and now
+  works on Reading, Writing, Math and RWM.
 - **Reading cohort report — "Diff from Expected" column.** Each student's most-recent reading score now
   shows its signed distance from the expected benchmark (±N levels), next to the existing "Diff from Prev June".
 - **Sortable cohort table** (Reading & Writing). Click a column header to sort ascending; click the same
@@ -36,8 +44,19 @@ with `0.3.0`, so earlier detail is approximate.
   deprecated no-op, kept only for pre-1.1.0 container compatibility); the ingest page's skip checkbox is removed.
 - **Ingest run-time hint reworded** "can take a minute" → "can take a few minutes," since every cycle now
   loads all five files and runs the full merge + data-quality gate.
+- **Math cycles carry a "Task month."** `usp_UpsertShortCycle` no longer nulls `BenchmarkMonth` for Math, and
+  `/cycles` shows a Task-month selector for Math, so a Math cycle pulls the right `DimMathTask` set (the month
+  the cohort/entry grids match tasks on).
+- **Sortable column headers show a persistent ⇅ cue** so it's clear a column can be sorted (the active column
+  still shows ▲/▼).
 
 ### Fixed
+- **Data loss on Save (the "white window").** A transient backend failure during a Save (expired token,
+  connection-pool hiccup, roster read) could throw an unhandled error that fell through to a blank page AND
+  unmounted the entry grid, dropping the teacher's unsaved entries. Fixed three ways: the save actions now
+  **return** errors instead of throwing; each grid's save handler catches any remaining throw (entries stay on
+  screen with "Save failed — try again"); and `error.tsx` / `global-error.tsx` replace Next's blank fallback
+  with a real message. Paired with the localStorage draft above as a belt-and-suspenders net.
 - **Reading entry: Late French Immersion can now record English reading levels.** The entry validation
   (`usp_UpsertReadingAssessment`, THROW 51014) hardcoded French Immersion → `FR_Reading`, so saving an English
   level for a late-immersion student (e.g. `J020`) was rejected even though the roster correctly displayed the
@@ -45,6 +64,23 @@ with `0.3.0`, so earlier detail is approximate.
   `ScaleSystem` (`COALESCE(window.ScaleSystem, program-family fallback)`), mirroring `tvf_TeacherRoster`, so
   entry accepts exactly what the roster shows. The cycle instance is the single source of truth (no per-program
   hardcode). **SQL:** redeploy `sql/procedures/usp_UpsertReadingAssessment.sql`.
+- **Math cycle tasks were blank for several cycles.** Math windows saved `BenchmarkMonth = NULL`, so the roster's
+  dominant-month fallback matched tasks on a month with none seeded. Fixed by setting the SCoR months on the
+  Reading+Math windows and re-coding mis-coded `DimMathTask` months (the math team codes SCoR-3/5 as Feb/May
+  instead of Jan/Apr — re-apply the correction after each task seed). **SQL:** `usp_UpsertShortCycle.sql` +
+  `sql/scripts/fix_math_cycle_months_and_task_miscoding.sql`.
+- **Reports: IPP and unconfirmed-IPP students are no longer compared to the benchmark.** The Expected,
+  Diff-from-Expected and Achievement columns now blank for IPP and unresolved students **and** sort them as
+  blank — they were displaying blank but still sorting by the hidden value, scattering them mid-table.
+- **The "Restored N unsaved entries" banner auto-dismisses after a clean Save.**
+
+### SQL to deploy for 1.1.0 (live warehouse)
+Run alongside the container swap (some are already live from earlier in the cycle — all are idempotent):
+- `sql/procedures/usp_UpsertReadingAssessment.sql` (51014 — already live)
+- `sql/procedures/usp_UpsertShortCycle.sql` (Math task month)
+- `sql/security/tvf_StudentCohort.sql` (Reading cycle-binding — if not already live)
+- `sql/security/tvf_StudentCohortWriting.sql`, `sql/security/tvf_StudentCohortMath.sql`, `sql/security/tvf_StudentCohortRWM.sql` (cycle fan-out)
+- `sql/scripts/fix_math_cycle_months_and_task_miscoding.sql` (data — already run on live)
 
 ## [1.0.0] — 2026-10-02
 

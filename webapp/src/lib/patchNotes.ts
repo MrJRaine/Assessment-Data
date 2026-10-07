@@ -17,6 +17,20 @@ export interface PatchNote {
 export const PATCH_NOTES: PatchNote[] = [
   {
     version: '1.1.0',
+    date: '2026-10-07',
+    kind: 'feature',
+    summary:
+      'Your in-progress entries are now kept safe on your own device: if the page reloads or closes before you Save, you’ll see a “Restored unsaved entries” note when you come back and your work will be there — for about 90 minutes, or until you Save.',
+  },
+  {
+    version: '1.1.0',
+    date: '2026-10-07',
+    kind: 'feature',
+    summary:
+      'Reports can now be viewed by Short Cycle. Pick a cycle at the top of a cohort report to see where students stood for that cycle, or stay on “Current” for the most recent results. Works for Reading, Writing, Math and RWM.',
+  },
+  {
+    version: '1.1.0',
     date: '2026-10-06',
     kind: 'fix',
     summary:
