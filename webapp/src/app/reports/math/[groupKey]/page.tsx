@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import { EmptyState, ErrorNote } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getMathCohort, type MathCohortRow } from '@/lib/data'
+import { getMathCohort, getReportCycles, type MathCohortRow, type ReportCycle } from '@/lib/data'
 import MathCohortView from './MathCohortView'
+import CycleSelector from '../../CycleSelector'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,17 +11,23 @@ export const dynamic = 'force-dynamic'
 // current year's math cycles, latest result per task. P-6.
 export default async function MathCohortPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ groupKey: string }>
+  searchParams: Promise<{ cycle?: string }>
 }) {
   const { groupKey: raw } = await params
   const groupKey = decodeURIComponent(raw)
+  const { cycle: cycleParam } = await searchParams
+  const cycle = cycleParam ?? null
   const upn = await getCurrentUpn()
 
   let rows: MathCohortRow[] = []
+  let cycles: ReportCycle[] = []
   let error: string | null = null
   try {
-    rows = await getMathCohort(upn, groupKey)
+    rows = await getMathCohort(upn, groupKey, cycle)
+    cycles = await getReportCycles()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -49,6 +56,7 @@ export default async function MathCohortPage({
         </span>
       </div>
 
+      {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       {error ? (
         <ErrorNote message={error} />
       ) : rows.length === 0 ? (

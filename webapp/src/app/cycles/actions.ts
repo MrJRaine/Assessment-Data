@@ -59,7 +59,7 @@ export interface CycleInstanceInput {
   programScope: string[] // buckets {English, Early Immersion, Late Immersion}; [] = all
   minGrade: string
   maxGrade: string
-  benchmarkMonth: number | null // reading only
+  benchmarkMonth: number | null // reading (benchmark month) + math (task-pull month); not writing
   active: boolean
 }
 
@@ -99,7 +99,7 @@ export async function saveShortCycle(input: SaveInstancesInput): Promise<void> {
     // SQL type from a bare JS null). Language/benchmark are literacy/reading-only.
     if (inst.programScope.length) params.ProgramScope = inst.programScope.join(',')
     if (inst.subject !== 'Math' && inst.language) params.AssessmentLanguage = inst.language
-    if (inst.subject === 'Reading' && inst.benchmarkMonth != null) params.BenchmarkMonth = inst.benchmarkMonth
+    if (inst.subject !== 'Writing' && inst.benchmarkMonth != null) params.BenchmarkMonth = inst.benchmarkMonth
     if (inst.existingId) params.AssessmentWindowID = inst.existingId
     await execProc('usp_UpsertShortCycle', params)
   }

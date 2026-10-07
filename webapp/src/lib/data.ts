@@ -835,10 +835,11 @@ export async function getReportCycles(): Promise<ReportCycle[]> {
  * fields. ippStatusReading carries the WRITING IPP status here (the field is reused for the table's
  * IPP display); reading-only fields (delta, level order) are null.
  */
-export async function getStudentCohortWriting(upn: string): Promise<CohortStudent[]> {
+export async function getStudentCohortWriting(upn: string, cycleGroupId: string | null = null): Promise<CohortStudent[]> {
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN) ORDER BY LastName, FirstName',
+    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN, @CycleGroupID) ORDER BY LastName, FirstName',
+    { CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -900,7 +901,7 @@ export async function getStudentNavList(upn: string, subject: 'Reading' | 'Writi
     `SELECT StudentKey, FullName, Grade, ProgramFamily,
             COALESCE(SchoolAbbreviation, SchoolName, SchoolID) AS SchoolLabel,
             Homeroom, ${ippCol} AS IPPStatus
-     FROM dbo.${tvf}(@UPN)
+     FROM dbo.${tvf}(@UPN, NULL)
      ORDER BY LastName, FirstName`,
   )
   return rows.map((r) => ({
@@ -1410,7 +1411,7 @@ export interface MathCohortRow {
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
 }
 
-export async function getMathCohort(upn: string, groupKey: string): Promise<MathCohortRow[]> {
+export async function getMathCohort(upn: string, groupKey: string, cycleGroupId: string | null = null): Promise<MathCohortRow[]> {
   const rows = await queryAsUser<{
     StudentKey: string
     StudentNumber: number | string
@@ -1431,8 +1432,8 @@ export async function getMathCohort(upn: string, groupKey: string): Promise<Math
     MathIPPStatus: boolean | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
-    { GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -1485,10 +1486,11 @@ export interface RWMStudent {
   hasMath: boolean
 }
 
-export async function getStudentCohortRWM(upn: string): Promise<RWMStudent[]> {
+export async function getStudentCohortRWM(upn: string, cycleGroupId: string | null = null): Promise<RWMStudent[]> {
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN)',
+    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
