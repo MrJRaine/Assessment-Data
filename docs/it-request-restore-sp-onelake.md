@@ -16,6 +16,11 @@ group). Only a Fabric tenant admin can confirm and restore this.
 - **Object ID:** `479b9fde-5f89-4d52-b1d9-e03b4ce62594`
 - **Workspace:** `Regional_Data_Portal` — the SP is still listed as **Contributor** (verified in Manage access).
 
+## Re-confirmed 2026-10-06 (and ruled out the workspace role)
+Re-tested against the **dev** warehouse (`Assessment_Warehouse_Dev`, landing lakehouse `8c5589bd-d04e-4e94-bb2c-482db645afab`): a fresh file upload via the app **landed clean**, and the loader `COPY INTO` **still threw the same token error**. Because it's the same SP and workspace, this is not environment-specific — restoring the SP at the tenant fixes **both dev and live** at once.
+
+To pre-empt the obvious first guess, we **elevated the SP from Contributor → Admin** on the workspace and re-ran: **identical token error**. So the **workspace role is not the cause** (and the SP has been returned to Contributor). This matches the symptom — the error is a failure to *mint* a OneLake token, which is gated at the **tenant** level, not by the workspace role.
+
 ## Exact symptom
 When the ingest runs **as the SP** (the app path), the loader `COPY INTO` throws:
 

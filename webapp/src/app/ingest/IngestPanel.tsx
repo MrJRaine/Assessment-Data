@@ -146,7 +146,7 @@ export default function IngestPanel() {
           ) : null}
         </div>
         {running ? (
-          <p className="muted">The orchestrator runs all loads + merges + the data-quality gate; this can take a minute.</p>
+          <p className="muted">The orchestrator runs all loads + merges + the data-quality gate; this can take a few minutes.</p>
         ) : null}
       </div>
     </>

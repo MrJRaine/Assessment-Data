@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-17T11:54:52.416Z
+  modified: 2026-10-07T14:45:37.036Z
 ---
 
 **Maintain the changelog AS WE GO — not at release.** Set 2026-09-17, ahead of the ~1-week-out launch
@@ -23,3 +23,13 @@ when we'll be rapidly fixing + deploying versions.
   bump package.json at a release; the footer follows automatically. The in-app popup shows the current
   minor line PLUS the previous one (e.g. 0.5.x lists 0.5.x + 0.4.x) via `recentNotes()`.
 - Keep `CHANGELOG.md` ↔ `patchNotes.ts` ↔ `package.json` in sync. Full versioning scheme: [[project_image_versioning_scheme]].
+
+**What QUALIFIES for the CHANGELOG (set 2026-10-07):** only things that are NEW or CHANGED to users
+relative to what shipped. A **repair of something that was working at its release and later broke** —
+e.g. an environment/infra regression like the #1119 ingest `COPY INTO` outage (SP/Fabric-side change,
+not our code) — does **NOT** go in the CHANGELOG: it's not a new change, it's a return to the already-
+shipped behavior. Record those in our INTERNAL log only (memory + the implementation-plan Left Off notes).
+The CHANGELOG `Fixed` section is for a defect that was **broken from its own release date** and later
+hotfixed (shipped wrong, then corrected) — that one IS user-facing history and belongs there.
+Litmus: "was this behavior ever live and correct for users?" Yes→repair, keep it out. No (broken since
+ship)→Fixed entry.

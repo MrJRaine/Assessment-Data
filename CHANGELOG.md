@@ -34,6 +34,17 @@ with `0.3.0`, so earlier detail is approximate.
   no longer a displayed column.
 - **Co-teachers always load on ingest.** The silent co-teacher skip was removed (`@SkipCoTeachers` is now a
   deprecated no-op, kept only for pre-1.1.0 container compatibility); the ingest page's skip checkbox is removed.
+- **Ingest run-time hint reworded** "can take a minute" → "can take a few minutes," since every cycle now
+  loads all five files and runs the full merge + data-quality gate.
+
+### Fixed
+- **Reading entry: Late French Immersion can now record English reading levels.** The entry validation
+  (`usp_UpsertReadingAssessment`, THROW 51014) hardcoded French Immersion → `FR_Reading`, so saving an English
+  level for a late-immersion student (e.g. `J020`) was rejected even though the roster correctly displayed the
+  English scale. The check is now **instance-based** — the entered scale must match the cycle instance's
+  `ScaleSystem` (`COALESCE(window.ScaleSystem, program-family fallback)`), mirroring `tvf_TeacherRoster`, so
+  entry accepts exactly what the roster shows. The cycle instance is the single source of truth (no per-program
+  hardcode). **SQL:** redeploy `sql/procedures/usp_UpsertReadingAssessment.sql`.
 
 ## [1.0.0] — 2026-10-02
 

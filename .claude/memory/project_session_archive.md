@@ -1600,3 +1600,54 @@ break window to Sept 12→29 (last good app ingest was the 12th, not "after the 
 deployed to dev. NEXT: fan the cycle selector to Writing/Math/RWM (3 TVFs get `@CycleGroupID` + page wiring), optional
 "(active)" filter hint, then cut 1.1.0 (version bump + CHANGELOG/patchNotes + container swap, carrying the 10-04 ingest items).
 Containers need a rebuild to pick up the "Participating grades only" rename.
+
+## Session 2026-10-06 — #1119 ingest hunt (unresolved), dev warehouse recovery, cycle rebuild, reading-entry fix
+
+Long debugging day, mostly on the app-ingest outage (#1119). Several of my premature conclusions got (rightly) called out.
+
+**Container/env housekeeping:** restored standard local layout awlive:3000 / awdev:3001 / awdev-impersonation:3002; confirmed
+awlive (`.env`) and awdev (`.env.dev`) use the SAME login Entra app (`819f9480`, "TCRCE Data Web App") as prod, differing only
+in `AUTH_URL`. The data SP / Fabric login app was last structurally changed 2026-08-27 (`2352e25`, split login app from the
+warehouse SP); real secret values aren't in git (gitignored env files).
+
+**Dev ingest data:** shifted `data/imports/enrollments/EnrollmentsExport.csv` +1yr to 2026-27 (gitignored, local) so a fresh
+dev ingest lands current rosters without `rollforward_enrollment_dev.sql`. Confirmed `jeffrey.raine` is ALREADY in
+`StaffExport.csv` + the generator (`8b599cb`) as Group-41 RegionalAnalyst — so the ingest owns that account now; the
+access-grant half is identity-driven and separate.
+
+**51014 reading entry made instance-based (committed, not yet deployed):** `usp_UpsertReadingAssessment` 51014 hardcoded
+FI→FR_Reading, blocking late-immersion (J020) English reading even though the ROSTER showed the English scale (reads were
+config-driven since 09-18; the write path was the straggler). Fixed to `COALESCE(window.ScaleSystem, family fallback)`,
+mirroring `tvf_TeacherRoster`. Decided NOT to add a ProgramScope write-guard (roster is sole feeder + would be a 2nd source
+of truth). 20 J020 grade-7/8 synthetic students exist to test it. (`e702aff`; `[[project_assessment_language_tracks]]`.)
+
+**Dev warehouse was STALE — root-caused + recovered.** `/cycles` save threw "usp_UpsertShortCycleHeader has too many
+arguments" and Data Entry showed "No cycles". Cause: the git flow (back-merge/worktree recreate) syncs CODE but nothing
+re-applies live SQL to the dev WAREHOUSE after a release, AND `deploy_all_dev.sql` is frozen at 2026-06-23 — so the 0.7.0
+grace objects were never on dev. Catch-up runbook `sql/scripts/dev_catchup_1.1.0_2026-10-06.md` (8 current-source files,
+no data loss) — user ran it. Also: project-lead analyst role was stuck (duplicate DimStaff rows — a NULL-access deactivation
+marker shadowing the RegionalAnalyst row) → `fix_dev_projectlead_analyst_active.sql`; that then caused a DQ rule-D
+overlapping-window failure (I ended the marker INSIDE the open window instead of deleting it) → fixed by
+`fix_dev_dimstaff_overlap_projectlead.sql`. Decision for later: `deploy_all_dev.sql` → rebuild to a 1.0.0 milestone +
+a real manifest/generator (option A; unvalidated until a fresh dev rebuild, which needs #1119) + capture the dev-warehouse-
+sync step into the runbook/memory.
+
+**Dev cycles → Short Cycle 1–6 (script staged, user hadn't confirmed running):** diag (`diag_cycles_live_vs_dev.sql`)
+showed dev had Short Cycle 1 (data: Math 825 etc.) + an empty SCoR 2 + a prior-year cycle, vs live's 6 cycles. Key find:
+dev SC1 Math is P-6 (correct per model) but LIVE's is P-5 (stale). So NOT a copy+re-point (would orphan the 825 Math facts +
+regress Math); instead add-only, cloning dev SC1's canonical P-6 structure into SC2 + new SC3-6, renaming SCoR 1/2 →
+"Short Cycle 1/2". `sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql` (dev-local GUIDs, guarded).
+
+**#1119 — the main event, STILL UNRESOLVED at EOD.** Chain of elimination: NOT the ingest-page code (3-version container
+A/B, identical error — done an earlier session); NOT the storage permission (upload lands); NOT the workspace role (SP
+Contributor→Admin, no change); NOT a one-time token bootstrap that lapsed (no bootstrap ever happened — confirmed by record
++ user recall, and COPY INTO worked continuously from the 2026-06-22 B6 build, ~3 months, not a 30-day window). IT confirmed
+the tenant **"SP can call Fabric public APIs" = ON org-wide** → that hypothesis dead too. Then tried **Workspace Identity**
+credential (distinct from the Managed Identity we ruled out, Msg 13838): provisioned the WI (`0d9df426`), gave IT
+Contributor, waited; credentialed loaders created clean and a SQL-EDITOR run reached the DQ gate — but that was a FALSE
+POSITIVE (ran as a USER; user COPY INTO always worked). The **app/SP run still throws Msg 13840 "unsupported URL"**, so
+WI-with-abfss does NOT fix the SP path. GOTCHA learned: a credentialed COPY INTO is validated at CREATE PROCEDURE time
+(eager) → a failed CREATE drops the loader (`DROP IF EXISTS`+`CREATE`). **Open next session:** (A) swap loader source
+abfss://→https://onelake… + credential, app-test (MS examples all use https; abfss may make the credential a no-op); or
+(B) the token bootstrap (never actually run). Dev loaders sit credentialed-abfss; revert = `deploy_dev_cutover_loaders.sql`;
+dev is in maintenance mode. See `[[reference_it_modifies_sps_and_copyinto_auth]]` + the skill `fabric-warehouse-sql.md`.

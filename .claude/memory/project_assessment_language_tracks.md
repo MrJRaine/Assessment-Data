@@ -39,6 +39,15 @@ reading scale = `COALESCE(wed.ScaleSystem, <family fallback>)`. The family-fallb
 cycle has NO ScaleSystem — a properly-scoped reading instance never hits it. (The old `ProgramCode <> 'J020'`
 hardcode was REMOVED 2026-09-18; config is the single source of truth.)
 
+**Write path aligned 2026-10-06:** the reads were config-driven since 2026-09-18 but the WRITE proc was left
+behind — `usp_UpsertReadingAssessment`'s **51014** scale check still hardcoded family→scale (FI→FR_Reading),
+so a late-immersion student was BLOCKED from saving an English reading level even though the roster correctly
+showed EN_Reading (display right, save rejected). Fixed to validate against the cycle instance:
+`@ExpectedScaleSystem = COALESCE(@WindowScaleSystem, program-family fallback)`, mirroring the roster. Decided
+NOT to add a ProgramScope write-guard (roster is the sole feeder + already filters it; re-deriving the
+scope-bucket logic in the proc would be a second source of truth that can drift — grade net 51016 stays
+because it's a trivial scalar). SQL-only (no app change); redeploy the proc dev→live.
+
 ## Course-scoped ENTRY (shipped 0.5.0)
 Entry language comes from the COURSE the teacher teaches, via `DimCourseAssessment` (ELA / Immersion-ELA →
 English literacy; FLA → French; Math → Math). Group picker = the caller's mapped-course sections, grouped

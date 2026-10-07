@@ -33,6 +33,8 @@
  * the workspace or lakehouse is ever rebuilt.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_LoadStudentsStaging;
+GO
 CREATE PROCEDURE usp_LoadStudentsStaging
 AS
 BEGIN
@@ -46,6 +48,11 @@ BEGIN
         FILE_TYPE       = 'CSV',
         FIELDTERMINATOR = ',',
         FIELDQUOTE      = '"',
-        FIRSTROW        = 2
+        FIRSTROW        = 2,
+        -- #1119 WORKAROUND (2026-10-07): the app SERVICE PRINCIPAL cannot mint a OneLake passthrough
+        -- token for COPY INTO (broke tenant-side ~2026-09; root cause NOT diagnosed). Route around it
+        -- by authorizing the source read as the WORKSPACE IDENTITY instead (provisioned + Contributor
+        -- on Regional_Data_Portal). URL scheme is irrelevant (abfss works). See fabric-warehouse-sql.
+        CREDENTIAL      = (IDENTITY = 'Workspace Identity')
     );
 END;

@@ -131,6 +131,35 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-06 — 🔴 #1119 STILL OPEN (Workspace-Identity/abfss failed the SP path); dev recovered + fixes staged
+- **#1119 (app ingest SP→OneLake `COPY INTO` token failure) — STILL BROKEN at EOD.**
+  - Tenant **"Service principals can call Fabric APIs" = ON org-wide** (IT confirmed, screenshot) → that hypothesis is DEAD.
+  - Tried the **Workspace Identity** credential on the loaders (`CREDENTIAL=(IDENTITY='Workspace Identity')`): provisioned
+    the WI (App ID `0d9df426-abef-46fd-9601-9178422a0e4c`) + gave IT (not the data SP) Contributor + waited for
+    propagation; credentialed loaders then created clean. **BUT the app/SP ingest run STILL throws Msg 13840**
+    ("unsupported URL"). The earlier SQL-editor pass was a FALSE POSITIVE — it ran as a USER (user `COPY INTO` always worked).
+  - **NEXT ACTION — pick one:** **(A)** swap loader source `abfss://…` → `https://onelake.dfs.fabric.microsoft.com/<ws>/<lh>/Files/…`
+    + keep the credential, deploy, **app-test** (every MS Workspace-Identity example uses `https://`; abfss may make the
+    credential a no-op). Run standalone variant C first (safe, writes to `Stg_Student`). **(B)** the **token bootstrap** —
+    NEVER actually run; `az login`/PowerShell client-creds as the SP → GET `api.fabric.microsoft.com/v1/workspaces/<ws>/items`
+    → app-test the ORIGINAL passthrough loaders (revert first).
+  - Dev loaders currently = **credentialed-abfss** (`sql/scripts/deploy_dev_loaders_workspace_identity.sql`); revert =
+    `sql/scripts/deploy_dev_cutover_loaders.sql`. **Dev is IN MAINTENANCE** (app set it after the half-failed ingest) — clear after a clean run.
+  - GOTCHA: a credentialed `COPY INTO` validates at **CREATE PROCEDURE time** → a failed CREATE *drops* the loader. Test credentials standalone, never via DROP+CREATE.
+- **Dev warehouse recovered this session (user ran all):** 8-file proc catch-up (0.7.0 grace + 1.1.0 deltas —
+  `sql/scripts/dev_catchup_1.1.0_2026-10-06.md`; dev had drifted because `deploy_all_dev.sql` is frozen at June AND nothing
+  re-applies live SQL to the dev *warehouse* after a release); analyst role un-stuck (`fix_dev_projectlead_analyst_active.sql`);
+  DimStaff overlapping-window DQ rule D fixed (`fix_dev_dimstaff_overlap_projectlead.sql`).
+- **Staged, NOT yet deployed by user:** 51014 reading fix (instance-based scale → late-immersion English reading;
+  `usp_UpsertReadingAssessment.sql`, deploy dev→live — 20 J020 grade-7/8 test students exist); dev cycle rebuild to
+  Short Cycle 1–6 (`dev_build_cycles_to_match_live_2026-10-06.sql`, add-only, P-6 Math, dev GUIDs); dev enrollment CSV
+  shifted to 2026-27 (local file only — gitignored).
+- **Parked:** `deploy_all_dev.sql` → 1.0.0 milestone (option A chosen: build bundle + a real manifest/generator; unvalidated
+  until a fresh dev rebuild, which needs #1119); capture the "apply live SQL to the dev WAREHOUSE after each release" step
+  into the runbook + dev/live memory; A/B worktrees `premaint`/`preauth` + images stay until #1119 closes.
+- **Next action**: resolve #1119 via (A) https-form WI or (B) token bootstrap, then port the fix to the LIVE loaders.
+- **Blockers**: #1119 blocks a clean app ingest on dev and prod; dev is in maintenance mode.
+
 ### Left Off — 2026-10-05 — 🟡 1.1.0 report work in dev (cohort QoL + cycle time-binding Reading); fan-out + cut pending
 - **DONE this session (on dev; app + one deployed TVF; all committed + pushed to `dev` and reconciled to `dev-impersonation`):**
   - **Cohort table QoL (Reading/Writing cohort — `CohortView`):** sortable columns (2-state click: asc→flip desc, other
