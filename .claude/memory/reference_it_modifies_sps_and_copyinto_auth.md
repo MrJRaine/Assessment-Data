@@ -4,6 +4,8 @@ description: "When app sign-in or ingest breaks with 'nothing changed in our cod
 metadata:
   node_type: memory
   type: reference
+  originSessionId: 81b06086-0f59-47db-b6fb-84b7a577c17f
+  modified: 2026-10-07T15:02:25.279Z
 ---
 
 **Set 2026-10-04**, after a multi-hour ingest debug.
@@ -12,22 +14,25 @@ metadata:
 Two prod-auth breakages traced to IT modifying the app registrations / service principals / tenant SP
 settings with no notice:
 - **Local sign-in broke** — the **login app** (`TCRCE Data Web App`, client ID `819f9480-5e65-469e-be27-89ac30381f1f`, tenant `0320ef6f-7349-4acf-b62a-e780da155b7e`) lost its `http://localhost:3000/api/auth/callback/microsoft-entra-id` redirect URI (AADSTS50011). **RECURRED 2026-10-05** (localhost confirmed absent again) → IT request now asks for BOTH `:3000` and `:3001` localhost redirect URIs: `docs/it-request-login-redirect-uris.md`. Callback path = `/api/auth/callback/microsoft-entra-id`; keep the prod URI `https://data.tcrce.ca/...`.
-- **In-app ingest broke** — the **data SP** (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`) can still connect + run SQL + is workspace **Contributor**, but can no longer get a **OneLake token for `COPY INTO`**. **IT ticket #1119**. **UPDATE 2026-10-06 — tenant-setting hypothesis DISPROVEN:** IT confirmed **"Service principals can call Fabric public APIs" = Enabled for the ENTIRE org, no security-group exceptions** (screenshot). So the SP is NOT blocked by that toggle. Remaining cause per MS docs = the SP's **control-plane Fabric token was never (re)established**: `COPY INTO`/OPENROWSET (data plane) needs a control-plane token that is minted ONLY by a Fabric REST API call (`api.fabric.microsoft.com`), NOT by the SQL connection — and our app only ever connects via SQL + mints its own `storage.azure.com` token (upload), so nothing bootstraps/refreshes the Fabric token (which also lapses ~30d). NEXT ACTION (self-serviceable, setting now allows it): `az login --service-principal` as the SP → GET `api.fabric.microsoft.com/v1/workspaces/<ws>/items` to bootstrap the token → retry ingest. If it works, add a recurring <30d refresh (app timer or scheduled task). See [[reference_it_modifies_sps_and_copyinto_auth]] "control-plane vs data plane" below.
+- **In-app ingest broke** — the **data SP** (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`) can still connect + run SQL + is workspace **Contributor**, but can no longer get a **OneLake token for `COPY INTO`**. **IT ticket #1119**. **UPDATE 2026-10-06 — tenant-setting hypothesis DISPROVEN:** IT confirmed **"Service principals can call Fabric public APIs" = Enabled for the ENTIRE org, no security-group exceptions** (screenshot). So the SP is NOT blocked by that toggle. **RESOLVED 2026-10-07 — the fix is a Workspace Identity CREDENTIAL on the loaders, NOT a control-plane token bootstrap** (that theory was wrong; `az login` was never run). See the RESOLVED paragraph below.
 
-**#1119 STILL OPEN as of 2026-10-06 EOD — Workspace Identity (abfss form) did NOT fix the SP path.** Tried:
-add `CREDENTIAL = (IDENTITY = 'Workspace Identity')` to each loader's `COPY INTO WITH (...)` to authorize the
-OneLake read via the workspace identity instead of the SP's caller-passthrough token. Provisioned the
-workspace identity (App ID `0d9df426-abef-46fd-9601-9178422a0e4c`) + gave IT (not the data SP) Contributor +
-waited for propagation; the credentialed loaders then created clean. BUT the **app/SP ingest run still throws
-Msg 13840** ("access token couldn't be fetched … unsupported URL"). The earlier SQL-editor run reaching the DQ
-gate was a FALSE POSITIVE — it ran as a USER, and user COPY INTO has worked the whole time. **Lesson: you
-CANNOT test the SP path in the Fabric SQL editor (user passthrough masks it) — only the awdev app run exercises
-the SP.** Leading theory now: with the `abfss://` source form the credential is IGNORED (error says
-"unsupported URL"); every MS `Workspace Identity` example uses the `https://onelake…` form. OPEN LEVERS for
-next session: (1) **https-form credentialed loaders** (change `abfss://…` → `https://onelake.dfs.fabric.microsoft.com/<ws>/<lh>/Files/…`) then app-test; (2) the **token bootstrap** (NEVER actually run; setting confirmed
-on) — `az login`/PowerShell client-creds as the SP → GET `api.fabric.microsoft.com/v1/workspaces/<ws>/items`
-→ app-test the ORIGINAL passthrough loaders. Dev loaders currently sit credentialed-abfss
-(`sql/scripts/deploy_dev_loaders_workspace_identity.sql`); revert = `deploy_dev_cutover_loaders.sql`.
+**#1119 RESOLVED on dev 2026-10-07 — the fix is the Workspace Identity CREDENTIAL; the URL scheme (abfss vs
+https) is IRRELEVANT.** Add `CREDENTIAL = (IDENTITY = 'Workspace Identity')` to each loader's `COPY INTO
+WITH (...)` so the OneLake read authorizes as the WORKSPACE identity, not the SP's (still-broken)
+caller-passthrough token. Proven by a full 2×2 on dev via the APP (SP) run — the ONLY valid test (a Fabric
+SQL-editor EXEC runs as a USER, and user passthrough always worked): passthrough+abfss ❌ (the outage) ·
+passthrough+https ❌ "Access token couldn't be fetched" · **WI+abfss ✅** · WI+https ✅. The 2026-10-06
+WI+abfss failure (Msg 13840 "unsupported URL") was a **FALSE NEGATIVE** — the WI's Contributor grant had not
+PROPAGATED yet (granted late that day); re-tested 2026-10-07 after **overnight** propagation → clean app
+ingest. So Msg 13840 here meant "the WI can't authorize yet", NOT "wrong URL form": do NOT chase the URL
+scheme, an https rewrite, or a token bootstrap. **Root cause stands:** the SP's OneLake passthrough is
+genuinely broken tenant-side (both passthrough tests still fail); the WI credential routes around it.
+**LIVE PORT:** the one `CREDENTIAL` line is committed into the 5 abfss procs `sql/procedures/usp_Load*Staging.sql`
+(+ a `DROP IF EXISTS` guard) — run those on live + app-test on data.tcrce.ca to close #1119 on prod (same
+workspace + WI grant already cover live). Dev working form = `deploy_dev_loaders_workspace_identity.sql`
+(WI+abfss); revert-to-passthrough = `deploy_dev_cutover_loaders.sql`. The https-form scripts
+(`deploy_dev_loaders_workspace_identity_https.sql`, `deploy_dev_loaders_https_passthrough.sql`) are
+record-only now.
 **FABRIC GOTCHA (confirmed this session):** a `COPY INTO` with a CREDENTIAL clause is validated at **CREATE
 PROCEDURE time** (eager, not deferred) — if the credential/identity can't authorize, the CREATE fails, and
 since loaders are `DROP IF EXISTS` + `CREATE`, the DROP leaves the proc GONE. Test a new credential/path with
@@ -35,8 +40,10 @@ a STANDALONE `COPY INTO` into staging first, never via the DROP+CREATE loader. T
 Managed Identity we ruled out (`Msg 13838`); 'Workspace Identity' IS supported for OneLake COPY INTO.
 PREREQS that bit us (do in THIS order or it fails): (1) provision a Workspace Identity on the workspace
 (Workspace settings → Workspace identity; App ID `0d9df426-abef-46fd-9601-9178422a0e4c`), (2) grant THAT
-identity (not the data SP) ≥Contributor on the workspace, (3) WAIT ~10-15 min for the role to propagate,
-THEN deploy the credentialed loaders. GOTCHA: Fabric validates the `COPY INTO` credential at **CREATE
+identity (not the data SP) ≥Contributor on the workspace, (3) WAIT for the role to propagate — the ~10-15 min
+MS quotes was NOT enough here; WI+abfss still failed the same day and only worked after OVERNIGHT propagation,
+so do NOT trust an early post-grant failure (that was exactly the 2026-10-06 false negative). THEN deploy the
+credentialed loaders. GOTCHA: Fabric validates the `COPY INTO` credential at **CREATE
 PROCEDURE time** (eager, not deferred) — so a credentialed loader whose identity lacks access FAILS to
 create, and since the proc is `DROP IF EXISTS` + `CREATE`, the DROP leaves the loader GONE. Test a new
 credential with a STANDALONE `COPY INTO` (writes to staging, drops nothing), never via the DROP+CREATE

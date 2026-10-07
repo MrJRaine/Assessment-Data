@@ -423,12 +423,19 @@ access, OR supply a SAS credential (`CREDENTIAL = (IDENTITY='Shared Access Signa
 extra secret + rotation), OR run the load as a user. The app's direct ADLS **upload** is unaffected — it
 mints the SP's own `storage.azure.com` token via `@azure/identity`, a different path than `COPY INTO`.
 
-### Workspace Identity credential — distinct from MI, but DON'T trust an abfss test (2026-10-06)
-`CREDENTIAL = (IDENTITY = 'Workspace Identity')` **is** a supported OneLake COPY INTO credential (NOT the
-same as the rejected 'Managed Identity'). It authorizes the source read as the **workspace's own identity**,
-decoupling it from the caller — the intended #1119 fix. Prereqs, in ORDER: (1) provision a Workspace Identity
-(Workspace settings → Workspace identity), (2) grant THAT identity (not the data SP) ≥Contributor on the
-workspace, (3) wait ~10–15 min to propagate. Hard-won gotchas:
+### Workspace Identity credential — the #1119 fix for SP COPY INTO (RESOLVED 2026-10-07)
+When the app's **service principal** can't mint a OneLake passthrough token for `COPY INTO` (the #1119
+outage — a tenant-side change broke the SP's passthrough, both abfss AND https passthrough fail), authorize
+the source read as the **workspace identity** instead: add `CREDENTIAL = (IDENTITY = 'Workspace Identity')`
+to each loader's `COPY INTO WITH (...)`. This is a supported OneLake credential (NOT the rejected 'Managed
+Identity', Msg 13838). It is the WHOLE fix — the **URL scheme is irrelevant** (abfss and https both work with
+the credential). Prereqs, in ORDER: (1) provision a Workspace Identity (Workspace settings → Workspace
+identity), (2) grant THAT identity (not the data SP) ≥Contributor on the workspace, (3) WAIT for propagation.
+Hard-won gotchas:
+- **Propagation can take HOURS, not the ~10–15 min MS quotes.** On 2026-10-06 WI+abfss failed with Msg 13840
+  "unsupported URL" minutes after the grant; the identical loader ran clean the next morning after overnight
+  propagation. **Msg 13840 from a credentialed COPY INTO means "the WI can't authorize YET", not "wrong URL
+  form"** — do not chase the URL scheme or a token bootstrap; re-test after it propagates.
 - **A credentialed `COPY INTO` is validated at CREATE PROCEDURE time (eager, not deferred).** If the credential
   can't authorize, the `CREATE` fails — and because loaders are `DROP IF EXISTS` + `CREATE`, the DROP leaves
   the proc GONE. Test a new credential/path with a **standalone `COPY INTO` into staging first**, never via
@@ -436,8 +443,4 @@ workspace, (3) wait ~10–15 min to propagate. Hard-won gotchas:
 - **You cannot validate the SP path in the Fabric SQL editor** — a manual `EXEC` there runs as a USER, and
   user COPY INTO has always worked (the interim workaround). Reaching the DQ gate from the editor proves
   NOTHING. Only the **app run (SP connection)** exercises the SP path.
-- **The abfss:// source form may make the credential a no-op.** As of 2026-10-06 the workspace-identity
-  credential with `abfss://…@onelake…/<lh-guid>/…` still threw Msg 13840 ("unsupported URL") from the app/SP
-  path. Every MS example uses the `https://onelake.dfs.fabric.microsoft.com/<ws>/<lh>/Files/…` form — try that
-  before concluding Workspace Identity doesn't work. (Open as of EOD 2026-10-06 — see
-  [[reference_it_modifies_sps_and_copyinto_auth]].)
+See [[reference_it_modifies_sps_and_copyinto_auth]].
