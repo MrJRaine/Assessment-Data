@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 81b06086-0f59-47db-b6fb-84b7a577c17f
-  modified: 2026-10-07T15:02:25.279Z
+  modified: 2026-10-07T15:08:19.990Z
 ---
 
 **Set 2026-10-04**, after a multi-hour ingest debug.
@@ -27,9 +27,10 @@ PROPAGATED yet (granted late that day); re-tested 2026-10-07 after **overnight**
 ingest. So Msg 13840 here meant "the WI can't authorize yet", NOT "wrong URL form": do NOT chase the URL
 scheme, an https rewrite, or a token bootstrap. **Root cause stands:** the SP's OneLake passthrough is
 genuinely broken tenant-side (both passthrough tests still fail); the WI credential routes around it.
-**LIVE PORT:** the one `CREDENTIAL` line is committed into the 5 abfss procs `sql/procedures/usp_Load*Staging.sql`
-(+ a `DROP IF EXISTS` guard) — run those on live + app-test on data.tcrce.ca to close #1119 on prod (same
-workspace + WI grant already cover live). Dev working form = `deploy_dev_loaders_workspace_identity.sql`
+**LIVE — DONE 2026-10-07:** the one `CREDENTIAL` line is committed into the 5 abfss procs
+`sql/procedures/usp_Load*Staging.sql` (+ a `DROP IF EXISTS` guard); deployed to the live warehouse and a
+**live app ingest ran clean over the SP path on data.tcrce.ca** → #1119 closed on prod. (Source PR to `main`
+still pending — warehouse-only fix, no semver.) Dev working form = `deploy_dev_loaders_workspace_identity.sql`
 (WI+abfss); revert-to-passthrough = `deploy_dev_cutover_loaders.sql`. The https-form scripts
 (`deploy_dev_loaders_workspace_identity_https.sql`, `deploy_dev_loaders_https_passthrough.sql`) are
 record-only now.
