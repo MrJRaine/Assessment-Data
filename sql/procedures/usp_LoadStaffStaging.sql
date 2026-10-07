@@ -29,6 +29,8 @@
  * the workspace or lakehouse is ever rebuilt.
  ******************************************************************************/
 
+DROP PROCEDURE IF EXISTS usp_LoadStaffStaging;
+GO
 CREATE PROCEDURE usp_LoadStaffStaging
 AS
 BEGIN
@@ -42,6 +44,9 @@ BEGIN
         FILE_TYPE       = 'CSV',
         FIELDTERMINATOR = ',',
         FIELDQUOTE      = '"',
-        FIRSTROW        = 2
+        FIRSTROW        = 2,
+        -- #1119 (2026-10-07): WI credential required — the SP can't passthrough a OneLake token
+        -- for COPY INTO; the workspace identity authorizes the read. See usp_LoadStudentsStaging.
+        CREDENTIAL      = (IDENTITY = 'Workspace Identity')
     );
 END;
