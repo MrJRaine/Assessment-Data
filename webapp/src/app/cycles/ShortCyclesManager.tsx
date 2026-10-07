@@ -249,8 +249,11 @@ export default function ShortCyclesManager({ initialCycles }: { initialCycles: S
                 <select value={inst.maxGrade} onChange={(e) => patchInstance(inst.key, { maxGrade: e.target.value })}>
                   {GRADES.map((g) => <option key={g} value={g}>{gradeLabel(g)}</option>)}
                 </select>
-                {inst.subject === 'Reading' ? (
-                  <select value={inst.benchmarkMonth ?? ''} title="Benchmark month (reading)"
+                {inst.subject !== 'Writing' ? (
+                  <select value={inst.benchmarkMonth ?? ''}
+                          title={inst.subject === 'Math'
+                            ? 'Task month — which month’s tasks appear for this cycle (must match the seeded DimMathTask month)'
+                            : 'Benchmark month (reading)'}
                           onChange={(e) => patchInstance(inst.key, { benchmarkMonth: e.target.value ? Number(e.target.value) : null })}>
                     <option value="">Auto</option>
                     {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m.slice(0, 3)}</option>)}
