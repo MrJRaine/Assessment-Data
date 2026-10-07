@@ -52,7 +52,7 @@ CREATE PROCEDURE dbo.usp_UpsertShortCycle
     @MaxGrade           VARCHAR(10)  = '12',
     @ProgramScope       VARCHAR(100) = NULL,         -- comma-delimited bucket set from {English, Early Immersion, Late Immersion}; NULL = all. e.g. 'English,Late Immersion'
     @AssessmentLanguage VARCHAR(10)  = NULL,         -- 'English' | 'French' language scope (literacy); NULL = Both (toggle/per-student)
-    @BenchmarkMonth     INT          = NULL,         -- 1-12: explicit reading benchmark month (NULL = dominant-month fallback); reading only
+    @BenchmarkMonth     INT          = NULL,         -- 1-12: Reading = benchmark month, Math = task-pull month (DimMathTask.AssessmentMonth); NULL = dominant-month fallback. Writing has none.
     @CycleGroupID       VARCHAR(36)  = NULL,         -- groups the per-subject rows of one multi-subject cycle (app-generated GUID)
     @ActiveFlag         BIT          = 1,            -- 0 to deactivate/hide a cycle
     @AssessmentWindowID BIGINT       = NULL,         -- NULL = create; else edit this cycle
@@ -104,8 +104,9 @@ BEGIN
     -- Empty string normalises to NULL (= all programs).
     IF @ProgramScope IS NOT NULL AND LTRIM(RTRIM(@ProgramScope)) = '' SET @ProgramScope = NULL;
 
-    -- Benchmark month is reading-specific; ignore it for Writing/Math cycles.
-    IF @AssessmentType <> 'Reading' SET @BenchmarkMonth = NULL;
+    -- Benchmark/task month applies to Reading (benchmark month) AND Math (the month whose
+    -- DimMathTask rows the roster pulls); ONLY Writing has no month, so null it just for Writing.
+    IF @AssessmentType = 'Writing' SET @BenchmarkMonth = NULL;
 
     -- Language scope is literacy-only; Math is single-track (no language).
     IF @AssessmentType = 'Math' SET @AssessmentLanguage = NULL;

@@ -13,9 +13,10 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [1.0.1] — 2026-10-07
 
-Warehouse-only patch — **no container rebuild**. The fix is a stored-procedure change deployed to the live
-warehouse; the only app-layer delta would be the version string + this changelog (cosmetic), so the live
-container stays on the 1.0.0 image and the app footer continues to read 1.0.0.
+Warehouse-only patch — **no container rebuild**. The fixes are warehouse changes (stored procs + data)
+deployed to the live warehouse; the only app-layer delta would be the version string + this changelog
+(cosmetic), so the live container stays on the 1.0.0 image and the app footer continues to read 1.0.0. (One
+follow-on UI piece — a "Task month" selector for Math on `/cycles` — ships with 1.1.0.)
 
 ### Fixed
 - **Reading entry: Late French Immersion (J020) can now record English reading levels.** The entry validation
@@ -25,6 +26,13 @@ container stays on the 1.0.0 image and the app footer continues to read 1.0.0.
   (`COALESCE(window.ScaleSystem, program-family fallback)`), mirroring `tvf_TeacherRoster`, so entry accepts
   exactly what the roster shows. The Early-Immersion → French guard still fires. **SQL (live warehouse):**
   redeploy `sql/procedures/usp_UpsertReadingAssessment.sql`.
+- **Math entry: tasks now appear (was a blank grid for several cycles).** Math tasks are keyed by
+  `DimMathTask.AssessmentMonth` and the roster pulls them by the cycle's `BenchmarkMonth`; Math cycle
+  instances were saving `BenchmarkMonth = NULL`, so the roster fell back to each window's dominant calendar
+  month and missed the seeded task months. Fixed by (a) `usp_UpsertShortCycle` no longer nulling
+  `BenchmarkMonth` for Math (only Writing), (b) stamping the SCoR months {9,11,1,3,4,6} on the Reading+Math
+  windows, and (c) re-coding mis-coded task months (Feb→Jan, May→Apr). **SQL (live warehouse):** redeploy
+  `sql/procedures/usp_UpsertShortCycle.sql` + run `sql/scripts/fix_math_cycle_months_and_task_miscoding.sql`.
 
 ## [1.0.0] — 2026-10-02
 
