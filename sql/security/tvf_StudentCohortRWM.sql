@@ -27,7 +27,7 @@
 DROP FUNCTION IF EXISTS dbo.tvf_StudentCohortRWM;
 GO
 
-CREATE FUNCTION dbo.tvf_StudentCohortRWM(@UPN VARCHAR(255))
+CREATE FUNCTION dbo.tvf_StudentCohortRWM(@UPN VARCHAR(255), @CycleGroupID VARCHAR(36) = NULL)
 RETURNS TABLE
 AS
 RETURN
@@ -44,7 +44,9 @@ RETURN
                     WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
                     GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w CROSS JOIN CurYear cy
+        -- @CycleGroupID (2026-10-07): NULL = all current-year math windows; a cycle id narrows to that cycle's Math window(s).
         WHERE w.AssessmentType = 'Math' AND w.ActiveFlag = 1 AND w.SchoolYear = cy.Yr
+          AND (@CycleGroupID IS NULL OR w.CycleGroupID = @CycleGroupID)
     ),
     -- In-scope, current, P-6 students (role-gated).
     InScope AS (
@@ -77,6 +79,11 @@ RETURN
                ROW_NUMBER() OVER (PARTITION BY far.StudentKey
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
+        -- @CycleGroupID: NULL = lifetime latest; a cycle id scopes to that cycle's Reading window(s).
+        WHERE @CycleGroupID IS NULL
+           OR far.AssessmentWindowID IN (
+                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1)
     ),
     ReadAch AS (
         SELECT rl.StudentKey, dal.AchievementLevelCode AS Code
@@ -113,6 +120,11 @@ RETURN
                ROW_NUMBER() OVER (PARTITION BY faw.StudentKey
                                   ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
+        -- @CycleGroupID: NULL = lifetime latest; a cycle id scopes to that cycle's Writing window(s).
+        WHERE @CycleGroupID IS NULL
+           OR faw.AssessmentWindowID IN (
+                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Writing' AND w.ActiveFlag = 1)
     ),
     WriteAch AS (
         SELECT wl.StudentKey,

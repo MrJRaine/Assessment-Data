@@ -719,11 +719,15 @@ function toDateStr(v: Date | string | null | undefined): string | null {
   return v instanceof Date ? v.toISOString().slice(0, 10) : v
 }
 
-/** Student cohort in the signed-in user's scope (role-branched in SQL), with most-recent reading. */
-export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
+/**
+ * Student cohort in the signed-in user's scope (role-branched in SQL), with reading evidence.
+ * cycleGroupId null = lifetime most-recent ("Current"); a cycle id scopes to that cycle's reading window.
+ */
+export async function getStudentCohort(upn: string, cycleGroupId: string | null = null): Promise<CohortStudent[]> {
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohort(@UPN) ORDER BY LastName, FirstName',
+    'SELECT * FROM dbo.tvf_StudentCohort(@UPN, @CycleGroupID) ORDER BY LastName, FirstName',
+    { CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -761,15 +765,81 @@ export async function getStudentCohort(upn: string): Promise<CohortStudent[]> {
 }
 
 /**
+ * The assessable GRADE-ORDER range for a subject this school year, derived from the subject's active
+ * assessment windows (DimAssessmentWindow MinGrade/MaxGrade → DimGrade.GradeOrder). Config-driven, so
+ * "Reading = P–8" comes from the window metadata, not a literal. Powers the cohort report's
+ * "Assessable only" default (narrow the total to the students actually in the assessed grades). Returns
+ * null if the subject has no active windows this year (caller then shows all students).
+ */
+export async function getAssessableGradeRange(
+  subject: 'Reading' | 'Writing' | 'Math',
+  cycleGroupId: string | null = null,
+): Promise<{ minOrder: number; maxOrder: number } | null> {
+  const rows = await query<{ MinOrder: number | null; MaxOrder: number | null }>(
+    `WITH CurYear AS (
+       SELECT CASE WHEN MONTH(d.Today) >= 9 THEN CONCAT(YEAR(d.Today), '-', YEAR(d.Today) + 1)
+                   ELSE CONCAT(YEAR(d.Today) - 1, '-', YEAR(d.Today)) END AS Yr
+       FROM (SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today) d
+     )
+     SELECT MIN(gmin.GradeOrder) AS MinOrder, MAX(gmax.GradeOrder) AS MaxOrder
+     FROM DimAssessmentWindow w
+     CROSS JOIN CurYear cy
+     JOIN DimGrade gmin ON gmin.GradeCode = w.MinGrade
+     JOIN DimGrade gmax ON gmax.GradeCode = w.MaxGrade
+     WHERE w.ActiveFlag = 1 AND w.AssessmentType = @Subject
+       -- cycle given -> that cycle's window(s); else the current school year's windows (union)
+       AND (@CycleGroupID IS NULL OR w.CycleGroupID = @CycleGroupID)
+       AND (@CycleGroupID IS NOT NULL OR w.SchoolYear = cy.Yr)`,
+    { Subject: subject, CycleGroupID: cycleGroupId },
+  )
+  const r = rows[0]
+  if (!r || r.MinOrder == null || r.MaxOrder == null) return null
+  return { minOrder: Number(r.MinOrder), maxOrder: Number(r.MaxOrder) }
+}
+
+export interface ReportCycle {
+  cycleGroupId: string
+  name: string // DisplayName, e.g. 'SCoR 1'
+  startDate: string // 'YYYY-MM-DD'
+  endDate: string
+}
+
+/**
+ * This school year's cycles that have STARTED — open / in grace / closed, i.e. everything EXCEPT
+ * Upcoming — for the Reports cycle selector (shared across Reading/Writing/Math/RWM, since the cycles
+ * are shared). Config, not PII, so a plain query is fine. The date range drives the button hover.
+ */
+export async function getReportCycles(): Promise<ReportCycle[]> {
+  const rows = await query<{ CycleGroupID: string; DisplayName: string; StartDate: unknown; EndDate: unknown }>(
+    `WITH CurYear AS (
+       SELECT CASE WHEN MONTH(d.Today) >= 9 THEN CONCAT(YEAR(d.Today), '-', YEAR(d.Today) + 1)
+                   ELSE CONCAT(YEAR(d.Today) - 1, '-', YEAR(d.Today)) END AS Yr, d.Today
+       FROM (SELECT CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE) AS Today) d
+     )
+     SELECT sc.CycleGroupID, sc.DisplayName, sc.StartDate, sc.EndDate
+     FROM DimShortCycle sc CROSS JOIN CurYear cy
+     WHERE sc.ActiveFlag = 1 AND sc.SchoolYear = cy.Yr AND cy.Today >= sc.StartDate
+     ORDER BY sc.StartDate`,
+  )
+  return rows.map((r) => ({
+    cycleGroupId: r.CycleGroupID,
+    name: r.DisplayName,
+    startDate: toDateStr(r.StartDate as Date | string | null) ?? '',
+    endDate: toDateStr(r.EndDate as Date | string | null) ?? '',
+  }))
+}
+
+/**
  * Writing cohort in the same CohortStudent shape so CohortView renders it unchanged: the 4-trait
  * average fills the "Level" slot (shown as a 2-dec score) and the writing band fills the achievement
  * fields. ippStatusReading carries the WRITING IPP status here (the field is reused for the table's
  * IPP display); reading-only fields (delta, level order) are null.
  */
-export async function getStudentCohortWriting(upn: string): Promise<CohortStudent[]> {
+export async function getStudentCohortWriting(upn: string, cycleGroupId: string | null = null): Promise<CohortStudent[]> {
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN) ORDER BY LastName, FirstName',
+    'SELECT * FROM dbo.tvf_StudentCohortWriting(@UPN, @CycleGroupID) ORDER BY LastName, FirstName',
+    { CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -831,7 +901,7 @@ export async function getStudentNavList(upn: string, subject: 'Reading' | 'Writi
     `SELECT StudentKey, FullName, Grade, ProgramFamily,
             COALESCE(SchoolAbbreviation, SchoolName, SchoolID) AS SchoolLabel,
             Homeroom, ${ippCol} AS IPPStatus
-     FROM dbo.${tvf}(@UPN)
+     FROM dbo.${tvf}(@UPN, NULL)
      ORDER BY LastName, FirstName`,
   )
   return rows.map((r) => ({
@@ -1297,7 +1367,7 @@ export interface MathCohortRow {
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
 }
 
-export async function getMathCohort(upn: string, groupKey: string): Promise<MathCohortRow[]> {
+export async function getMathCohort(upn: string, groupKey: string, cycleGroupId: string | null = null): Promise<MathCohortRow[]> {
   const rows = await queryAsUser<{
     StudentKey: string
     StudentNumber: number | string
@@ -1318,8 +1388,8 @@ export async function getMathCohort(upn: string, groupKey: string): Promise<Math
     MathIPPStatus: boolean | null
   }>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
-    { GroupKey: groupKey },
+    'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),
@@ -1372,10 +1442,11 @@ export interface RWMStudent {
   hasMath: boolean
 }
 
-export async function getStudentCohortRWM(upn: string): Promise<RWMStudent[]> {
+export async function getStudentCohortRWM(upn: string, cycleGroupId: string | null = null): Promise<RWMStudent[]> {
   const rows = await queryAsUser<Record<string, unknown>>(
     upn,
-    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN)',
+    'SELECT * FROM dbo.tvf_StudentCohortRWM(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
   )
   return rows.map((r) => ({
     studentKey: String(r.StudentKey),

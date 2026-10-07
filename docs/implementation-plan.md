@@ -131,10 +131,108 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
-### Left Off — 2026-10-02 (eve) — 🟢 v1.0.0 LIVE (SQL): writing trait exclusion deployed; prod container swap + git ritual PENDING
-- **Last completed step**: **Writing TRAIT-exclusion** feature built, dev-verified, and **live SQL deployed + verified** — bundle `sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql` (migration → config table → proc → 5 TVFs → remediation); verified 4 trait cols VARCHAR/167 + remediation 0 rows. **Live warehouse is at 1.0.0.** Data-driven `WritingTraitExclusion`; excluded trait stored as `-` (≠NULL); FI·P·Sep/Oct/Nov·Organization. [[project_writing_trait_exclusion]]. Fabric gotcha found: `TRY_CAST('-' AS INT)=0` → averages gate on `IN ('1'..'4')`.
-- **In progress**: final prod **CONTAINER** swap to the corrected 1.0.0 image (patchNotes fix — in-app What's New must show ONLY 1.0.0). Corrected tar `assessment-webapp-1.0.0.tar` built (sha `da38fbce…`); user was uploading/swapping over RDP at session end. Prod publish standard changed to `-p 0.0.0.0:3000:3000` (WSL loopback-relay 502 fix — `docs/prod-container-swap.md`).
-- **Next action**: (1) confirm the prod container swap landed (What's New = only 1.0.0; `/api/health` 200). (2) Run the **git release ritual** (user's trigger): `dev→main --no-ff`, tag `v1.0.0`, gh release, main→dev back-merge, and reconcile `dev-impersonation` with the final SQL-fix + patchNotes commits.
+### Left Off — 2026-10-06 — 🔴 #1119 STILL OPEN (Workspace-Identity/abfss failed the SP path); dev recovered + fixes staged
+- **#1119 (app ingest SP→OneLake `COPY INTO` token failure) — STILL BROKEN at EOD.**
+  - Tenant **"Service principals can call Fabric APIs" = ON org-wide** (IT confirmed, screenshot) → that hypothesis is DEAD.
+  - Tried the **Workspace Identity** credential on the loaders (`CREDENTIAL=(IDENTITY='Workspace Identity')`): provisioned
+    the WI (App ID `0d9df426-abef-46fd-9601-9178422a0e4c`) + gave IT (not the data SP) Contributor + waited for
+    propagation; credentialed loaders then created clean. **BUT the app/SP ingest run STILL throws Msg 13840**
+    ("unsupported URL"). The earlier SQL-editor pass was a FALSE POSITIVE — it ran as a USER (user `COPY INTO` always worked).
+  - **NEXT ACTION — pick one:** **(A)** swap loader source `abfss://…` → `https://onelake.dfs.fabric.microsoft.com/<ws>/<lh>/Files/…`
+    + keep the credential, deploy, **app-test** (every MS Workspace-Identity example uses `https://`; abfss may make the
+    credential a no-op). Run standalone variant C first (safe, writes to `Stg_Student`). **(B)** the **token bootstrap** —
+    NEVER actually run; `az login`/PowerShell client-creds as the SP → GET `api.fabric.microsoft.com/v1/workspaces/<ws>/items`
+    → app-test the ORIGINAL passthrough loaders (revert first).
+  - Dev loaders currently = **credentialed-abfss** (`sql/scripts/deploy_dev_loaders_workspace_identity.sql`); revert =
+    `sql/scripts/deploy_dev_cutover_loaders.sql`. **Dev is IN MAINTENANCE** (app set it after the half-failed ingest) — clear after a clean run.
+  - GOTCHA: a credentialed `COPY INTO` validates at **CREATE PROCEDURE time** → a failed CREATE *drops* the loader. Test credentials standalone, never via DROP+CREATE.
+- **Dev warehouse recovered this session (user ran all):** 8-file proc catch-up (0.7.0 grace + 1.1.0 deltas —
+  `sql/scripts/dev_catchup_1.1.0_2026-10-06.md`; dev had drifted because `deploy_all_dev.sql` is frozen at June AND nothing
+  re-applies live SQL to the dev *warehouse* after a release); analyst role un-stuck (`fix_dev_projectlead_analyst_active.sql`);
+  DimStaff overlapping-window DQ rule D fixed (`fix_dev_dimstaff_overlap_projectlead.sql`).
+- **Staged, NOT yet deployed by user:** 51014 reading fix (instance-based scale → late-immersion English reading;
+  `usp_UpsertReadingAssessment.sql`, deploy dev→live — 20 J020 grade-7/8 test students exist); dev cycle rebuild to
+  Short Cycle 1–6 (`dev_build_cycles_to_match_live_2026-10-06.sql`, add-only, P-6 Math, dev GUIDs); dev enrollment CSV
+  shifted to 2026-27 (local file only — gitignored).
+- **Parked:** `deploy_all_dev.sql` → 1.0.0 milestone (option A chosen: build bundle + a real manifest/generator; unvalidated
+  until a fresh dev rebuild, which needs #1119); capture the "apply live SQL to the dev WAREHOUSE after each release" step
+  into the runbook + dev/live memory; A/B worktrees `premaint`/`preauth` + images stay until #1119 closes.
+- **Next action**: resolve #1119 via (A) https-form WI or (B) token bootstrap, then port the fix to the LIVE loaders.
+- **Blockers**: #1119 blocks a clean app ingest on dev and prod; dev is in maintenance mode.
+
+### Left Off — 2026-10-05 — 🟡 1.1.0 report work in dev (cohort QoL + cycle time-binding Reading); fan-out + cut pending
+- **DONE this session (on dev; app + one deployed TVF; all committed + pushed to `dev` and reconciled to `dev-impersonation`):**
+  - **Cohort table QoL (Reading/Writing cohort — `CohortView`):** sortable columns (2-state click: asc→flip desc, other
+    column restarts asc; active-header highlight + ▲/▼; blanks last; **"Reset sort order"** button; default order
+    School→Homeroom→Grade→Last→First→provincial Student #, used as the tiebreak under any clicked column); **Program→Homeroom**
+    column (Program stays a filter); Reading **"Diff from Expected"** column (`mostRecentDelta`); **"Participating grades only"**
+    toggle (default ON — narrows the total + table to the subject's window grade range, Reading P–8, config-driven via
+    `getAssessableGradeRange`; renamed from "Assessable" to avoid the assess term). Sort/filters/toggle persist per tab.
+  - **Cycle time-binding — READING done end-to-end:** shared `CycleSelector` (Current + this-year STARTED cycles, hover=date
+    range, rides `?cycle=<CycleGroupID>`); `tvf_StudentCohort` gained optional `@CycleGroupID` (**DEPLOYED TO DEV today** —
+    NULL=lifetime "Current", a cycle id scopes the latest-pick to that cycle's Reading window); `getReportCycles` +
+    `getAssessableGradeRange(subject, cycle)` per-cycle scope.
+- **NEXT ACTION — fan the cycle selector out to Writing / Math / RWM:** add `@CycleGroupID` to `tvf_StudentCohortWriting`,
+  `tvf_StudentCohortMath`, `tvf_StudentCohortRWM` (same `WHERE AssessmentWindowID IN (<the cycle's subject windows>)` pattern;
+  **cycles are SHARED across R/W/M — NOT month-based**; RWM scopes R+W+M within the shared cycle) + wire each page's `?cycle=`
+  and render the shared selector. SQL deploys to dev, then live at the 1.1.0 cut. Optional after: "(active)" hint on the
+  collapsed Reading/Writing filter toggle (RWM already shows it — a stuck grade filter read as "empty" today).
+- **THEN cut 1.1.0:** version bump + finalize CHANGELOG/patchNotes (also carries the 2026-10-04 **ingest run-log** +
+  co-teacher-always-load + ingest-page checkbox removal), container swap. Live SQL = the cycle-scoped cohort TVFs.
+- **Dev data note (resolved):** yesterday's dev re-ingest re-expired `FactEnrollment` (880 rows back to 2025-2026, 0 current
+  by DATE, but `ActiveFlag=1` so REPORTS still resolve) AND wiped the project-lead's manual access. **Access RESTORED** via
+  `sql/scripts/grant_dev_projectlead_access.sql` (DimStaff analyst + StaffSchoolAccess + sysadmin). **Enrollment NOT rolled
+  forward** — run `sql/scripts/rollforward_enrollment_dev.sql` only if testing the DATE-gated DATA-ENTRY/roster side; Reports
+  are fine without it. New diagnostics committed: `diag_cohort_base_dev.sql`, `diag_cohort_scope_dev.sql`.
+- **IT requests to SEND (user's action):** login redirect URIs — [`docs/it-request-login-redirect-uris.md`](it-request-login-redirect-uris.md)
+  (add `localhost:3000`+`3001` to "TCRCE Data Web App" `819f9480…`; local sign-in broken on :3000 until then) + the SP OneLake
+  `COPY INTO` request [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md).
+- **Containers (dev):** `awdev` :3000 (real Entra login — BLOCKED until the redirect-URI fix), `awdev-impersonation` :3002
+  (impersonation, testable). Both on 1.1.0 builds through the Reading-cycle deploy; **a rebuild is needed to pick up the
+  "Participating grades only" rename** (committed, not yet built).
+- **Blockers:** none code-side; IT-side = the two Entra/SP requests above.
+
+### Left Off — 2026-10-04 (later) — 🟢 Math tasks 2026-27 loaded (dev+live); user-guide audit done; IT request STILL top
+- **🔴 STILL THE TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md)
+  to restore the data SP's OneLake `COPY INTO` access (app-triggered ingest still broken; full detail in the note below). Not touched this session.
+- **✅ DONE — math task 2026-27 differential loaded on dev + live.** Transcribed the math team's workbook
+  (`data/imports/Math SCoR App Data Spreadsheet 2026-27.xlsx`) → `data/mathtasks/MathTasks_2026-27.csv` (428 rows) and loaded via
+  `usp_LoadMathTasks`. Differential vs the prior load: **+58 new** (grade 3 November 35, grade 4 September 23), 0 removed,
+  0 genuine content edits, 27 code-strip cleanups. **Grades 5 & 6 still empty** (blank sheets) — shrinks but doesn't close
+  [[project_math_report_blank_roster_bug]]. Tracked bank + reusable tooling now committed: `data/mathtasks/` (+ `baseline-2026-09/`)
+  and `scripts/mathtasks/` (transform/diff/parse); workflow in `data/mathtasks/README.md`. Conventions: month 10→9, `UnitName="Unit "+Unit#`,
+  strip trailing outcome-code parenthetical from descriptions, preserve internal whitespace. See [[reference_read_xlsx_and_check_logs_first]].
+- **✅ DONE — v0.6.0 → v1.0.0 user-guide audit.** Of the 8 teacher one-pagers (gen'd by `scripts/build_user_guides.ps1`), only **06 Reports: cohort**
+  and **07 Reports: a student** need real edits (Math + the new RWM report now exist; "Math reporting is not in Reports yet" is false). 01/02/03/04/05/08
+  are a clean relabel. **By design, the grace window and the writing four-trait exception stay OUT of teacher docs** ([[project_grace_period_hidden_from_teachers]],
+  [[project_writing_trait_exclusion]]) — fixed a misleading TODO in the build script. User hand-edits their own screenshot copies; I was NOT asked to regenerate.
+- **1.1.0 still HELD OPEN** for tomorrow's (2026-10-05) first-full-staff-load batch (see note below).
+- **Blockers:** IT-side SP/OneLake fix (top item).
+
+### Left Off — 2026-10-04 — 🔴 APP INGEST BROKEN (SP→OneLake); run-log shipped; 1.1.0 held open
+- **🔴 TOP NEXT ACTION — send the IT request** [`docs/it-request-restore-sp-onelake.md`](it-request-restore-sp-onelake.md).
+  The **app-triggered ingest fails**: the data SP (`StudentDataAssessment`, App ID `c33fb2d3-b64e-4818-aa9b-0ac7515f1710`)
+  can connect + run SQL + is workspace Contributor, but can no longer get a **OneLake token for `COPY INTO`**
+  (a tenant SP setting changed outside our code — worked at the 08-27 cutover + the 09-12 ingest; broke between 09-12 and 09-29 — last good app ingest 09-12, confirmed failing/manual by 09-29). Fabric `COPY INTO`
+  is caller-passthrough only — **no Managed Identity** (Msg 13838, tested on dev) — so there is NO code workaround;
+  **IT must restore the SP's OneLake access**. Interim: run ingest manually in Fabric SQL as yourself (works + now logs).
+  Only affects the project lead right now (other ingest users not scoped until this is fixed). See [[reference_it_modifies_sps_and_copyinto_auth]].
+- **SHIPPED (dev + live):** ingest **run-log** — `IngestRunLog` + instrumented `usp_RunFullIngestCycle` / `usp_TriggerIngestCycle`
+  (who / when / App-vs-FabricSQL / rows-per-file). Collate a run by `CycleStart`, order steps by `LoggedAt`; do NOT sort on
+  `IngestRunLogID` (Fabric IDENTITY is non-monotonic). Co-teacher **silent-skip removed** — co-teachers always load;
+  `@SkipCoTeachers` is a deprecated no-op kept only for pre-1.1.0 container compat (remove once 1.1.0 is live).
+- **1.1.0 HELD OPEN deliberately** — batching tomorrow's (2026-10-05) first-full-staff-load fixes into one patch instead of
+  many swaps. Pending for the 1.1.0 cut: version bump + CHANGELOG/patchNotes (carry the ingest-page checkbox removal + the
+  run-log) + container swap. (`FABRIC_POOL_MAX=20` from the load test already shipped in 1.0.0.)
+- **ALSO QUEUED — math tasks:** check PowerSchool/source for **math-task updates** and load only the **differential** vs what's
+  already in `DimMathTask` (loader `usp_LoadMathTasks`, @SourceUri; re-derive the Excel→CSV format from `DimMathTask.sql` /
+  `sql/staging/Stg_MathTask.sql` / an existing grade CSV — the CSV mirrors the table columns, EN+FR on one key). See [[project_math_assessment_model]].
+- **Blockers:** the SP/OneLake fix is IT-side (top item).
+
+### Left Off — 2026-10-02 (eve) — 🟢 v1.0.0 FULLY LIVE + released; writing trait exclusion shipped
+- **Done — 1.0.0 is LIVE end-to-end**: live warehouse SQL deployed + verified (bundle `sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql`; 4 trait cols VARCHAR/167, remediation 0 rows) **AND** the corrected 1.0.0 container is swapped on prod (What's New shows only 1.0.0; `/api/health` 200). **Writing TRAIT-exclusion** feature live: data-driven `WritingTraitExclusion`, excluded trait stored as `-` (≠NULL), FI·P·Sep/Oct/Nov·Organization. [[project_writing_trait_exclusion]]. Fabric gotcha found + fixed: `TRY_CAST('-' AS INT)=0` → averages gate on `IN ('1'..'4')`.
+- **Done — git release ritual** (triggered by the live deploy, NOT a separate ask): `dev→main --no-ff`, tag **`v1.0.0`** pushed, **gh release** created (https://github.com/MrJRaine/Assessment-Data/releases/tag/v1.0.0), `main→dev` back-merge (dev == main @ 5940e52). Prod publish standard is now `-p 0.0.0.0:3000:3000` (WSL loopback-relay 502 fix — `docs/prod-container-swap.md`).
+- **Next action**: reconcile `dev-impersonation` with dev (carry the final SQL-fix + patchNotes + release commits) — done as part of this wrap. Then nothing outstanding on 1.0.0.
 - **Blockers**: None. (Prod-host `/etc/wsl.conf` is malformed ⇒ systemd + `/run/user/1001` don't auto-recover after a reboot; recovery steps are in the runbook — hardening, not blocking.)
 
 ### Left Off — 2026-10-02 — 🔬 First load test complete: app is FABRIC-BOUND (capacity data)

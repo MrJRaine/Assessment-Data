@@ -25,7 +25,6 @@ export default function IngestPanel() {
   const [rows, setRows] = useState<Record<string, RowState>>(
     Object.fromEntries(TOPICS.map((t) => [t.topic, { file: null, status: 'idle' as const }])),
   )
-  const [skipCo, setSkipCo] = useState(false)
   const [running, startRun] = useTransition()
   const [runResult, setRunResult] = useState<RunResult | null>(null)
   const inputs = useRef<Record<string, HTMLInputElement | null>>({})
@@ -56,7 +55,8 @@ export default function IngestPanel() {
 
   function run() {
     setRunResult(null)
-    startRun(async () => setRunResult(await runIngestCycle(skipCo)))
+    // Co-teachers always load now — no skip option (it silently dropped co-teachers' section access).
+    startRun(async () => setRunResult(await runIngestCycle()))
   }
 
   function statusCell(topic: string) {
@@ -114,10 +114,11 @@ export default function IngestPanel() {
       </table>
 
       <div className="ingest-run">
-        <label className="ingest-skip">
-          <input type="checkbox" checked={skipCo} onChange={(e) => setSkipCo(e.target.checked)} />
-          Skip co-teachers (no section-teachers file this cycle)
-        </label>
+        <p className="muted small">
+          All five files — including section-teachers (co-teachers) — load every cycle. Upload the
+          co-teacher export like the others; it is no longer optional (skipping it removed
+          co-teachers&apos; section access).
+        </p>
         {/* Step 1 — warn teachers. An ingest moves students between sections, and the save path
             scope-checks against the roster, so a teacher saving mid-ingest loses the entry to a
             message that sounds like their fault. The staged banner -> lock -> auto-save flushes
@@ -145,7 +146,7 @@ export default function IngestPanel() {
           ) : null}
         </div>
         {running ? (
-          <p className="muted">The orchestrator runs all loads + merges + the data-quality gate; this can take a minute.</p>
+          <p className="muted">The orchestrator runs all loads + merges + the data-quality gate; this can take a few minutes.</p>
         ) : null}
       </div>
     </>

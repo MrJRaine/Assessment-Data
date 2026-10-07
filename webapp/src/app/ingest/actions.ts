@@ -97,10 +97,10 @@ export async function scheduleIngestMaintenance(): Promise<NoticeResult> {
   }
 }
 
-export async function runIngestCycle(skipCoTeachers: boolean): Promise<RunResult> {
+export async function runIngestCycle(): Promise<RunResult> {
   try {
     const upn = await assertIngestAdmin()
-    await execProc('usp_TriggerIngestCycle', { SkipCoTeachers: skipCoTeachers ? 1 : 0, CallerUPN: upn })
+    await execProc('usp_TriggerIngestCycle', { CallerUPN: upn })
     // The ingest rewrites DimStaff and StaffAppAccess-adjacent data, so every cached role and
     // capability is now potentially wrong. Clearing here is what makes the 1h TTL on those caches
     // safe: they can only be stale until the data behind them actually changes, and this is that

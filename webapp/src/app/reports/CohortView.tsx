@@ -25,6 +25,9 @@ type CohortPersist = {
   prog?: string[]
   sch?: string[]
   ach?: (string | number)[] // string categories now ('1'..'4' | 'ipp' | 'nodata'); tolerate old numeric saves
+  sortKey?: string | null
+  sortDir?: 'asc' | 'desc'
+  assessableOnly?: boolean
 }
 function readCohortFilters(): CohortPersist {
   try {
@@ -39,6 +42,62 @@ function triMatch(sel: Tri, v: boolean | null): boolean {
   if (sel === 'All') return true
   if (sel === 'Yes') return v === true
   return v === false
+}
+
+// --- Column sort ------------------------------------------------------------------------------
+// Sortable value per column key. Reading-only columns (expected / diffExpected / diffJune) only
+// render for Reading, so they're only reachable there. 'level' sorts by the reading-scale ORDINAL
+// (reading) or the numeric average (writing). Strings are lowercased so sorting is case-insensitive.
+type SortKey =
+  | 'student' | 'lastName' | 'firstName' | 'studentNumber'
+  | 'grade' | 'homeroom' | 'school' | 'level' | 'expected' | 'diffExpected' | 'diffJune' | 'achievement'
+
+function sortVal(s: CohortStudent, key: SortKey): number | string | null {
+  const lc = (v: string | null) => (v == null ? null : v.toLowerCase())
+  switch (key) {
+    case 'student': return `${s.lastName ?? ''}\u0000${s.firstName ?? ''}`.toLowerCase()
+    case 'lastName': return lc(s.lastName)
+    case 'firstName': return lc(s.firstName)
+    case 'studentNumber': return s.studentNumber != null ? Number(s.studentNumber) : null // provincial #
+    case 'grade': return s.gradeOrder
+    case 'homeroom': return lc(s.homeroom)
+    case 'school': return lc(s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
+    case 'level': return s.mostRecentLevelOrder ?? (s.mostRecentLevelCode != null ? Number(s.mostRecentLevelCode) : null)
+    case 'expected': return s.chartEligible ? lc(s.expectedMin) : null // IPP: no benchmark target -> sort blank
+    // IPP / unresolved students are NOT compared to the expected benchmark, so they have no
+    // Diff-from-Expected — return null so they sort as blank (to the bottom), not by a stray value.
+    case 'diffExpected': return s.chartEligible ? s.mostRecentDelta : null
+    case 'diffJune': return s.diffFromPrevJune
+    // IPP / unresolved (unconfirmed-IPP) students show no achievement band, so they must not sort by
+    // a stray code — null sorts them blank (to the bottom), treating unconfirmed IPPs like IPPs.
+    case 'achievement': return s.chartEligible ? s.achievementCode : null
+    default: return null
+  }
+}
+
+type SortSpec = { key: SortKey; dir: 'asc' | 'desc' }
+// Table DEFAULT order (both subjects): School → Homeroom → Grade → Last → First → provincial Student #,
+// all ascending. A clicked column becomes the PRIMARY key with this order as the tiebreak, so the table
+// is always deterministic. "Reset sort order" clears the click back to this.
+const DEFAULT_ORDER: SortSpec[] = [
+  { key: 'school', dir: 'asc' }, { key: 'homeroom', dir: 'asc' }, { key: 'grade', dir: 'asc' },
+  { key: 'lastName', dir: 'asc' }, { key: 'firstName', dir: 'asc' }, { key: 'studentNumber', dir: 'asc' },
+]
+// Keys with a clickable header (the ▲/▼ indicator + highlight show on these).
+const SORTABLE_HEADERS: SortKey[] = ['student', 'grade', 'homeroom', 'school', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement']
+
+// Compare by an ordered spec; NULL/blank always sorts LAST regardless of direction; ties fall through.
+function multiCmp(a: CohortStudent, b: CohortStudent, spec: SortSpec[]): number {
+  for (const { key, dir } of spec) {
+    const va = sortVal(a, key), vb = sortVal(b, key)
+    const na = va == null || va === '', nb = vb == null || vb === ''
+    if (na && nb) continue
+    if (na) return 1
+    if (nb) return -1
+    const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    if (base !== 0) return dir === 'desc' ? -base : base
+  }
+  return 0
 }
 
 // Last 6 month buckets ending with the current month (oldest first).
@@ -57,10 +116,15 @@ export default function CohortView({
   cohort,
   bands,
   subject = 'Reading',
+  assessableRange = null,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
   subject?: 'Reading' | 'Writing'
+  // Grade-order range of students actually assessed for this subject (e.g. Reading = P–8), from the
+  // window metadata. When set, the "Assessable grades only" toggle (default ON) narrows the table +
+  // total to this range. null = no scope known → toggle hidden, all students shown.
+  assessableRange?: { minOrder: number; maxOrder: number } | null
 }) {
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
@@ -106,6 +170,27 @@ export default function CohortView({
   // Achievement filter values are STRING categories: '1'..'4' (the bands), 'ipp' (shown as "IPP"),
   // and 'nodata' (no achievement shown — measured-but-no-result, or unresolved IPP, both render "—").
   const [ach, setAch] = useState<Set<string>>(new Set())
+  // Assessable-only (default ON when a scope is known): narrow the table + total to the subject's
+  // assessed grades. The grade range comes from the window metadata (config-driven).
+  const [assessableOnly, setAssessableOnly] = useState(true)
+  const inAssessable = (s: CohortStudent) =>
+    !assessableOnly ||
+    assessableRange == null ||
+    (s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder)
+
+  // Column sort — 2-state (click a header → ascending; click the SAME header → flip to descending; a
+  // DIFFERENT header starts fresh at ascending). null = the DEFAULT_ORDER. "Reset sort order" → null.
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  function onSort(key: SortKey) {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+  const thCls = (k: SortKey) => `sortable${sortKey === k ? ' sorted' : ''}`
+  const caret = (k: SortKey) => (sortKey === k ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   function toggle<T>(set: Set<T>, v: T, setter: (s: Set<T>) => void) {
     const next = new Set(set)
@@ -155,6 +240,11 @@ export default function CohortView({
     if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
     if (p.ach) setAch(new Set(p.ach.map(String).filter((v) => achKeys.includes(v))))
+    if (p.sortKey && (SORTABLE_HEADERS as string[]).includes(p.sortKey)) {
+      setSortKey(p.sortKey as SortKey)
+      setSortDir(p.sortDir === 'desc' ? 'desc' : 'asc')
+    }
+    if (typeof p.assessableOnly === 'boolean') setAssessableOnly(p.assessableOnly)
     setReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -164,12 +254,12 @@ export default function CohortView({
     try {
       sessionStorage.setItem(
         COHORT_FILTER_KEY,
-        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach] }),
+        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], sortKey, sortDir, assessableOnly }),
       )
     } catch {
       /* private mode / storage blocked — filters just won't persist */
     }
-  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach])
+  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, sortKey, sortDir, assessableOnly])
 
   // Each student's single achievement-filter category, matching what the table shows:
   //  '1'..'4' = the band; 'ipp' = a confirmed IPP student (shows "IPP"); 'nodata' = everyone else
@@ -214,10 +304,26 @@ export default function CohortView({
   }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach])
 
   const filtered = useMemo(
-    () => cohort.filter((s) => matchExcept(s, '')),
+    () => cohort.filter((s) => matchExcept(s, '') && inAssessable(s)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
   )
+
+  // Total (the M in "N of M"): the assessable population when the toggle is ON, else the full cohort.
+  const baseTotal = useMemo(
+    () =>
+      assessableOnly && assessableRange
+        ? cohort.filter((s) => s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder).length
+        : cohort.length,
+    [cohort, assessableOnly, assessableRange],
+  )
+
+  // Display order: a clicked column as the PRIMARY key, then DEFAULT_ORDER as the tiebreak (so the
+  // table is always deterministic); with no click, just DEFAULT_ORDER.
+  const sorted = useMemo(() => {
+    const spec: SortSpec[] = sortKey ? [{ key: sortKey, dir: sortDir }, ...DEFAULT_ORDER] : DEFAULT_ORDER
+    return [...filtered].sort((a, b) => multiCmp(a, b, spec))
+  }, [filtered, sortKey, sortDir])
 
   // Chart-eligible subset (IPP / unresolved students excluded from aggregate stats).
   const chartRows = useMemo(() => filtered.filter((s) => s.chartEligible), [filtered])
@@ -277,13 +383,30 @@ export default function CohortView({
   return (
     <>
       <div className="cohort-bar">
-        <span className="muted">{filtered.length} of {cohort.length} students match</span>
+        <span className="muted">{filtered.length} of {baseTotal} students match</span>
+        {assessableRange ? (
+          <label className="assessable-toggle" title={`Show only the grades that participate in ${subject} — the rest don't take part, so they'd only pad the total.`}>
+            <input type="checkbox" checked={assessableOnly} onChange={(e) => setAssessableOnly(e.target.checked)} />
+            Participating grades only
+          </label>
+        ) : null}
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
           {expanded ? 'Hide filters' : 'Show filters'}
         </button>
         <button className="btn-ghost" onClick={reset}>
           Reset
         </button>
+        {sortKey ? (
+          <button
+            className="btn-ghost"
+            onClick={() => {
+              setSortKey(null)
+              setSortDir('asc')
+            }}
+          >
+            Reset sort order
+          </button>
+        ) : null}
       </div>
 
       {expanded ? (
@@ -496,22 +619,29 @@ export default function CohortView({
         <table className="grid">
           <thead>
             <tr>
-              <th>Student</th>
-              <th>Grade</th>
-              <th>Program</th>
-              <th>School</th>
-              <th>{subject === 'Writing' ? 'Avg' : 'Level'}</th>
-              {subject === 'Reading' ? <th>Expected</th> : null}
+              <th className={thCls('student')} onClick={() => onSort('student')}>Student{caret('student')}</th>
+              <th className={thCls('grade')} onClick={() => onSort('grade')}>Grade{caret('grade')}</th>
+              <th className={thCls('homeroom')} onClick={() => onSort('homeroom')}>Homeroom{caret('homeroom')}</th>
+              <th className={thCls('school')} onClick={() => onSort('school')}>School{caret('school')}</th>
+              <th className={thCls('level')} onClick={() => onSort('level')}>{subject === 'Writing' ? 'Avg' : 'Level'}{caret('level')}</th>
               {subject === 'Reading' ? (
-                <th>
-                  Diff from<br />Prev June
+                <th className={thCls('expected')} onClick={() => onSort('expected')}>Expected{caret('expected')}</th>
+              ) : null}
+              {subject === 'Reading' ? (
+                <th className={thCls('diffExpected')} onClick={() => onSort('diffExpected')} style={{ textAlign: 'center' }}>
+                  Diff from<br />Expected{caret('diffExpected')}
                 </th>
               ) : null}
-              <th>Achievement</th>
+              {subject === 'Reading' ? (
+                <th className={thCls('diffJune')} onClick={() => onSort('diffJune')} style={{ textAlign: 'center' }}>
+                  Diff from<br />Prev June{caret('diffJune')}
+                </th>
+              ) : null}
+              <th className={thCls('achievement')} onClick={() => onSort('achievement')}>Achievement{caret('achievement')}</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s) => {
+            {sorted.map((s) => {
               // IPP / unresolved students aren't measured against benchmarks — no achievement
               // tint or band (their reading level still shows). chartEligible = no IPP or IsIPP=0.
               const measured = s.chartEligible
@@ -523,15 +653,30 @@ export default function CohortView({
                     </Link>
                   </td>
                   <td>{s.grade ?? '—'}</td>
-                  <td>{s.programFamily ?? '—'}</td>
+                  <td>{s.homeroom ?? <span className="muted">—</span>}</td>
                   <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
                   <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
                   {subject === 'Reading' ? (
                     <td>
-                      {s.expectedMin && s.expectedMax ? (
+                      {/* IPP / unresolved students (!measured) have no benchmark target, so blank the Expected range. */}
+                      {measured && s.expectedMin && s.expectedMax ? (
                         s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
                       ) : (
                         <span className="muted">—</span>
+                      )}
+                    </td>
+                  ) : null}
+                  {subject === 'Reading' ? (
+                    <td style={{ textAlign: 'center' }}>
+                      {/* Diff from Expected = the latest score's signed distance from its benchmark (ReadingDelta).
+                          IPP / unresolved students (!measured) are NOT compared to the expected benchmark, so
+                          they show no value — the row's achievement column already marks them "IPP". */}
+                      {!measured || s.mostRecentDelta == null ? (
+                        <span className="muted">—</span>
+                      ) : (
+                        <strong style={{ color: s.mostRecentDelta > 0 ? '#137333' : s.mostRecentDelta < 0 ? '#a50e0e' : 'inherit' }}>
+                          {s.mostRecentDelta > 0 ? `+${s.mostRecentDelta}` : s.mostRecentDelta}
+                        </strong>
                       )}
                     </td>
                   ) : null}

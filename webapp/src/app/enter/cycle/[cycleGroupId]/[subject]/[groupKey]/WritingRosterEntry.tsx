@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { saveWritingAssessments, confirmRosterIPPs, type WritingEntry, type IppEntry } from './actions'
 import type { WritingRosterStudent, WritingLanguage } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
+import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
 
 const TRAITS = [
   { key: 'ideas', label: 'Ideas' },
@@ -127,6 +128,25 @@ export default function WritingRosterEntry({
   const ro = !editable
   const sg = useSmallGroup(roster)
 
+  // --- Unsaved-entry draft (localStorage, 90-min TTL, studentKey-keyed; separate per language) -----
+  // Survives a refresh / closed tab / crash. Stores ONLY surrogate keys + the 1–4/SCR trait scores
+  // (no student number/name). See components/entryDraft.
+  const dkey = draftKey(`writing:${language}`, windowId, groupKey)
+  const validKeys = useMemo(() => new Set(roster.map((s) => s.studentKey)), [roster])
+  const [restored, setRestored] = useState<{ n: number; dropped: number } | null>(null)
+  useEffect(() => {
+    const d = readDraft<ScoreSet>(dkey, validKeys)
+    if (!d) return
+    if (Object.keys(d.v).length) setSel((prev) => ({ ...prev, ...d.v }))
+    setRestored({ n: Object.keys(d.v).length, dropped: d.dropped })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const dirty: Record<string, ScoreSet> = {}
+    for (const [k, v] of Object.entries(sel)) if (!eqSet(v, base[k])) dirty[k] = v
+    writeDraft(dkey, dirty)
+  }, [sel, base, dkey])
+
   // "New Data" — which rows Save acts on. Auto-checked when the row's scores differ from the
   // committed set (today's behaviour); a MANUAL toggle overrides so a teacher can re-record an
   // IDENTICAL result on a new day. Save still requires all four traits: a checked-but-incomplete row
@@ -187,40 +207,46 @@ export default function WritingRosterEntry({
       .filter((e): e is IppEntry => e !== null)
 
     startTransition(async () => {
-      const wRes = writingEntries.length
-        ? await saveWritingAssessments(windowId, groupKey, writingEntries, language)
-        : { saved: 0, errors: [] as { studentNumber: string; message: string }[] }
-      const ippRes = ippEntries.length
-        ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing', language)
-        : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
+      try {
+        const wRes = writingEntries.length
+          ? await saveWritingAssessments(windowId, groupKey, writingEntries, language)
+          : { saved: 0, errors: [] as { studentNumber: string; message: string }[] }
+        const ippRes = ippEntries.length
+          ? await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Writing', language)
+          : { saved: 0, errors: [] as { studentKey: string; message: string }[] }
 
-      const errs: SaveSummary['errors'] = []
-      for (const e of wRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
-      for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
-      for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
-      for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
-      setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
+        const errs: SaveSummary['errors'] = []
+        for (const e of wRes.errors) errs.push({ label: nameByNum.get(e.studentNumber) ?? `Student ${e.studentNumber}`, message: e.message })
+        for (const e of ippRes.errors) errs.push({ label: nameByKey.get(e.studentKey) ?? 'Student', message: e.message })
+        for (const k of incomplete) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'All assessed traits required — not saved.' })
+        for (const k of missingPf) errs.push({ label: nameByKey.get(k) ?? 'Student', message: 'Missing program family — redeploy tvf_TeacherRosterWriting.' })
+        setResult({ saved: wRes.saved + ippRes.saved, errors: errs })
+        if (errs.length === 0) setRestored(null) // restored work is now saved — drop the banner
 
-      const erroredNums = new Set(wRes.errors.map((e) => e.studentNumber))
-      setBase((prev) => {
-        const next = { ...prev }
-        for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) next[k] = { ...sel[k] }
-        return next
-      })
-      // Un-check saved rows (baseline == sel now, so auto-check is false; drop any manual override).
-      setEvidenceManual((prev) => {
-        const next = { ...prev }
-        for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
-        return next
-      })
-      const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
-      setIppSel((prev) => {
-        const next = { ...prev }
-        for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
-        return next
-      })
-      markSaved() // at T-5 the next save is what locks input
-      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+        const erroredNums = new Set(wRes.errors.map((e) => e.studentNumber))
+        setBase((prev) => {
+          const next = { ...prev }
+          for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) next[k] = { ...sel[k] }
+          return next
+        })
+        // Un-check saved rows (baseline == sel now, so auto-check is false; drop any manual override).
+        setEvidenceManual((prev) => {
+          const next = { ...prev }
+          for (const k of ready) if (!erroredNums.has(numByKey.get(k)!)) delete next[k]
+          return next
+        })
+        const erroredKeys = new Set([...ippRes.errors.map((e) => e.studentKey), ...missingPf])
+        setIppSel((prev) => {
+          const next = { ...prev }
+          for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
+          return next
+        })
+        markSaved() // at T-5 the next save is what locks input
+        if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      } catch {
+        // Backstop: keep the grid mounted + rows dirty if the save unexpectedly throws (no base advance ran).
+        setResult({ saved: 0, errors: [{ label: 'Save failed', message: 'Could not save right now — your entries are still on screen. Please try again.' }] })
+      }
     })
   }
 
@@ -245,6 +271,17 @@ export default function WritingRosterEntry({
               )}
             </>
           )}
+        </div>
+      )}
+      {restored && (restored.n > 0 || restored.dropped > 0) && (
+        <div className="no-tasks">
+          {restored.n > 0 && (
+            <><strong>Restored {restored.n} unsaved {restored.n === 1 ? 'entry' : 'entries'}</strong> from an earlier session — review and Save. </>
+          )}
+          {restored.dropped > 0 && (
+            <>{restored.dropped} could not be restored (those students are no longer on this roster). </>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => setRestored(null)}>Dismiss</button>
         </div>
       )}
       <SmallGroupFilter sg={sg} />

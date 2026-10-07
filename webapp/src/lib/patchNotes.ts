@@ -16,6 +16,34 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.1.0',
+    date: '2026-10-07',
+    kind: 'feature',
+    summary:
+      'Your in-progress entries are now kept safe on your own device: if the page reloads or closes before you Save, you’ll see a “Restored unsaved entries” note when you come back and your work will be there — for about 90 minutes, or until you Save.',
+  },
+  {
+    version: '1.1.0',
+    date: '2026-10-07',
+    kind: 'feature',
+    summary:
+      'Reports can now be viewed by Short Cycle. Pick a cycle at the top of a cohort report to see where students stood for that cycle, or stay on “Current” for the most recent results. Works for Reading, Writing, Math and RWM.',
+  },
+  {
+    version: '1.1.0',
+    date: '2026-10-06',
+    kind: 'fix',
+    summary:
+      'Late French Immersion classes can now record English reading levels. The English sections already showed the English scale, but saving a level was being blocked — that’s fixed, so a level now saves against whichever reading scale the cycle uses.',
+  },
+  {
+    version: '1.1.0',
+    date: '2026-10-05',
+    kind: 'feature',
+    summary:
+      'On the Reports cohort table you can now sort by any column — click a heading to sort, click it again to reverse. The table shows Homeroom instead of Program (Program is still a filter), and Reading adds a "Diff from Expected" column showing how far each student’s latest level is above or below the expected benchmark. The total now counts only the grades that participate in the subject (e.g. Reading grades Primary–8) — flip "Participating grades only" off to include everyone.',
+  },
+  {
     version: '1.0.0',
     date: '2026-10-02',
     kind: 'feature',

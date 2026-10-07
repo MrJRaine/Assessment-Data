@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import type { MathRosterRow } from '@/lib/data'
 import { saveMathAssessments, type MathEntry } from './actions'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
+import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
 
 // Cell state: '1' can-do · '0' cannot · 'clear' explicit blank · 'ipp' the IPP default (no stored mark).
 type Mark = '1' | '0' | 'clear' | 'ipp'
@@ -127,6 +128,25 @@ export default function MathRosterEntry({
   const editable = !locked || override
   const ro = !editable
 
+  // --- Unsaved-entry draft (localStorage, 90-min TTL, keyed studentKey:taskKey) --------------------
+  // Survives a refresh / closed tab / crash. Stores ONLY surrogate keys + the 0/1 mark (no student
+  // number/name). See components/entryDraft.
+  const dkey = draftKey('math', windowId, groupKey)
+  const validKeys = useMemo(() => new Set(Object.keys(studentNumberByKey)), [studentNumberByKey])
+  const [restored, setRestored] = useState<{ n: number; dropped: number } | null>(null)
+  useEffect(() => {
+    const d = readDraft<Mark>(dkey, validKeys)
+    if (!d) return
+    if (Object.keys(d.v).length) setMarks((prev) => ({ ...prev, ...d.v }))
+    setRestored({ n: Object.keys(d.v).length, dropped: d.dropped })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const dirty: Record<string, Mark> = {}
+    for (const [k, v] of Object.entries(marks)) if (v !== committed[k]) dirty[k] = v
+    writeDraft(dkey, dirty)
+  }, [marks, committed, dkey])
+
   const multi = grades.length > 1
   const activeTasks = (u: Unit) => u.tasks.filter((t) => !deselected.has(t.mathTaskKey))
   const shownStudents = (g: Grade) => g.students.filter((s) => shownStu.has(s.studentKey))
@@ -198,20 +218,26 @@ export default function MathRosterEntry({
       }
     })
     startSave(async () => {
-      const res = await saveMathAssessments(windowId, groupKey, entries)
-      setResult(res)
-      // Clear dirty for cells that saved (everything not in the error list), matched by student+task.
-      const failed = new Set(res.errors.map((e) => `${e.studentNumber}:${e.mathTaskKey}`))
-      setCommitted((prev) => {
-        const nextC = { ...prev }
-        for (const k of dirtyKeys) {
-          const [studentKey, taskKey] = k.split(':')
-          if (!failed.has(`${studentNumberByKey[studentKey]}:${taskKey}`)) nextC[k] = marks[k]
-        }
-        return nextC
-      })
-      markSaved() // at T-5 the next save is what locks input
-      if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      try {
+        const res = await saveMathAssessments(windowId, groupKey, entries)
+        setResult(res)
+        if (res.errors.length === 0) setRestored(null) // restored marks are now saved — drop the banner
+        // Clear dirty for cells that saved (everything not in the error list), matched by student+task.
+        const failed = new Set(res.errors.map((e) => `${e.studentNumber}:${e.mathTaskKey}`))
+        setCommitted((prev) => {
+          const nextC = { ...prev }
+          for (const k of dirtyKeys) {
+            const [studentKey, taskKey] = k.split(':')
+            if (!failed.has(`${studentNumberByKey[studentKey]}:${taskKey}`)) nextC[k] = marks[k]
+          }
+          return nextC
+        })
+        markSaved() // at T-5 the next save is what locks input
+        if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
+      } catch {
+        // Backstop: keep the grid mounted + cells dirty if the save unexpectedly throws (no commit ran).
+        setResult({ saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: 'Could not save right now — your marks are still on screen. Please try again.' })) })
+      }
     })
   }
 
@@ -296,6 +322,18 @@ export default function MathRosterEntry({
             ))}
           </div>
         </>
+      )}
+
+      {restored && (restored.n > 0 || restored.dropped > 0) && (
+        <div className="no-tasks">
+          {restored.n > 0 && (
+            <><strong>Restored {restored.n} unsaved {restored.n === 1 ? 'mark' : 'marks'}</strong> from an earlier session — review and Save. </>
+          )}
+          {restored.dropped > 0 && (
+            <>{restored.dropped} could not be restored (those students are no longer on this roster). </>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => setRestored(null)}>Dismiss</button>
+        </div>
       )}
 
       {/* student filter */}

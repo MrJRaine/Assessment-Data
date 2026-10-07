@@ -21,7 +21,7 @@
 DROP FUNCTION IF EXISTS dbo.tvf_StudentCohortMath;
 GO
 
-CREATE FUNCTION dbo.tvf_StudentCohortMath(@UPN VARCHAR(255), @GroupKey VARCHAR(70))
+CREATE FUNCTION dbo.tvf_StudentCohortMath(@UPN VARCHAR(255), @GroupKey VARCHAR(70), @CycleGroupID VARCHAR(36) = NULL)
 RETURNS TABLE
 AS
 RETURN
@@ -39,7 +39,10 @@ RETURN
                     GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w
         CROSS JOIN CurYear cy
+        -- @CycleGroupID (2026-10-07): NULL = all current-year math windows (lifetime "Current");
+        -- a cycle id narrows to that cycle's Math window(s). Mirrors tvf_StudentCohort.
         WHERE w.AssessmentType = 'Math' AND w.ActiveFlag = 1 AND w.SchoolYear = cy.Yr
+          AND (@CycleGroupID IS NULL OR w.CycleGroupID = @CycleGroupID)
     ),
     -- The group's students, current + P-6, intersected with the caller's SCOPE.
     GroupStudents AS (
