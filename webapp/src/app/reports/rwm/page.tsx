@@ -1,19 +1,28 @@
 import Link from 'next/link'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
-import { getStudentCohortRWM, type RWMStudent } from '@/lib/data'
+import { getStudentCohortRWM, getReportCycles, type RWMStudent, type ReportCycle } from '@/lib/data'
 import RWMCohortView from './RWMCohortView'
+import CycleSelector from '../CycleSelector'
 
 export const dynamic = 'force-dynamic'
 
 // Reports > RWM: a 0–3 Reading·Writing·Math achievement roll-up, Primary–6 only.
-export default async function RwmReportsPage() {
+export default async function RwmReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle?: string }>
+}) {
+  const { cycle: cycleParam } = await searchParams
+  const cycle = cycleParam ?? null
   const upn = await getCurrentUpn()
 
   let cohort: RWMStudent[] = []
+  let cycles: ReportCycle[] = []
   let error: string | null = null
   try {
-    cohort = await getStudentCohortRWM(upn)
+    cohort = await getStudentCohortRWM(upn, cycle)
+    cycles = await getReportCycles()
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
@@ -32,6 +41,7 @@ export default async function RwmReportsPage() {
         result is Meeting or Exceeding (Math: rolled-up ≥ 75%). Students with a confirmed IPP in any of
         the three are excluded.
       </p>
+      {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       {error ? (
         <ErrorNote message={error} />
       ) : cohort.length === 0 ? (

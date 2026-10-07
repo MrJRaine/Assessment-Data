@@ -23,7 +23,7 @@
 DROP FUNCTION IF EXISTS dbo.tvf_StudentCohortWriting;
 GO
 
-CREATE FUNCTION dbo.tvf_StudentCohortWriting(@UPN VARCHAR(255))
+CREATE FUNCTION dbo.tvf_StudentCohortWriting(@UPN VARCHAR(255), @CycleGroupID VARCHAR(36) = NULL)
 RETURNS TABLE
 AS
 RETURN
@@ -57,6 +57,12 @@ RETURN
                 ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentWriting faw
+        -- @CycleGroupID (2026-10-07): NULL = lifetime latest ("Current"); a cycle id scopes the
+        -- latest-pick to that cycle's Writing window(s). Mirrors tvf_StudentCohort.
+        WHERE @CycleGroupID IS NULL
+           OR faw.AssessmentWindowID IN (
+                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Writing' AND w.ActiveFlag = 1)
     ),
     CurrentWritingIPP AS (
         SELECT fsi.StudentKey, fsi.ProgramFamily, fsi.IsIPP
