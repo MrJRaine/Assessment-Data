@@ -11,6 +11,21 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [1.0.1] — 2026-10-07
+
+Warehouse-only patch — **no container rebuild**. The fix is a stored-procedure change deployed to the live
+warehouse; the only app-layer delta would be the version string + this changelog (cosmetic), so the live
+container stays on the 1.0.0 image and the app footer continues to read 1.0.0.
+
+### Fixed
+- **Reading entry: Late French Immersion (J020) can now record English reading levels.** The entry validation
+  (`usp_UpsertReadingAssessment`, THROW 51014) hardcoded French Immersion → `FR_Reading`, so saving an English
+  level for a late-immersion student was rejected even though the roster correctly displayed the English scale.
+  The check is now **instance-based** — the entered scale must match the cycle instance's `ScaleSystem`
+  (`COALESCE(window.ScaleSystem, program-family fallback)`), mirroring `tvf_TeacherRoster`, so entry accepts
+  exactly what the roster shows. The Early-Immersion → French guard still fires. **SQL (live warehouse):**
+  redeploy `sql/procedures/usp_UpsertReadingAssessment.sql`.
+
 ## [1.0.0] — 2026-10-02
 
 First production release of the SCoR Dashboard.
