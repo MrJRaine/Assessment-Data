@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { saveReadingAssessments, confirmRosterIPPs, type SaveResult, type IppEntry } from './actions'
 import type { RosterStudent, ScaleLevel, AchievementBand } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
+import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
 
 // ReadingDelta from a level's order vs the expected [min,max] range -- mirrors the server
 // formula in usp_UpsertReadingAssessment so the live (pre-save) value matches what Save stores.
@@ -90,6 +91,27 @@ export default function RosterEntry({
   const [override, setOverride] = useState(false)
   const editable = !locked || override
   const ro = !editable // read-only: disables every input + Save
+
+  // --- Unsaved-entry draft (localStorage, 90-min TTL, studentKey-keyed) ---------------------------
+  // Survives a refresh / closed tab / crash so a teacher's in-progress entries aren't lost. Stores
+  // ONLY surrogate keys + the chosen ReadingScaleID (no student number/name). See components/entryDraft.
+  const dkey = draftKey('reading', windowId, groupKey)
+  const validKeys = useMemo(() => new Set(roster.map((s) => s.studentKey)), [roster])
+  const [restored, setRestored] = useState<{ n: number; dropped: number } | null>(null)
+  useEffect(() => {
+    const d = readDraft<string>(dkey, validKeys)
+    if (!d) return
+    if (Object.keys(d.v).length) setSel((prev) => ({ ...prev, ...d.v }))
+    setRestored({ n: Object.keys(d.v).length, dropped: d.dropped })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // Persist the dirty subset (changed levels) on every edit/save; clears automatically once a row saves
+  // (baseline advances, so it drops out of "dirty") and when the grid is fully clean.
+  useEffect(() => {
+    const dirty: Record<string, string> = {}
+    for (const [k, v] of Object.entries(sel)) if (v && v !== baseline[k]) dirty[k] = v
+    writeDraft(dkey, dirty)
+  }, [sel, baseline, dkey])
   // Grades 7-8 are assessed only until a student reaches the expected (Grade-6 June) level, so
   // default-hide any 7/8 student whose most recent reading is already Meeting/Exceeding (delta >= 0).
   // Non-IPP, benchmark-resolved only; they stay listed in the Students picker to re-show.
@@ -211,6 +233,17 @@ export default function RosterEntry({
               )}
             </>
           )}
+        </div>
+      )}
+      {restored && (restored.n > 0 || restored.dropped > 0) && (
+        <div className="no-tasks">
+          {restored.n > 0 && (
+            <><strong>Restored {restored.n} unsaved {restored.n === 1 ? 'entry' : 'entries'}</strong> from an earlier session — review and Save. </>
+          )}
+          {restored.dropped > 0 && (
+            <>{restored.dropped} could not be restored (those students are no longer on this roster). </>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => setRestored(null)}>Dismiss</button>
         </div>
       )}
       <SmallGroupFilter

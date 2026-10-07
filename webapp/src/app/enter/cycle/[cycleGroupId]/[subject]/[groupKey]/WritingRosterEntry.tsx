@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { saveWritingAssessments, confirmRosterIPPs, type WritingEntry, type IppEntry } from './actions'
 import type { WritingRosterStudent, WritingLanguage } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
+import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
 
 const TRAITS = [
   { key: 'ideas', label: 'Ideas' },
@@ -126,6 +127,25 @@ export default function WritingRosterEntry({
   const editable = !locked || override
   const ro = !editable
   const sg = useSmallGroup(roster)
+
+  // --- Unsaved-entry draft (localStorage, 90-min TTL, studentKey-keyed; separate per language) -----
+  // Survives a refresh / closed tab / crash. Stores ONLY surrogate keys + the 1–4/SCR trait scores
+  // (no student number/name). See components/entryDraft.
+  const dkey = draftKey(`writing:${language}`, windowId, groupKey)
+  const validKeys = useMemo(() => new Set(roster.map((s) => s.studentKey)), [roster])
+  const [restored, setRestored] = useState<{ n: number; dropped: number } | null>(null)
+  useEffect(() => {
+    const d = readDraft<ScoreSet>(dkey, validKeys)
+    if (!d) return
+    if (Object.keys(d.v).length) setSel((prev) => ({ ...prev, ...d.v }))
+    setRestored({ n: Object.keys(d.v).length, dropped: d.dropped })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    const dirty: Record<string, ScoreSet> = {}
+    for (const [k, v] of Object.entries(sel)) if (!eqSet(v, base[k])) dirty[k] = v
+    writeDraft(dkey, dirty)
+  }, [sel, base, dkey])
 
   // "New Data" — which rows Save acts on. Auto-checked when the row's scores differ from the
   // committed set (today's behaviour); a MANUAL toggle overrides so a teacher can re-record an
@@ -250,6 +270,17 @@ export default function WritingRosterEntry({
               )}
             </>
           )}
+        </div>
+      )}
+      {restored && (restored.n > 0 || restored.dropped > 0) && (
+        <div className="no-tasks">
+          {restored.n > 0 && (
+            <><strong>Restored {restored.n} unsaved {restored.n === 1 ? 'entry' : 'entries'}</strong> from an earlier session — review and Save. </>
+          )}
+          {restored.dropped > 0 && (
+            <>{restored.dropped} could not be restored (those students are no longer on this roster). </>
+          )}
+          <button type="button" className="btn-ghost" onClick={() => setRestored(null)}>Dismiss</button>
         </div>
       )}
       <SmallGroupFilter sg={sg} />
