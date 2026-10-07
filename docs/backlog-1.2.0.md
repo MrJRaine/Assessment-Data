@@ -9,4 +9,6 @@ the 51014 reading fix, the IPP report-column fixes, the cohort QoL already built
 time-binding fan-out.)
 
 ## Deferred QoL
-- _(none yet — add as they come up)_
+- **Loading indicator on the Reports cycle-selector chips.** Clicking a cycle chip triggers a server
+  round-trip (force-dynamic) with no feedback — add a loading state on the clicked chip (e.g. spinner /
+  disabled-pending via `useLinkStatus`) so it's clear the report is refreshing.
