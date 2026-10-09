@@ -3,9 +3,10 @@ param(
   [Parameter(Mandatory)][string]$New      # new combined CSV path
 )
 # Differential between the previously-loaded math task bank and the new one.
-# Normalizes old AssessmentMonth 10 -> 9 first (old files predate the dim fix) so the
-# natural key (GradeCode, AssessmentMonth, UnitName, QuestionNumber) aligns and we see
-# TRUE content changes, not month-relabel noise.
+# Normalizes old AssessmentMonth to the canonical SCoR set (10->9, 2->1, 5->4) first — old files
+# predate the conversion-time month fix (project_math_task_month_miscoding) — so the natural key
+# (GradeCode, AssessmentMonth, UnitName, QuestionNumber) aligns and we see TRUE content changes,
+# not month-relabel noise.
 $ErrorActionPreference = 'Stop'
 $cmp = 'UnitOrder','DisplayOrder','OutcomeCode','TaskDescriptionEN','TaskDescriptionFR','AnswerKey','AnswerKeyFR','ActiveFlag'
 function NK($r){ "$($r.GradeCode)|$($r.AssessmentMonth)|$($r.UnitName)|$($r.QuestionNumber)" }
@@ -13,7 +14,9 @@ function NK($r){ "$($r.GradeCode)|$($r.AssessmentMonth)|$($r.UnitName)|$($r.Ques
 $oldRows = @()
 foreach ($f in $Old) {
   $rows = Import-Csv -Path $f
-  foreach ($r in $rows) { if ($r.AssessmentMonth -eq '10') { $r.AssessmentMonth = '9' } }
+  foreach ($r in $rows) {
+    switch ($r.AssessmentMonth) { '10' { $r.AssessmentMonth = '9' } '2' { $r.AssessmentMonth = '1' } '5' { $r.AssessmentMonth = '4' } }
+  }
   $oldRows += $rows
 }
 $newRows = Import-Csv -Path $New
