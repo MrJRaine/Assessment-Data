@@ -13,6 +13,14 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Fixed
+- **Cohort report — stale rows after the Reading/Writing or cycle toggle.** The subject toggle and
+  cycle selector are same-route soft navigations, so React reconciled the cohort table in place and
+  could leave rows from the previous view mounted (e.g. a block of *reading* rows — with reading
+  columns and reading links — sitting inside a filtered *writing* report, inert to the sort, until a
+  hard refresh). The table now remounts when the subject or cycle changes, so it always rebuilds
+  fresh; filters/sort are preserved via sessionStorage.
+
 ### Changed
 - **Math reports — units start collapsed.** The cohort grid and the single-student drill-down now
   open with every unit collapsed; expand the units you want. (Previously units rendered open.)
