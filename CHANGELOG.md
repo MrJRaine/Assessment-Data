@@ -14,6 +14,14 @@ with `0.3.0`, so earlier detail is approximate.
 ## [Unreleased]
 
 ### Fixed
+- **Math entry — large saves no longer time out (and no more false "couldn't save").** A full math
+  class is per-student×per-task (100+ marks), and the save ran them one at a time — a ~2-minute
+  request that tripped the prod proxy timeout and showed a "Could not save" line per mark even when
+  the marks had actually committed. The per-mark upserts now run **concurrently over the connection
+  pool** (~2 min → ~seconds). If a save still can't be confirmed (timeout/transport), the grid now
+  shows **one** honest notice — "Couldn't confirm the save — reload to check before re-entering; the
+  page remembers your entries for ~90 minutes" — instead of one error per mark, and keeps the entries
+  in the draft so a reload recovers them.
 - **Cohort report — stale rows after the Reading/Writing or cycle toggle.** The subject toggle and
   cycle selector are same-route soft navigations, so React reconciled the cohort table in place and
   could leave rows from the previous view mounted (e.g. a block of *reading* rows — with reading

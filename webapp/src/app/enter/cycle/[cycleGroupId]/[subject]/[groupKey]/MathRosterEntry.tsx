@@ -121,7 +121,9 @@ export default function MathRosterEntry({
   const [editMode, setEditMode] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [saving, startSave] = useTransition()
-  const [result, setResult] = useState<{ saved: number; errors: { studentNumber: string; mathTaskKey: string; message: string }[] } | null>(null)
+  // `unconfirmed` = the save request itself didn't come back (transport/timeout). We DON'T know what
+  // committed, so we neither claim success nor flag every cell failed — we tell the teacher to reload.
+  const [result, setResult] = useState<{ saved: number; errors: { studentNumber: string; mathTaskKey: string; message: string }[]; unconfirmed?: boolean } | null>(null)
   // Grace-lock: read-only when locked; an override-holder flips it on for THIS group with a one-shot
   // toggle that reverts after the next save completes (see the save handler).
   const [override, setOverride] = useState(false)
@@ -235,8 +237,10 @@ export default function MathRosterEntry({
         markSaved() // at T-5 the next save is what locks input
         if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
       } catch {
-        // Backstop: keep the grid mounted + cells dirty if the save unexpectedly throws (no commit ran).
-        setResult({ saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: 'Could not save right now — your marks are still on screen. Please try again.' })) })
+        // The request didn't return (timeout/transport). Some or all marks may have committed server
+        // side, or none did — we can't tell. Keep the grid + dirty cells, and show ONE honest notice
+        // (not one error per mark). The draft keeps the entries for 90 min, so a reload recovers them.
+        setResult({ saved: 0, errors: [], unconfirmed: true })
       }
     })
   }
@@ -380,12 +384,19 @@ export default function MathRosterEntry({
         <div className="loading"><span className="spinner" /> Saving changes…</div>
       )}
       {result && !saving && (
-        <p className="save-result">
-          Saved {result.saved}
-          {result.errors.length > 0 && <span className="err"> · {result.errors.length} failed</span>}
-        </p>
+        result.unconfirmed ? (
+          <p className="save-result err">
+            Couldn&apos;t confirm the save — <strong>reload</strong> to check before re-entering. The page
+            remembers what you&apos;ve entered for about 90 minutes, so it won&apos;t be lost.
+          </p>
+        ) : (
+          <p className="save-result">
+            Saved {result.saved}
+            {result.errors.length > 0 && <span className="err"> · {result.errors.length} failed</span>}
+          </p>
+        )
       )}
-      {result && result.errors.length > 0 && !saving && (
+      {result && !result.unconfirmed && result.errors.length > 0 && !saving && (
         <ul className="save-errors">
           {result.errors.map((e, i) => (
             <li key={i}>{e.message}</li>
