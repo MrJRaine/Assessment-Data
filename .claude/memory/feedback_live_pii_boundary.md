@@ -11,6 +11,14 @@ Claude has no ambient DB access — data only enters Claude's context when Claud
 
 **Why:** the project rule "never route real PS PII through Claude" (see [[feedback_compliance_flagging]]) — student PII must stay in Fabric (Canada East) and the app, not leave Canada through Claude's context.
 
+**Staff name + work email are NOT PII (user clarification 2026-10-09)** — a staff member's name and
+`@tcrce.ca` work address are publicly available information, so they are NOT subject to the student-PII
+boundary below. Returning a staff row (DimStaff/Stg_Staff: name, work email, title, school, role, access
+flags) into context for a diagnostic is fine; don't over-flag it as a privacy/residency breach. This is
+narrow — it does NOT extend to student rows, nor to any non-public personal staff detail. (The separate
+rule that Claude never *executes* SQL against the warehouse — [[feedback_sql_write_authorization]] — still
+applies regardless: the user runs it.)
+
 **How to apply (once REAL PowerSchool data is ingested — pre-cutover synthetic data is fine):**
 - SAFE for Claude to run against live: DDL/schema, `COUNT(*)`/aggregates, `EXPLAIN`, structural checks, deploys, builds, container ops — nothing that returns student rows.
 - DO NOT run against live: `SELECT *` / row-level reads, the `@UPN` TVFs (tvf_StudentCohort / tvf_TeacherRoster / tvf_StudentIPP / vw_*) with a real UPN, anything returning names / StudentNumber / levels. If data-shape verification is needed, use counts/aggregates or ask the USER to run it and share only de-identified results.
