@@ -158,7 +158,7 @@ GradeCode,AssessmentMonth,UnitName,UnitOrder,QuestionNumber,DisplayOrder,Outcome
 "1","11","Unit 3","3","8b","33","N08.01","Identify 1 less","Identifier 1 de moins","7","7","1"
 "1","11","Unit 3","3","9a","34","N03.02","Identify counting error","Identifier une erreur dans la séquence de nombres","no","non","1"
 "1","11","Unit 3","3","9b","35","N03.02","Identify counting error","Corriger la séquence de compte","14 15 16 17 18 19 20 or says 16 was missing","14 15 16 17 18 19 20 ou dire que 16 n'était pas là","1"
-"1","11","Unit 3","3","10","36","N06.02","Estimate with a referent and select from possible estimates (N06.01, N06.02)","Estimer à l'aide d'un référant et choisir une des estimations possibles","10","10","1"
+"1","11","Unit 3","3","10","36","N06.02","Estimate with a referent and select from possible estimates","Estimer à l'aide d'un référant et choisir une des estimations possibles","10","10","1"
 "1","1","Unit 5","5","1","38","N01.01","Start at 47, count forward by 1","Commencer à compter en ordre croissant par sauts de 1 à partir de 47 .","47 48 49 50 51 52 53","47 48 49 50 51 52 53","1"
 "1","1","Unit 5","5","2","39","N01.02","Start at 34, count backward by 1","Commencer à compter en ordre décroissant pas sauts de 1 à partir de 34","34 33 32 31 30 29 28","34 33 32 31 30 29 28","1"
 "1","1","Unit 5","5","3a","40","N01.04","Read a numeral.","Lire le numéral","50","50","1"

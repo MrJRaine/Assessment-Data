@@ -22,10 +22,12 @@ function Clean($s){
   $s = $s -replace '[\r\n\t]+',' '
   $s.Trim()
 }
-# Strip a TRAILING outcome-code parenthetical, e.g. " (N01.01)" or " (N010.01)." — the code
-# lives in its own OutcomeCode column and was never in the team's sheet (per project convention).
-# Keeps any trailing period and leaves legit mid-text parentheticals alone (anchored to end).
-function StripCode($s){ ((Clean $s) -replace '\s*\([A-Za-z]{1,2}\d{2,3}\.\d{2}\)(\.?)\s*$','$1').Trim() }
+# Strip a TRAILING outcome-code parenthetical, e.g. " (N01.01)", " (N010.01)." or a MULTI-code
+# " (N06.01, N06.02)" — the code lives in its own OutcomeCode column and was never in the team's
+# sheet (per project convention). Keeps any trailing period and leaves legit mid-text parentheticals
+# (e.g. "(correct spelling is not required)", "(3 x 4)") alone — the content must be ONLY codes, and
+# it is anchored to end of string.
+function StripCode($s){ ((Clean $s) -replace '\s*\([A-Za-z]{1,2}\d{2,3}\.\d{2}(?:\s*,\s*[A-Za-z]{1,2}\d{2,3}\.\d{2})*\)(\.?)\s*$','$1').Trim() }
 function Q($s){ '"' + ((Clean $s) -replace '"','""') + '"' }
 function QDesc($s){ '"' + ((StripCode $s) -replace '"','""') + '"' }
 

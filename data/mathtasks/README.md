@@ -37,7 +37,7 @@ Their sheet → our column, with the transforms (all handled by `scripts/mathtas
 | QuestionNumber | `QuestionNumber` | verbatim (`1`, `2a`, …) — part of the natural key, do not reformat |
 | DisplayOrder | `DisplayOrder` | — |
 | OutcomeCode | `PerformanceIndicator Number` | — |
-| TaskDescriptionEN | `TaskDescriptionEN` | **strip trailing outcome-code parenthetical** e.g. ` (N01.01)` — the code lives in OutcomeCode and was never in the team's sheet |
+| TaskDescriptionEN | `TaskDescriptionEN` | **strip trailing outcome-code parenthetical** e.g. ` (N01.01)` — incl. multi-code ` (N06.01, N06.02)` — the code lives in OutcomeCode and was never in the team's sheet |
 | TaskDescriptionFR | `TaskDescriptionFR` | same strip |
 | AnswerKey | `AnswerKeyEN` | — |
 | AnswerKeyFR | `AnswerKeyFR` | — |
