@@ -7,7 +7,7 @@ import CycleSelector from '../CycleSelector'
 
 export const dynamic = 'force-dynamic'
 
-// Reports > RWM: a 0–3 Reading·Writing·Math achievement roll-up, Primary–6 only.
+// Reports > RWM: a 0–3 Reading·Writing·Math achievement roll-up, Primary–5 only.
 export default async function RwmReportsPage({
   searchParams,
 }: {
@@ -37,7 +37,7 @@ export default async function RwmReportsPage({
         <Link href="/reports/rwm" className="toggle-on">RWM</Link>
       </div>
       <p className="muted small" style={{ margin: '0 0 1rem' }}>
-        Primary–6 only. A student&apos;s score counts Reading, Writing, and Math where their most-recent
+        Primary–5 only. A student&apos;s score counts Reading, Writing, and Math where their most-recent
         result is Meeting or Exceeding (Math: rolled-up ≥ 75%). Students with a confirmed IPP in any of
         the three are excluded.
       </p>
@@ -47,7 +47,7 @@ export default async function RwmReportsPage({
       ) : cohort.length === 0 ? (
         <EmptyState
           title="No students in your scope"
-          hint="Primary–6 students (without a confirmed IPP in Reading, Writing, or Math) appear here."
+          hint="Primary–5 students (without a confirmed IPP in Reading, Writing, or Math) appear here."
         />
       ) : (
         <RWMCohortView cohort={cohort} />

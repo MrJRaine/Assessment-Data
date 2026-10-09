@@ -11,6 +11,19 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased]
+
+### Changed
+- **Math reports — units start collapsed.** The cohort grid and the single-student drill-down now
+  open with every unit collapsed; expand the units you want. (Previously units rendered open.)
+- **Math reports — regional staff land on the Grade view.** RegionalAnalyst callers default to the
+  grade-level lens (a higher-up view) when they open Math reports; school admins and teachers keep
+  the Homeroom default. A per-tab lens choice still overrides it.
+- **Math scope is now Primary–5, not Primary–6** (grade 6 math tasks are not available for 2026-27).
+  Affects the Math and RWM reports, the math entry rosters, and the math cycle windows. **SQL to
+  deploy:** re-run `sql/scripts/set_cycle_grade_ranges_by_subject.sql` (Math window `MaxGrade` → 5)
+  and redeploy `tvf_MathCohortGroups`, `tvf_StudentCohortMath`, `tvf_StudentCohortRWM`.
+
 ## [1.1.0] — 2026-10-07
 
 ### Added

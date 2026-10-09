@@ -57,7 +57,7 @@ RETURN
         INNER JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
         INNER JOIN DimGrade   sg ON sg.GradeCode  = s.Grade
         LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND sg.GradeOrder BETWEEN 0 AND 6
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND sg.GradeOrder BETWEEN 0 AND 5  -- RWM P..5 (grade 6 math not ready 2026-27)
           AND (
                 EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
                         WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID

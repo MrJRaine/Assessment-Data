@@ -1230,7 +1230,7 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Math roster (P-6 Math). One row per (student x applicable task) from
+// Math roster (P-5 Math; grade 6 not ready 2026-27). One row per (student x applicable task) from
 // tvf_TeacherRosterMath; the client grid structures these into the student x
 // task matrix (grouped by grade + unit). See project_math_assessment_model.
 // ---------------------------------------------------------------------------
@@ -1319,7 +1319,7 @@ export async function getMathRoster(
 // Read-only matrix, group-scoped, ALL of the current year's math cycles (latest result per task).
 // Mirrors the choose-a-group + roster split of Data Entry, but points at the Reports TVFs.
 
-/** Group picker for the Math cohort report (homeroom / grade lenses, P-6). Same shape as Data Entry. */
+/** Group picker for the Math cohort report (homeroom / grade lenses, P-5). Same shape as Data Entry. */
 export async function getMathCohortGroups(upn: string): Promise<TeacherGroup[]> {
   const rows = await queryAsUser<{
     GroupKey: string
@@ -1413,7 +1413,7 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
 }
 
 // ---- Reports > RWM (0.7.0, item 5): Reading·Writing·Math achievement roll-up ------------------
-// Cohort-wide (like Reading/Writing), P-6 only, IPP-in-any-area students excluded (in the TVF).
+// Cohort-wide (like Reading/Writing), P-5 only, IPP-in-any-area students excluded (in the TVF).
 
 export interface RWMStudent {
   studentKey: string

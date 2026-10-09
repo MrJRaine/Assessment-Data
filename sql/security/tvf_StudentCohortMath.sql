@@ -52,7 +52,7 @@ RETURN
         INNER JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
         INNER JOIN DimGrade   g  ON g.GradeCode   = s.Grade
         LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND g.GradeOrder BETWEEN 0 AND 6
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND g.GradeOrder BETWEEN 0 AND 5  -- Math P..5 (grade 6 not ready 2026-27)
           -- group membership by @GroupKey shape
           AND (
                 (LEFT(@GroupKey, 6) = 'GRADE:' AND 'GRADE:' + s.SchoolID + ':' + s.Grade = @GroupKey)

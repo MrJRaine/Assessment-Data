@@ -6,7 +6,7 @@ import type { MathCohortRow } from '@/lib/data'
 // ── Read-only math results matrix for Reports. Styled to look like the data-entry grid (same
 // .mgrid / .mband / .mtoggle classes) but nothing is editable. Pulls ALL of the current year's math
 // cycles as a single latest-result-per-task matrix, groups tasks by unit, and rolls up per-student
-// and per-cohort averages for the colour-coding + the two charts. P-6 only (the TVF enforces it).
+// and per-cohort averages for the colour-coding + the two charts. P-5 only (the TVF enforces it).
 
 type Mark = '1' | '0' | 'ipp' | 'blank'
 const rk = (studentKey: string, taskKey: string) => `${studentKey}:${taskKey}`
@@ -109,7 +109,10 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   const grades = useMemo(() => buildGrades(rows), [rows])
   const marks = useMemo(() => buildMarks(rows), [rows])
 
-  const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set())
+  // Units start COLLAPSED (seed the set with every unit key); the user expands what they want.
+  const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(
+    () => new Set(grades.flatMap((g) => g.units.map((u) => `${g.grade}:${u.name}`))),
+  )
   const [axis, setAxis] = useState<'tasksDown' | 'studentsDown'>('tasksDown')
   const [blankMode, setBlankMode] = useState<BlankMode>('exclude')
   const [focusKey, setFocusKey] = useState<string | null>(null)
@@ -584,6 +587,14 @@ function StudentGrid({
   taskCell: (v: Mark) => React.ReactNode
   onBack: () => void
 }) {
+  // Units start COLLAPSED here too; clicking a unit header expands its tasks.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(grade.units.map((u) => u.name)))
+  const toggle = (name: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      next.has(name) ? next.delete(name) : next.add(name)
+      return next
+    })
   return (
     <section className="mgrade">
       <div className="mtoolbar">
@@ -606,13 +617,17 @@ function StudentGrid({
           <tbody>
             {grade.units.map((u) => {
               const a = unitAvg(student.studentKey, u)
+              const coll = collapsed.has(u.name)
               return (
                 <FragmentRows key={u.name}>
                   <tr className="unitrow">
-                    <th className="col-task"><span className="uname">{u.name} · {u.tasks.length} tasks</span></th>
+                    <th className="col-task" onClick={() => toggle(u.name)} style={{ cursor: 'pointer' }}>
+                      <span className="chev">{coll ? '▸' : '▾'}</span>
+                      <span className="uname">{u.name} · {u.tasks.length} tasks</span>
+                    </th>
                     <td className="col-pct">{bandCell(a.avg, a.ipp, a.incomplete)}</td>
                   </tr>
-                  {u.tasks.map((t) => (
+                  {!coll && u.tasks.map((t) => (
                     <tr key={t.mathTaskKey}>
                       <th className="col-task" scope="row">
                         <span className="q">{t.questionNumber}</span> <span className="desc">{t.description}</span>
