@@ -38,9 +38,9 @@ genuinely broken tenant-side (both passthrough tests still fail); the WI credent
 **live app ingest ran clean over the SP path on data.tcrce.ca** → ingest UNBLOCKED on prod via the workaround
 (root cause of the passthrough breakage still undiagnosed). (Source PR to `main` still pending —
 warehouse-only change, no semver.) Dev working form = `deploy_dev_loaders_workspace_identity.sql`
-(WI+abfss); revert-to-passthrough = `deploy_dev_cutover_loaders.sql`. The https-form scripts
-(`deploy_dev_loaders_workspace_identity_https.sql`, `deploy_dev_loaders_https_passthrough.sql`) are
-record-only now.
+(WI+abfss); revert-to-passthrough = `deploy_dev_cutover_loaders.sql`. (The investigative dead-ends — the
+two https-form scripts and the standalone `test_copyinto_https_wi_dev.sql` — were DELETED 2026-10-09 on
+#1119 closure; the 2×2 result above records what they proved.)
 **FABRIC GOTCHA (confirmed this session):** a `COPY INTO` with a CREDENTIAL clause is validated at **CREATE
 PROCEDURE time** (eager, not deferred) — if the credential/identity can't authorize, the CREATE fails, and
 since loaders are `DROP IF EXISTS` + `CREATE`, the DROP leaves the proc GONE. Test a new credential/path with
