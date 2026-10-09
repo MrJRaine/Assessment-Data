@@ -22,7 +22,14 @@ told and **won't change**, so every pull from the share doc re-introduces it.
 convert the math team's file into the uploadable `usp_LoadMathTasks` format, **remap the months as part of
 that conversion** so the file is already correct before it is ingested — SCoR-3 `2 → 1` (Feb→Jan), SCoR-5
 `5 → 4` (May→Apr), and **verify the whole month set is a subset of {9,11,1,3,4,6}** in case they mis-code a
-different month. Doing it here means `DimMathTask` lands right on the first seed and there is no after-the-fact
+different month.
+
+**IMPLEMENTED (2026-10-09, proven on dev+live):** `scripts/mathtasks/transform-mathtasks.ps1` now bakes in
+10→9, 2→1, 5→4 and warns on any non-canonical final month; `scripts/mathtasks/diff-mathtasks.ps1` normalizes
+the same on the old side so the differential shows true content changes. The transform also **skips rows
+with a blank QuestionNumber** (invalid natural key) and reports them. The full math-task prep/load process
+lives in `data/mathtasks/README.md`. So next time: just run the transform on the new workbook — the month
+fix is automatic. Doing it here means `DimMathTask` lands right on the first seed and there is no after-the-fact
 `UPDATE DimMathTask` to remember. (If a seed ever gets loaded raw, the recovery is still the two UPDATEs
 `SET AssessmentMonth = 1 WHERE AssessmentMonth = 2` / `= 4 WHERE = 5`, `ActiveFlag = 1` — safe because no
 cycle uses months 2 or 5 and no month-1/4 tasks exist to collide — but the conversion-time fix is the
