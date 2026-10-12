@@ -24,8 +24,9 @@ impersonation container (:3002), which is still on `1.1.0-imp` — it must be re
 
 ## 2. Cohort report — no stale rows (any role)
 
-- [ ] Reports → Reading → switch to Writing → back to Reading: rows always match the subject (columns, links, sort).
-- [ ] Switch cycles (Current → a cycle → Current) with a filter applied: no leftover rows; filters/sort kept.
+- [x] Reports → Reading → switch to Writing → back to Reading: rows always match the subject (columns, links, sort).
+- [x] Switch cycles (Current → a cycle → Current) with a filter applied: no leftover rows; filters/sort kept.
+- Note: stale-row bug could not be reproduced on 1.2.0 after repeated toggling (user, 2026-10-12).
 
 ## 3. Math class view (`/reports/math/<group>`)
 
