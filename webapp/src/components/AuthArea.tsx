@@ -1,22 +1,7 @@
 import { auth, signIn, signOut } from '@/auth'
-import { getCurrentUpn } from '@/lib/auth'
 
-// Header identity widget. Reflects AUTH_MODE so it works before Entra is wired:
-//  - dev:   shows the DEV_FAKE_UPN identity
-//  - entra: shows the signed-in user (or a sign-in button)
+// Header identity widget: the signed-in Entra user (or a sign-in button).
 export default async function AuthArea() {
-  const mode = process.env.AUTH_MODE ?? 'dev'
-
-  if (mode === 'dev') {
-    let upn = process.env.DEV_FAKE_UPN ?? 'dev user'
-    try {
-      upn = await getCurrentUpn()
-    } catch {
-      /* misconfigured dev mode — fall back to the env value */
-    }
-    return <span className="muted">{upn} (dev)</span>
-  }
-
   const session = await auth()
   const user = session?.user as ({ upn?: string; email?: string } | undefined)
 

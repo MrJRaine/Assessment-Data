@@ -1,4 +1,3 @@
-import { getReadiness } from '@/lib/readiness'
 import { getCurrentUpn } from '@/lib/auth'
 import { getCallerCapabilities } from '@/lib/data'
 import { PageHeader, CardLink } from '@/components/ui'
@@ -14,11 +13,7 @@ function friendlyName(upn: string): string {
 }
 
 export default async function Home() {
-  // Config strip is a dev-diagnostic only — don't disclose posture to unauthenticated visitors in prod.
-  const devDiag = process.env.AUTH_MODE === 'dev' && process.env.ALLOW_DEV_AUTH === 'true'
-  const r = devDiag ? getReadiness() : null
-
-  // "/" is public, so there may be no signed-in user (entra mode, not yet signed in) — getCurrentUpn
+  // "/" is public, so there may be no signed-in user (not yet signed in) — getCurrentUpn
   // throws in that case; fall back to no welcome line rather than erroring the landing page.
   let welcome: string | undefined
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
@@ -96,12 +91,6 @@ export default async function Home() {
             ) : null}
           </div>
         </section>
-      ) : null}
-      {r ? (
-        <div className="status-strip muted">
-          Region: {r.region} {r.regionCompliant ? '(OK)' : '(check)'} &middot; Auth: {r.authMode} &middot;
-          Fabric configured: {r.fabricConfigured ? 'yes' : 'no'}
-        </div>
       ) : null}
     </>
   )
