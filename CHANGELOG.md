@@ -13,6 +13,19 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Added
+- **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
+  regional staff).** Administrator / SpecialistTeacher / RegionalAnalyst callers now land on a
+  collapsed tree over every Primary–5 student they oversee: **School → Grade or Homeroom** (a
+  *Summarize by* toggle) **→ students**. School and Grade/Homeroom rows show **Overall** plus one
+  column per unit (pooled by unit name across grades); each cell is the **% of students at Meeting
+  or In-depth, out of students with a level** (2 decimals). IPP, No data and Incomplete are left out
+  of the % and listed in the cell's hover with the four level counts. Opening a grade or homeroom
+  loads its students on demand — one block per grade, students as rows, units that expand into task
+  columns, and an *All students* row whose task cells show % can do (hover: Can do / Cannot / IPP /
+  Not scored). Cycle selector and the Blanks toggle apply throughout; a link opens the full class
+  view. Teachers keep the card picker unchanged. **SQL to deploy:** `sql/security/tvf_StudentCohortMathAll.sql` (new, read-only).
+
 ### Fixed
 - **Math entry — large saves no longer time out (and no more false "couldn't save").** A full math
   class is per-student×per-task (100+ marks), and the save ran them one at a time — a ~2-minute
@@ -32,9 +45,6 @@ with `0.3.0`, so earlier detail is approximate.
 ### Changed
 - **Math reports — units start collapsed.** The cohort grid and the single-student drill-down now
   open with every unit collapsed; expand the units you want. (Previously units rendered open.)
-- **Math reports — regional staff land on the Grade view.** RegionalAnalyst callers default to the
-  grade-level lens (a higher-up view) when they open Math reports; school admins and teachers keep
-  the Homeroom default. A per-tab lens choice still overrides it.
 - **Math scope is now Primary–5, not Primary–6** (grade 6 math tasks are not available for 2026-27).
   Affects the Math and RWM reports, the math entry rosters, and the math cycle windows. **SQL to
   deploy:** re-run `sql/scripts/set_cycle_grade_ranges_by_subject.sql` (Math window `MaxGrade` → 5)
