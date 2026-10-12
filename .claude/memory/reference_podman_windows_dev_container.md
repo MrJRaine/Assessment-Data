@@ -20,7 +20,7 @@ lives ONLY on the `dev-impersonation` branch, built into a separate `:<ver>-imp`
 - **awdev** — :3001 — clean release image (built from `dev`) — `.env.dev` (synthetic `_Dev`), Entra auth. NO impersonation (clean image). Safe demo target ([[feedback_live_pii_boundary]]).
 - **awdev-impersonation** — :3002 — the `:<ver>-imp` image (built from `dev-impersonation`) — `.env.dev` **with `-e AUTH_MODE=dev`** so it opens already signed-in as `DEV_FAKE_UPN` with the impersonation bar always on (dev auth ⇒ no `:3002` Entra redirect-URI needed). For how-tos / demos / troubleshooting.
 
-`.env.dev` is now `AUTH_MODE=entra` + `ALLOW_IMPERSONATION=true` + `AUTH_URL=http://localhost:3001` (awdev signs in via Entra like live). The impersonation container overrides `AUTH_MODE=dev` at run time.
+`.env.dev` is now `AUTH_MODE=entra` + `ALLOW_IMPERSONATION=true` + `AUTH_URL=http://localhost:3001` + the AUTH_ENTRA_* login-app vars (awdev signs in via Entra like live). It is UNTRACKED — set it up per machine (2026-10-12: the work machine still had AUTH_MODE=dev and no login vars). dev/main code no longer HAS a dev-auth path at all ([[feedback_entra_only_auth]]). The impersonation container overrides `AUTH_MODE=dev` at run time.
 
 ```
 # build clean (from dev or main worktree)
