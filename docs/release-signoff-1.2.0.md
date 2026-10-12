@@ -12,15 +12,15 @@ impersonation container (:3002), which is still on `1.1.0-imp` — it must be re
 ## 0. Prerequisites
 
 - [x] Ran [`sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql`](../sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql) on **dev** (dress rehearsal for live — same file). Verify: Math window rows show `MaxGrade = 5`; 4 function rows returned. **Done 2026-10-12:** Math P–5 (6 rows); Reading 7–8 / Writing 7–RG instance bands left intact (the full band script would have reset them).
-- [ ] awdev sends you to **Entra sign-in** and the header shows *your* account — no dev identity anywhere (dev-auth bypass removed from dev/live code, 2026-10-12). Sign out → back to sign-in.
-- [ ] awdev footer reads **1.2.0**.
-- [ ] *What's new* shows the three 1.2.0 notes (math save, cohort table, math reports) above the 1.1.0 notes.
+- [x] awdev sends you to **Entra sign-in** and the header shows *your* account — no dev identity anywhere (dev-auth bypass removed from dev/live code, 2026-10-12). Sign out → back to sign-in.
+- [x] awdev footer reads **1.2.0**.
+- [x] *What's new* shows the three 1.2.0 notes (math save, cohort table, math reports) above the 1.1.0 notes.
 
 ## 1. Math entry — save speed + honest notice (teacher)
 
-- [ ] Save a full math class (100+ marks): finishes in seconds, no "Could not save" lines.
-- [ ] Reload the page: every mark is there.
-- [ ] Change a few marks, save again: only those change; dated history still works (re-open shows latest).
+- [x] Save a full math class (100+ marks): finishes in seconds, no "Could not save" lines.
+- [x] Reload the page: every mark is there.
+- [x] Change a few marks, save again: only those change; dated history still works (re-open shows latest).
 
 ## 2. Cohort report — no stale rows (any role)
 
