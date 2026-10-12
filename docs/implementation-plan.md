@@ -131,6 +131,24 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-12 — 🟢 1.2.0 SIGNED OFF; cutover first thing 2026-10-13
+- **Last completed**: 1.2.0 built + signed off on awdev — math-reports #2 **Phase 1** (oversight roll-up tree), Entra-only
+  auth (dev-auth bypass removed from dev/main), server-side error logging, plus the 10-09 fixes (math save, cohort stale
+  rows, units collapsed, Math P–5). Checklist [`docs/release-signoff-1.2.0.md`](release-signoff-1.2.0.md).
+- **Next action — CUTOVER (user, morning of 2026-10-13):**
+  1. Run [`sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql`](../sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql) on **live**;
+     check the verify output (Math rows MaxGrade 5; 4 function rows). Already rehearsed clean on dev.
+  2. Copy `C:\Git-Repos\assessment-webapp-1.2.0.tar` to the prod host and swap per [`prod-container-swap.md`](prod-container-swap.md).
+  3. Live smoke: footer 1.2.0; Reports → Math shows the tree; one math save; **also verify the two untested role views**
+     (a school admin sees only their school; a teacher still gets cards).
+- **Then (Claude, on the user's word that live is good)**: release ritual — dev→main, tag `v1.2.0`, gh release, main→dev
+  back-merge; then rebuild the impersonation image: merge `dev` into `dev-impersonation` and **REVERT `1ecb3c9` there**
+  so dev auth survives on that branch only ([[feedback_entra_only_auth]]).
+- **Watch**: the transient all-Reports "Couldn't load data" seen once on awdev (cleared on restart, cause unknown) — if it
+  recurs, the raw error is now in the container log.
+- **Backlog**: math-reports #2 Phase 2 (Grade-first pivot for analysts + school multi-select within a grade band).
+- **Blockers**: none.
+
 ### Left Off — 2026-10-09 — 🟢 several dev fixes landed (math save timeout, cohort stale-rows, math reports 1/3/4, P-5); math-reports #2 fully specced, NOT built
 - **ALL on `dev`, pushed, NOT yet deployed to live** (app-only unless noted — need a container build+swap; the P-5 piece also needs SQL run):
   - **Math entry save — timeout fixed + honest notice (LIVE-IMPACTING).** A full math class (100+ marks) saved per-(student×task) **sequentially** → ~2m19s → tripped the prod proxy timeout → showed 114 "Could not save" lines even though every mark committed (CONFIRMED false failure 2026-10-09, shanna.maxwell, diag `sql/scripts/diag_math_save_landed.sql`). Fix: **parallelize the per-mark calls over the pool** (~2min→seconds), reusing the proven scalar proc. **VALIDATED on `awdev` (1.2.0-dev) 2026-10-09: 154 marks in ~15s** (was a few minutes earlier same day) — timeout failure mode gone. On a genuine unconfirmed save, the client now shows ONE honest notice ("Couldn't confirm — reload; page remembers ~90min") + the 90-min draft recovers entries. NO SQL (reuses `usp_UpsertMathAssessment`). **Set-based batch proc DEFERRED** — Fabric has no temp tables / no cursors + MERGE unreliable → a one-call proc is untestable-on-live; parallelize is the low-risk fix. By-student JSON batch is a churn-only perf item ([[project_perf_qol_backlog]]).

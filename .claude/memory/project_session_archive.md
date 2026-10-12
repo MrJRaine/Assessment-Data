@@ -1665,3 +1665,40 @@ dev is in maintenance mode. See `[[reference_it_modifies_sps_and_copyinto_auth]]
 **Math reports — items built on dev (1/3/4) + #2 fully specced.** 1/3/4: units default **collapsed** (cohort + student drill-down), **RegionalAnalyst lands on the Grade lens** (`defaultLens` prop fed by `getCallerAccessLevel`; sessionStorage choice still wins), **Math P-6→P-5** (grade 6 not ready 2026-27; 3 cohort TVFs `BETWEEN 0 AND 5` + cycle-window MaxGrade via `set_cycle_grade_ranges_by_subject.sql` + display copy). **#2 (NOT built) — DESIGN PINNED through a long design dialogue:** oversight roles land on a collapsed roll-up tree that **REPLACES the card picker** (teachers unchanged); students-as-rows; **School-first** (`School → [Summarize by: Grade | Homeroom] → Student`) for all oversight roles (admins locked to their school), **Grade-first** pivot (`Grade band → School → Student`) for RegionalAnalyst; school multi-select *within* a grade band; summaries = **% Meeting-or-In-depth ÷ students with a computed band** (IPP/No-data/Incomplete excluded from %, shown on hover), 2 decimals; task roll-up = % with 1 ÷ (1+0); **hover** on a roll-up cell = 4 band counts + IPP + No data (task cells: Can do/Cannot/IPP/Not scored). Needs a new `tvf_StudentCohortMathAll(@UPN,@CycleGroupID)` (all accessible students, no @GroupKey) + a client tree. The old "roll up grade cards" (2a) is MOOT. See the 2026-10-09 Left Off + [[project_group_display_redesign]].
 
 **End state.** All of the above committed + pushed to `dev` throughout. NOT deployed to live (app changes need a container build+swap; the P-5 piece also needs its SQL run). `awdev` rebuilt off dev as `assessment-webapp:1.2.0-dev` on :3001 (user timed the 154-mark save there). No PR (not a release; dev is the integration branch). Next: deploy the dev fixes when ready (the math-save fix is live-impacting) + build math-reports #2 Phase 1.
+
+## Session 2026-10-12 — 1.2.0 built + signed off (math-reports #2 Phase 1, Entra-only auth)
+
+**Session-start gap.** Briefed from a checkout 67 commits behind origin/dev (missed v1.1.0) — the session-start
+skill had no fetch/pull step. Added **Step 0 — Sync with GitHub** (fetch; ff-only pull when clean+behind; stop on
+dirty/diverged; note new tags; re-read the skill if it changed). Both mirrors.
+
+**Math-reports #2 Phase 1 — built.** `tvf_StudentCohortMathAll(@UPN,@CycleGroupID)`: one row per student×unit,
+COUNTS only (TaskCount / ScoredCount / CanDoCount), oversight scope via StaffSchoolAccess, single reference to the
+student scan (Fabric CTE-inlining), students in a grade with no tasks still return one NULL-unit row ("No data").
+Client `MathRollupTree`: School → Summarize by Grade|Homeroom → per-grade block lazy-loaded by a server action over
+the existing `tvf_StudentCohortMath`. User chose **task columns nested per grade** (tasks differ by grade; unit
+names line up so tree columns pool units by name). Shared `mathModel.ts` / `mathCells.tsx` so tree and class view
+compute levels identically (MathCohortView refactored onto them, behaviour unchanged). Teachers keep cards.
+**Materialization question:** user asked about a standing refreshed table; advised not yet (live writes, no
+scheduler, small output) and, if ever slow, a write-through latest-per-task table on save. User: test as-is and
+feel it out — most past timing pain was IIS.
+
+**1.2.0 release prep.** package.json 1.2.0, CHANGELOG [1.2.0], 3 patch notes. Live bundle
+`sql/deploy/live_1.2.0/` — Math band step narrowed to `MaxGrade '6'→'5'` on Math rows only; dev rehearsal showed
+per-instance Reading 7–8 (7 rows) / Writing 7–RG (14 rows) bands that the full script would have clobbered.
+Sign-off checklist `docs/release-signoff-1.2.0.md`. Package-lock gotcha: its root `version` has always been 0.1.0 —
+a naive sed for `"version": "1.1.0"` hit two DEPENDENCIES; reverted.
+
+**Entra-only auth (user correction).** awdev was running `AUTH_MODE=dev` because this machine's untracked `.env.dev`
+was stale (no login-app vars either). User: they had ALREADY instructed Entra-only in dev+live code, including
+removing dev auth — never recorded, so lost. Removed `authMode.ts`, `readiness.ts`, dev-diag strip/health detail/raw
+error text (commit 1ecb3c9 — REVERT IT on dev-impersonation when merging dev there). Saved
+`feedback_entra_only_auth`. Local `.env.dev` → entra/:3001 + AUTH_ENTRA_* copied from `.env` (backup in scratchpad).
+
+**Transient all-Reports "Couldn't load data"** on awdev while Data Entry worked; cleared after a container restart;
+cause NOT captured (no logging existed). Added server-side `console.error` in ErrorNote + toUserMessage (browser still
+generic). Hook false positives: `podman exec … printenv` and a grep naming FABRIC_SQL_* — asked, user approved a
+key-names-only listing.
+
+**End state.** All committed + pushed on `dev`. awdev :3001 = 1.2.0 (Entra). Tar written. Cutover 2026-10-13 AM by the
+user. No PR (release ritual runs after a successful live deploy). Impersonation container still 1.1.0-imp.

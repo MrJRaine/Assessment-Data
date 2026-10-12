@@ -30,55 +30,58 @@ impersonation container (:3002), which is still on `1.1.0-imp` — it must be re
 
 ## 3. Math class view (`/reports/math/<group>`)
 
-- [ ] Units start **collapsed** in the cohort grid; expand/collapse works.
-- [ ] Clicking a student opens their grid with units **collapsed**.
-- [ ] Cycle selector: **Current** + each started cycle; switching changes the results.
-- [ ] *Blanks: excluded / count as 0* changes the levels as expected.
-- [ ] *Show students down* / *Show tasks down* both render.
+- [x] Units start **collapsed** in the cohort grid; expand/collapse works.
+- [x] Clicking a student opens their grid with units **collapsed**.
+- [x] Cycle selector: **Current** + each started cycle; switching changes the results.
+- [x] *Blanks: excluded / count as 0* changes the levels as expected.
+- [x] *Show students down* / *Show tasks down* both render.
 
 ## 4. Math scope Primary–5
 
-- [ ] Data Entry: no Grade 6 students in math rosters; math cycle cards only for P–5 classes.
-- [ ] Reports → Math and Reports → RWM: no Grade 6 students; copy says "Primary–5".
+- [x] Data Entry: no Grade 6 students in math rosters; math cycle cards only for P–5 classes.
+- [x] Reports → Math and Reports → RWM: no Grade 6 students; copy says "Primary–5".
 
 ## 5. Math reports — oversight roll-up tree (NEW)
 
 **Who sees what**
-- [ ] Analyst lands on the **tree**, not the cards.
-- [ ] School admin lands on the tree, sees **only their school(s)**; with one school it opens expanded.
-- [ ] Teacher still gets the **card picker** (single-class teacher still jumps straight to the class).
+- [x] Analyst lands on the **tree**, not the cards.
+- [ ] *(not tested — needs the impersonation build)* School admin lands on the tree, sees **only their school(s)**; with one school it opens expanded.
+- [ ] *(not tested — needs the impersonation build)* Teacher still gets the **card picker** (single-class teacher still jumps straight to the class).
 
 **Tree rows (School → Grade | Homeroom)**
-- [ ] Schools start collapsed; Students count looks right.
-- [ ] Overall + one column per unit (Unit 1, Unit 2…), values like `61.25%` (2 decimals), heat-coloured.
-- [ ] Hover any % cell: Emerging / Developing / Meeting / In-depth (+ Incomplete) / IPP / No data counts that add up to the Students count (unit columns: to the students who have that unit).
-- [ ] `—` where nobody in the row has a level; unit columns a grade doesn't have show `—` with "No students here have this unit".
-- [ ] *Summarize by* **Grade** ↔ **Homeroom** switches the second level; split homerooms list their grades (e.g. "Primary, Grade 1").
-- [ ] If any student has no homeroom: the "No homeroom" row + the note above the table appear.
+- [x] Schools start collapsed; Students count looks right.
+- [x] Overall + one column per unit (Unit 1, Unit 2…), values like `61.25%` (2 decimals), heat-coloured.
+- [x] Hover any % cell: Emerging / Developing / Meeting / In-depth (+ Incomplete) / IPP / No data counts that add up to the Students count (unit columns: to the students who have that unit).
+- [x] `—` where nobody in the row has a level; unit columns a grade doesn't have show `—` with "No students here have this unit".
+- [x] *Summarize by* **Grade** ↔ **Homeroom** switches the second level; split homerooms list their grades (e.g. "Primary, Grade 1").
+- [x] If any student has no homeroom: the "No homeroom" row + the note above the table appear.
 
 **Expanded grade / homeroom block**
-- [ ] Opening a row shows "Loading results…", then the block.
-- [ ] One block per grade (split homeroom → two blocks with grade headings).
-- [ ] Students as rows: Overall level + unit levels; units expand into task columns (✓ / ○ / IPP / blank).
-- [ ] *All students* row: unit cells = % Meeting+ (hover counts); task cells = % can do (hover: Can do / Cannot / IPP / Not scored). Task header hover shows the description + outcome code.
-- [ ] A grade with no math tasks shows the "no math tasks are set up for this grade yet" note.
-- [ ] *Open the full class view* link opens `/reports/math/<group>` on the **same cycle**.
-- [ ] **Cross-check:** a grade row's numbers match that grade's class view (same cycle, same Blanks setting).
+- [x] Opening a row shows "Loading results…", then the block.
+- [x] One block per grade (split homeroom → two blocks with grade headings).
+- [x] Students as rows: Overall level + unit levels; units expand into task columns (✓ / ○ / IPP / blank).
+- [x] *All students* row: unit cells = % Meeting+ (hover counts); task cells = % can do (hover: Can do / Cannot / IPP / Not scored). Task header hover shows the description + outcome code.
+- [x] A grade with no math tasks shows the "no math tasks are set up for this grade yet" note.
+- [x] *Open the full class view* link opens `/reports/math/<group>` on the **same cycle**.
+- [x] **Cross-check:** a grade row's numbers match that grade's class view (same cycle, same Blanks setting).
 
 **Cycle + Blanks**
-- [ ] Changing cycle resets the tree (blocks collapse) and the numbers change.
-- [ ] Blanks toggle changes both the tree rows and open blocks.
+- [x] Changing cycle resets the tree (blocks collapse) and the numbers change.
+- [x] Blanks toggle changes both the tree rows and open blocks.
 
 **Feel**
-- [ ] Tree first load and block loads feel acceptable for an analyst (whole region). Note anything sluggish.
+- [x] Tree first load and block loads feel acceptable for an analyst (whole region). Note anything sluggish.
 
 ## 6. Regression smoke
 
-- [ ] Reports Reading, Writing, RWM and a student detail page load.
-- [ ] Data Entry: save one Reading and one Writing result.
-- [ ] Programming page loads.
+- [x] Reports Reading, Writing, RWM and a student detail page load.
+- [x] Data Entry: save one Reading and one Writing result.
+- [x] Programming page loads.
 
 ---
+
+**Signed off 2026-10-12 (user):** everything testable as the analyst passed. The two role-gated
+items above were not testable (impersonation container still on 1.1.0) — verify on live after cutover.
 
 ## Issues found
 
