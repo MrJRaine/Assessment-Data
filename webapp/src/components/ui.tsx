@@ -31,10 +31,10 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
 }
 
 // Read failed (e.g. a transient connection error). The raw message (SQL/driver text) is never
-// shown -- it's genericized so internals don't leak to the browser. `message` stays in the
-// signature so every caller is unchanged.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// shown -- it's genericized so internals don't leak to the browser -- but it IS logged server-side
+// (container logs) so a failure is diagnosable. Server-rendered only: no client component uses this.
 export function ErrorNote({ message }: { message: string }) {
+  console.error('[ErrorNote]', message)
   const shown = 'Please retry; if it persists, contact your administrator.'
   return (
     <div className="notice notice-error">

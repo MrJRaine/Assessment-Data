@@ -24,5 +24,6 @@ export function toUserMessage(err: unknown): string {
   if (num !== undefined && num >= 51000 && num < 52000 && typeof e.message === 'string') {
     return e.message
   }
+  console.error('[toUserMessage]', typeof e?.message === 'string' ? e.message : err) // server log only
   return 'Something went wrong. Please retry; if it persists, contact your administrator.'
 }

@@ -84,7 +84,7 @@ impersonation container (:3002), which is still on `1.1.0-imp` — it must be re
 
 | # | Area | What happened | Fixed in |
 |---|------|---------------|----------|
-|   |      |               |          |
+| 1 | Reports (all tabs) | "Couldn't load data" on every Reports tab while Data Entry worked; cleared after an awdev restart, cause not captured (no server logging at the time). Server-side error logging added so a recurrence shows in `podman logs awdev`. | not reproduced — watch |
 
 ## Live deploy (after every box above is ticked)
 
