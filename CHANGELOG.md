@@ -13,6 +13,8 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-10-12
+
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
   regional staff).** Administrator / SpecialistTeacher / RegionalAnalyst callers now land on a
