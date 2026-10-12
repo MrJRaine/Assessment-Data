@@ -12,6 +12,7 @@ impersonation container (:3002), which is still on `1.1.0-imp` — it must be re
 ## 0. Prerequisites
 
 - [x] Ran [`sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql`](../sql/deploy/live_1.2.0/deploy_live_1.1.0_to_1.2.0.sql) on **dev** (dress rehearsal for live — same file). Verify: Math window rows show `MaxGrade = 5`; 4 function rows returned. **Done 2026-10-12:** Math P–5 (6 rows); Reading 7–8 / Writing 7–RG instance bands left intact (the full band script would have reset them).
+- [ ] awdev sends you to **Entra sign-in** and the header shows *your* account — no dev identity anywhere (dev-auth bypass removed from dev/live code, 2026-10-12). Sign out → back to sign-in.
 - [ ] awdev footer reads **1.2.0**.
 - [ ] *What's new* shows the three 1.2.0 notes (math save, cohort table, math reports) above the 1.1.0 notes.
 
