@@ -1,26 +1,17 @@
 import 'server-only'
 import { auth } from '@/auth'
-import { authMode } from './authMode'
 
 /**
- * Resolve the current user's UPN (SERVER-ONLY). Two modes via AUTH_MODE:
- *  - 'dev'   : returns DEV_FAKE_UPN, so the app runs end to end before Entra is wired. LOCAL ONLY --
- *              never deploy with this.
- *  - 'entra' : reads the validated Auth.js session (Microsoft Entra sign-in) and returns the UPN
- *              lifted onto the session in `src/auth.ts`.
+ * Resolve the current user's UPN (SERVER-ONLY) from the validated Auth.js session (Microsoft Entra
+ * sign-in) -- the UPN lifted onto the session in `src/auth.ts`. Entra is the ONLY auth path in dev
+ * and live; the dev-auth bypass exists solely on the dev-impersonation branch.
  *
  * The resolved UPN flows into db.queryAsUser() as the @UPN parameter the secured views filter on.
  */
 export async function getCurrentUpn(): Promise<string> {
-  if (authMode() === 'dev') {
-    const upn = process.env.DEV_FAKE_UPN
-    if (!upn) throw new Error('AUTH_MODE=dev requires DEV_FAKE_UPN to be set')
-    return upn
-  }
-
   const session = await auth()
   const user = session?.user as { upn?: string; email?: string } | undefined
   const upn = user?.upn ?? user?.email
-  if (!upn) throw new Error('No authenticated user (AUTH_MODE=entra) -- sign in required')
+  if (!upn) throw new Error('No authenticated user -- sign in required')
   return upn
 }

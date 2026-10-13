@@ -19,6 +19,19 @@ in-app queueing — see [[project_capacity_rightsizing_intent]].
    student** (`for (const e of entries) await execProc(...)`), plus a scope-gate roster re-query first —
    a 30-student roster save is ~31 sequential round-trips. Biggest single write win, and Fabric
    Warehouse specifically dislikes frequent small writes (parquet churn).
+   - **CONFIRMED FAILURE 2026-10-09 (math):** shanna.maxwell saved **114 math marks** (grain is
+     per-student×**per-task** for math, so a full class = hundreds of calls) → the request ran
+     **~2m19s** (16:02:34–16:04:53 UTC, ~1.2s/mark sequential), exceeded the proxy/client timeout, and
+     the browser fired the `MathRosterEntry` backstop → **114 "Could not save" lines even though all 114
+     committed** (false failure; diag `sql/scripts/diag_math_save_landed.sql`). So math batching is now
+     a real teacher-facing bug, not just a perf nicety. Also fix the backstop to show ONE message that
+     says marks may have saved — reload to check.
+   - **OPEN DESIGN CONSIDERATION (user, 2026-10-09; PARKED behind the math-reports work):** batch math
+     saves **by STUDENT** (one proc call per student carrying that student's task marks) to mirror how
+     reading/writing batch, rather than one giant all-students batch. Decide the grain when we pick this
+     up. Fabric has no TVP; the batch mechanism would be a JSON payload + `OPENJSON` (verify Fabric
+     support first) or a single multi-EXEC batch string. Same loop pattern exists in `RosterEntry`
+     (reading) and `WritingRosterEntry` (writing).
 2. **Cache the static reference lookups.** `getScaleLevels` (DimReadingScale, 59 rows) and
    `getAchievementLevels` (DimAchievementLevel, 4 rows) are re-queried on **every** roster page load
    even though they're static config. Removes ~2 of the ~4 queries per roster load.

@@ -22,10 +22,12 @@ function Clean($s){
   $s = $s -replace '[\r\n\t]+',' '
   $s.Trim()
 }
-# Strip a TRAILING outcome-code parenthetical, e.g. " (N01.01)" or " (N010.01)." — the code
-# lives in its own OutcomeCode column and was never in the team's sheet (per project convention).
-# Keeps any trailing period and leaves legit mid-text parentheticals alone (anchored to end).
-function StripCode($s){ ((Clean $s) -replace '\s*\([A-Za-z]{1,2}\d{2,3}\.\d{2}\)(\.?)\s*$','$1').Trim() }
+# Strip a TRAILING outcome-code parenthetical, e.g. " (N01.01)", " (N010.01)." or a MULTI-code
+# " (N06.01, N06.02)" — the code lives in its own OutcomeCode column and was never in the team's
+# sheet (per project convention). Keeps any trailing period and leaves legit mid-text parentheticals
+# (e.g. "(correct spelling is not required)", "(3 x 4)") alone — the content must be ONLY codes, and
+# it is anchored to end of string.
+function StripCode($s){ ((Clean $s) -replace '\s*\([A-Za-z]{1,2}\d{2,3}\.\d{2}(?:\s*,\s*[A-Za-z]{1,2}\d{2,3}\.\d{2})*\)(\.?)\s*$','$1').Trim() }
 function Q($s){ '"' + ((Clean $s) -replace '"','""') + '"' }
 function QDesc($s){ '"' + ((StripCode $s) -replace '"','""') + '"' }
 
@@ -70,6 +72,7 @@ $out = New-Object System.Collections.Generic.List[string]
 $total = 0; $remap = 0
 $perGM = [ordered]@{}                 # "grade|month(final)" -> count
 $warnings = New-Object System.Collections.Generic.List[string]
+$skipped  = New-Object System.Collections.Generic.List[string]
 
 foreach ($file in (Get-ChildItem (Join-Path $tmp 'xl\worksheets') -Filter *.xml | Sort-Object Name)) {
   $nm = $names[$file.Name]; if (-not $nm) { $nm = $file.Name }
@@ -101,17 +104,32 @@ foreach ($file in (Get-ChildItem (Join-Path $tmp 'xl\worksheets') -Filter *.xml 
     $monthRaw = Clean (ColVal $h 'Month')
     $monthInt = 0; [void][int]::TryParse($monthRaw, [ref]$monthInt)
     $month = $monthInt
-    if ($monthInt -eq 10) { $month = 9; $remap++ }  # fall cycle is Sept(9); team authors Oct(10)
+    # The math team mis-codes SCoR cycle months; remap to the canonical SCoR set {9,11,1,3,4,6}
+    # at conversion time so DimMathTask lands correct on first seed (project_math_task_month_miscoding):
+    #   SCoR-1 Sep(9)  authored as Oct(10) -> 9
+    #   SCoR-3 Jan(1)  authored as Feb(2)  -> 1
+    #   SCoR-5 Apr(4)  authored as May(5)  -> 4
+    if     ($monthInt -eq 10) { $month = 9; $remap++ }
+    elseif ($monthInt -eq 2)  { $month = 1; $remap++ }
+    elseif ($monthInt -eq 5)  { $month = 4; $remap++ }
 
     $unitNum   = Clean (ColVal $h 'Unit#')
     $unitName  = if ($unitNum -ne '') { "Unit $unitNum" } else { '' }
+
+    # QuestionNumber is part of the natural key (GradeCode, AssessmentMonth, UnitName, QuestionNumber);
+    # a blank one is an incomplete/stray row that can't form a valid key -> skip it (reported below).
+    $qnum = Clean (ColVal $h 'QuestionNumber')
+    if ($qnum -eq '') {
+      [void]$skipped.Add("grade $grade, month $month, $unitName (blank QuestionNumber)")
+      continue
+    }
 
     $fields = @(
       (Q $grade),
       (Q $month),
       (Q $unitName),
       (Q $unitNum),
-      (Q (ColVal $h 'QuestionNumber')),
+      (Q $qnum),
       (Q (ColVal $h 'DisplayOrder')),
       (Q (ColVal $h 'PerformanceIndicator Number')),
       (QDesc (ColVal $h 'TaskDescriptionEN')),
@@ -132,10 +150,20 @@ Remove-Item -LiteralPath $copy -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 
 "Wrote $total data rows (+1 header) to $OutCsv"
-"Rows remapped month 10 -> 9: $remap"
+"Rows remapped to canonical SCoR month (10->9, 2->1, 5->4): $remap"
+if ($skipped.Count) { "Rows SKIPPED (blank QuestionNumber): $($skipped.Count)"; $skipped | ForEach-Object { "  - $_" } }
 ""
 "Per grade+month (final month):"
 foreach ($k in ($perGM.Keys | Sort-Object { ($_ -split '\|')[0] }, { [int](($_ -split '\|')[1]) })) {
   "  {0,-6} {1}" -f $k, $perGM[$k]
+}
+# Safety net: every FINAL month must be in the canonical SCoR set. A month outside it means the
+# team mis-coded a cycle we don't yet remap (project_math_task_month_miscoding) — surface it loudly.
+$canonical = @(9,11,1,3,4,6)
+$badMonths = @()
+foreach ($k in $perGM.Keys) { $m = [int](($k -split '\|')[1]); if ($canonical -notcontains $m) { $badMonths += $m } }
+$badMonths = $badMonths | Sort-Object -Unique
+if ($badMonths.Count) {
+  [void]$warnings.Add("Non-canonical month(s) present after remap: $($badMonths -join ', ') - expected only {9,11,1,3,4,6}. A new mis-code? Add a remap before loading.")
 }
 if ($warnings.Count) { ""; "WARNINGS:"; $warnings | ForEach-Object { "  $_" } }

@@ -11,6 +11,47 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased]
+
+## [1.2.0] — 2026-10-12
+
+### Added
+- **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
+  regional staff).** Administrator / SpecialistTeacher / RegionalAnalyst callers now land on a
+  collapsed tree over every Primary–5 student they oversee: **School → Grade or Homeroom** (a
+  *Summarize by* toggle) **→ students**. School and Grade/Homeroom rows show **Overall** plus one
+  column per unit (pooled by unit name across grades); each cell is the **% of students at Meeting
+  or In-depth, out of students with a level** (2 decimals). IPP, No data and Incomplete are left out
+  of the % and listed in the cell's hover with the four level counts. Opening a grade or homeroom
+  loads its students on demand — one block per grade, students as rows, units that expand into task
+  columns, and an *All students* row whose task cells show % can do (hover: Can do / Cannot / IPP /
+  Not scored). Cycle selector and the Blanks toggle apply throughout; a link opens the full class
+  view. Teachers keep the card picker unchanged. **SQL to deploy:** `sql/security/tvf_StudentCohortMathAll.sql` (new, read-only).
+
+### Fixed
+- **Math entry — large saves no longer time out (and no more false "couldn't save").** A full math
+  class is per-student×per-task (100+ marks), and the save ran them one at a time — a ~2-minute
+  request that tripped the prod proxy timeout and showed a "Could not save" line per mark even when
+  the marks had actually committed. The per-mark upserts now run **concurrently over the connection
+  pool** (~2 min → ~seconds). If a save still can't be confirmed (timeout/transport), the grid now
+  shows **one** honest notice — "Couldn't confirm the save — reload to check before re-entering; the
+  page remembers your entries for ~90 minutes" — instead of one error per mark, and keeps the entries
+  in the draft so a reload recovers them.
+- **Cohort report — stale rows after the Reading/Writing or cycle toggle.** The subject toggle and
+  cycle selector are same-route soft navigations, so React reconciled the cohort table in place and
+  could leave rows from the previous view mounted (e.g. a block of *reading* rows — with reading
+  columns and reading links — sitting inside a filtered *writing* report, inert to the sort, until a
+  hard refresh). The table now remounts when the subject or cycle changes, so it always rebuilds
+  fresh; filters/sort are preserved via sessionStorage.
+
+### Changed
+- **Math reports — units start collapsed.** The cohort grid and the single-student drill-down now
+  open with every unit collapsed; expand the units you want. (Previously units rendered open.)
+- **Math scope is now Primary–5, not Primary–6** (grade 6 math tasks are not available for 2026-27).
+  Affects the Math and RWM reports, the math entry rosters, and the math cycle windows. **SQL to
+  deploy:** re-run `sql/scripts/set_cycle_grade_ranges_by_subject.sql` (Math window `MaxGrade` → 5)
+  and redeploy `tvf_MathCohortGroups`, `tvf_StudentCohortMath`, `tvf_StudentCohortRWM`.
+
 ## [1.1.0] — 2026-10-07
 
 ### Added

@@ -59,6 +59,7 @@ export default function GroupCards({
   metaMode = 'progress',
   mode = 'lens',
   subject,
+  defaultLens = 'Homeroom',
 }: {
   groups: TeacherGroup[]
   hrefBase: string
@@ -66,6 +67,10 @@ export default function GroupCards({
   metaMode?: 'progress' | 'count' // 'count' = just "N students" (reports pickers have no progress)
   mode?: 'lens' | 'course'
   subject?: string // entry subject; 'math' switches the card meta to "N/M started · K done"
+  // Initial oversight lens. Lets a caller land regional staff on 'Grade' (a higher-up view) while
+  // school admins keep 'Homeroom'. A persisted per-tab selection still wins over this. 'Homeroom'
+  // for all other callers/pages, so this is opt-in and scoped to whoever passes it.
+  defaultLens?: 'Homeroom' | 'Section' | 'Grade'
 }) {
   const isMath = (subject ?? '').toLowerCase() === 'math' // route passes 'Math' (from AssessmentType)
   const taught = groups.filter((g) => g.scope === 'Taught')
@@ -111,7 +116,7 @@ export default function GroupCards({
       )}
 
       {oversight.length > 0 && (
-        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} hrefBase={hrefBase} isMath={isMath} />
+        <Oversight groups={oversight} card={card} showHeading={taught.length > 0} mode={mode} hrefBase={hrefBase} isMath={isMath} defaultLens={defaultLens} />
       )}
     </>
   )
@@ -263,6 +268,7 @@ function Oversight({
   hrefBase,
   mode,
   isMath = false,
+  defaultLens = 'Homeroom',
 }: {
   groups: TeacherGroup[]
   card: (g: TeacherGroup) => ReactNode
@@ -270,6 +276,7 @@ function Oversight({
   hrefBase: string
   mode: 'lens' | 'course'
   isMath?: boolean
+  defaultLens?: 'Homeroom' | 'Section' | 'Grade'
 }) {
   const byCourse = mode === 'course'
   const hasSections = useMemo(() => !byCourse && groups.some((g) => g.groupType === 'Section'), [groups, byCourse])
@@ -288,7 +295,13 @@ function Oversight({
   )
   const multiSchool = schools.length > 1
 
-  const [lens, setLens] = useState<'Homeroom' | 'Section' | 'Grade'>('Homeroom')
+  // Seed from the caller's default, but never to a lens that has no groups (e.g. 'Grade' with no
+  // grade cards) — fall back to Homeroom so we don't open on an empty view.
+  const [lens, setLens] = useState<'Homeroom' | 'Section' | 'Grade'>(() =>
+    defaultLens === 'Grade' && !hasGrades ? 'Homeroom'
+      : defaultLens === 'Section' && !hasSections ? 'Homeroom'
+        : defaultLens,
+  )
   const [shownGrades, setShownGrades] = useState<Set<string>>(() => new Set(grades))
   const [shownSchools, setShownSchools] = useState<Set<string>>(() => new Set(schools))
   const [schoolsOpen, setSchoolsOpen] = useState(false)
@@ -297,8 +310,11 @@ function Oversight({
   // Restore saved filters once on mount (client-only, so no SSR hydration mismatch).
   useEffect(() => {
     const p = readPersistedFilters()
+    // A persisted per-tab choice wins over the role default (incl. switching back to Homeroom),
+    // but only when that lens still has groups this session.
     if (p.lens === 'Section' && hasSections) setLens('Section')
     else if (p.lens === 'Grade' && hasGrades) setLens('Grade')
+    else if (p.lens === 'Homeroom') setLens('Homeroom')
     if (p.grades) setShownGrades(restoreSet(grades, p.grades))
     if (p.schools) setShownSchools(restoreSet(schools, p.schools))
     setReady(true)
