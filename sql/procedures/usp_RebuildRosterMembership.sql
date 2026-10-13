@@ -137,8 +137,9 @@ BEGIN
     FROM dbo.SectionRosterMembership b
     INNER JOIN FactSectionTeachers fst
             ON fst.SectionID = b.SectionID
-           AND b.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
-                                         AND COALESCE(fst.EffectiveEndDate, '9999-12-31');
+           AND fst.IsCurrent = 1;   -- B (2026-10-13): CURRENT teacher gets the fast-path for EVERY cycle of
+                                    -- the year for their current sections (was as-of-EndDate, which stranded
+                                    -- the current teacher off closed cycles after a reassignment).
 END;
 GO
 

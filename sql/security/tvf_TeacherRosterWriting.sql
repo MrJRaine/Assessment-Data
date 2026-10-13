@@ -74,8 +74,7 @@ RETURN
              OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
                         WHERE fst.SectionID = m.SectionID
                           AND LOWER(fst.TeacherEmail) = c.Email
-                          AND m.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
-                                                        AND COALESCE(fst.EffectiveEndDate, '9999-12-31')))
+                          AND fst.IsCurrent = 1))   -- B (2026-10-13): CURRENT teacher sees every cycle (was as-of-EndDate)
           -- Language track = the SECTION's course language. Effective language is the cycle's scope
           -- when set, else the EN/FR toggle. (For a scoped window the base already holds only that
           -- language's sections; the predicate is a harmless no-op then and does the real work when

@@ -41,6 +41,16 @@ with `0.3.0`, so earlier detail is approximate.
 >   roster so a teacher can still enter paper results for them. SQL:
 >   `sql/deploy/live_1.2.0/deploy_rostermembership_section_stable_2026-10-13.sql` (redeploys
 >   `usp_RebuildRosterMembership` + rebuilds the membership tables).
+> - **2026-10-13 — Data-Entry card counts for closed cycles fixed, and a section's current teacher sees
+>   its whole year.** Two follow-ons to the roster fix above. (1) The `/enter` **card counts** (started /
+>   done / applicable) are computed live and had the same closed-cycle stranding the roster body fix
+>   already cured — a re-versioned section could show a card at "0 of N" or drop it entirely; the card
+>   logic now matches students to a section by its stable identity across all its versions. (2) A teacher
+>   who takes over a section partway through the year now sees and can enter **every cycle back to the
+>   start of the year** for it (access follows the current teacher-of-record, not who taught it when the
+>   cycle closed). SQL:
+>   `sql/deploy/live_1.2.0/deploy_card_section_stable_teacher_current_2026-10-13.sql` (redeploys the
+>   rebuild proc + 5 TVFs + rebuilds membership).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
