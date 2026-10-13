@@ -59,8 +59,8 @@ RETURN
           AND mt.AssessmentMonth IN (SELECT BenchMonth FROM MathWins)
     ),
     LatestMath AS ( -- latest result per (student, task) across the selected windows
-        SELECT fm.StudentKey, fm.MathTaskKey, fm.Result,
-               ROW_NUMBER() OVER (PARTITION BY fm.StudentKey, fm.MathTaskKey
+        SELECT fm.StudentNumber, fm.MathTaskKey, fm.Result,
+               ROW_NUMBER() OVER (PARTITION BY fm.StudentNumber, fm.MathTaskKey
                                   ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
         FROM FactAssessmentMath fm
         WHERE fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
@@ -90,8 +90,8 @@ RETURN
     LEFT  JOIN MathIPP   ipp ON ipp.StudentKey = s.StudentKey
     LEFT  JOIN Tasks     t   ON t.GradeCode  = s.Grade
     LEFT  JOIN LatestMath lm
-           ON lm.StudentKey  = s.StudentKey
-          AND lm.MathTaskKey = t.MathTaskKey
+           ON lm.StudentNumber = s.StudentNumber
+          AND lm.MathTaskKey   = t.MathTaskKey
           AND lm.rn = 1
     WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
       AND g.GradeOrder BETWEEN 0 AND 5   -- Math P..5 (grade 6 not ready 2026-27)

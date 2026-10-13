@@ -89,9 +89,9 @@ RETURN
     -- Latest math result per (student, window, task). Dated history is kept, so pick the most recent.
     LatestMathPerTask AS (
         SELECT
-            StudentKey, AssessmentWindowID, MathTaskKey, Result, AssessmentDate,
+            StudentNumber, AssessmentWindowID, MathTaskKey, Result, AssessmentDate,
             ROW_NUMBER() OVER (
-                PARTITION BY StudentKey, AssessmentWindowID, MathTaskKey
+                PARTITION BY StudentNumber, AssessmentWindowID, MathTaskKey
                 ORDER BY AssessmentDate DESC, MathAssessmentID DESC
             ) AS rn
         FROM FactAssessmentMath
@@ -137,7 +137,7 @@ RETURN
           AND mt.AssessmentMonth = wdm.DominantMonth
           AND mt.ActiveFlag      = 1
     LEFT JOIN LatestMathPerTask fam
-           ON fam.StudentKey         = sg.StudentKey
+           ON fam.StudentNumber      = sg.StudentNumber
           AND fam.AssessmentWindowID = sg.AssessmentWindowID
           AND fam.MathTaskKey        = CAST(mt.MathTaskKey AS BIGINT)
           AND fam.rn = 1

@@ -30,7 +30,7 @@ RETURN
 (
     WITH LatestWriting AS (
         SELECT
-            faw.StudentKey,
+            faw.StudentNumber,   -- stable key: match latest result to the student across SCD re-versions
             faw.WritingAssessmentID,
             faw.AssessmentWindowID,
             faw.IdeasScore,
@@ -53,7 +53,7 @@ RETURN
                        + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                 AS DECIMAL(5,2)) AS AvgScore,
             ROW_NUMBER() OVER (
-                PARTITION BY faw.StudentKey
+                PARTITION BY faw.StudentNumber
                 ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentWriting faw
@@ -119,7 +119,7 @@ RETURN
     LEFT JOIN CurrentWritingIPP cwd
            ON cwd.StudentKey    = s.StudentKey
           AND cwd.ProgramFamily = p.ProgramFamily
-    LEFT JOIN LatestWriting lw ON lw.StudentKey = s.StudentKey AND lw.rn = 1
+    LEFT JOIN LatestWriting lw ON lw.StudentNumber = s.StudentNumber AND lw.rn = 1
     LEFT JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = lw.AssessmentWindowID
     -- Map the average to a band CODE, then reuse DimAchievementLevel's name + colour by code.
     LEFT JOIN DimAchievementLevel dal

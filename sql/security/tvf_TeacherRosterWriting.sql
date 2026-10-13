@@ -85,7 +85,7 @@ RETURN
     -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
     LatestWritingInWindow AS (
         SELECT
-            StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
+            StudentNumber, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
             -- Average over the NUMERICALLY-SCORED traits only. Count a trait ONLY when it is explicitly
             -- '1'-'4': '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all drop from
             -- BOTH the sum and the count (never counted as 0). All-dropped -> NULL. NB (Fabric gotcha):
@@ -102,7 +102,7 @@ RETURN
                 AS DECIMAL(5,2)) AS AvgScore,
             AssessmentDate,
             ROW_NUMBER() OVER (
-                PARTITION BY StudentKey, AssessmentWindowID
+                PARTITION BY StudentNumber, AssessmentWindowID
                 ORDER BY AssessmentDate DESC, WritingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentWriting
@@ -149,7 +149,7 @@ RETURN
     LEFT JOIN DimProgram dp ON dp.ProgramCode = ds.ProgramCode
     LEFT JOIN LatestWritingInWindow faw
            ON faw.AssessmentWindowID = sg.AssessmentWindowID
-          AND faw.StudentKey         = sg.StudentKey
+          AND faw.StudentNumber      = sg.StudentNumber
           AND faw.rn = 1
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey
