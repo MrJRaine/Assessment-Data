@@ -131,6 +131,21 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-13 — 🟢 1.2.0 LIVE; StudentNumber durable fix shipped (server-side patch); dev==main
+- **Last completed**: 1.2.0 cutover live + release ritual + dev-impersonation reconcile done. Second math-task batch
+  (2026-27) loaded (month remaps now at conversion time). Specialist-teacher entry scope fixed (server-side patch).
+  **StudentNumber durable fix LIVE** — the SCD-reversion "stranded entries" bug: assessment facts keyed only on the
+  mutable StudentKey, so a re-versioned student's entered data went invisible. Added stable `StudentNumber` to the 3
+  facts (backfilled), persisted it on the 3 upsert procs, and switched the 15 reads to match current student↔fact on
+  StudentNumber. One consolidated server-side bundle `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql`
+  (no semver bump; CHANGELOG blockquote under [1.2.0]). Live verify StillNull=0. Detail: [[project_assessment_fact_scd_policy]].
+- **Next action**: nothing pending on this thread. Resume math-reports #2 **Phase 2** (Grade-first pivot for analysts +
+  school multi-select within a grade band) when picked up.
+- **Watch**: #1119 ingest `COPY INTO` error recurred under 1.2.0 (WI OneLake, tenant/transient — loaders unchanged); root
+  cause still parked. If assessment data ever strands again, check whether IPP/Adaptation/Enrollment reads (still keyed
+  on StudentKey, out of scope this fix) are the culprit.
+- **Blockers**: none. `dev` and `main` are level at cb551d2.
+
 ### Left Off — 2026-10-12 — 🟢 1.2.0 SIGNED OFF; cutover first thing 2026-10-13
 - **Last completed**: 1.2.0 built + signed off on awdev — math-reports #2 **Phase 1** (oversight roll-up tree), Entra-only
   auth (dev-auth bypass removed from dev/main), server-side error logging, plus the 10-09 fixes (math save, cohort stale

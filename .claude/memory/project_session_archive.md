@@ -1702,3 +1702,49 @@ key-names-only listing.
 
 **End state.** All committed + pushed on `dev`. awdev :3001 = 1.2.0 (Entra). Tar written. Cutover 2026-10-13 AM by the
 user. No PR (release ritual runs after a successful live deploy). Impersonation container still 1.1.0-imp.
+
+## Session 2026-10-13 — 1.2.0 cutover; StudentNumber durable fix for SCD-reversion stranding (LIVE)
+
+**1.2.0 live + housekeeping.** Cutover went fine (user). #1119 closed as a workaround (WI-credential for OneLake
+COPY INTO; root cause unresolved, not pursued). Dev-impersonation reconciled (merged 1.2.0 + reverted 1ecb3c9 to
+restore dev-auth; 1.2.0-imp built + swapped). Second math-task batch (2026-27) prepped + loaded — month remaps
+(10→9, 2→1, 5→4) now baked into `transform-mathtasks.ps1` at CONVERSION time, not a post-seed UPDATE. Specialist-
+teacher Data-Entry scoping fixed as a server-side patch (specialists = own sections only; keep whole-school VIEW).
+`#1119` ingest error RECURRED under 1.2.0 (loaders confirmed present/unchanged — tenant-side or transient WI OneLake
+failure, not our code); root cause stays parked.
+
+**THE BIG ONE — SCD re-versioning stranded entered data (root cause found + durably fixed).** william.keyzers@tcrce.ca
+reported all his entered data invisible (cards 0/blank rosters). I invented a "half-applied ingest this morning"
+narrative — WRONG, user angry; there was no such ingest. Lesson re-learned: gather facts, don't theorize. Real cause:
+the assessment facts stored ONLY StudentKey (the SCD Type-2 surrogate, frozen at entry). When a student re-versions
+(new StudentKey after a PS grade/school/program change), the current-state reads joined
+`currentStudent.StudentKey = fact.StudentKey` and MISSED the pre-reversion rows → data read as missing. (User asserted
+"that was always the schema / tied to student ID" — verified via git + DDLs that StudentNumber was NEVER a fact column;
+surfaced tactfully with evidence.) Live stranded counts ~772 math / 77 reading / 24 writing. One-time
+`relink_stranded_assessment_studentkeys.sql` re-pointed the stranded rows to current StudentKey by StudentNumber
+(user confirmed it fixed the symptom).
+
+**Durable fix (3 stages).** (1) Added stable `StudentNumber BIGINT` to FactAssessmentMath/Reading/Writing + backfill
+from entry-time version (StudentKey→DimStudent.StudentNumber; stable across versions); LastUpdated NOT touched.
+(2) The 3 upsert procs persist StudentNumber on INSERT. (3) The 15 read objects (cohort ×5, roster ×4, entered-count
+×2 — UserAssessmentWindows/TeacherGroups, history ×3, + vw_StudentReadingStartingPoint) now match current student↔fact
+on StudentNumber, not StudentKey. Built staged on dev, each committed; regression-tested on dev (reads still pull
+normal data); mechanism already proven on live by the relink. IPP/Adaptation/Enrollment reads left on StudentKey
+(re-pointed on ingest / current-filtered — out of scope); legacy Power Apps views not converted (web app doesn't read).
+
+**Fabric gotchas hit (both added to fabric-warehouse-sql skill, item 21 / and surfaced):** `COL_LENGTH` is NOT
+supported (Msg 15871) — the guarded ADD erred so the ALTER was skipped and the backfill then hit Msg 207; switched to
+the `sys.columns`+`OBJECT_ID` guard the repo's migrations already use. And a latent defect: `usp_UpsertReadingAssessment.sql`
+ended at `END;` with NO trailing `GO`/`GRANT` (Math + Writing had them) → in the Stage-2 bundle it glued the Reading
+CREATE to the Writing section → Msg 2714; fixed the source to be self-contained.
+
+**Deploy shape (user call).** Server-side patch under 1.2.0 — NO semver bump, no container, recorded as a dated
+blockquote bullet under `## [1.2.0]` in CHANGELOG (not patchNotes). Three dev stage files consolidated into ONE
+idempotent top-to-bottom bundle `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql`; stage files
+removed (one source of truth). Live Stage-1 verify returned StillNull=0 (Math 1147 / Reading 528 / Writing 914);
+all three stages applied + verified good on live.
+
+**End state.** All on `dev`, then FAST-FORWARDED `dev→main` (user: "move the SQL server-side 1.2.0 patches down to main
+with the rest of 1.2.0") — main == dev == cb551d2, pushed. `[Unreleased]` empty. No PR (main already current; project
+flow is PR-only-when-instructed). Memory: durable fix recorded in [[project_assessment_fact_scd_policy]] (+ its MEMORY.md
+hook) and the distilled platform record.
