@@ -124,7 +124,9 @@ RETURN
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
         INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel IS NULL
+        -- Teacher route: plain teachers AND SpecialistTeacher (2026-10-13 — specialists enter only the
+        -- sections they teach, so they need this route now that the oversight route excludes them).
+        WHERE (c.AccessLevel IS NULL OR c.AccessLevel = 'SpecialistTeacher')
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
           AND (wed.ProgramScope IS NULL
