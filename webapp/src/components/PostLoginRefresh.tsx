@@ -7,12 +7,12 @@ import { useRouter } from 'next/navigation'
  * Keeps the capability-gated nav (Cycles / Ingest / Maintenance, resolved from StaffAppAccess in
  * AppShell) correct on first load. The root layout only re-renders on a FULL document load, so two
  * first-hit races can leave the nav showing only the basic items:
- *   1. login race — the session cookie isn't fully readable on the OAuth landing render.
+ *   1. entra login race — the session cookie isn't fully readable on the OAuth landing render.
  *   2. caps-query transient — a cold connection pool / token warm-up makes the caps read throw.
  *
  * Fixes, both bounded + guarded (no refresh loops), rendering nothing:
- *   - ONE refresh after the first authenticated render this session.
- *   - `capsError`: AppShell couldn't read caps this render → refresh a few times until
+ *   - `enablePostLogin` (entra): ONE refresh after the first authenticated render this session.
+ *   - `capsError` (both modes): AppShell couldn't read caps this render → refresh a few times until
  *     it can. A "no row" result is NOT capsError, so a genuinely-no-caps user never loops.
  */
 const POST_LOGIN_FLAG = 'postLoginRefreshed'
@@ -22,15 +22,18 @@ const CAPS_RETRY_MAX = 3
 export default function PostLoginRefresh({
   authed,
   capsError,
+  enablePostLogin,
 }: {
   authed: boolean
   capsError: boolean
+  enablePostLogin: boolean
 }) {
   const router = useRouter()
   const ranPostLogin = useRef(false)
 
-  // 1) One-time post-login refresh (login race).
+  // 1) One-time post-login refresh (entra login race).
   useEffect(() => {
+    if (!enablePostLogin) return
     if (!authed) {
       try {
         sessionStorage.removeItem(POST_LOGIN_FLAG)
@@ -55,7 +58,7 @@ export default function PostLoginRefresh({
       /* unreachable: getItem above succeeded */
     }
     router.refresh()
-  }, [authed, router])
+  }, [authed, enablePostLogin, router])
 
   // 2) Bounded caps-error retry (both modes). Reset the counter whenever caps resolve cleanly.
   useEffect(() => {

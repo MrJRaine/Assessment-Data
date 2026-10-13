@@ -30,12 +30,15 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   )
 }
 
-// Read failed (e.g. a transient connection error). The raw message (SQL/driver text) is never
-// shown -- it's genericized so internals don't leak to the browser -- but it IS logged server-side
-// (container logs) so a failure is diagnosable. Server-rendered only: no client component uses this.
+// Read failed (e.g. a transient connection error). The raw message (SQL/driver text) is shown only
+// in the explicit dev-diagnostic mode (AUTH_MODE=dev, dev-impersonation branch only); in production
+// it's genericized so internals don't leak to the browser. It is ALSO logged server-side (container
+// logs) regardless, so a failure is diagnosable. Server-rendered, so AUTH_MODE is readable; on the
+// client it's undefined -> falls through to the generic message, the safe default.
 export function ErrorNote({ message }: { message: string }) {
   console.error('[ErrorNote]', message)
-  const shown = 'Please retry; if it persists, contact your administrator.'
+  const devDiag = process.env.AUTH_MODE === 'dev' && process.env.ALLOW_DEV_AUTH === 'true'
+  const shown = devDiag ? message : 'Please retry; if it persists, contact your administrator.'
   return (
     <div className="notice notice-error">
       <div className="notice-title">Couldn&apos;t load data</div>

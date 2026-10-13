@@ -376,6 +376,7 @@ a { color: inherit; text-decoration: none; }
 .actions { margin-top: 1rem; }
 .toolbar { margin: 1rem 0; }
 .detail-grid { display: grid; gap: 1rem; margin-top: 1rem; }
+.status-strip { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 
 /* dev-only impersonation bar (amber so it is unmistakably a dev tool; never shown in entra/live) */
 .dev-impersonate {
