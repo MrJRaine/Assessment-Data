@@ -24,6 +24,14 @@ with `0.3.0`, so earlier detail is approximate.
 >   save scope gate follows the rosters, so it's enforced on save too. SQL:
 >   `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql` +
 >   `fix_specialist_entry_cards_2026-10-13.sql` (5 entry TVFs).
+> - **2026-10-13 — Entered data no longer disappears when a student's record changes.** Reading, writing
+>   and math results are now tied to the student by their stable student number, not the internal
+>   versioned key that changes whenever PowerSchool re-sends the student with a new grade/school/program.
+>   Before, results entered before such a change stopped showing on rosters, reports and history (the card
+>   read "0 started"); they are now matched durably so they always surface. Adds `StudentNumber` to the
+>   three assessment fact tables (backfilled), persists it on every new entry (3 upsert procs), and switches
+>   the 15 read objects to match on it. One-time relink recovery had already restored the affected live rows.
+>   SQL: `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql` (run top-to-bottom).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
