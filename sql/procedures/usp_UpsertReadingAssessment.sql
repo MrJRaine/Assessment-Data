@@ -451,12 +451,12 @@ BEGIN
     ELSE
     BEGIN
         INSERT INTO FactAssessmentReading (
-            StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta,
+            StudentKey, StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta,
             LevelCode, ExpectedMinLevelCode, ExpectedMaxLevelCode,
             AssessmentDate, EnteredByStaffKey, SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @ReadingScaleID_BI, @ReadingDelta,
+            @StudentKey, @StudentNumber, @AssessmentWindowID_BI, @ReadingScaleID_BI, @ReadingDelta,
             @StudentLevelCode, @ExpectedMinLevel, @ExpectedMaxLevel,
             @AssessmentDate, @CallerStaffKey, @Now, @Now
         );

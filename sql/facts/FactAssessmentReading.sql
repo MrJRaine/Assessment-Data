@@ -10,7 +10,8 @@
 
 CREATE TABLE FactAssessmentReading (
     ReadingAssessmentID     BIGINT          NOT NULL IDENTITY,
-    StudentKey              BIGINT          NOT NULL,   -- References DimStudent.StudentKey
+    StudentKey              BIGINT          NOT NULL,   -- References DimStudent.StudentKey (mutable across SCD re-versions)
+    StudentNumber           BIGINT          NOT NULL,   -- STABLE business key (= DimStudent.StudentNumber). Current-state reads match on THIS, never the surrogate (durable fix 2026-10-13; see relink_stranded_assessment_studentkeys.sql)
     AssessmentWindowID      BIGINT          NOT NULL,   -- References DimAssessmentWindow.AssessmentWindowID
     ReadingScaleID          BIGINT          NOT NULL,   -- References DimReadingScale.ReadingScaleID
     ReadingDelta            INT             NULL,       -- Difference from grade-level expectation

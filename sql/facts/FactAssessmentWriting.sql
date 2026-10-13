@@ -23,7 +23,8 @@
 
 CREATE TABLE FactAssessmentWriting (
     WritingAssessmentID     BIGINT          NOT NULL IDENTITY,
-    StudentKey              BIGINT          NOT NULL,   -- References DimStudent.StudentKey
+    StudentKey              BIGINT          NOT NULL,   -- References DimStudent.StudentKey (mutable across SCD re-versions)
+    StudentNumber           BIGINT          NOT NULL,   -- STABLE business key (= DimStudent.StudentNumber). Current-state reads match on THIS, never the surrogate (durable fix 2026-10-13; see relink_stranded_assessment_studentkeys.sql)
     AssessmentWindowID      BIGINT          NOT NULL,   -- References DimAssessmentWindow.AssessmentWindowID
     AssessmentLanguage      VARCHAR(10)     NULL,       -- 'English' | 'French' — dual-language writing; part of the grain (an FI grade-3+ student holds one row per language per cycle). Backfilled from program family.
     -- All four traits VARCHAR(10): '1'–'4' | 'SCR' (Conventions only) | '-' (deliberately NOT assessed

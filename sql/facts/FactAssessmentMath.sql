@@ -37,7 +37,8 @@
 
 CREATE TABLE FactAssessmentMath (
     MathAssessmentID    BIGINT          NOT NULL IDENTITY,   -- Surrogate key
-    StudentKey          BIGINT          NOT NULL,   -- References DimStudent.StudentKey (current at entry)
+    StudentKey          BIGINT          NOT NULL,   -- References DimStudent.StudentKey (current at entry; mutable across SCD re-versions)
+    StudentNumber       BIGINT          NOT NULL,   -- STABLE business key (= DimStudent.StudentNumber). Current-state reads match on THIS, never the surrogate (durable fix 2026-10-13; see relink_stranded_assessment_studentkeys.sql)
     AssessmentWindowID  BIGINT          NOT NULL,   -- References DimAssessmentWindow.AssessmentWindowID (the Math Short Cycle window)
     MathTaskKey         BIGINT          NOT NULL,   -- References DimMathTask.MathTaskKey
     Result              BIT             NOT NULL,   -- 1 = can do the task, 0 = cannot
