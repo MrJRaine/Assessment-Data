@@ -40,13 +40,14 @@ SET NOCOUNT ON;
 
 -- ===================== (A) ADD COLUMN StudentNumber (nullable) =====================
 -- Guarded so re-running is a no-op. Each ADD is its own batch (Fabric).
-IF COL_LENGTH('dbo.FactAssessmentMath', 'StudentNumber') IS NULL
+-- Fabric guard = sys.columns + OBJECT_ID (COL_LENGTH is NOT supported in Fabric Warehouse).
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentMath') AND name = 'StudentNumber')
     ALTER TABLE dbo.FactAssessmentMath ADD StudentNumber BIGINT NULL;
 GO
-IF COL_LENGTH('dbo.FactAssessmentReading', 'StudentNumber') IS NULL
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentReading') AND name = 'StudentNumber')
     ALTER TABLE dbo.FactAssessmentReading ADD StudentNumber BIGINT NULL;
 GO
-IF COL_LENGTH('dbo.FactAssessmentWriting', 'StudentNumber') IS NULL
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.FactAssessmentWriting') AND name = 'StudentNumber')
     ALTER TABLE dbo.FactAssessmentWriting ADD StudentNumber BIGINT NULL;
 GO
 

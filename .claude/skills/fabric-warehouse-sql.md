@@ -376,6 +376,13 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
     (`pool.min` — note `tarn` defaults to `min: 0` and `idleTimeoutMillis: 30000`, so a pool left idle
     30s empties and the next request pays the full 1.8s again). (2026-09-18)
 
+21. **`COL_LENGTH` is NOT supported (Msg 15871) — guard an idempotent `ADD COLUMN` with `sys.columns`.**
+    `IF COL_LENGTH('dbo.T','Col') IS NULL ALTER TABLE …` errors in Fabric, which (since the `IF` throws)
+    also SKIPS the `ALTER`, so a later same-script batch referencing the new column then fails with
+    `Msg 207 Invalid column name`. Use the pattern the repo's migrations already use:
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.T') AND name = 'Col') ALTER TABLE dbo.T ADD Col …;` then `GO`.
+    (2026-10-13, StudentNumber durable-fix Stage 1.)
+
 ## NEWID() in a CROSS APPLY is folded to ONE value per query (2026-09-22)
 
 Per-row randomness via `NEWID()` fails when the expression sits in a `CROSS APPLY (VALUES ( …NEWID()… ))`:
