@@ -33,3 +33,13 @@ The CHANGELOG `Fixed` section is for a defect that was **broken from its own rel
 hotfixed (shipped wrong, then corrected) — that one IS user-facing history and belongs there.
 Litmus: "was this behavior ever live and correct for users?" Yes→repair, keep it out. No (broken since
 ship)→Fixed entry.
+
+**SERVER-SIDE-ONLY (warehouse SQL) behavior changes deployed to live between releases (set 2026-10-13):**
+a warehouse-only SQL change that ALTERS behavior (e.g. the 2026-10-13 SpecialistTeacher Data-Entry
+scoping fix — TVFs only, no app image) is **live without a container deploy, so it gets NO semver bump
+and NO new version** (don't invent a 1.2.1 for a server-side fix). Record it as a **dated "server-side
+patch" bullet UNDER THE CURRENT RELEASE's CHANGELOG section** (e.g. a blockquote under `## [1.2.0]`),
+NOT under `## [Unreleased]` (which reads as "not shipped" — but it IS live) and NOT as a phantom new
+version. **`patchNotes.ts` is NOT the vehicle** for these: the in-app "What's new" footer is tied to
+`package.json`, which doesn't change, so a patchNotes entry wouldn't surface until the next container
+release anyway — leave it out until then. (The user confirmed this convention 2026-10-13.)

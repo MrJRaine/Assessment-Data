@@ -13,16 +13,17 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
-### Changed
-- **Specialist teachers enter data only for the sections they teach** (warehouse-only, no app change).
-  Counsellors, registrars and Resource Teachers (PS groups 12/19/21/23/37/45 → `SpecialistTeacher`)
-  were reaching every course-mapped section in their school on Data Entry through the oversight path.
-  They are teachers, so Data Entry now follows the classroom-teacher rule (their own sections via
-  `FactSectionTeachers`); they KEEP whole-school viewing in Reports and whole-school Programming
-  (IPP/adaptations) entry. The save scope gate follows the rosters, so it is enforced on save too.
-  **SQL to deploy:** `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql` (5 entry TVFs).
-
 ## [1.2.0] — 2026-10-12
+
+> **Server-side patches since 1.2.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
+> - **2026-10-13 — Specialist teachers enter data only for the sections they teach.** Counsellors,
+>   registrars and Resource Teachers (PS groups 12/19/21/23/37/45 → `SpecialistTeacher`) were reaching
+>   every course-mapped section in their school on Data Entry through the oversight path. They are
+>   teachers, so Data Entry now follows the classroom-teacher rule (own sections via `FactSectionTeachers`);
+>   they KEEP whole-school viewing in Reports and whole-school Programming (IPP/adaptations) entry. The
+>   save scope gate follows the rosters, so it's enforced on save too. SQL:
+>   `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql` +
+>   `fix_specialist_entry_cards_2026-10-13.sql` (5 entry TVFs).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
