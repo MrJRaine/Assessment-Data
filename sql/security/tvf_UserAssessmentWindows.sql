@@ -20,6 +20,10 @@
  *          instance, exactly like tvf_TeacherGroups — the card equals the sum of the group cards for
  *          every role. Also changed EnteredStudentCount to "a result on ANY instance of the cycle"
  *          (CycleEntered) so a result on a sibling-language window still counts (matches the picker).
+ * Modified: 2026-10-13 — SpecialistTeacher REMOVED from the oversight path (user: specialist teachers
+ *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
+ *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
+ *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an inline TVF (not a proc): reads should be QUERYABLE -- the app does
@@ -107,7 +111,7 @@ RETURN
           AND (wed.ProgramScope IS NULL
                OR (',' + wed.ProgramScope + ',') LIKE ('%,' + dp.ScopeBucket + ',%'))
     ),
-    -- Oversight (Administrator / SpecialistTeacher / RegionalAnalyst) — COURSE-SCOPED and
+    -- Oversight (Administrator / RegionalAnalyst; NOT SpecialistTeacher) — COURSE-SCOPED and
     -- SCHOOL-SCOPED: only students in MAPPED-COURSE sections (ELA/FLA/Math) in the schools the caller
     -- covers via StaffSchoolAccess (= their CanChangeSchool buildings), language-matched to the
     -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
@@ -134,7 +138,7 @@ RETURN
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
         INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+        WHERE c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
           AND (wed.ProgramScope IS NULL

@@ -27,6 +27,10 @@
  *          that measured ~2s for 20 students. The VOLATILE half below (reading results, deltas,
  *          benchmark, IPP, achievement, starting point) is unchanged and still live. Membership
  *          logic lives in usp_RebuildRosterMembership — keep the two in lockstep.
+ * Modified: 2026-10-13 — SpecialistTeacher REMOVED from the oversight path (user: specialist teachers
+ *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
+ *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
+ *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
  * Region: Canada East (PIIDPA compliant)
  *
  * See tvf_UserAssessmentWindows header for the iTVF rationale + SECURITY note
@@ -93,9 +97,9 @@ RETURN
             m.Grade, m.Homeroom, m.SchoolName, m.ProgramCode, m.ProgramFamily, m.GroupKey
         FROM Membership m
         CROSS JOIN Caller c
-        -- RegionalAnalyst scoped by StaffSchoolAccess like Admin/Specialist (NO region-wide branch;
+        -- RegionalAnalyst scoped by StaffSchoolAccess like Admin (NO region-wide branch;
         -- a region-wide analyst simply has every building listed).
-        WHERE (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+        WHERE (c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
                AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
                            WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = m.SchoolID))
            OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)

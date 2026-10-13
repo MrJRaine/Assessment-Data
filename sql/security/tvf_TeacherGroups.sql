@@ -21,7 +21,7 @@
  *          TWO SCOPES (a row can be in both — dual-role; the client toggles):
  *            'Taught'    — sections the caller personally teaches, ANY AccessLevel.
  *            'Oversight' — above-teacher roles see EVERY mapped-course section they
- *                          would normally see: Administrator / SpecialistTeacher ->
+ *                          would normally see: Administrator ->
  *                          their school(s); RegionalAnalyst -> region-wide. (A
  *                          principal sees all ELA/FLA/Math sections in their school.)
  *          TeacherNames says WHOSE class a card is (co-taught sections list all) —
@@ -39,6 +39,10 @@
  *          collapsed "Writing" card pointing at the English instance would show an
  *          FLA teacher nothing.
  *          NOTE: Programming uses its OWN tvf_ProgrammingGroups — unaffected.
+ * Modified: 2026-10-13 — SpecialistTeacher REMOVED from the oversight path (user: specialist teachers
+ *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
+ *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
+ *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
  * Region: Canada East (PIIDPA compliant)
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted.
@@ -108,7 +112,7 @@ RETURN
 
         UNION
 
-        -- OVERSIGHT (Administrator / SpecialistTeacher / RegionalAnalyst): mapped-course sections in
+        -- OVERSIGHT (Administrator / RegionalAnalyst; NOT SpecialistTeacher): mapped-course sections in
         -- the schools they cover via StaffSchoolAccess.
         SELECT DISTINCT
             CAST('Oversight' AS VARCHAR(10)),
@@ -122,10 +126,10 @@ RETURN
                AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
         INNER JOIN DimCourseAssessment ca
                 ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
-        -- All oversight roles (Administrator / SpecialistTeacher / RegionalAnalyst) are scoped to the
+        -- Both oversight roles (Administrator / RegionalAnalyst) are scoped to the
         -- schools in their StaffSchoolAccess (= their CanChangeSchool buildings). NO region-wide
         -- analyst branch; a region-wide analyst simply has every building in their list.
-        WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+        WHERE c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
           AND ((@AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
             OR (@AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
           AND (win.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = win.AssessmentLanguage)

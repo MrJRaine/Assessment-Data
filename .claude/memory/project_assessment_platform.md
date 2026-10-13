@@ -72,7 +72,7 @@ Regional student reading/writing assessment platform for a Nova Scotia school sy
 | DimAchievementLevel | 4 | Operator-column bounds (DECIMAL) + hex colors; reused for writing 2.75 threshold later. |
 | DimCalendar | 5844 | Bulk-insert (WHILE-loop version was too slow). |
 
-**RoleCode taxonomy (6 values):** `Teacher` (section-level RLS via FactSectionTeachers; incl. APSEA itinerants, IB/O2/Co-op coordinators after the 22/32 reclass), `SpecialistTeacher` + `Administrator` (school-level RLS via StaffSchoolAccess), `RegionalAnalyst` (multi-school via CanChangeSchool), `ProvincialAnalyst` + `SupportStaff` (no app access — excluded from all security groups). NULL = unused PS slots.
+**RoleCode taxonomy (6 values):** `Teacher` (section-level RLS via FactSectionTeachers; incl. APSEA itinerants, IB/O2/Co-op coordinators after the 22/32 reclass), `SpecialistTeacher` + `Administrator` (school-level RLS via StaffSchoolAccess — **BUT SpecialistTeacher Data Entry = OWN SECTIONS ONLY** (user 2026-10-13: "specialist teachers are still teachers" → entry only for sections they teach; whole-school VIEW in Reports + whole-school Programming entry stay; removed from the oversight predicate of the 5 entry TVFs — `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql`)), `RegionalAnalyst` (multi-school via CanChangeSchool), `ProvincialAnalyst` + `SupportStaff` (no app access — excluded from all security groups). NULL = unused PS slots.
 
 ## PowerSchool ingest conventions (resolved)
 
