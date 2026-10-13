@@ -491,3 +491,8 @@ BEGIN
         @Now
     );
 END;
+GO
+
+-- Self-contained redeploy: DROP+CREATE drops the EXECUTE grant, so re-grant to the SP.
+GRANT EXECUTE ON [dbo].[usp_UpsertReadingAssessment] TO [StudentDataAssessment];
+GO

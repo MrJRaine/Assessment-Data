@@ -14,7 +14,7 @@
  *
  * PREREQUISITE: Stage 1 must have run first (StudentNumber column must exist on all
  * three fact tables) or the INSERTs will fail. Run Stage 1 -> 2 -> 3, dev then live.
- * Idempotent: each proc is DROP-IF-EXISTS + CREATE + GRANT EXECUTE to the SP.
+ * Idempotent: each proc is DROP-IF-EXISTS + CREATE + GO + GRANT EXECUTE to the SP.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
@@ -806,6 +806,11 @@ BEGIN
         @Now
     );
 END;
+GO
+
+-- Self-contained redeploy: DROP+CREATE drops the EXECUTE grant, so re-grant to the SP.
+GRANT EXECUTE ON [dbo].[usp_UpsertReadingAssessment] TO [StudentDataAssessment];
+GO
 
 /* ============================ usp_UpsertWritingAssessment ============================ */
 /*******************************************************************************
