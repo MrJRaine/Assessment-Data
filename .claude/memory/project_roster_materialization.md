@@ -37,6 +37,25 @@ TVFs' membership logic (grade band, program scope, section→subject mapping, la
 changes how rosters filter students, they MUST update the rebuild proc too or rosters silently
 diverge. Both live in `sql/security/` + `sql/procedures/`.
 
+**FIX — SECTION-STABLE membership, LIVE 2026-10-13 (server-side patch under 1.2.0):** closed Short-Cycle
+rosters collapsed to ~1 student when a section re-versioned. The rebuild resolved each window's section
+to the ONE DimSection version in force on the window EndDate, then joined enrolment on THAT version's
+SectionKey. DimSection churns (EnrollmentCount/teacher changes → new SectionKey); live enrolment is
+re-pointed to the CURRENT SectionKey, so a CLOSED window (resolved at its past EndDate) matched a dead
+key → roster ~0 (CHES SC1: ELA6/ILA3 showed 1 of 18/22). SAME mutable-surrogate theme as the
+StudentNumber fact fix ([[project_assessment_fact_scd_policy]]) and the old [[project_section_undercapture_bug]].
+**Now:** sections resolve to their CURRENT version; enrolment matches by the STABLE `SectionID` across
+ALL section versions (window-date overlap unchanged); student resolves to CURRENT by `StudentNumber`;
+DISTINCT collapses dups. **NO ActiveFlag filter** — a student enrolled during the window but since
+departed STAYS on that window's roster (teacher may have paper results to enter — user decision). Side
+effect: open cycles also recovered a few students stranded on old keys (rosters tick up 1–3). Deploy:
+`sql/deploy/live_1.2.0/deploy_rostermembership_section_stable_2026-10-13.sql` (redeploy proc + rebuild).
+Validated as a read-only preview (`diag_ches_fixed_membership_preview_*`) against CHES live BEFORE the change.
+**STILL OPEN (teacher axis):** step 2's teacher fast-table + the TVFs' teacher-access predicate still use
+`WindowEffectiveDate` (= EndDate for closed windows) against FactSectionTeachers — so a TEACHER reassigned
+after a cycle closed can still be stranded off that cycle's card. Not yet fixed; same bug shape on the
+teacher dimension.
+
 **Perf state (dev warm, 20-student):** original ~2050ms → base+dead-cut ~1461ms → teacher fast-path
 ~1157ms; Fabric per-query floor ≈ ~1015ms (the untouched groups TVF). LIVE app warm ~2.3s = ~1.4s SQL
 + ~0.9s connection/render. Remaining levers (both bigger, deferred): pre-warm/min-connections for the

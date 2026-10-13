@@ -100,7 +100,7 @@
 
 ## Shipped / in-flight features
 - [Writing Trait Exclusion (v1.0.0 LIVE)](project_writing_trait_exclusion.md) — data-driven `WritingTraitExclusion` (trait×grade×program×benchmark-month); excluded trait stored as `-` (≠NULL), dropped from avg/reports. Traits now VARCHAR; average via `IN ('1'..'4')` allow-list (Fabric `TRY_CAST('-')=0`). LIVE 2026-10-02.
-- [Roster Materialization (0.6.2 LIVE)](project_roster_materialization.md) — membership tables (`SectionRosterMembership`/`TeacherRosterMembership`) + card-metadata pass-through; warm roster ~3.47s→~2.3s. Two tables in LOCKSTEP with the roster TVFs; D (fast-path routing) parked.
+- [Roster Materialization (0.6.2 LIVE)](project_roster_materialization.md) — membership tables (`SectionRosterMembership`/`TeacherRosterMembership`) + card-metadata pass-through; warm roster ~3.47s→~2.3s. Two tables in LOCKSTEP with the roster TVFs; D (fast-path routing) parked. **SECTION-STABLE fix LIVE 2026-10-13**: rebuild matches enrolment by stable `SectionID` (all section versions) + student by `StudentNumber`, not the mutable surrogate — closed cycles no longer strand on a section re-version; departed-during-window students kept (paper backfill). TEACHER-axis version still OPEN.
 - [Image Versioning Scheme (DONE)](project_image_versioning_scheme.md) — RESOLVED 2026-09-08: semver-tagged prod images, tar by version, CHANGELOG + git tag; first = v0.3.0.
 - [Prior-Year Baseline (v0.4.0 SHIPPED)](project_prior_year_baseline.md) — Reading prior-year starting point LIVE 2026-09-10; COALESCE(prior facts, baseline seed). Writing has NO baseline.
 - [Group Display Redesign](project_group_display_redesign.md) — shared choose-a-group picker (teacher own classes / oversight lenses + filters). Built via the makeover Phase 1.
