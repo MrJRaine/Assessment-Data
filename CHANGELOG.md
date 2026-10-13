@@ -32,6 +32,15 @@ with `0.3.0`, so earlier detail is approximate.
 >   three assessment fact tables (backfilled), persists it on every new entry (3 upsert procs), and switches
 >   the 15 read objects to match on it. One-time relink recovery had already restored the affected live rows.
 >   SQL: `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql` (run top-to-bottom).
+> - **2026-10-13 — Closed-cycle rosters no longer go blank when a class record changes.** A section's
+>   roster for a *closed* Short Cycle collapsed to ~1 student whenever PowerSchool re-sent the section with
+>   a new internal key (enrolment-count/teacher changes), because the roster rebuild resolved the section
+>   as of the cycle's end date and then matched the stale key. The rebuild now matches students to a
+>   section by its stable section identity across all its versions, so every cycle (open or closed) shows
+>   the full class; a student who was enrolled during a cycle but has since left stays on that cycle's entry
+>   roster so a teacher can still enter paper results for them. SQL:
+>   `sql/deploy/live_1.2.0/deploy_rostermembership_section_stable_2026-10-13.sql` (redeploys
+>   `usp_RebuildRosterMembership` + rebuilds the membership tables).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
