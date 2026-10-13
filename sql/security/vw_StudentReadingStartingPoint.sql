@@ -35,13 +35,12 @@ Yr AS (
 -- Latest prior-school-year reading fact per (StudentNumber, ScaleSystem).
 PriorFact AS (
     SELECT
-        ds.StudentNumber, drs.ScaleSystem, drs.LevelCode, drs.LevelOrder,
-        ROW_NUMBER() OVER (PARTITION BY ds.StudentNumber, drs.ScaleSystem
+        far.StudentNumber, drs.ScaleSystem, drs.LevelCode, drs.LevelOrder,
+        ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
                            ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
     FROM FactAssessmentReading far
     INNER JOIN DimAssessmentWindow w   ON w.AssessmentWindowID = far.AssessmentWindowID
     INNER JOIN Yr                       ON w.SchoolYear        = Yr.PriorYear
-    INNER JOIN DimStudent      ds       ON ds.StudentKey       = far.StudentKey
     INNER JOIN DimReadingScale drs      ON drs.ReadingScaleID  = far.ReadingScaleID
 ),
 -- Baseline seed: only exists for the pre-system prior year (2025-2026). Map the

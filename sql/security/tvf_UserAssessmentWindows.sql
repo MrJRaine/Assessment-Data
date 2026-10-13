@@ -78,7 +78,7 @@ RETURN
         WHERE w.ActiveFlag = 1
     ),
     TeacherStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN FactSectionTeachers fst
@@ -119,7 +119,7 @@ RETURN
     -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
     -- simply has every building in their list. Mirrors tvf_TeacherGroups' Oversight path.
     AdminStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey, s.Grade
+        SELECT wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
@@ -155,20 +155,20 @@ RETURN
     -- English window before the French instance existed); the collapsed /enter card and the group
     -- picker both treat that as entered, so this must too. Keyed by CycleGroupID + AssessmentType.
     CycleEntered AS (
-        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentNumber
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentReading f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Reading' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
         UNION
-        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentNumber
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Writing' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
         UNION
         -- Math (added 2026-09-23): a student counts as entered once they have ANY task result -
-        -- FactAssessmentMath is one row per (student x task), so DISTINCT StudentKey gives "has begun",
+        -- FactAssessmentMath is one row per (student x task), so DISTINCT StudentNumber gives "has begun",
         -- the same "has a result" meaning used for Reading/Writing. Without this, Math cards read 0.
-        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentKey
+        SELECT DISTINCT w2.CycleGroupID, w2.AssessmentType, f.StudentNumber
         FROM DimAssessmentWindow w2
         INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = w2.AssessmentWindowID
         WHERE w2.AssessmentType = 'Math' AND w2.ActiveFlag = 1 AND w2.CycleGroupID IS NOT NULL
@@ -199,16 +199,16 @@ RETURN
         -- pays NOTHING here: MathBench is empty for non-Math windows, pruning the scan before it touches
         -- FactAssessmentMath. (A clear DELETEs its row, so a distinct-task count is a true "has a mark"
         -- count -- no NULL tombstones to over-count.)
-        SELECT a.AssessmentWindowID, a.StudentKey, a.Grade,
+        SELECT a.AssessmentWindowID, a.StudentNumber, a.Grade,
                COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
         FROM ApplicableStudents a
         INNER JOIN MathBench mb ON mb.AssessmentWindowID = a.AssessmentWindowID
         INNER JOIN FactAssessmentMath fm
-                ON fm.StudentKey = a.StudentKey AND fm.AssessmentWindowID = a.AssessmentWindowID
-        GROUP BY a.AssessmentWindowID, a.StudentKey, a.Grade
+                ON fm.StudentNumber = a.StudentNumber AND fm.AssessmentWindowID = a.AssessmentWindowID
+        GROUP BY a.AssessmentWindowID, a.StudentNumber, a.Grade
     ),
     MathDone AS (   -- (window, student) over the >80% bar; empty for R/W (MathApplicable empty there)
-        SELECT met.AssessmentWindowID, met.StudentKey
+        SELECT met.AssessmentWindowID, met.StudentNumber
         FROM MathEnteredTasks met
         INNER JOIN MathApplicable ma
                 ON ma.AssessmentWindowID = met.AssessmentWindowID AND ma.GradeCode = met.Grade
@@ -235,18 +235,18 @@ RETURN
         COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
         -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
         -- so a result on a sibling-language instance still counts and the card matches the group picker.
-        COUNT(DISTINCT CASE WHEN ce.StudentKey IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount,
+        COUNT(DISTINCT CASE WHEN ce.StudentNumber IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount,
         -- Math "done" (0.6.4): >80% of the student's benchmark-month tasks marked. 0 for Reading/Writing.
-        COUNT(DISTINCT CASE WHEN mdn.StudentKey IS NOT NULL THEN a.StudentKey END) AS DoneStudentCount
+        COUNT(DISTINCT CASE WHEN mdn.StudentNumber IS NOT NULL THEN a.StudentKey END) AS DoneStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
     LEFT JOIN CycleEntered ce
            ON ce.CycleGroupID   = wed.CycleGroupID
           AND ce.AssessmentType = wed.AssessmentType
-          AND ce.StudentKey     = a.StudentKey
+          AND ce.StudentNumber  = a.StudentNumber
     LEFT JOIN MathDone mdn
            ON mdn.AssessmentWindowID = a.AssessmentWindowID
-          AND mdn.StudentKey         = a.StudentKey
+          AND mdn.StudentNumber      = a.StudentNumber
     GROUP BY
         wed.AssessmentWindowID, wed.WindowName, wed.AssessmentType, wed.SchoolYear,
         wed.StartDate, wed.EndDate, wed.MinGrade, wed.MaxGrade, wed.ProgramFamily,

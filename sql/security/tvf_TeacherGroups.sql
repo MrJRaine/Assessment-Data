@@ -150,7 +150,7 @@ RETURN
         SELECT DISTINCT
             vs.Scope, vs.SectionID, vs.SectionNumber, vs.CourseName, vs.CourseCode, vs.Language,
             win.AssessmentWindowID,   -- WHICH instance this student is assessed under (see SectionWindows)
-            s.StudentKey, s.Grade, sch.SchoolName
+            s.StudentKey, s.StudentNumber, s.Grade, sch.SchoolName
         FROM VisibleSections vs
         CROSS JOIN Wins win
         INNER JOIN FactEnrollment e
@@ -173,19 +173,19 @@ RETURN
     ),
     -- Students with an entry already, for ANY instance of this cycle+subject.
     EnteredStudents AS (
-        SELECT DISTINCT f.StudentKey
+        SELECT DISTINCT f.StudentNumber
         FROM Wins win
         INNER JOIN FactAssessmentReading f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Reading'
         UNION
-        SELECT DISTINCT f.StudentKey
+        SELECT DISTINCT f.StudentNumber
         FROM Wins win
         INNER JOIN FactAssessmentWriting f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Writing'
         UNION
         -- Math (added 2026-09-23): entered = has ANY task result (FactAssessmentMath is one row per
         -- student x task). Was the "Math entry count TBD" gap that made Math group cards read 0.
-        SELECT DISTINCT f.StudentKey
+        SELECT DISTINCT f.StudentNumber
         FROM Wins win
         INNER JOIN FactAssessmentMath f ON f.AssessmentWindowID = win.AssessmentWindowID
         WHERE @AssessmentType = 'Math'
@@ -211,25 +211,25 @@ RETURN
         GROUP BY mb.AssessmentWindowID, mt.GradeCode
     ),
     MathStudentWindow AS (   -- (student, window, grade) triples in play, de-duped
-        SELECT DISTINCT StudentKey, AssessmentWindowID, Grade FROM SectionStudents
+        SELECT DISTINCT StudentKey, StudentNumber, AssessmentWindowID, Grade FROM SectionStudents
     ),
     MathEnteredTasks AS (   -- distinct tasks each student has a result for, per window
         -- Gated to Math windows (INNER JOIN MathBench, itself @AssessmentType='Math'-guarded) so a
         -- Reading/Writing picker pays NOTHING here -- MathBench is empty then, pruning this scan.
-        SELECT msw.StudentKey, msw.AssessmentWindowID, COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
+        SELECT msw.StudentNumber, msw.AssessmentWindowID, COUNT(DISTINCT fm.MathTaskKey) AS EnteredTasks
         FROM MathStudentWindow msw
         INNER JOIN MathBench mb ON mb.AssessmentWindowID = msw.AssessmentWindowID
         INNER JOIN FactAssessmentMath fm
-                ON fm.StudentKey = msw.StudentKey AND fm.AssessmentWindowID = msw.AssessmentWindowID
-        GROUP BY msw.StudentKey, msw.AssessmentWindowID
+                ON fm.StudentNumber = msw.StudentNumber AND fm.AssessmentWindowID = msw.AssessmentWindowID
+        GROUP BY msw.StudentNumber, msw.AssessmentWindowID
     ),
     MathDone AS (   -- students over the >80% bar (empty for R/W since MathApplicable is empty there)
-        SELECT DISTINCT msw.StudentKey
+        SELECT DISTINCT msw.StudentNumber
         FROM MathStudentWindow msw
         INNER JOIN MathApplicable ma
                 ON ma.AssessmentWindowID = msw.AssessmentWindowID AND ma.GradeCode = msw.Grade
         INNER JOIN MathEnteredTasks me
-                ON me.StudentKey = msw.StudentKey AND me.AssessmentWindowID = msw.AssessmentWindowID
+                ON me.StudentNumber = msw.StudentNumber AND me.AssessmentWindowID = msw.AssessmentWindowID
         WHERE ma.ApplicableTasks > 0
           AND CAST(me.EnteredTasks AS DECIMAL(9,4)) / ma.ApplicableTasks > 0.8
     ),
@@ -264,12 +264,12 @@ RETURN
         MAX(gg.Grades)        AS Grades,
         MAX(sw.WindowIDs)     AS WindowIDs,   -- cycle instance(s) behind this card; roster routes saves by it
         COUNT(DISTINCT ss.StudentKey) AS ApplicableStudentCount,
-        COUNT(DISTINCT es.StudentKey) AS EnteredStudentCount,   -- "started" (>=1 result) for Math; the single result for R/W
-        COUNT(DISTINCT md.StudentKey) AS DoneStudentCount        -- Math only: >80% of grade's benchmark-month tasks marked (0 for R/W)
+        COUNT(DISTINCT es.StudentNumber) AS EnteredStudentCount,   -- "started" (>=1 result) for Math; the single result for R/W
+        COUNT(DISTINCT md.StudentNumber) AS DoneStudentCount        -- Math only: >80% of grade's benchmark-month tasks marked (0 for R/W)
     FROM SectionStudents ss
     LEFT JOIN SectionTeacherNames stn ON stn.SectionID = ss.SectionID
-    LEFT JOIN EnteredStudents es      ON es.StudentKey = ss.StudentKey
-    LEFT JOIN MathDone md             ON md.StudentKey = ss.StudentKey
+    LEFT JOIN EnteredStudents es      ON es.StudentNumber = ss.StudentNumber
+    LEFT JOIN MathDone md             ON md.StudentNumber = ss.StudentNumber
     LEFT JOIN GroupGrades gg
            ON gg.Scope     = ss.Scope
           AND gg.SectionID = ss.SectionID

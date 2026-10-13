@@ -30,6 +30,7 @@ RETURN
         SELECT
             faw.WritingAssessmentID,
             faw.StudentKey,
+            faw.StudentNumber,
             faw.AssessmentWindowID,
             faw.IdeasScore,
             faw.OrganizationScore,
@@ -86,7 +87,7 @@ RETURN
         dal.HexColor                                            AS AchievementHexColor,
         dal.HexColorTint                                        AS AchievementHexColorTint
     FROM WritingRows w
-    JOIN DimStudent s ON s.StudentKey = w.StudentKey AND s.IsCurrent = 1
+    JOIN DimStudent s ON s.StudentNumber = w.StudentNumber AND s.IsCurrent = 1
     JOIN DimProgram p ON p.ProgramCode = s.ProgramCode
     JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = w.AssessmentWindowID
     LEFT JOIN CurrentWritingIPP cwd

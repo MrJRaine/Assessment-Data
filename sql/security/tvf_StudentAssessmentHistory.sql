@@ -68,7 +68,7 @@ RETURN
         sp.StartingLevelCode                                    AS JuneReadingLevel,
         sp.StartingLevelOrder                                   AS JuneReadingLevelOrder
     FROM FactAssessmentReading far
-    JOIN DimStudent s ON s.StudentKey = far.StudentKey AND s.IsCurrent = 1
+    JOIN DimStudent s ON s.StudentNumber = far.StudentNumber AND s.IsCurrent = 1
     JOIN DimProgram p ON p.ProgramCode = s.ProgramCode
     JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = far.AssessmentWindowID
     JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID

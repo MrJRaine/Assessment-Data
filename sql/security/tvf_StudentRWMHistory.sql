@@ -46,7 +46,9 @@ RETURN
     ),
     -- The student, with grade (drives the count-as-0 task universe).
     Stu AS (
-        SELECT s.StudentKey, s.Grade
+        -- @StudentKey is the CURRENT key the app holds; resolve the STABLE StudentNumber here so the
+        -- fact scans below match results entered under a prior (re-versioned) key too.
+        SELECT s.StudentKey, s.StudentNumber, s.Grade
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.StudentKey = CAST(@StudentKey AS BIGINT)
     ),
@@ -98,7 +100,7 @@ RETURN
                    OR (dal.UpperOp = '<=' AND far.ReadingDelta <= dal.UpperBound)
                    OR (dal.UpperOp = '<'  AND far.ReadingDelta <  dal.UpperBound)
                    OR (dal.UpperOp = '='  AND far.ReadingDelta =  dal.UpperBound))
-        WHERE far.StudentKey = CAST(@StudentKey AS BIGINT)
+        WHERE far.StudentNumber = (SELECT StudentNumber FROM Stu)
     ),
     -- Writing events (dated) with their band code.
     WriteEvents AS (
@@ -122,7 +124,7 @@ RETURN
                           + (CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
                           + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                    AS DECIMAL(5,2)) AS AvgScore) avg4
-        WHERE faw.StudentKey = CAST(@StudentKey AS BIGINT)
+        WHERE faw.StudentNumber = (SELECT StudentNumber FROM Stu)
     )
     SELECT
         c.CycleDate,
@@ -163,7 +165,7 @@ RETURN
                        ROW_NUMBER() OVER (PARTITION BY fm.MathTaskKey
                                           ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
                 FROM FactAssessmentMath fm
-                WHERE fm.StudentKey = CAST(@StudentKey AS BIGINT)
+                WHERE fm.StudentNumber = (SELECT StudentNumber FROM Stu)
                   AND fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
                   AND fm.AssessmentDate <= c.CycleEnd
             ) x
@@ -187,7 +189,7 @@ RETURN
                            ROW_NUMBER() OVER (PARTITION BY fm.MathTaskKey
                                               ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
                     FROM FactAssessmentMath fm
-                    WHERE fm.StudentKey = CAST(@StudentKey AS BIGINT)
+                    WHERE fm.StudentNumber = (SELECT StudentNumber FROM Stu)
                       AND fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
                       AND fm.AssessmentDate <= c.CycleEnd
                 ) x
