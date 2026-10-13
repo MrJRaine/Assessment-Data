@@ -55,19 +55,21 @@ GO
 -- the STABLE business key, identical across every version of a student, so pulling it from the
 -- entry-time version yields the correct stable value even for already-relinked rows.
 UPDATE f
-SET f.StudentNumber = ds.StudentNumber, f.LastUpdated = GETDATE()
+-- NB: LastUpdated is intentionally NOT touched — populating this new provenance column is a
+-- schema migration, not an edit to the result, so the "last changed" stamp must stay accurate.
+SET f.StudentNumber = ds.StudentNumber
 FROM dbo.FactAssessmentMath f
 JOIN dbo.DimStudent ds ON ds.StudentKey = f.StudentKey
 WHERE f.StudentNumber IS NULL OR f.StudentNumber <> ds.StudentNumber;
 GO
 UPDATE f
-SET f.StudentNumber = ds.StudentNumber, f.LastUpdated = GETDATE()
+SET f.StudentNumber = ds.StudentNumber
 FROM dbo.FactAssessmentReading f
 JOIN dbo.DimStudent ds ON ds.StudentKey = f.StudentKey
 WHERE f.StudentNumber IS NULL OR f.StudentNumber <> ds.StudentNumber;
 GO
 UPDATE f
-SET f.StudentNumber = ds.StudentNumber, f.LastUpdated = GETDATE()
+SET f.StudentNumber = ds.StudentNumber
 FROM dbo.FactAssessmentWriting f
 JOIN dbo.DimStudent ds ON ds.StudentKey = f.StudentKey
 WHERE f.StudentNumber IS NULL OR f.StudentNumber <> ds.StudentNumber;
