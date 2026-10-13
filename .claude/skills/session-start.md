@@ -28,6 +28,22 @@ junction.**)
 
 ---
 
+## Step 0 — Sync with GitHub (BEFORE reading anything)
+
+Every file read below — the decision record, the Left Off note, the skills themselves — is only as
+current as the local checkout. Work often lands from another machine, so a stale checkout produces a
+confidently wrong briefing (happened 2026-10-12: local `dev` was 67 commits behind, and the briefing
+missed a whole release).
+
+1. `git fetch --all --prune`, then compare the current branch to its `origin` counterpart
+   (`git status -sb`, `git log --oneline HEAD..@{u}`).
+2. **Clean tree AND only behind** → `git pull --ff-only`; note how many commits came in.
+3. **Uncommitted changes, OR local commits not on origin (ahead/diverged)** → STOP. Report the state
+   to the user before reading anything else; do not stash, rebase, or merge on your own.
+4. Note any **new tags/releases** the fetch reported (e.g. `vX.Y.Z`) — they change what "current
+   release" means in the briefing.
+5. If this skill file itself changed in the pull, re-read it before continuing.
+
 ## Step 1 — Read the decision record (the ONLY memory file to auto-read)
 
 Read `.claude/memory/project_assessment_platform.md`.

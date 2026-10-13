@@ -14,8 +14,8 @@ export class UserError extends Error {
  *
  * Intentional app-validation THROWs (SQL error numbers 51000-51999, surfaced by mssql as
  * RequestError.number) are user-facing by design — pass them through. Everything else
- * (connection/driver/SQL internals) is genericized in production so we don't leak server or
- * schema details to the browser; the raw message is shown only in the explicit dev-diagnostic mode.
+ * (connection/driver/SQL internals) is genericized so we don't leak server or schema details to
+ * the browser.
  */
 export function toUserMessage(err: unknown): string {
   if (err instanceof UserError) return err.message
@@ -24,8 +24,6 @@ export function toUserMessage(err: unknown): string {
   if (num !== undefined && num >= 51000 && num < 52000 && typeof e.message === 'string') {
     return e.message
   }
-  if (process.env.AUTH_MODE === 'dev' && process.env.ALLOW_DEV_AUTH === 'true' && typeof e?.message === 'string') {
-    return e.message
-  }
+  console.error('[toUserMessage]', typeof e?.message === 'string' ? e.message : err) // server log only
   return 'Something went wrong. Please retry; if it persists, contact your administrator.'
 }

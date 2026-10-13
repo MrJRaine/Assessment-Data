@@ -376,7 +376,6 @@ a { color: inherit; text-decoration: none; }
 .actions { margin-top: 1rem; }
 .toolbar { margin: 1rem 0; }
 .detail-grid { display: grid; gap: 1rem; margin-top: 1rem; }
-.status-strip { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
 
 /* dev-only impersonation bar (amber so it is unmistakably a dev tool; never shown in entra/live) */
 .dev-impersonate {
@@ -607,3 +606,28 @@ a { color: inherit; text-decoration: none; }
 .mtoggle.yes .check path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 .mtoggle.yes .check .edge { stroke: #176a37; stroke-width: 6; } /* 1.25 units per side ~= 1.75px — see note */
 .mtoggle.yes .check .fill { stroke: #35c75a; stroke-width: 3.5; } /* the colour you actually read */
+
+/* ---- Reports > Math oversight roll-up tree (math-reports #2) ---- */
+.mtree-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.mtree { width: 100%; }
+.mtree th.rn, .mtree td.rn { width: 84px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+.mtree thead th.rpct-h { min-width: 96px; }
+.mtree tr.tnode th.col-task { cursor: pointer; }
+.mtree tr.lvl1 th.col-task { font-weight: 700; }
+.mtree tr.lvl2 th.col-task { padding-left: 1.7rem; font-weight: 500; }
+.mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
+.mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }
+/* width:0 + min-width:100% keeps a wide grade block from stretching the tree's columns; the block's
+   own .mscroll scrolls horizontally instead. */
+.mtree .blockwrap { width: 0; min-width: 100%; }
+.mtree .blockwrap .mscroll { max-height: 60vh; }
+.mgrid td.rpct { text-align: center; font-weight: 700; font-size: .82rem; font-variant-numeric: tabular-nums; padding: .35rem .3rem; cursor: help; background: var(--card); }
+.mgrid td.rpct.h4 { background: #dbf1e4; color: #1c6b3b; }
+.mgrid td.rpct.h3 { background: #eaf5da; color: #4d6a1c; }
+.mgrid td.rpct.h2 { background: #fbeed6; color: #8a5711; }
+.mgrid td.rpct.h1 { background: #f9dfe3; color: #9a2f3d; }
+.mgrid td.rpct.none { color: var(--muted); font-weight: 500; cursor: default; }
+.mgrid tr.sumrow th.col-task { background: #e7edf1; }
+.mgrid tr.sumrow th.col-task .uname { font-size: .76rem; letter-spacing: .07em; text-transform: uppercase; color: var(--ink); font-weight: 700; }
+.mgrid tr.sumrow th.col-task .tsub { display: block; margin-left: 0; }

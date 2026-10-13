@@ -4,7 +4,7 @@
  *          Response rows in DimAssessmentWindow) by subject:
  *            Reading -> P .. 8   (Primary through Grade 8)
  *            Writing -> P .. RG  (Primary through Returning Graduate)
- *            Math    -> P .. 6   (Primary through Grade 6)
+ *            Math    -> P .. 5   (Primary through Grade 5; grade 6 tasks not ready for 2026-27)
  *          MinGrade moves to 'P' (Primary) for all three (previously the
  *          whole-population default 'PP'/Pre-Primary).
  * SCD Type: N/A (DimAssessmentWindow rows are managed manually)
@@ -34,10 +34,10 @@ SET MinGrade    = 'P',
     LastUpdated = GETDATE()
 WHERE AssessmentType = 'Writing';
 
--- ---- Math: P .. 6 -----------------------------------------------------------
+-- ---- Math: P .. 5 (grade 6 math not ready for 2026-27) ----------------------
 UPDATE DimAssessmentWindow
 SET MinGrade    = 'P',
-    MaxGrade    = '6',
+    MaxGrade    = '5',
     LastUpdated = GETDATE()
 WHERE AssessmentType = 'Math';
 

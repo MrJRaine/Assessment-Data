@@ -43,7 +43,7 @@ export default async function RwmStudentPage({
     return (
       <>
         <div className="back-row"><Link href="/reports/rwm" className="back-link">&larr; Back to RWM</Link></div>
-        <EmptyState title="Student not found in your scope" hint="This student may not be a Primary–6 student you can see, or has a confirmed IPP." />
+        <EmptyState title="Student not found in your scope" hint="This student may not be a Primary–5 student you can see, or has a confirmed IPP." />
       </>
     )
   }

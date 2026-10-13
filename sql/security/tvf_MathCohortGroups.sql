@@ -39,7 +39,7 @@ RETURN
         INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
         INNER JOIN DimGrade sg ON sg.GradeCode = s.Grade
         LEFT  JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
-        WHERE sg.GradeOrder BETWEEN 0 AND 6
+        WHERE sg.GradeOrder BETWEEN 0 AND 5   -- Math = Primary..Grade 5 (grade 6 not ready 2026-27)
 
         UNION ALL
 
@@ -51,7 +51,7 @@ RETURN
         INNER JOIN DimGrade sg ON sg.GradeCode = s.Grade
         LEFT  JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
         WHERE c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
-          AND sg.GradeOrder BETWEEN 0 AND 6
+          AND sg.GradeOrder BETWEEN 0 AND 5   -- Math = Primary..Grade 5 (grade 6 not ready 2026-27)
     ),
     -- Homeroom lens + Grade lens (the two the user asked for).
     GroupRows AS (

@@ -8,7 +8,7 @@ import CycleSelector from '../../CycleSelector'
 export const dynamic = 'force-dynamic'
 
 // Reports > Math > one group. Read-only results matrix (styled like the entry grid) over ALL of the
-// current year's math cycles, latest result per task. P-6.
+// current year's math cycles, latest result per task. P-5.
 export default async function MathCohortPage({
   params,
   searchParams,
@@ -62,7 +62,7 @@ export default async function MathCohortPage({
       ) : rows.length === 0 ? (
         <EmptyState
           title="No students in this group"
-          hint="Math results appear here once this class has Primary–6 students on roll."
+          hint="Math results appear here once this class has Primary–5 students on roll."
         />
       ) : (
         <MathCohortView rows={rows} />

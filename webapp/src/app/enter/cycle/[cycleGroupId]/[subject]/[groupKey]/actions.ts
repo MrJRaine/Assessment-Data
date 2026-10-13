@@ -194,26 +194,38 @@ export async function saveMathAssessments(
     return { saved: 0, errors: entries.map((e) => ({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: msg })) }
   }
 
+  // Run the per-mark upserts CONCURRENTLY over the connection pool instead of one at a time. A full
+  // math class is per-student×per-task (100+ marks); sequentially that was ~100+ round-trips taking
+  // minutes, which tripped the prod proxy timeout and surfaced as a (often false) "couldn't save".
+  // The pool (FABRIC_POOL_MAX, default 20) bounds real concurrency; each proc call is independent
+  // (a distinct grain row), so there's no cross-row contention. Per-mark validation/errors are
+  // unchanged — each call still returns or throws on its own and is captured below.
+  const outcomes = await Promise.all(
+    entries.map(async (e): Promise<{ e: MathEntry; error: string | null }> => {
+      if (!allowed.has(e.studentNumber)) {
+        return { e, error: 'Not in your roster for this window/group — not saved.' }
+      }
+      try {
+        await execProc('usp_UpsertMathAssessment', {
+          StudentNumber: e.studentNumber,
+          AssessmentWindowID: windowId,
+          MathTaskKey: e.mathTaskKey,
+          Result: e.result, // '0' | '1' | null (clear)
+          AssessmentDate: assessmentDate,
+          CallerUPN: upn,
+        })
+        return { e, error: null }
+      } catch (err) {
+        return { e, error: toUserMessage(err) }
+      }
+    }),
+  )
+
   const errors: MathSaveResult['errors'] = []
   let saved = 0
-  for (const e of entries) {
-    if (!allowed.has(e.studentNumber)) {
-      errors.push({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: 'Not in your roster for this window/group — not saved.' })
-      continue
-    }
-    try {
-      await execProc('usp_UpsertMathAssessment', {
-        StudentNumber: e.studentNumber,
-        AssessmentWindowID: windowId,
-        MathTaskKey: e.mathTaskKey,
-        Result: e.result, // '0' | '1' | null (clear)
-        AssessmentDate: assessmentDate,
-        CallerUPN: upn,
-      })
-      saved++
-    } catch (err) {
-      errors.push({ studentNumber: e.studentNumber, mathTaskKey: e.mathTaskKey, message: toUserMessage(err) })
-    }
+  for (const o of outcomes) {
+    if (o.error) errors.push({ studentNumber: o.e.studentNumber, mathTaskKey: o.e.mathTaskKey, message: o.error })
+    else saved++
   }
 
   // The roster URL is keyed on the CYCLE now (/enter/cycle/<cycleGroupId>/<subject>/<groupKey>) and

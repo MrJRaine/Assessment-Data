@@ -1230,7 +1230,7 @@ export async function getAchievementLevels(): Promise<AchievementBand[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Math roster (P-6 Math). One row per (student x applicable task) from
+// Math roster (P-5 Math; grade 6 not ready 2026-27). One row per (student x applicable task) from
 // tvf_TeacherRosterMath; the client grid structures these into the student x
 // task matrix (grouped by grade + unit). See project_math_assessment_model.
 // ---------------------------------------------------------------------------
@@ -1363,7 +1363,7 @@ export async function getImpersonationTargets(): Promise<ImpersonationTarget[]> 
 // Read-only matrix, group-scoped, ALL of the current year's math cycles (latest result per task).
 // Mirrors the choose-a-group + roster split of Data Entry, but points at the Reports TVFs.
 
-/** Group picker for the Math cohort report (homeroom / grade lenses, P-6). Same shape as Data Entry. */
+/** Group picker for the Math cohort report (homeroom / grade lenses, P-5). Same shape as Data Entry. */
 export async function getMathCohortGroups(upn: string): Promise<TeacherGroup[]> {
   const rows = await queryAsUser<{
     GroupKey: string
@@ -1456,8 +1456,58 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
   }))
 }
 
+/**
+ * Oversight roll-up feed (math-reports #2): one row per (student × unit) across the caller's whole
+ * oversight scope, COUNTS only — no names. unitName null = the student's grade has no tasks yet.
+ */
+export interface MathRollupRow {
+  studentKey: string
+  grade: string
+  homeroom: string | null
+  homeroomKey: string | null
+  schoolId: string
+  schoolName: string | null
+  mathIPP: boolean
+  unitName: string | null
+  unitOrder: number
+  taskCount: number
+  scoredCount: number
+  canDoCount: number
+}
+
+export async function getMathCohortAll(upn: string, cycleGroupId: string | null = null): Promise<MathRollupRow[]> {
+  const rows = await queryAsUser<{
+    StudentKey: string
+    Grade: string
+    Homeroom: string | null
+    HomeroomKey: string | null
+    SchoolID: string
+    SchoolName: string | null
+    MathIPPStatus: number | null
+    UnitName: string | null
+    UnitOrder: number | null
+    TaskCount: number
+    ScoredCount: number
+    CanDoCount: number | null
+  }>(upn, 'SELECT * FROM dbo.tvf_StudentCohortMathAll(@UPN, @CycleGroupID)', { CycleGroupID: cycleGroupId })
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    grade: r.Grade,
+    homeroom: r.Homeroom ?? null,
+    homeroomKey: r.HomeroomKey ?? null,
+    schoolId: r.SchoolID,
+    schoolName: r.SchoolName ?? null,
+    mathIPP: r.MathIPPStatus === 1,
+    unitName: r.UnitName ?? null,
+    unitOrder: Number(r.UnitOrder ?? 0),
+    taskCount: Number(r.TaskCount ?? 0),
+    scoredCount: Number(r.ScoredCount ?? 0),
+    canDoCount: Number(r.CanDoCount ?? 0),
+  }))
+}
+
 // ---- Reports > RWM (0.7.0, item 5): Reading·Writing·Math achievement roll-up ------------------
-// Cohort-wide (like Reading/Writing), P-6 only, IPP-in-any-area students excluded (in the TVF).
+// Cohort-wide (like Reading/Writing), P-5 only, IPP-in-any-area students excluded (in the TVF).
 
 export interface RWMStudent {
   studentKey: string

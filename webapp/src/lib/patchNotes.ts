@@ -16,6 +16,27 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.2.0',
+    date: '2026-10-12',
+    kind: 'fix',
+    summary:
+      'Saving a full math class is now much faster — seconds instead of a couple of minutes — and no longer shows a "Could not save" message for marks that actually saved. If a save ever can’t be confirmed, you’ll see one message asking you to reload and check; your entries are kept on your device for about 90 minutes.',
+  },
+  {
+    version: '1.2.0',
+    date: '2026-10-12',
+    kind: 'fix',
+    summary:
+      'On the Reports cohort table, switching between Reading and Writing (or changing the cycle) no longer leaves rows from the previous view behind. The table now rebuilds each time you switch.',
+  },
+  {
+    version: '1.2.0',
+    date: '2026-10-12',
+    kind: 'feature',
+    summary:
+      'Math reports: units now start collapsed — click a unit to see its tasks. Math now covers grades Primary to 5 for this school year. School administrators and regional staff now see a summary by school, grade and homeroom, showing the share of students at Meeting or In-depth; open any grade or homeroom to see its students.',
+  },
+  {
     version: '1.1.0',
     date: '2026-10-07',
     kind: 'feature',

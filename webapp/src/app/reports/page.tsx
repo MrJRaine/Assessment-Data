@@ -67,7 +67,13 @@ export default async function StudentsPage({
           hint={`${isWriting ? 'Writing' : 'Reading'} assessments and demographics appear here for students you can see.`}
         />
       ) : (
-        <CohortView cohort={cohort} bands={bands} subject={isWriting ? 'Writing' : 'Reading'} assessableRange={assessableRange} />
+        // key on subject+cycle: the Reading/Writing toggle AND the cycle selector are SAME-ROUTE
+        // soft navigations, so React reconciles this client component in place — which left stale
+        // rows from the previous render mounted in the table (e.g. reading rows with reading columns
+        // + reading links, inert to the writing sort) until a hard refresh. Keying forces a full
+        // remount on either change: the old subtree is torn down and rebuilt fresh from the new data.
+        // Filters/sort restore from sessionStorage, so the user's selections survive the remount.
+        <CohortView key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}`} cohort={cohort} bands={bands} subject={isWriting ? 'Writing' : 'Reading'} assessableRange={assessableRange} />
       )}
     </>
   )

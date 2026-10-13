@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { RWMStudent } from '@/lib/data'
 
-// RWM = a 0–3 score per Primary–6 student: how many of Reading / Writing / Math they're currently
+// RWM = a 0–3 score per Primary–5 student: how many of Reading / Writing / Math they're currently
 // meeting or exceeding. Cohort-wide (like the Reading/Writing report), IPP-in-any students already
 // excluded by the TVF. Faceted grade / program / school / score filters that live-trim each other.
 
@@ -43,7 +43,7 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   // Reading/Writing are single most-recent results and unaffected. Recompute client-side so the
   // toggle flips instantly. Default: blanks excluded (matches the Math report's default).
   const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
-  // "Complete" = has an actual result in ALL THREE areas (not everyone does — the report is P-6 and
+  // "Complete" = has an actual result in ALL THREE areas (not everyone does — the report is P-5 and
   // areas roll out at different times). Independent of the blanks toggle: this is about evidence
   // existing at all, not how it's scored.
   const [completeOnly, setCompleteOnly] = useState(false)
