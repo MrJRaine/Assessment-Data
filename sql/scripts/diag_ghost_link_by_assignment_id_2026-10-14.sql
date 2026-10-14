@@ -41,7 +41,8 @@ SELECT
     ca.Email           AS MatchedCurrentEmail,
     ca.AccessLevel     AS MatchedAccessLevel,
     COUNT(DISTINCT ga.SourceSystemID) AS SharedAssignmentIDs,
-    COUNT(DISTINCT ca.StaffKey) OVER (PARTITION BY ga.GhostKey) AS DistinctMatchesForGhost
+    -- after GROUP BY, one row per (ghost, matched person) -> COUNT(*) over the ghost = # distinct matches
+    COUNT(*) OVER (PARTITION BY ga.GhostKey) AS DistinctMatchesForGhost
 FROM GhostAsg ga
 INNER JOIN CurAsg ca
         ON ca.SourceSystemID = ga.SourceSystemID
