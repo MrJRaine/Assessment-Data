@@ -59,8 +59,9 @@ with `0.3.0`, so earlier detail is approximate.
 >   student appears once regardless of any duplication upstream; this also clears the related case where a
 >   duplicated student lingered in the list after a filter was applied. SQL:
 >   `sql/deploy/live_1.2.0/deploy_startingpoint_collapse_2026-10-15.sql` (view redeploy only; no app change).
->   The duplicate baseline seed rows remain and are harmless to the view — cleaning the seed and the loader
->   that doubled it is a separate hygiene step.
+>   The multiple baseline rows are expected, not a bug: the prior-year seed is aggregated per school, so a
+>   student who changed schools last year legitimately has one row per school — the view now resolves a
+>   single starting point from them (newest in-system result first, else a deterministic pick of the seed).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
