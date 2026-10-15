@@ -51,6 +51,16 @@ with `0.3.0`, so earlier detail is approximate.
 >   cycle closed). SQL:
 >   `sql/deploy/live_1.2.0/deploy_card_section_stable_teacher_current_2026-10-13.sql` (redeploys the
 >   rebuild proc + 5 TVFs + rebuilds membership).
+> - **2026-10-15 — Students no longer appear more than once in the reading report.** Some students were
+>   listed two (or more) times in the reading cohort because the reading starting-point view returned
+>   duplicate rows for them — the pre-system prior-year baseline seed held duplicate entries for those
+>   students, and the report's starting-point join multiplied them. The view now collapses to exactly one
+>   starting point per student and reading scale (preferring an in-system result over the seed), so each
+>   student appears once regardless of any duplication upstream; this also clears the related case where a
+>   duplicated student lingered in the list after a filter was applied. SQL:
+>   `sql/deploy/live_1.2.0/deploy_startingpoint_collapse_2026-10-15.sql` (view redeploy only; no app change).
+>   The duplicate baseline seed rows remain and are harmless to the view — cleaning the seed and the loader
+>   that doubled it is a separate hygiene step.
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
