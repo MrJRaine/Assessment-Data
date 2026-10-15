@@ -16,6 +16,13 @@
  *
  * StartingLevelOrder is NULL when the level doesn't map to a DimReadingScale level
  * (e.g. a baseline code ABS/INS/EAL) — the caller then shows the level with no Δ.
+ *
+ * Modified: 2026-10-15 — ENFORCE the one-row-per-(StudentNumber, ScaleSystem) grain with a final
+ *   ROW_NUMBER collapse (prefer fact over baseline, deterministic tiebreak). The baseline seed
+ *   (PriorYearBaseline) had duplicate rows for some students, which fanned the view out to 2-4 rows
+ *   per student and multiplied those students in the reading cohort (fact.StudentNumber join). We
+ *   COLLAPSE by the stable Student ID here rather than filter ActiveFlag (which would break historical
+ *   reports that must resolve old/inactive scale versions). Robust to any upstream duplication.
  ******************************************************************************/
 
 DROP VIEW IF EXISTS dbo.vw_StudentReadingStartingPoint;
@@ -54,19 +61,34 @@ BaselineSeed AS (
     INNER JOIN Yr ON b.SchoolYear = Yr.PriorYear
     WHERE b.ReadingLevel IS NOT NULL
 )
-SELECT
-    COALESCE(pf.StudentNumber, bs.StudentNumber) AS StudentNumber,
-    COALESCE(pf.ScaleSystem,   bs.ScaleSystem)   AS ScaleSystem,
-    COALESCE(pf.LevelCode,     bs.LevelCode)     AS StartingLevelCode,
-    COALESCE(pf.LevelOrder,    bsrs.LevelOrder)  AS StartingLevelOrder,
-    CASE WHEN pf.StudentNumber IS NOT NULL THEN 'fact' ELSE 'baseline' END AS StartingSource
-FROM (SELECT * FROM PriorFact WHERE rn = 1) pf
-FULL OUTER JOIN BaselineSeed bs
-       ON bs.StudentNumber = pf.StudentNumber
-      AND bs.ScaleSystem   = pf.ScaleSystem
-LEFT JOIN DimReadingScale bsrs
-       ON bsrs.ScaleSystem = bs.ScaleSystem
-      AND bsrs.LevelCode   = bs.LevelCode;
+-- Collapse to EXACTLY ONE row per (StudentNumber, ScaleSystem). Prefer the fact source over the
+-- baseline seed, then a mappable level over an unmappable one, then the level code — deterministic,
+-- and immune to duplicate baseline rows / any upstream fan-out. (Do NOT dedupe via ActiveFlag — a
+-- historical report must still resolve old scale versions.)
+SELECT z.StudentNumber, z.ScaleSystem, z.StartingLevelCode, z.StartingLevelOrder, z.StartingSource
+FROM (
+    SELECT
+        COALESCE(pf.StudentNumber, bs.StudentNumber) AS StudentNumber,
+        COALESCE(pf.ScaleSystem,   bs.ScaleSystem)   AS ScaleSystem,
+        COALESCE(pf.LevelCode,     bs.LevelCode)     AS StartingLevelCode,
+        COALESCE(pf.LevelOrder,    bsrs.LevelOrder)  AS StartingLevelOrder,
+        CASE WHEN pf.StudentNumber IS NOT NULL THEN 'fact' ELSE 'baseline' END AS StartingSource,
+        ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(pf.StudentNumber, bs.StudentNumber),
+                         COALESCE(pf.ScaleSystem,   bs.ScaleSystem)
+            ORDER BY CASE WHEN pf.StudentNumber IS NOT NULL THEN 0 ELSE 1 END,   -- fact before baseline
+                     COALESCE(pf.LevelOrder, bsrs.LevelOrder) DESC,              -- a mapped level before NULL
+                     COALESCE(pf.LevelCode, bs.LevelCode)                        -- final deterministic tiebreak
+        ) AS rn
+    FROM (SELECT * FROM PriorFact WHERE rn = 1) pf
+    FULL OUTER JOIN BaselineSeed bs
+           ON bs.StudentNumber = pf.StudentNumber
+          AND bs.ScaleSystem   = pf.ScaleSystem
+    LEFT JOIN DimReadingScale bsrs
+           ON bsrs.ScaleSystem = bs.ScaleSystem
+          AND bsrs.LevelCode   = bs.LevelCode
+) z
+WHERE z.rn = 1;
 GO
 
 GRANT SELECT ON [dbo].[vw_StudentReadingStartingPoint] TO [StudentDataAssessment];
