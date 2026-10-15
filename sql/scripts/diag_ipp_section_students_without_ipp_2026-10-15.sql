@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Script: diag_ipp_section_students_without_ipp_2026-10-15.sql   (LIVE — READ ONLY)
- * Purpose: Data-quality worklist — students currently enrolled in a section whose COURSE NAME contains
- *          "IPP", but who are NOT flagged as having a current IPP on their student record. These are
+ * Purpose: Data-quality worklist — students currently enrolled in a section whose COURSE CODE contains
+ *          "IP", but who are NOT flagged as having a current IPP on their student record. These are
  *          likely missing an IPP flag (or mis-enrolled in the IPP section).
  *
  * Returns: StudentID (provincial StudentNumber), LastName/FirstName (to action the list),
@@ -9,7 +9,7 @@
  *          School (the student's current school).
  *
  * Logic:
- *   - Section "with IPP in the name"  = DimSection.CourseName contains 'IPP' (case-insensitive).
+ *   - Section "IPP section"           = DimSection.CourseCode contains 'IP' (case-insensitive).
  *   - "Enrolled"                      = a CURRENT enrolment (FactEnrollment.ActiveFlag = 1).
  *   - "Not a current IPP"             = DimStudent.IPP IS NULL OR = 0 (PS CurrentIPP flag on the
  *                                       student's CURRENT version).
@@ -37,7 +37,7 @@ SELECT DISTINCT
 FROM FactEnrollment e
 INNER JOIN DimSection sec
         ON sec.SectionKey = e.SectionKey
-       AND UPPER(sec.CourseName) LIKE '%IPP%'
+       AND UPPER(sec.CourseCode) LIKE '%IP%'
 INNER JOIN DimStudent es                                 -- enrolment's version, only to recover StudentNumber
         ON es.StudentKey = e.StudentKey
 INNER JOIN DimStudent s                                  -- the student's CURRENT version (stable-key resolve)
