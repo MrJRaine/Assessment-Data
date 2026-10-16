@@ -9,7 +9,7 @@ import { loadReadingGroup } from './actions'
 // Reading oversight roll-up: School → Grade/Homeroom → students (EN/FR reading level + band). Thin
 // wrapper over the shared RollupTree; the per-group detail shows each student's English + French level.
 
-export default function ReadingRollupTree({ rows, cycle }: { rows: ReadingRollupRow[]; cycle: string | null }) {
+export default function ReadingRollupTree({ rows, cycle, showAll }: { rows: ReadingRollupRow[]; cycle: string | null; showAll?: boolean }) {
   const schools = useMemo(() => {
     const byKey = new Map<string, RollupStudent>()
     for (const r of rows) {
@@ -33,6 +33,7 @@ export default function ReadingRollupTree({ rows, cycle }: { rows: ReadingRollup
     <RollupTree<ReadingGroupRow>
       schools={schools}
       cycle={cycle}
+      showAll={showAll}
       loadGroup={loadReadingGroup}
       renderDetail={(groupRows) => <ReadingDetail rows={groupRows} />}
     />

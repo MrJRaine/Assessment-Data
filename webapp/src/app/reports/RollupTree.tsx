@@ -2,8 +2,8 @@
 
 import { Fragment, useState, type ReactNode } from 'react'
 import {
-  type Counts, type RollupSchool, type SummarizeBy,
-  tally, pctOf, childrenOf,
+  type Counts, type RollupSchool, type RollupStudent, type SummarizeBy,
+  tally, pctOf, childrenOf, gradeLabel, gradeRank,
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
 
@@ -29,14 +29,26 @@ function MeetCell({ c }: { c: Counts }) {
 
 // Generic School → Grade/Homeroom → (expand) student-detail roll-up. The subject wrapper supplies the
 // pre-built schools, a per-group loader, and how to render one group's student detail.
+// Grade-grouped children of a set of students (used by the TCRCE all-schools row — grade only, no homeroom).
+function gradeGroups(students: RollupStudent[]): { grade: string; students: RollupStudent[] }[] {
+  const m = new Map<string, RollupStudent[]>()
+  for (const s of students) m.set(s.grade, [...(m.get(s.grade) ?? []), s])
+  return [...m.entries()]
+    .map(([grade, studs]) => ({ grade, students: studs }))
+    .sort((a, b) => gradeRank(a.grade) - gradeRank(b.grade))
+}
+
+const TCRCE_ID = '__TCRCE__'
+
 export function RollupTree<T>({
-  schools, cycle, loadGroup, renderDetail, toolbarExtra,
+  schools, cycle, loadGroup, renderDetail, toolbarExtra, showAll = false,
 }: {
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
   renderDetail: (rows: T[]) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
+  showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
   const [openSchools, setOpenSchools] = useState<Set<string>>(
@@ -123,6 +135,40 @@ export function RollupTree<T>({
             </tr>
           </thead>
           <tbody>
+            {showAll && schools.length > 1
+              ? (() => {
+                  const allStudents = schools.flatMap((s) => s.students)
+                  const tOpen = openSchools.has(TCRCE_ID)
+                  const tc = tally(allStudents)
+                  return (
+                    <Fragment key={TCRCE_ID}>
+                      <tr className="tnode lvl1 tcrce">
+                        <th className="col-task" onClick={() => toggleSchool(TCRCE_ID)}>
+                          <span className="tchev">{tOpen ? '▾' : '▸'}</span>TCRCE<span className="tsub">all schools</span>
+                        </th>
+                        <StudentsCell c={tc} />
+                        <ResultsCell c={tc} />
+                        <MeetCell c={tc} />
+                      </tr>
+                      {tOpen
+                        ? gradeGroups(allStudents).map((g) => {
+                            const gc = tally(g.students)
+                            return (
+                              <tr className="tnode lvl2" key={`${TCRCE_ID}:${g.grade}`}>
+                                <th className="col-task">
+                                  <span className="tchev" style={{ visibility: 'hidden' }}>▸</span>{gradeLabel(g.grade)}
+                                </th>
+                                <StudentsCell c={gc} />
+                                <ResultsCell c={gc} />
+                                <MeetCell c={gc} />
+                              </tr>
+                            )
+                          })
+                        : null}
+                    </Fragment>
+                  )
+                })()
+              : null}
             {schools.map((sch) => {
               const open = openSchools.has(sch.id)
               const c = tally(sch.students)

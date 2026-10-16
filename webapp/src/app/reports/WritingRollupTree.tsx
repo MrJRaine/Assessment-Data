@@ -20,7 +20,7 @@ const scoreFor = (r: WritingGroupRow, key: WritingTraitKey): string | null =>
       : key === 'language' ? r.languageScore
         : r.conventionsScore
 
-export default function WritingRollupTree({ rows, cycle }: { rows: WritingRollupRow[]; cycle: string | null }) {
+export default function WritingRollupTree({ rows, cycle, showAll }: { rows: WritingRollupRow[]; cycle: string | null; showAll?: boolean }) {
   const [traitMode, setTraitMode] = useTraitOrder()
   const traits = useMemo(() => traitsInOrder(traitMode), [traitMode])
 
@@ -47,6 +47,7 @@ export default function WritingRollupTree({ rows, cycle }: { rows: WritingRollup
     <RollupTree<WritingGroupRow>
       schools={schools}
       cycle={cycle}
+      showAll={showAll}
       loadGroup={loadWritingGroup}
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
       renderDetail={(groupRows) => <WritingDetail rows={groupRows} traits={traits} />}

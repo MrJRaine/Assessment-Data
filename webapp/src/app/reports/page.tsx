@@ -44,10 +44,12 @@ export default async function StudentsPage({
   let assessableRange: { minOrder: number; maxOrder: number } | null = null
   let cycles: ReportCycle[] = []
   let oversight = false
+  let regionWide = false // RegionalAnalyst = sees all schools → gets the TCRCE all-schools roll-up row
   let error: string | null = null
   try {
     const accessLevel = await getCallerAccessLevel(upn)
     oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
+    regionWide = accessLevel === 'RegionalAnalyst'
     cycles = await getReportCycles()
     // Oversight roles get the School → Grade/Homeroom roll-up tree (Reading or Writing); teachers get the
     // flat per-student cohort list.
@@ -90,9 +92,9 @@ export default async function StudentsPage({
         <ErrorNote message={error} />
       ) : useReadingTree ? (
         // key on cycle so an expanded school doesn't survive a cycle switch (same reason as the Math tree).
-        <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} />
+        <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} />
       ) : useWritingTree ? (
-        <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} />
+        <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} />
       ) : cohort.length === 0 ? (
         <EmptyState
           title="No students in your scope"

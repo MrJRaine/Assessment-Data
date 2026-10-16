@@ -67,7 +67,7 @@ export default async function MathReportsPage({ searchParams }: { searchParams: 
           />
         ) : (
           // Remount on cycle change so no expanded block from the previous cycle lingers.
-          <MathRollupTree key={cycle ?? 'current'} rows={rows} cycle={cycle} />
+          <MathRollupTree key={cycle ?? 'current'} rows={rows} cycle={cycle} showAll={accessLevel === 'RegionalAnalyst'} />
         )}
       </>
     )
