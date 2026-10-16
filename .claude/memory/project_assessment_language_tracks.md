@@ -2,7 +2,10 @@
 name: project_assessment_language_tracks
 description: "Dual-language literacy is CONFIG-DRIVEN via cycle INSTANCES (shipped 0.5.0) — reading scale/language and who's assessed come from the instance a student's program-scope+grade lands them in, NEVER a hardcoded per-student rule. Claude keeps relapsing into hardcoding; do NOT."
 metadata:
+  node_type: memory
   type: project
+  originSessionId: 41a845c2-822d-46c3-bb5a-20d4a608b8a9
+  modified: 2026-10-16T20:07:50.276Z
 ---
 
 ## BINDING RULE — the instances are the levers. Do NOT hardcode.
@@ -75,19 +78,24 @@ and `EnteredStudentCount` counts a result on ANY instance of the cycle. Card == 
 J020 (late immersion) has no French reading benchmarks yet, so it reads English — but that too is expressed
 by ProgramScope (J020 is in the Late Immersion bucket), not by hardcoding its program code.
 
-## FUTURE — dual-track reading cleanup (user flagged 2026-09-21; harmless now, fix before dual-track reading)
-Reading is captured per result via `FactAssessmentReading.ReadingScaleID → DimReadingScale.ScaleSystem`
-(EN_Reading/FR_Reading — the scale IS the language) + the instance's `AssessmentWindowID`. BUT the ROSTER
-resolves the scale from the **window** (`COALESCE(window.ScaleSystem, per-student family fallback)`), **not
-from the SECTION's course language.** So a student in BOTH an ELA and an FLA section sees the SAME reading
-scale in both (whatever the window/family gives), even though the group-select page bins them into the
-correct section by course language. Writing already routes by the section's language; reading does not.
-- **Today it's cosmetic** — reading is effectively single-language per student, so the duplicate/same-scale
-  view causes no wrong data.
-- **To make reading dual-track:** route the reading result to the instance matching the SECTION'S course
-  language (the way writing does), so an ELA section → `EN_Reading` and an FLA section → `FR_Reading`, and a
-  student's English and French reading split into the two instances' windows. Reading already has NO grain
-  collision (two windows), so this is roster-routing work, not a fact-schema change.
+## Dual-language READING — it IS supported in the data (corrected 2026-10-16; was mis-noted as "single-language")
+Reading language is per result via `FactAssessmentReading.ReadingScaleID → DimReadingScale.ScaleSystem`
+(EN_Reading/FR_Reading — the scale IS the language; there is NO AssessmentLanguage column on the reading
+fact, unlike writing). **A reading result's scale is the one the ENTRY INSTANCE/WINDOW carries.** Entry is
+course-scoped (the group picker routes a section to its cycle instance), and `usp_UpsertReadingAssessment`
+validates the saved scale against that instance's `ScaleSystem` (51014). So when a cycle has BOTH an
+`EN_Reading` and an `FR_Reading` instance, a student in both an ELA and an FLA section is entered in both
+windows and gets **two reading results — one EN, one FR.** Dual-language reading therefore EXISTS at the
+data level with no entry-side work (user, 2026-10-16); it's just not yet common practice.
+- The old "single-language per student" claim was WRONG / conditional: it only holds for a cycle that has
+  NO language-scoped reading instance, where the roster falls back to `COALESCE(window.ScaleSystem,
+  per-student family)`. With the reconciled instance set (separate EN/FR reading windows), the scale does
+  track the section's language through the chosen window.
+- **The gap being fixed in the 1.3.0 reports rebuild:** the cohort read `tvf_StudentCohort` collapses a
+  student's reading to ONE latest row (`PARTITION BY StudentNumber` only), silently dropping the other
+  language. The new oversight roll-up TVF (`tvf_StudentCohortReadingAll`) derives language per result from
+  `ScaleSystem` and keeps per-(StudentNumber, ScaleSystem) rows, so distinct-student vs results-per-language
+  counting works. Writing already carries `AssessmentLanguage` on its fact; reading derives it from the scale.
 - Possible companion (see [[project_math_split_pacing_model]] self-containment ethos): freeze `ScaleSystem`
   directly on `FactAssessmentReading` for clean export, rather than resolving via ReadingScaleID.
 
