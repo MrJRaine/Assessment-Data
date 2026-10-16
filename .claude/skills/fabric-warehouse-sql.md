@@ -383,6 +383,14 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
     `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.T') AND name = 'Col') ALTER TABLE dbo.T ADD Col …;` then `GO`.
     (2026-10-13, StudentNumber durable-fix Stage 1.)
 
+22. **A module's stored definition (`sys.sql_modules.definition` / `OBJECT_DEFINITION`) begins at `CREATE` — a
+    leading header comment is NOT stored.** Our deploy files put a `/* header */` block then `DROP … IF EXISTS; GO`
+    then `CREATE …`; the header is a separate batch (and even in the same batch, text before `CREATE` is dropped),
+    so it never lands in the stored definition. Consequence: a "is this patch deployed?" check that greps the live
+    definition for a marker string must use a marker that lives **inside the module body (after `CREATE`)**, never one
+    from the file header — a header marker yields a false MISSING even when the object IS deployed.
+    (2026-10-16, A+B card-fix deploy-verification diag — first version false-negatived 2 of 6 objects.)
+
 ## NEWID() in a CROSS APPLY is folded to ONE value per query (2026-09-22)
 
 Per-row randomness via `NEWID()` fails when the expression sits in a `CROSS APPLY (VALUES ( …NEWID()… ))`:
