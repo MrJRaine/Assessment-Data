@@ -13,6 +13,14 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Added
+- **Reading report — oversight roll-up tree** (admins / specialists / regional staff): instead of the flat
+  list, oversight roles now land on a **School → (Grade or Homeroom) → …** tree (a *Summarize by* toggle),
+  each row showing **Students**, **Results**, and **% Meeting/Exceeding** with an **EN/FR breakdown on hover**
+  (a student assessed in both languages counts once in Students, twice in Results). Teachers keep the flat
+  per-student list. New oversight-scoped feed `tvf_StudentCohortReadingAll` (SQL — deploy alongside). First
+  slice of the 1.3.0 reports rebuild; Writing, the TCRCE all-schools roll-up, and the language filter follow.
+
 ### Changed
 - **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,
   Ideas, Language), with a per-viewer **COIL ⇄ IOLC toggle** (remembered in the browser). Display order

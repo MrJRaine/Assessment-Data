@@ -764,6 +764,40 @@ export async function getStudentCohort(upn: string, cycleGroupId: string | null 
   }))
 }
 
+// Reading OVERSIGHT roll-up feed (1.3.0) — one row per (student × reading-result language) + a
+// NULL-language row for a student with no reading result. Counts/measure only (no names); the client
+// rolls it up School → Grade/Homeroom with distinct-student vs results-per-language counting.
+export interface ReadingRollupRow {
+  studentKey: string
+  grade: string | null
+  homeroom: string | null
+  homeroomKey: string | null // homeroom GroupKey (for the Homeroom summarize mode)
+  schoolId: string | null
+  schoolName: string | null
+  readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
+  achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
+}
+
+export async function getReadingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<ReadingRollupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortReadingAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    homeroomKey: (r.HomeroomKey as string) ?? null,
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    scaleSystem: (r.ScaleSystem as string) ?? null,
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+  }))
+}
+
 /**
  * The assessable GRADE-ORDER range for a subject this school year, derived from the subject's active
  * assessment windows (DimAssessmentWindow MinGrade/MaxGrade → DimGrade.GradeOrder). Config-driven, so

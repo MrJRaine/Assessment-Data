@@ -7,14 +7,22 @@ import {
   getAchievementLevels,
   getAssessableGradeRange,
   getReportCycles,
+  getCallerAccessLevel,
+  getReadingCohortAll,
   type CohortStudent,
   type AchievementBand,
   type ReportCycle,
+  type ReadingRollupRow,
 } from '@/lib/data'
 import CohortView from './CohortView'
+import ReadingRollupTree from './ReadingRollupTree'
 import CycleSelector from './CycleSelector'
 
 export const dynamic = 'force-dynamic'
+
+// Oversight roles get the School → Grade/Homeroom roll-up tree (reading, 1.3.0); teachers keep the
+// flat per-student cohort list. Scope is enforced in the TVF regardless of this UI branch.
+const OVERSIGHT = new Set(['Administrator', 'SpecialistTeacher', 'RegionalAnalyst'])
 
 export default async function StudentsPage({
   searchParams,
@@ -27,19 +35,31 @@ export default async function StudentsPage({
   const cycle = cycleParam ?? null // cycle-binding applies to Reading AND Writing (cycles are shared)
 
   let cohort: CohortStudent[] = []
+  let rollup: ReadingRollupRow[] = []
   let bands: AchievementBand[] = []
   let assessableRange: { minOrder: number; maxOrder: number } | null = null
   let cycles: ReportCycle[] = []
+  let oversight = false
   let error: string | null = null
   try {
-    cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
-    bands = await getAchievementLevels()
-    // Assessable grade scope (e.g. Reading = P–8) — scoped to the selected cycle's window when one is picked.
-    assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading', cycle)
+    const accessLevel = await getCallerAccessLevel(upn)
+    oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
     cycles = await getReportCycles()
+    // Reading + oversight → the roll-up tree feed. Everyone else (teachers, and Writing until its own
+    // roll-up ships in Slice 2) → the flat cohort list.
+    if (oversight && !isWriting) {
+      rollup = await getReadingCohortAll(upn, cycle)
+    } else {
+      cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
+      bands = await getAchievementLevels()
+      // Assessable grade scope (e.g. Reading = P–8) — scoped to the selected cycle's window when one is picked.
+      assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading', cycle)
+    }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
+
+  const useReadingTree = oversight && !isWriting
 
   return (
     <>
@@ -61,10 +81,13 @@ export default async function StudentsPage({
       {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       {error ? (
         <ErrorNote message={error} />
+      ) : useReadingTree ? (
+        // key on cycle so an expanded school doesn't survive a cycle switch (same reason as the Math tree).
+        <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} />
       ) : cohort.length === 0 ? (
         <EmptyState
           title="No students in your scope"
-          hint={`${isWriting ? 'Writing' : 'Reading'} assessments and demographics appear here for students you can see.`}
+          hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
         />
       ) : (
         // key on subject+cycle: the Reading/Writing toggle AND the cycle selector are SAME-ROUTE
