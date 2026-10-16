@@ -5,6 +5,11 @@
  *          tightly coupled — FactStaffAssignment needs StaffKey from the
  *          just-merged DimStaff.
  * Created: 2026-04-30
+ * Modified: 2026-10-16 — Step 3.5 EMAIL-CHANGE RECONCILIATION: when a staff email is corrected in
+ *           PowerSchool (per-assignment SourceSystemIDs unchanged), rename the current DimStaff row's
+ *           Email IN PLACE — matched by a shared FactStaffAssignment.SourceSystemID — instead of
+ *           closing the old email into a NULL-access ghost and inserting the corrected one as a new
+ *           person. 1:1-guarded; NewEmail-not-already-current guarded. Stops the growing ghost pile.
  * Region: Canada East (PIIDPA compliant)
  *
  * Pipeline (all set-based — no row-by-row WHILE loops):
@@ -100,6 +105,8 @@ BEGIN
     DECLARE @AssignmentsTouched       INT = 0;
     -- StaffSchoolAccess counter
     DECLARE @SsaRowCount              INT = 0;
+    -- Email-change reconciliation counter (2026-10-16)
+    DECLARE @EmailsReconciled         INT = 0;   -- DimStaff rows renamed in place (corrected email, same individual)
 
     SELECT @StgRowCount = COUNT(*) FROM Stg_Staff;
 
@@ -242,6 +249,54 @@ BEGIN
             OR COUNT(DISTINCT ISNULL(HomeSchoolID, ''))    > 1
             OR COUNT(DISTINCT ISNULL(CanChangeSchool, '')) > 1
     ) anom;
+
+    -- ========================================================================
+    -- Step 3.5 (2026-10-16): EMAIL-CHANGE RECONCILIATION — rename in place.
+    -- When a staff email is corrected/changed in PowerSchool, the per-assignment PS record ids
+    -- (SourceSystemID) are UNCHANGED — only Email_Addr differs. The plain email-keyed merge would then
+    -- close the old email (4b) + stamp a NULL-access deactivation ghost (4c) and insert the new email as
+    -- a brand-new person (4d) — splitting one individual and growing a pile of ghosts. Here we detect
+    -- "same individual, new email" by a SHARED FactStaffAssignment.SourceSystemID and RENAME the current
+    -- DimStaff row's Email in place (StaffKey preserved → assignments / history / StaffSchoolAccess all
+    -- follow). Steps 4-6 then treat the (renamed) email as the existing person.
+    --
+    -- GUARDS: only a 1:1 (OldEmail <-> NewEmail) link renames — ambiguous many-to-one / one-to-many
+    -- links are left for manual review; and only when NewEmail is NOT already a current person (two
+    -- distinct people, not a rename). "Same email, new account" (returning teacher) keeps the email, so
+    -- it is NOT a rename — the normal merge + 5a SourceSystemID-collision path covers it.
+    -- ========================================================================
+    ;WITH OldAssign AS (   -- current ACTIVE staff whose email is absent from this import + their current assignment ids
+        SELECT d.StaffKey, d.Email AS OldEmail, f.SourceSystemID
+        FROM DimStaff d
+        INNER JOIN FactStaffAssignment f ON f.StaffKey = d.StaffKey AND f.IsCurrent = 1
+        WHERE d.IsCurrent = 1 AND d.ActiveFlag = 1
+          AND NULLIF(LTRIM(RTRIM(f.SourceSystemID)), '') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM Wrk_StaffPersons w WHERE w.Email = d.Email)
+    ),
+    NewAssign AS (   -- incoming emails NOT already a current person + their assignment ids
+        SELECT w.Email AS NewEmail, w.SourceSystemID
+        FROM Wrk_StaffAssignment w
+        WHERE NULLIF(LTRIM(RTRIM(w.SourceSystemID)), '') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM DimStaff d WHERE d.Email = w.Email AND d.IsCurrent = 1)
+    ),
+    LinkedPairs AS (   -- old <-> new linked by a shared per-assignment PS id
+        SELECT DISTINCT oa.StaffKey, oa.OldEmail, na.NewEmail
+        FROM OldAssign oa
+        INNER JOIN NewAssign na ON na.SourceSystemID = oa.SourceSystemID
+    ),
+    Unambiguous AS (   -- keep only 1:1 links (one OldEmail <-> one NewEmail)
+        SELECT lp.StaffKey, lp.OldEmail, lp.NewEmail
+        FROM LinkedPairs lp
+        WHERE lp.OldEmail IN (SELECT OldEmail FROM LinkedPairs GROUP BY OldEmail HAVING COUNT(DISTINCT NewEmail) = 1)
+          AND lp.NewEmail IN (SELECT NewEmail FROM LinkedPairs GROUP BY NewEmail HAVING COUNT(DISTINCT OldEmail) = 1)
+    )
+    UPDATE d
+    SET Email = u.NewEmail, LastUpdated = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Unambiguous u ON u.StaffKey = d.StaffKey
+    WHERE d.IsCurrent = 1 AND d.ActiveFlag = 1;
+
+    SET @EmailsReconciled = @@ROWCOUNT;
 
     -- ========================================================================
     -- Step 4: DimStaff merge
@@ -629,6 +684,7 @@ BEGIN
         CONCAT(
             'usp_MergeStaff: ',
             CAST(@StgRowCount AS VARCHAR(20)), ' staff rows staged | ',
+            CAST(@EmailsReconciled AS VARCHAR(20)), ' email(s) reconciled in place (corrected address) | ',
             'DimStaff: ',
                 CAST(@PersonsStaged           AS VARCHAR(20)), ' persons | ',
                 CAST(@PersonsInsertedActive   AS VARCHAR(20)), ' active inserts (new+changed+returning) | ',

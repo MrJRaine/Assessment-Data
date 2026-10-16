@@ -14,6 +14,13 @@ with `0.3.0`, so earlier detail is approximate.
 ## [Unreleased]
 
 ### Fixed
+- **Corrected staff emails no longer spawn "ghost" accounts.** When a staff email was fixed in
+  PowerSchool, the ingest treated the corrected address as a brand-new person and left the old one as a
+  no-access ghost (an ever-growing pile). The ingest now recognises it's the same individual — via the
+  per-assignment PowerSchool id, which is unchanged by an email correction — and **renames the account in
+  place** (1:1-guarded; won't merge two genuinely different people). SQL: redeploy `usp_MergeStaff`
+  (step 3.5). A one-time, review-first cleanup (`sql/scripts/cleanup_staff_email_ghosts_2026-10-16.sql`)
+  closes the ghosts already on the books, leaving genuine departures alone.
 - **IPP / adaptation confirmations no longer reset when a student's record changes.** A teacher's
   IPP/adaptation answer was tied to the student's internal versioned key; when PowerSchool re-sent the
   student with a changed grade/school/program (a new version), the answer was dropped and the student
