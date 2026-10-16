@@ -263,7 +263,7 @@ export default function WritingRosterEntry({
             </>
           ) : (
             <>
-              <strong>This cycle is locked (view only).</strong> The grace period for late entry has ended.{' '}
+              <strong>This cycle is locked (view only).</strong>{' '}
               {canOverride && (
                 <button type="button" className="btn-ghost" onClick={() => setOverride(true)}>
                   Override lock for this group
