@@ -13,6 +13,16 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Fixed
+- **IPP / adaptation confirmations no longer reset when a student's record changes.** A teacher's
+  IPP/adaptation answer was tied to the student's internal versioned key; when PowerSchool re-sent the
+  student with a changed grade/school/program (a new version), the answer was dropped and the student
+  showed as unresolved again. The ingest now carries each resolved IPP/adaptation across the re-version
+  (matched by the stable student number), so it **persists until a teacher changes it**. A student who is
+  no longer flagged IPP/adaptation in PowerSchool still has it correctly removed. SQL: redeploy
+  `usp_MergeStudent` (adds the step-6-pre repoint). Going-forward fix — answers already lost to a past
+  re-version are re-entered by the teacher.
+
 ### Added
 - **Reading report — oversight roll-up tree** (admins / specialists / regional staff): instead of the flat
   list, oversight roles now land on a **School → (Grade or Homeroom) → …** tree (a *Summarize by* toggle),
