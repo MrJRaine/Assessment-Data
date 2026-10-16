@@ -9,13 +9,16 @@ import {
   getReportCycles,
   getCallerAccessLevel,
   getReadingCohortAll,
+  getWritingCohortAll,
   type CohortStudent,
   type AchievementBand,
   type ReportCycle,
   type ReadingRollupRow,
+  type WritingRollupRow,
 } from '@/lib/data'
 import CohortView from './CohortView'
 import ReadingRollupTree from './ReadingRollupTree'
+import WritingRollupTree from './WritingRollupTree'
 import CycleSelector from './CycleSelector'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +39,7 @@ export default async function StudentsPage({
 
   let cohort: CohortStudent[] = []
   let rollup: ReadingRollupRow[] = []
+  let writingRollup: WritingRollupRow[] = []
   let bands: AchievementBand[] = []
   let assessableRange: { minOrder: number; maxOrder: number } | null = null
   let cycles: ReportCycle[] = []
@@ -45,10 +49,12 @@ export default async function StudentsPage({
     const accessLevel = await getCallerAccessLevel(upn)
     oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
     cycles = await getReportCycles()
-    // Reading + oversight → the roll-up tree feed. Everyone else (teachers, and Writing until its own
-    // roll-up ships in Slice 2) → the flat cohort list.
+    // Oversight roles get the School → Grade/Homeroom roll-up tree (Reading or Writing); teachers get the
+    // flat per-student cohort list.
     if (oversight && !isWriting) {
       rollup = await getReadingCohortAll(upn, cycle)
+    } else if (oversight && isWriting) {
+      writingRollup = await getWritingCohortAll(upn, cycle)
     } else {
       cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
       bands = await getAchievementLevels()
@@ -60,6 +66,7 @@ export default async function StudentsPage({
   }
 
   const useReadingTree = oversight && !isWriting
+  const useWritingTree = oversight && isWriting
 
   return (
     <>
@@ -84,6 +91,8 @@ export default async function StudentsPage({
       ) : useReadingTree ? (
         // key on cycle so an expanded school doesn't survive a cycle switch (same reason as the Math tree).
         <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} />
+      ) : useWritingTree ? (
+        <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} />
       ) : cohort.length === 0 ? (
         <EmptyState
           title="No students in your scope"

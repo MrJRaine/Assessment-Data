@@ -1,7 +1,7 @@
 'use server'
 
 import { getCurrentUpn } from '@/lib/auth'
-import { getReadingGroup, type ReadingGroupRow } from '@/lib/data'
+import { getReadingGroup, getWritingGroup, type ReadingGroupRow, type WritingGroupRow } from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 
 /**
@@ -16,6 +16,19 @@ export async function loadReadingGroup(
   try {
     const upn = await getCurrentUpn()
     return { rows: await getReadingGroup(upn, groupKey, cycleGroupId), error: null }
+  } catch (e) {
+    return { rows: [], error: toUserMessage(e) }
+  }
+}
+
+/** Writing counterpart of loadReadingGroup (1.3.0 Slice 2): one group's writing detail on expand. */
+export async function loadWritingGroup(
+  groupKey: string,
+  cycleGroupId: string | null,
+): Promise<{ rows: WritingGroupRow[]; error: string | null }> {
+  try {
+    const upn = await getCurrentUpn()
+    return { rows: await getWritingGroup(upn, groupKey, cycleGroupId), error: null }
   } catch (e) {
     return { rows: [], error: toUserMessage(e) }
   }

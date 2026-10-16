@@ -21,7 +21,15 @@ with `0.3.0`, so earlier detail is approximate.
   homeroom lists its students** with their English and French reading level + achievement band. Teachers keep
   the flat per-student list. New oversight-scoped feeds `tvf_StudentCohortReadingAll` (roll-up) +
   `tvf_StudentCohortReadingGroup` (per-group student detail) (SQL — deploy alongside). First slice of the
-  1.3.0 reports rebuild; Writing, the TCRCE all-schools roll-up, and the language filter follow.
+  1.3.0 reports rebuild; the TCRCE all-schools roll-up and the language filter follow. (% Meeting/Exceeding
+  excludes IPP students, matching the Math roll-up.)
+- **Writing report — oversight roll-up tree** (Slice 2): the same School → Grade/Homeroom → students tree
+  for Writing, with distinct Students / Results / % Meeting/Exceeding (EN/FR on hover). Expanding a group
+  lists its students with their **four traits in COIL order + the average**, and the **COIL ⇄ IOLC toggle**
+  (shared with data entry) re-orders the trait columns. Writing language is real per result
+  (`FactAssessmentWriting.AssessmentLanguage`), so a dual-language writer counts once in Students, twice in
+  Results. New oversight feeds `tvf_StudentCohortWritingAll` + `tvf_StudentCohortWritingGroup` (SQL — deploy
+  alongside). Reading + Writing trees now share one `RollupTree` component + counting model.
 
 ### Changed
 - **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,

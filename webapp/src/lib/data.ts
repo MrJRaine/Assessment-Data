@@ -848,6 +848,92 @@ export async function getReadingGroup(
   }))
 }
 
+// Writing OVERSIGHT roll-up feed (1.3.0 Slice 2) — one row per (student × writing AssessmentLanguage)
+// + a NULL-language row for no-result students. Counts/measure only.
+export interface WritingRollupRow {
+  studentKey: string
+  grade: string | null
+  homeroom: string | null
+  homeroomKey: string | null
+  schoolId: string | null
+  schoolName: string | null
+  writingIPP: boolean | null
+  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
+}
+
+export async function getWritingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<WritingRollupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWritingAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    homeroomKey: (r.HomeroomKey as string) ?? null,
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+  }))
+}
+
+// Per-group writing detail (1.3.0 Slice 2) — students in one Grade/Homeroom node with their four trait
+// scores + average + band, one row per (student × writing language) + a NULL-language row.
+export interface WritingGroupRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  writingIPP: boolean | null
+  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  ideasScore: string | null // '1'-'4' | 'SCR' | '-' | null
+  organizationScore: string | null
+  languageScore: string | null
+  conventionsScore: string | null
+  avgScore: number | null
+  achievementCode: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+}
+
+export async function getWritingGroup(
+  upn: string,
+  groupKey: string,
+  cycleGroupId: string | null = null,
+): Promise<WritingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWritingGroup(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    ideasScore: (r.IdeasScore as string) ?? null,
+    organizationScore: (r.OrganizationScore as string) ?? null,
+    languageScore: (r.LanguageScore as string) ?? null,
+    conventionsScore: (r.ConventionsScore as string) ?? null,
+    avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
+  }))
+}
+
 /**
  * The assessable GRADE-ORDER range for a subject this school year, derived from the subject's active
  * assessment windows (DimAssessmentWindow MinGrade/MaxGrade → DimGrade.GradeOrder). Config-driven, so
