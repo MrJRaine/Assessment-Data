@@ -13,6 +13,12 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Changed
+- **Removed grace-period wording from the teacher-facing entry UI** — the `/enter` cards (no more
+  "late entry · N left") and the entry locked banners (no more "The grace period for late entry has
+  ended"). The grace *mechanism* and the admin "Override lock" are unchanged; this only hides the
+  wording so teachers don't rely on the post-close window. Deliberately **not** in the in-app What's New.
+
 ## [1.2.0] — 2026-10-12
 
 > **Server-side patches since 1.2.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
