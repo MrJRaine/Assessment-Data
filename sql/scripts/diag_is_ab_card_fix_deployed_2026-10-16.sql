@@ -28,9 +28,12 @@ SELECT
         ELSE                                                           'A+B MISSING (older version live)'
     END AS Status
 FROM (VALUES
+    -- Markers MUST live inside the module body (after CREATE). A marker in the file's leading header
+    -- comment is stripped from sys.sql_modules.definition (the module is stored from CREATE onward), so
+    -- it reads as a false MISSING — that's what bit the first two rows in the 2026-10-16 run.
     ('usp_RebuildRosterMembership', 'CURRENT teacher gets the fast-path for EVERY cycle'),
-    ('tvf_UserAssessmentWindows',   'SECTION-STABLE + CURRENT-TEACHER'),
-    ('tvf_TeacherGroups',           'SECTION-STABLE + CURRENT-TEACHER'),
+    ('tvf_UserAssessmentWindows',   'the current teacher sees every cycle of the year for their'),
+    ('tvf_TeacherGroups',           'the current teacher of a section sees EVERY cycle'),
     ('tvf_TeacherRoster',           'CURRENT teacher sees every cycle'),
     ('tvf_TeacherRosterWriting',    'CURRENT teacher sees every cycle'),
     ('tvf_TeacherRosterMath',       'CURRENT teacher sees every cycle')
