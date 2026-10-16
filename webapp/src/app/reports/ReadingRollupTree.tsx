@@ -1,18 +1,19 @@
 'use client'
 
 import { Fragment, useMemo, useState } from 'react'
-import type { ReadingRollupRow } from '@/lib/data'
+import type { ReadingRollupRow, ReadingGroupRow } from '@/lib/data'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
+import { loadReadingGroup } from './actions'
 
 // ── Reports > Reading OVERSIGHT roll-up tree (1.3.0 reports rebuild). Mirrors the Math tree:
 //
-//   School → [Summarize by: Grade | Homeroom] → grade/homeroom rows
+//   School → [Summarize by: Grade | Homeroom] → grade/homeroom rows → (expand) individual students
 //
-// Each row shows distinct STUDENTS, total RESULTS, and % Meeting/Exceeding — each with an EN/FR
+// Each roll-up row shows distinct STUDENTS, total RESULTS, and % Meeting/Exceeding — each with an EN/FR
 // breakdown in the hover. A student assessed in both languages counts ONCE in Students and TWICE in
-// Results (one result per language). % is over results that carry an achievement band (code >= 3 =
-// Meeting/Exceeding); IPP / no-result are excluded from the % and shown in the hover. Oversight only
-// (Admin / Specialist / RegionalAnalyst, scoped in the TVF); teachers keep the flat cohort list.
+// Results. % is over results that carry an achievement band (code >= 3 = Meeting/Exceeding); IPP /
+// no-result are excluded from the % and shown in the hover. Expanding a Grade/Homeroom row lazy-loads
+// that group's students (their EN/FR reading level + band). Oversight only; teachers keep the flat list.
 
 type SummarizeBy = 'Grade' | 'Homeroom'
 const MEETING_MIN = 3 // DimAchievementLevel code at/above = Meeting/Exceeding (matches writing's b3+b4)
@@ -34,7 +35,15 @@ interface TreeStudent {
   results: Res[]
 }
 interface School { id: string; name: string; students: TreeStudent[] }
-interface ChildNode { id: string; label: string; sub: string | null; grades: string[]; students: TreeStudent[] }
+interface ChildNode {
+  id: string
+  label: string
+  sub: string | null
+  groupKey: string | null // reading-group key; null = can't open (no homeroom)
+  grades: string[]
+  students: TreeStudent[]
+}
+type BlockState = { status: 'loading' } | { status: 'done'; rows: ReadingGroupRow[] } | { status: 'error'; message: string }
 
 interface Counts {
   students: number
@@ -87,7 +96,7 @@ function tally(students: TreeStudent[]): Counts {
 const pctOf = (meet: number, band: number): number | null => (band === 0 ? null : meet / band)
 
 function StudentsCell({ c }: { c: Counts }) {
-  const title = `EN ${c.studentsEN} · FR ${c.studentsFR} · no result ${c.studentsNone}\n(a student assessed in both languages is counted once here, in EN and FR under the hood)`
+  const title = `EN ${c.studentsEN} · FR ${c.studentsFR} · no result ${c.studentsNone}\n(a student assessed in both languages is counted once here)`
   return <td className="rn" title={title}>{c.students}</td>
 }
 function ResultsCell({ c }: { c: Counts }) {
@@ -100,7 +109,7 @@ function MeetCell({ c }: { c: Counts }) {
   return <td className={`rpct ${heatClass(p)}`} title={title}>{fmtPct(p)}</td>
 }
 
-export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }) {
+export default function ReadingRollupTree({ rows, cycle }: { rows: ReadingRollupRow[]; cycle: string | null }) {
   const schools = useMemo(() => {
     const byKey = new Map<string, TreeStudent>()
     const schoolNames = new Map<string, string>()
@@ -136,6 +145,8 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
   const [openSchools, setOpenSchools] = useState<Set<string>>(
     () => new Set(schools.length === 1 ? [schools[0].id] : []),
   )
+  const [openNodes, setOpenNodes] = useState<Set<string>>(() => new Set())
+  const [blocks, setBlocks] = useState<Record<string, BlockState>>({})
 
   function childrenOf(sch: School): ChildNode[] {
     const groups = new Map<string, TreeStudent[]>()
@@ -146,13 +157,14 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
     const nodes: ChildNode[] = [...groups.entries()].map(([k, students]) => {
       const grades = [...new Set(students.map((s) => s.grade))].sort((a, b) => gradeRank(a) - gradeRank(b))
       if (summarizeBy === 'Grade') {
-        return { id: `G:${sch.id}:${k}`, label: gradeLabel(k), sub: null, grades, students }
+        return { id: `G:${sch.id}:${k}`, label: gradeLabel(k), sub: null, groupKey: `GRADE:${sch.id}:${k}`, grades, students }
       }
       const hr = students[0].homeroom
       return {
         id: `H:${sch.id}:${k}`,
         label: k && hr ? `Homeroom ${hr}` : 'No homeroom',
         sub: grades.map(gradeLabel).join(', '),
+        groupKey: k || null, // homeroom GroupKey; null = no homeroom (can't open)
         grades,
         students,
       }
@@ -168,6 +180,29 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+
+  function toggleNode(node: ChildNode) {
+    const opening = !openNodes.has(node.id)
+    setOpenNodes((prev) => {
+      const next = new Set(prev)
+      opening ? next.add(node.id) : next.delete(node.id)
+      return next
+    })
+    const gk = node.groupKey
+    if (opening && gk && !blocks[gk]) {
+      setBlocks((prev) => ({ ...prev, [gk]: { status: 'loading' } }))
+      loadReadingGroup(gk, cycle)
+        .then((res) =>
+          setBlocks((prev) => ({
+            ...prev,
+            [gk]: res.error ? { status: 'error', message: res.error } : { status: 'done', rows: res.rows },
+          })),
+        )
+        .catch(() =>
+          setBlocks((prev) => ({ ...prev, [gk]: { status: 'error', message: 'Could not load this group. Please retry.' } })),
+        )
+    }
+  }
 
   const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
@@ -202,7 +237,7 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
       {summarizeBy === 'Homeroom' && noHomeroomCount > 0 ? (
         <p className="muted small" style={{ margin: '0 0 .7rem' }}>
           {noHomeroomCount} student{noHomeroomCount === 1 ? ' has' : 's have'} no homeroom in PowerSchool; they are grouped
-          under &ldquo;No homeroom.&rdquo;
+          under &ldquo;No homeroom&rdquo; and can&apos;t be opened (use Summarize by Grade to see them).
         </p>
       ) : null}
 
@@ -232,17 +267,29 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
                   </tr>
                   {open
                     ? childrenOf(sch).map((node) => {
+                        const nOpen = openNodes.has(node.id)
                         const nc = tally(node.students)
                         return (
-                          <tr className="tnode lvl2" key={node.id}>
-                            <th className="col-task">
-                              <span className="tchev" style={{ visibility: 'hidden' }}>▸</span>{node.label}
-                              {node.sub ? <span className="tsub">{node.sub}</span> : null}
-                            </th>
-                            <StudentsCell c={nc} />
-                            <ResultsCell c={nc} />
-                            <MeetCell c={nc} />
-                          </tr>
+                          <Fragment key={node.id}>
+                            <tr className="tnode lvl2">
+                              <th className={`col-task${node.groupKey ? '' : ' nochev'}`} onClick={() => node.groupKey && toggleNode(node)}>
+                                <span className="tchev">{node.groupKey ? (nOpen ? '▾' : '▸') : ''}</span>{node.label}
+                                {node.sub ? <span className="tsub">{node.sub}</span> : null}
+                              </th>
+                              <StudentsCell c={nc} />
+                              <ResultsCell c={nc} />
+                              <MeetCell c={nc} />
+                            </tr>
+                            {nOpen && node.groupKey ? (
+                              <tr className="blockrow">
+                                <td colSpan={4}>
+                                  <div className="blockwrap">
+                                    <ReadingGroupBlock state={blocks[node.groupKey]} />
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
                         )
                       })
                     : null}
@@ -252,6 +299,77 @@ export default function ReadingRollupTree({ rows }: { rows: ReadingRollupRow[] }
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ── One expanded Grade/Homeroom: the students in the group with their EN/FR reading level + band ───
+interface DetailCell { levelCode: string | null; name: string | null; color: string | null; delta: number | null }
+interface DetailStudent { key: string; name: string; grade: string | null; ipp: boolean; en: DetailCell | null; fr: DetailCell | null }
+
+function pivotStudents(rows: ReadingGroupRow[]): DetailStudent[] {
+  const byKey = new Map<string, DetailStudent>()
+  for (const r of rows) {
+    let s = byKey.get(r.studentKey)
+    if (!s) {
+      s = { key: r.studentKey, name: `${r.lastName}, ${r.firstName}`, grade: r.grade, ipp: r.readingIPP === true, en: null, fr: null }
+      byKey.set(r.studentKey, s)
+    }
+    if (r.scaleSystem === 'EN_Reading' || r.scaleSystem === 'FR_Reading') {
+      const cell: DetailCell = { levelCode: r.levelCode, name: r.achievementName, color: r.achievementHexColor, delta: r.readingDelta }
+      if (r.scaleSystem === 'EN_Reading') s.en = cell
+      else s.fr = cell
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+function LevelCell({ cell, ipp }: { cell: DetailCell | null; ipp: boolean }) {
+  if (!cell || cell.levelCode == null) {
+    return <td className="stu">{ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : <span className="muted">—</span>}</td>
+  }
+  const title = [cell.name, cell.delta == null ? null : `Δ ${cell.delta > 0 ? `+${cell.delta}` : cell.delta}`].filter(Boolean).join(' · ')
+  return (
+    <td className="stu" title={title || undefined}>
+      <span style={cell.color ? { color: cell.color, fontWeight: 600 } : undefined}>{cell.levelCode}</span>
+    </td>
+  )
+}
+
+function ReadingGroupBlock({ state }: { state: BlockState | undefined }) {
+  if (!state || state.status === 'loading') return <p className="muted small" style={{ margin: 0 }}>Loading students…</p>
+  if (state.status === 'error') {
+    return (
+      <div className="notice notice-error">
+        <div className="notice-title">Couldn&apos;t load this group</div>
+        <div className="muted">{state.message}</div>
+      </div>
+    )
+  }
+  const students = pivotStudents(state.rows)
+  if (students.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group.</p>
+  return (
+    <div className="mscroll">
+      <table className="mgrid">
+        <thead>
+          <tr>
+            <th className="col-task">Student</th>
+            <th className="stu">Grade</th>
+            <th className="stu">English</th>
+            <th className="stu">French</th>
+          </tr>
+        </thead>
+        <tbody>
+          {students.map((s) => (
+            <tr key={s.key}>
+              <th className="col-task" scope="row">{s.name}</th>
+              <td className="stu">{s.grade ?? '—'}</td>
+              <LevelCell cell={s.en} ipp={s.ipp} />
+              <LevelCell cell={s.fr} ipp={s.ipp} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

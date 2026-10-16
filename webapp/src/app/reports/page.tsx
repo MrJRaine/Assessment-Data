@@ -83,7 +83,7 @@ export default async function StudentsPage({
         <ErrorNote message={error} />
       ) : useReadingTree ? (
         // key on cycle so an expanded school doesn't survive a cycle switch (same reason as the Math tree).
-        <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} />
+        <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} />
       ) : cohort.length === 0 ? (
         <EmptyState
           title="No students in your scope"

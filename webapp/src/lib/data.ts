@@ -798,6 +798,56 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
   }))
 }
 
+// Per-group reading detail (1.3.0 Slice 1b) — the individual students in one Grade/Homeroom node of the
+// reading roll-up, loaded on expand. One row per (student × reading-result language) + a NULL-language
+// row for a no-result student; the client pivots to one row per student (EN + FR cells).
+export interface ReadingGroupRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  readingIPP: boolean | null
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result
+  levelCode: string | null // the reading level (e.g. 'M'); null = no result
+  levelOrder: number | null
+  readingDelta: number | null
+  achievementCode: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+}
+
+export async function getReadingGroup(
+  upn: string,
+  groupKey: string,
+  cycleGroupId: string | null = null,
+): Promise<ReadingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortReadingGroup(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    scaleSystem: (r.ScaleSystem as string) ?? null,
+    levelCode: (r.LevelCode as string) ?? null,
+    levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
+    readingDelta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
+  }))
+}
+
 /**
  * The assessable GRADE-ORDER range for a subject this school year, derived from the subject's active
  * assessment windows (DimAssessmentWindow MinGrade/MaxGrade → DimGrade.GradeOrder). Config-driven, so
