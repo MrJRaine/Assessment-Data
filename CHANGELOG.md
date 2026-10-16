@@ -14,6 +14,10 @@ with `0.3.0`, so earlier detail is approximate.
 ## [Unreleased]
 
 ### Changed
+- **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,
+  Ideas, Language), with a per-viewer **COIL ⇄ IOLC toggle** (remembered in the browser). Display order
+  only — the stored trait scores and every TVF/proc are unchanged; each score keeps its identity. The
+  writing report gets the same shared order + toggle in the reports rebuild.
 - **Removed grace-period wording from the teacher-facing entry UI** — the `/enter` cards (no more
   "late entry · N left") and the entry locked banners (no more "The grace period for late entry has
   ended"). The grace *mechanism* and the admin "Override lock" are unchanged; this only hides the
