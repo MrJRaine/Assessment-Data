@@ -131,6 +131,12 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-16 — 🟡 v1.3.0 BUILT ON DEV (COIL, reports rebuild, Build C, staff reconciliation); nothing deployed yet
+- **Last completed**: Finished the 1.2.0 carry-over patches on LIVE (reading-report duplicate-student fix via `vw_StudentReadingStartingPoint` collapse, 2026-10-15; A+B card/current-teacher fix confirmed PRESENT on live, 2026-10-16). Then built ALL of v1.3.0 on `dev` (committed/pushed, image-build typechecked): **COIL** writing-trait order + toggle & grace-wording removal; **reports rebuild** — Reading + Writing oversight roll-up trees (School→Grade/Homeroom→students, Students·Results·%Meeting/Exceeding, EN/FR hover, per-group drill, writing 4-trait COIL detail), **TCRCE** all-schools row (R/W/Math), **language filter**; **Build C** IPP/adaptation persistence (`usp_MergeStudent` step-6-pre repoint); **staff email-change reconciliation** (`usp_MergeStaff` step 3.5) + ghost-cleanup script. Wrote `docs/v1.3.0-testing-plan.md`.
+- **In progress**: Nothing mid-edit. All v1.3.0 code is on `dev`; **no SQL deployed to the dev OR live warehouse yet**, no container cut.
+- **Next action**: Deploy the v1.3.0 SQL to the **dev** warehouse — the 4 reports TVFs (`tvf_StudentCohort{Reading,Writing}{All,Group}`), redeploy `usp_MergeStudent` + `usp_MergeStaff` — then rebuild `awdev` and work through `docs/v1.3.0-testing-plan.md` (§0 deploy checklist → §1–8). Run `cleanup_staff_email_ghosts` PART 1 (preview) on dev and review the pairs before PART 2. Then decide the 1.3.0 cut (version bump + patchNotes + release ritual happen at the live deploy).
+- **Blockers**: None. (Reports trees need the 4 TVFs on the dev warehouse to render real data; the webapp otherwise builds clean.)
+
 ### Left Off — 2026-10-13 — 🟢 1.2.0 LIVE; StudentNumber durable fix shipped (server-side patch); dev==main
 - **Last completed**: 1.2.0 cutover live + release ritual + dev-impersonation reconcile done. Second math-task batch
   (2026-27) loaded (month remaps now at conversion time). Specialist-teacher entry scope fixed (server-side patch).
