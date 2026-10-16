@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, buildSchools } from './rollupModel'
+import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -50,7 +50,7 @@ export default function WritingRollupTree({ rows, cycle, showAll }: { rows: Writ
       showAll={showAll}
       loadGroup={loadWritingGroup}
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
-      renderDetail={(groupRows) => <WritingDetail rows={groupRows} traits={traits} />}
+      renderDetail={(groupRows, lang) => <WritingDetail rows={groupRows} traits={traits} lang={lang} />}
     />
   )
 }
@@ -64,17 +64,17 @@ function TraitScoreCell({ value }: { value: string | null }) {
   return <td className="stu">{value}</td>
 }
 
-function WritingDetail({ rows, traits }: { rows: WritingGroupRow[]; traits: TraitMeta[] }) {
+function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter }) {
   const sorted = useMemo(
     () =>
-      [...rows].sort(
+      [...(lang === 'All' ? rows : rows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French')))].sort(
         (a, b) =>
           `${a.lastName}, ${a.firstName}`.localeCompare(`${b.lastName}, ${b.firstName}`) ||
           (a.assessmentLanguage ?? '').localeCompare(b.assessmentLanguage ?? ''),
       ),
-    [rows],
+    [rows, lang],
   )
-  if (sorted.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group.</p>
+  if (sorted.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
   return (
     <div className="mscroll">
       <table className="mgrid">

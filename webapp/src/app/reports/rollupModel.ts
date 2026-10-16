@@ -4,6 +4,7 @@
 // (reading = EN/FR level; writing = four COIL traits + average), which the subject wrappers supply.
 
 export type SummarizeBy = 'Grade' | 'Homeroom'
+export type LangFilter = 'All' | 'EN' | 'FR' // language-of-assessment filter (Slice 4)
 export const MEETING_MIN = 3 // DimAchievementLevel code at/above = Meeting/Exceeding (b3 Meeting, b4 Exceeding)
 
 // P–12 grade order (Math's own list stops at 6; reading/writing span further).
@@ -57,17 +58,23 @@ export interface Counts {
 // Distinct STUDENTS (a both-languages student counts once) vs total RESULTS (counts per language), and
 // % Meeting/Exceeding over results that carry a band — EXCLUDING IPP students (not measured), matching
 // the Math roll-up's treatment. IPP results are tallied in `ippExcluded` for the hover.
-export function tally(students: RollupStudent[]): Counts {
+//
+// `lang` narrows the view to one language of assessment (Slice 4): a specific language counts only that
+// language's results and DROPS students with none in it (so Students/Results reflect that language's
+// population); 'All' keeps everything incl. no-result students.
+export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Counts {
   const c: Counts = {
     students: 0, studentsEN: 0, studentsFR: 0, studentsNone: 0,
     results: 0, resultsEN: 0, resultsFR: 0,
     meet: 0, band: 0, meetEN: 0, bandEN: 0, meetFR: 0, bandFR: 0, ippExcluded: 0,
   }
   for (const s of students) {
+    const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
+    if (lang !== 'All' && rs.length === 0) continue // not part of this language's view
     c.students++
     let hasEN = false
     let hasFR = false
-    for (const r of s.results) {
+    for (const r of rs) {
       c.results++
       if (r.en) { c.resultsEN++; hasEN = true } else { c.resultsFR++; hasFR = true }
       if (r.code == null) continue

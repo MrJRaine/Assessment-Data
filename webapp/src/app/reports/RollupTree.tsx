@@ -2,7 +2,7 @@
 
 import { Fragment, useState, type ReactNode } from 'react'
 import {
-  type Counts, type RollupSchool, type RollupStudent, type SummarizeBy,
+  type Counts, type RollupSchool, type RollupStudent, type SummarizeBy, type LangFilter,
   tally, pctOf, childrenOf, gradeLabel, gradeRank,
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
@@ -46,11 +46,12 @@ export function RollupTree<T>({
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
-  renderDetail: (rows: T[]) => ReactNode
+  renderDetail: (rows: T[], lang: LangFilter) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
   showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
+  const [lang, setLang] = useState<LangFilter>('All')
   const [openSchools, setOpenSchools] = useState<Set<string>>(
     () => new Set(schools.length === 1 ? [schools[0].id] : []),
   )
@@ -107,6 +108,14 @@ export function RollupTree<T>({
             </button>
           ))}
         </div>
+        <span className="muted" style={{ marginLeft: '1rem' }}>Language</span>
+        <div className="subject-toggle" style={{ margin: 0 }}>
+          {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
+            <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
+              {label}
+            </button>
+          ))}
+        </div>
         {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : null}
       </div>
 
@@ -139,7 +148,8 @@ export function RollupTree<T>({
               ? (() => {
                   const allStudents = schools.flatMap((s) => s.students)
                   const tOpen = openSchools.has(TCRCE_ID)
-                  const tc = tally(allStudents)
+                  const tc = tally(allStudents, lang)
+                  if (lang !== 'All' && tc.students === 0) return null
                   return (
                     <Fragment key={TCRCE_ID}>
                       <tr className="tnode lvl1 tcrce">
@@ -152,7 +162,8 @@ export function RollupTree<T>({
                       </tr>
                       {tOpen
                         ? gradeGroups(allStudents).map((g) => {
-                            const gc = tally(g.students)
+                            const gc = tally(g.students, lang)
+                            if (lang !== 'All' && gc.students === 0) return null
                             return (
                               <tr className="tnode lvl2" key={`${TCRCE_ID}:${g.grade}`}>
                                 <th className="col-task">
@@ -171,7 +182,8 @@ export function RollupTree<T>({
               : null}
             {schools.map((sch) => {
               const open = openSchools.has(sch.id)
-              const c = tally(sch.students)
+              const c = tally(sch.students, lang)
+              if (lang !== 'All' && c.students === 0) return null
               return (
                 <Fragment key={sch.id}>
                   <tr className="tnode lvl1">
@@ -184,8 +196,9 @@ export function RollupTree<T>({
                   </tr>
                   {open
                     ? childrenOf(sch, summarizeBy).map((node) => {
+                        const nc = tally(node.students, lang)
+                        if (lang !== 'All' && nc.students === 0) return null
                         const nOpen = openNodes.has(node.id)
-                        const nc = tally(node.students)
                         const block = node.groupKey ? blocks[node.groupKey] : undefined
                         return (
                           <Fragment key={node.id}>
@@ -210,7 +223,7 @@ export function RollupTree<T>({
                                         <div className="muted">{block.message}</div>
                                       </div>
                                     ) : (
-                                      renderDetail(block.rows)
+                                      renderDetail(block.rows, lang)
                                     )}
                                   </div>
                                 </td>

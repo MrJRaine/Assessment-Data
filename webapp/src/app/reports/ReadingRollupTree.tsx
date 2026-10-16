@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import type { ReadingRollupRow, ReadingGroupRow } from '@/lib/data'
-import { type RollupStudent, buildSchools } from './rollupModel'
+import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadReadingGroup } from './actions'
 
@@ -35,7 +35,7 @@ export default function ReadingRollupTree({ rows, cycle, showAll }: { rows: Read
       cycle={cycle}
       showAll={showAll}
       loadGroup={loadReadingGroup}
-      renderDetail={(groupRows) => <ReadingDetail rows={groupRows} />}
+      renderDetail={(groupRows, lang) => <ReadingDetail rows={groupRows} lang={lang} />}
     />
   )
 }
@@ -77,9 +77,11 @@ function LevelCell({ cell, ipp }: { cell: DetailCell | null; ipp: boolean }) {
   )
 }
 
-function ReadingDetail({ rows }: { rows: ReadingGroupRow[] }) {
-  const students = pivot(rows)
-  if (students.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group.</p>
+function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilter }) {
+  const all = pivot(rows)
+  // Language filter: show only students with a result in the selected language (both level columns stay).
+  const students = lang === 'All' ? all : all.filter((s) => (lang === 'EN' ? s.en : s.fr))
+  if (students.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
   return (
     <div className="mscroll">
       <table className="mgrid">

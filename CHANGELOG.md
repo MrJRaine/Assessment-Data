@@ -33,6 +33,9 @@ with `0.3.0`, so earlier detail is approximate.
 - **TCRCE all-schools roll-up line** (Slice 3) on Reading, Writing **and Math**: a region-wide viewer
   (`RegionalAnalyst`) sees a top **TCRCE** row that rolls up every school, openable **by grade only** (no
   homerooms). Client-side over the existing feeds — no new SQL.
+- **Language-of-assessment filter** (Slice 4) on the Reading + Writing roll-ups: an **All / English / French**
+  toggle that narrows the whole view — counts, % Meeting/Exceeding, and the student detail — to the chosen
+  language (a specific language drops students with no result in it). Completes the 1.3.0 reports rebuild.
 
 ### Changed
 - **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,
