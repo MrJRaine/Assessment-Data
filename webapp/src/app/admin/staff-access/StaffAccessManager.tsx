@@ -28,6 +28,9 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
   // toggles + Saves (the DB row is created on that first Save, not on add).
   const [addEmail, setAddEmail] = useState('')
   const [addMsg, setAddMsg] = useState<string | null>(null)
+  // Explicit "don't search" choice — add an email that isn't a current staff record (e.g. Technology
+  // Services who aren't in PowerSchool). Off by default so a typo'd real email is still caught.
+  const [addExternal, setAddExternal] = useState(false)
 
   function addStaff() {
     const email = addEmail.trim()
@@ -38,7 +41,7 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
     }
     setAddMsg(null)
     startTransition(async () => {
-      const res = await findStaff(email)
+      const res = await findStaff(email, addExternal)
       if (!res.ok || !res.staff) {
         setAddMsg(res.message ?? 'Not found.')
         return
@@ -61,6 +64,7 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
       setRows((rs) => [newRow, ...rs]) // top of the list so it's visible
       setDirty((d) => ({ ...d, [s.email]: true })) // dirty -> Save enabled; Save creates the DB row
       setAddEmail('')
+      setAddExternal(false)
       setAddMsg(
         res.known
           ? `Added ${s.name} — set their roles and click Save.`
@@ -225,6 +229,18 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
           </button>
         </div>
       </div>
+      <label className="muted small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.5rem' }}>
+        <input
+          type="checkbox"
+          checked={addExternal}
+          disabled={pending}
+          onChange={(e) => {
+            setAddExternal(e.target.checked)
+            setAddMsg(null)
+          }}
+        />
+        This person isn’t in the system yet (skip the staff lookup — for Technology Services and others not in PowerSchool)
+      </label>
     </>
   )
 }

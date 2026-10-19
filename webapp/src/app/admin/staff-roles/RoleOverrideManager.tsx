@@ -20,6 +20,9 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
   const [filter, setFilter] = useState('')
   const [addEmail, setAddEmail] = useState('')
   const [addMsg, setAddMsg] = useState<string | null>(null)
+  // Explicit "don't search" choice — add an email that isn't a current staff record (e.g. a coach already
+  // excluded from active staff, or someone not yet in PowerSchool). Off by default so a typo is caught.
+  const [addExternal, setAddExternal] = useState(false)
 
   function addStaff() {
     const email = addEmail.trim()
@@ -30,7 +33,7 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
     }
     setAddMsg(null)
     startTransition(async () => {
-      const res = await findStaff(email)
+      const res = await findStaff(email, addExternal)
       if (!res.ok || !res.staff) {
         setAddMsg(res.message ?? 'Not found.')
         return
@@ -50,6 +53,7 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
       setRows((rs) => [newRow, ...rs])
       setDirty((d) => ({ ...d, [s.email]: true }))
       setAddEmail('')
+      setAddExternal(false)
       setAddMsg(
         res.known
           ? `Added ${s.name} — set their role and click Save.`
@@ -68,10 +72,22 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
 
   function saveAll() {
     if (dirtyRows.length === 0) return
+    const activating = dirtyRows.filter((r) => r.active)
     const retiring = dirtyRows.filter((r) => !r.active)
-    if (retiring.length > 0) {
-      if (!confirm(`Retire the override for ${retiring.map((r) => r.name).join(', ')}? They revert to their PowerSchool-derived role on the next ingest.`)) return
+    // Overrides are applied by the staff merge, so nothing changes until the next data ingest — which is
+    // also when each person's school-level access is derived from PowerSchool and can be verified. Make
+    // that explicit before saving so no one expects access to appear immediately.
+    let msg =
+      'Role override changes take effect on the NEXT data ingest — that is when each person’s school-level ' +
+      'access is derived from PowerSchool and can be verified. They are not effective immediately.'
+    if (activating.length > 0) {
+      msg += `\n\nApplying: ${activating.map((r) => `${r.name} → ${r.overrideRole}`).join(', ')}.`
     }
+    if (retiring.length > 0) {
+      msg += `\n\nRetiring (revert to their PowerSchool role): ${retiring.map((r) => r.name).join(', ')}.`
+    }
+    msg += '\n\nSave these changes?'
+    if (!confirm(msg)) return
     setSaveSummary(null)
     startTransition(async () => {
       let saved = 0

@@ -28,21 +28,27 @@ export interface StaffAccessUpdate {
   canMaintain: boolean
 }
 
-/** Resolve an email so a SysAdmin can add them to the access list. A current staff record is NOT
- *  required — app capabilities (incl. Maintenance for Technology Services) are keyed purely by email,
- *  and the person may not be in PowerSchool at all. When there's no current DimStaff row we still allow
- *  the add (known:false) with the email as the display name. */
+/** Resolve an email so a SysAdmin can add them to the access list.
+ *  Default (allowExternal=false): require a current staff record — an unknown email is rejected, so a
+ *  typo is caught instead of silently added.
+ *  allowExternal=true (the "not in the system" checkbox): skip the lookup entirely and add the email as
+ *  given — app capabilities (incl. Maintenance for Technology Services) are keyed purely by email and
+ *  the person may not be in PowerSchool at all. */
 export async function findStaff(
   email: string,
+  allowExternal = false,
 ): Promise<{ ok: boolean; staff?: { email: string; name: string }; known?: boolean; message?: string }> {
   try {
     await assertSysAdmin()
     const e = email?.trim()
     if (!e) throw new UserError('Enter a staff email to search.')
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new UserError('Enter a valid email address.')
+    if (allowExternal) return { ok: true, staff: { email: e.toLowerCase(), name: e }, known: false }
     const staff = await lookupStaffByEmail(e)
-    if (staff) return { ok: true, staff, known: true }
-    return { ok: true, staff: { email: e.toLowerCase(), name: e }, known: false }
+    if (!staff) {
+      return { ok: false, message: 'No current staff member found with that email. Tick “not in the system” to add them anyway.' }
+    }
+    return { ok: true, staff, known: true }
   } catch (e) {
     return { ok: false, message: toUserMessage(e) }
   }
