@@ -13,6 +13,16 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Added
+- **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
+  longer sysadmin-only: the `/ingest` **15-minute** button now works for anyone with **Run Ingest** (it was
+  blocking ingest operators mid-process), and a new **Maintenance** capability (`StaffAppAccess.CanMaintain`)
+  gives **Technology Services** the full `/admin/maintenance` page with no student-data access. A window is
+  now **owned by whoever opened it** — only that person **or a sysadmin** can clear it, so no one ends a
+  window while the server is down for infra work or mid-ingest. SQL: `migrate_StaffAppAccess_add_CanMaintain`
+  + redeploy `usp_SetMaintenanceWindow` (scope-based gate), `usp_ClearMaintenanceWindow` (LOTO),
+  `usp_SetStaffAppAccess` (new flag). Grant the capability at `/admin/staff-access`.
+
 ### Fixed
 - **Corrected staff emails no longer spawn "ghost" accounts.** When a staff email was fixed in
   PowerSchool, the ingest treated the corrected address as a brand-new person and left the old one as a

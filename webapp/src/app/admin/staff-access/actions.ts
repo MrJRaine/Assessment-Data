@@ -25,6 +25,7 @@ export interface StaffAccessUpdate {
   canRunIngest: boolean
   canOverrideMath: boolean
   canOverrideLiteracy: boolean
+  canMaintain: boolean
 }
 
 /** Find a current staff member by email so a SysAdmin can add them to the access list. */
@@ -54,6 +55,7 @@ export async function setStaffAccess(u: StaffAccessUpdate): Promise<{ ok: boolea
       CanRunIngest: u.canRunIngest,
       CanOverrideMath: u.canOverrideMath,
       CanOverrideLiteracy: u.canOverrideLiteracy,
+      CanMaintain: u.canMaintain,
       CallerUPN: upn,
     })
     // The target's capabilities changed — clear the identity caches so their nav/gates refresh within

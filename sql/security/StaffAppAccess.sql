@@ -25,8 +25,11 @@
  *   CanRunIngest    - upload PowerSchool exports + run the ingest cycle (/ingest)
  *   CanOverrideMath      - flip a MATH roster back to editable in a grace-locked cycle (0.7.0)
  *   CanOverrideLiteracy  - same, for READING + WRITING rosters (0.7.0)
- *   (Override columns are BIT NULL — added by ALTER to a populated table, which Fabric can't do as
- *    NOT NULL; reads treat NULL as 0. IsSysAdmin implies both, like every capability.)
+ *   CanMaintain          - full /admin/maintenance access: set/clear maintenance windows for server /
+ *                          infrastructure work (Technology Services). Data-free — grants NO student
+ *                          access, only the maintenance controls (1.3.0).
+ *   (Override + CanMaintain columns are BIT NULL — added by ALTER to a populated table, which Fabric
+ *    can't do as NOT NULL; reads treat NULL as 0. IsSysAdmin implies all of them.)
  *
  * NEW 2026-09-24: these grants are now managed from the in-app SysAdmin page /admin/staff-access
  * (usp_SetStaffAppAccess), not only by hand. usp_SetStaffAppAccess is the sole writer.
@@ -47,6 +50,7 @@ CREATE TABLE StaffAppAccess (
     CanRunIngest         BIT           NOT NULL,   -- /ingest admin
     CanOverrideMath      BIT           NULL,       -- grace-lock override, Math rosters (NULL = 0)
     CanOverrideLiteracy  BIT           NULL,       -- grace-lock override, Reading+Writing rosters (NULL = 0)
+    CanMaintain          BIT           NULL,       -- /admin/maintenance full access; set/clear windows (NULL = 0)
     LastUpdated          DATETIME2(0)  NOT NULL
 );
 GO

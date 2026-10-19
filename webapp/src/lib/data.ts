@@ -538,6 +538,7 @@ export interface CallerCapabilities {
   canRunIngest: boolean // /ingest admin
   canOverrideMath: boolean // flip a Math roster editable in a grace-locked cycle (0.7.0)
   canOverrideLiteracy: boolean // same, for Reading + Writing rosters (0.7.0)
+  canMaintain: boolean // full /admin/maintenance access — set/clear windows (Tech Services; 1.3.0)
 }
 
 /**
@@ -574,8 +575,9 @@ export async function getCallerCapabilities(
         CanRunIngest: boolean
         CanOverrideMath: boolean | null
         CanOverrideLiteracy: boolean | null
+        CanMaintain: boolean | null
       }>(
-        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy, CanMaintain
          FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
         { UPN: upn },
       )
@@ -587,6 +589,7 @@ export async function getCallerCapabilities(
         canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
         canOverrideMath: sysAdmin || Boolean(r?.CanOverrideMath),
         canOverrideLiteracy: sysAdmin || Boolean(r?.CanOverrideLiteracy),
+        canMaintain: sysAdmin || Boolean(r?.CanMaintain),
       }
       // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
       // poison the cache with a "no capabilities" answer for an hour.
@@ -611,6 +614,7 @@ export interface StaffAccessRow {
   canRunIngest: boolean
   canOverrideMath: boolean
   canOverrideLiteracy: boolean
+  canMaintain: boolean
 }
 
 /** Only staff who ALREADY hold a StaffAppAccess row (the curated access list) — NOT all ~500 staff.
@@ -627,9 +631,10 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     CanRunIngest: boolean | null
     CanOverrideMath: boolean | null
     CanOverrideLiteracy: boolean | null
+    CanMaintain: boolean | null
   }>(`
     SELECT a.Email, d.FirstName, d.LastName,
-           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy
+           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy, a.CanMaintain
     FROM StaffAppAccess a
     LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(a.Email) AND d.IsCurrent = 1
     ORDER BY d.LastName, d.FirstName, a.Email`)
@@ -641,6 +646,7 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     canRunIngest: Boolean(r.CanRunIngest),
     canOverrideMath: Boolean(r.CanOverrideMath),
     canOverrideLiteracy: Boolean(r.CanOverrideLiteracy),
+    canMaintain: Boolean(r.CanMaintain),
   }))
 }
 
