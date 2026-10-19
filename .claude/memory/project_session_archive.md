@@ -1808,3 +1808,44 @@ webapp change after.
 **End state.** All v1.3.0 work on `dev` (origin up to date). Nothing deployed to dev or live warehouses yet. Next
 session: deploy the 4 reports TVFs + `usp_MergeStudent` + `usp_MergeStaff` to the **dev** warehouse, rebuild `awdev`,
 and walk `docs/v1.3.0-testing-plan.md`; run the ghost-cleanup PART 1 preview; then decide the 1.3.0 cut.
+
+## Session 2026-10-19 — v1.3.0 access/permissions completed: staff-merge write rule + coach role overrides + admin-assistant remap; SQL bundle; dev-containers skill
+Continuation of the 1.3.0 access/permissions/maintenance theme (maintenance LOTO #3 was built 2026-10-16).
+
+- **#1 Staff-merge WRITE RULE (`usp_MergeStaff` Step 2).** A person is persisted to DimStaff only if they hold a
+  data-access role (RegionalAnalyst/Administrator/SpecialistTeacher), teach/co-teach a section this import (reads
+  `Stg_Section.Email_Addr` + `Stg_CoTeacher.Email` — orchestrator loads all staging before merges, so these are
+  populated), or carry a manual override. Everyone else drops out → closes on next ingest. **Admin Assistant DimRole
+  groups 11/13/17/20 remapped Administrator→SupportStaff** (seed + `migrate_DimRole_admin_assistants_to_support.sql`).
+  Steps 5b/5c extended to close + withhold FactStaffAssignment rows for dropped persons so none strand under a
+  deactivation marker. Final rule confirmed by the user over several corrections: "the only roles that override the
+  requirement to have a section attached are RegionalAnalyst and Administrator" + "include specialist teachers."
+- **#2 Coach ROLE OVERRIDES.** New `StaffRoleOverride` table (email→Administrator/RegionalAnalyst/SpecialistTeacher) +
+  `usp_SetStaffRoleOverride` (sole writer) + SysAdmin screen `/admin/staff-roles` (page/actions/manager/data read,
+  nav + home card, constants.ts for the role list since a 'use server' file can't export non-async). Read by
+  `usp_MergeStaff` Step 2: override WINS the AccessLevel and keeps the person; **scope still derives from PS**. An
+  excluded coach still in the PS export is re-included as Administrator via the existing multi-day-return path (4c-prime2 → 4d).
+- **Add-by-email corrections (two rounds, both prompted by the user).** First I had gated add on a current DimStaff
+  record — wrong (coaches already excluded, or Tech Services not in PS, couldn't be added). Fixed to allow unknown
+  emails. Then the user asked for an explicit **"not in the system" checkbox** (unchecked = require a match, so typos
+  are caught; `findStaff` gained `allowExternal`, server-enforced) on BOTH admin screens. Also added a **role-override
+  Save prompt** stating the change is effective only on the next ingest (when PS-derived school scope is verified).
+  User clarified maintenance-only IT folks don't wait for ingest and have no RLS — so NO deferral prompt on the
+  staff-access/CanMaintain path (that capability is read live, immediate).
+- **SQL bundle.** All 13 v1.3.0 objects assembled idempotently in dependency order at
+  `sql/deploy/live_1.3.0/deploy_1.3.0.sql` (schema → procs → report TVFs). Ghost-cleanup stays a separate by-hand
+  script. Deploy-live coupling documented: the write rule + StaffRoleOverride go live together; seed coaches BEFORE
+  the first post-deploy ingest or they're dropped.
+- **dev-containers skill.** User noted I "keep forgetting" the container launches, so created
+  `.claude/skills/dev-containers.md` (+ `.github/skills/` mirror, CLAUDE.md row): exact podman run commands for
+  awlive/awdev/awdev-impersonation (recovered from `podman inspect … CreateCommand`), and the image-build typecheck
+  (`MSYS_NO_PATHCONV=1 podman build`) as the ONLY supported typecheck (no host tsc — MSYS path-mangles).
+- **awdev spun up** on `assessment-webapp:1.3.0-dev` (tagged from the clean `1.3.0-wip` typecheck build), :3001,
+  `webapp/.env.dev`, Entra, `SQL_TIMING=1`, restart unless-stopped. Ready; "✓ Ready" confirmed in logs.
+- All webapp changes image-build typechecked clean each round; committed + pushed to `dev` across commits
+  3489185 / 26eb715 / 05b69eb / 8ba6eb5 (+ the wrap). **Did NOT open a dev→main PR** — 1.3.0 is mid-development, not
+  live-deployed; release-on-live-deploy + PR-only-when-instructed → main waits.
+
+**End state.** All v1.3.0 code on `dev` (origin up to date). NOTHING deployed to dev or live warehouses yet. Next
+session (2026-10-20): run `sql/deploy/live_1.3.0/deploy_1.3.0.sql` on the **dev** warehouse, seed any coach overrides
+at `/admin/staff-roles`, then walk `docs/v1.3.0-testing-plan.md` (§1–§8) against awdev on :3001.
