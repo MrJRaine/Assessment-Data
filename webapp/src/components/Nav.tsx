@@ -12,6 +12,7 @@ const ITEMS = [
   { href: '/ingest', label: 'Ingest', cap: 'ingest' as const },
   { href: '/admin/maintenance', label: 'Maintenance', cap: 'maintenance' as const },
   { href: '/admin/staff-access', label: 'Staff Access', cap: 'staffAccess' as const },
+  { href: '/admin/staff-roles', label: 'Role Overrides', cap: 'staffAccess' as const },
 ]
 
 export default function Nav({

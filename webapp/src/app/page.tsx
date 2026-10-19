@@ -89,6 +89,14 @@ export default async function Home() {
                 cta="Manage access"
               />
             ) : null}
+            {caps.isSysAdmin ? (
+              <CardLink
+                href="/admin/staff-roles"
+                title="Role Overrides"
+                desc="Classify staff the PowerSchool export can't — e.g. Instructional Coaches as Administrator for their schools. System administrators only."
+                cta="Manage roles"
+              />
+            ) : null}
           </div>
         </section>
       ) : null}

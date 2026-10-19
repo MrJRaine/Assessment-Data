@@ -662,6 +662,39 @@ export async function lookupStaffByEmail(email: string): Promise<{ email: string
   return { email: r.Email, name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email }
 }
 
+export interface StaffRoleOverrideRow {
+  email: string
+  name: string
+  overrideRole: string
+  notes: string | null
+  active: boolean
+}
+
+/** The curated StaffRoleOverride list — RLS-role context the PS export can't encode (e.g.
+ *  Instructional Coaches classified as Administrator). LEFT JOIN DimStaff for a display name.
+ *  SysAdmin-only screen; a plain SP read, gated by the page + the write action. */
+export async function getStaffRoleOverrideList(): Promise<StaffRoleOverrideRow[]> {
+  const rows = await query<{
+    Email: string
+    FirstName: string | null
+    LastName: string | null
+    OverrideRole: string
+    Notes: string | null
+    ActiveFlag: boolean | null
+  }>(`
+    SELECT o.Email, d.FirstName, d.LastName, o.OverrideRole, o.Notes, o.ActiveFlag
+    FROM StaffRoleOverride o
+    LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(o.Email) AND d.IsCurrent = 1
+    ORDER BY o.ActiveFlag DESC, d.LastName, d.FirstName, o.Email`)
+  return rows.map((r) => ({
+    email: r.Email,
+    name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email,
+    overrideRole: r.OverrideRole,
+    notes: r.Notes,
+    active: Boolean(r.ActiveFlag),
+  }))
+}
+
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
 // surfaced by /api/status to the client poller. MaintenanceAt is UTC.
 export interface MaintenanceWindow {

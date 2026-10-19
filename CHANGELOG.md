@@ -22,6 +22,21 @@ with `0.3.0`, so earlier detail is approximate.
   window while the server is down for infra work or mid-ingest. SQL: `migrate_StaffAppAccess_add_CanMaintain`
   + redeploy `usp_SetMaintenanceWindow` (scope-based gate), `usp_ClearMaintenanceWindow` (LOTO),
   `usp_SetStaffAppAccess` (new flag). Grant the capability at `/admin/staff-access`.
+- **Role overrides for staff the PowerSchool export can't classify.** A new sysadmin screen
+  (**Role Overrides**, `/admin/staff-roles`) lets you classify a staff member as Administrator, Regional
+  Analyst, or Specialist Teacher when PowerSchool has no distinct role for them — the first case being
+  **Instructional Coaches**, who now count as Administrator for the schools they already have in
+  PowerSchool. The override changes only the *role*; the *schools* still come from PowerSchool, so access
+  stays derived. SQL: new `StaffRoleOverride` table + `usp_SetStaffRoleOverride`; read by `usp_MergeStaff`.
+
+### Changed
+- **Staff ingest now only keeps people who need an account.** A person is written to the staff directory
+  only if they hold a data-access role (Administrator / Regional Analyst / Specialist Teacher), **teach or
+  co-teach a section**, or carry a manual role override. Everyone else — Support Staff, and the four
+  **Admin Assistant** PowerSchool groups, which are **reclassified from Administrator to Support Staff** —
+  is dropped and closed out on the next ingest, ending the pile-up of no-access accounts. SQL: redeploy
+  `usp_MergeStaff` (Step 2 write rule) + `migrate_DimRole_admin_assistants_to_support`. **Deploy note:** seed
+  any coaches/overrides *before* the first ingest after this deploys, or they're dropped with everyone else.
 
 ### Fixed
 - **Corrected staff emails no longer spawn "ghost" accounts.** When a staff email was fixed in
