@@ -61,7 +61,11 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
       setRows((rs) => [newRow, ...rs]) // top of the list so it's visible
       setDirty((d) => ({ ...d, [s.email]: true })) // dirty -> Save enabled; Save creates the DB row
       setAddEmail('')
-      setAddMsg(`Added ${s.name} — set their roles and click Save.`)
+      setAddMsg(
+        res.known
+          ? `Added ${s.name} — set their roles and click Save.`
+          : `Added ${s.email} (not a current staff record) — set their roles and click Save.`,
+      )
     })
   }
 

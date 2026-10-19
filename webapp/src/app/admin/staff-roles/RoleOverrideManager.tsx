@@ -50,7 +50,11 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
       setRows((rs) => [newRow, ...rs])
       setDirty((d) => ({ ...d, [s.email]: true }))
       setAddEmail('')
-      setAddMsg(`Added ${s.name} — set their role and click Save.`)
+      setAddMsg(
+        res.known
+          ? `Added ${s.name} — set their role and click Save.`
+          : `Added ${s.email} (not a current staff record) — set their role and click Save.`,
+      )
     })
   }
 

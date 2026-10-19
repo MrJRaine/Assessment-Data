@@ -27,7 +27,10 @@ with `0.3.0`, so earlier detail is approximate.
   Analyst, or Specialist Teacher when PowerSchool has no distinct role for them — the first case being
   **Instructional Coaches**, who now count as Administrator for the schools they already have in
   PowerSchool. The override changes only the *role*; the *schools* still come from PowerSchool, so access
-  stays derived. SQL: new `StaffRoleOverride` table + `usp_SetStaffRoleOverride`; read by `usp_MergeStaff`.
+  stays derived. People are added **by email** — a current staff record isn't required, so a coach already
+  excluded from active staff (or not yet in PowerSchool) can still be listed. (Same for the Maintenance
+  capability on `/admin/staff-access` — Technology Services needn't be in PowerSchool.) SQL: new
+  `StaffRoleOverride` table + `usp_SetStaffRoleOverride`; read by `usp_MergeStaff`.
 
 ### Changed
 - **Staff ingest now only keeps people who need an account.** A person is written to the staff directory
