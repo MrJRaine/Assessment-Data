@@ -41,13 +41,14 @@ function gradeGroups(students: RollupStudent[]): { grade: string; students: Roll
 const TCRCE_ID = '__TCRCE__'
 
 export function RollupTree<T>({
-  schools, cycle, loadGroup, renderDetail, toolbarExtra, showAll = false,
+  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, showAll = false,
 }: {
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
   renderDetail: (rows: T[], lang: LangFilter) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
+  viewToggle?: ReactNode // page-level Summary/Student-list switch, rendered inline at the start of the toolbar
   showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
@@ -100,6 +101,7 @@ export function RollupTree<T>({
   return (
     <div className="math-entry">
       <div className="mtoolbar">
+        {viewToggle ? <span className="mtoolbar-view">{viewToggle}</span> : null}
         <span className="muted">Summarize by</span>
         <div className="subject-toggle" style={{ margin: 0 }}>
           {(['Grade', 'Homeroom'] as SummarizeBy[]).map((m) => (
@@ -108,7 +110,7 @@ export function RollupTree<T>({
             </button>
           ))}
         </div>
-        <span className="muted" style={{ marginLeft: '1rem' }}>Language</span>
+        <span className="muted" style={{ marginLeft: '1rem' }}>Language of Assessment</span>
         <div className="subject-toggle" style={{ margin: 0 }}>
           {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
             <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
@@ -164,8 +166,9 @@ export function RollupTree<T>({
                         ? gradeGroups(allStudents).map((g) => {
                             const gc = tally(g.students, lang)
                             if (lang !== 'All' && gc.students === 0) return null
-                            // TCRCE grade row → expands to a per-SCHOOL breakdown of that grade (each
-                            // school then drills to students via the shared GRADE:<school>:<grade> loader).
+                            // TCRCE grade row → expands to a per-SCHOOL breakdown of that grade (counts
+                            // only — kept compact; to reach students, open that school in the per-school
+                            // tree below).
                             const gradeNodeId = `${TCRCE_ID}:G:${g.grade}`
                             const gOpen = openNodes.has(gradeNodeId)
                             const schoolsForGrade = schools
@@ -185,39 +188,17 @@ export function RollupTree<T>({
                                   ? schoolsForGrade.map(({ sch, students }) => {
                                       const sc = tally(students, lang)
                                       if (lang !== 'All' && sc.students === 0) return null
-                                      const schNodeId = `${gradeNodeId}:${sch.id}`
-                                      const schGroupKey = `GRADE:${sch.id}:${g.grade}` // shared with the per-school tree's grade node
-                                      const sOpen = openNodes.has(schNodeId)
-                                      const block = blocks[schGroupKey]
+                                      // Leaf row: counts only. No student drill here (reach students via
+                                      // the per-school tree below) — keeps the TCRCE section compact.
                                       return (
-                                        <Fragment key={schNodeId}>
-                                          <tr className="tnode lvl3">
-                                            <th className="col-task" onClick={() => toggleNode(schNodeId, schGroupKey)}>
-                                              <span className="tchev">{sOpen ? '▾' : '▸'}</span>{sch.name}
-                                            </th>
-                                            <StudentsCell c={sc} />
-                                            <ResultsCell c={sc} />
-                                            <MeetCell c={sc} />
-                                          </tr>
-                                          {sOpen ? (
-                                            <tr className="blockrow">
-                                              <td colSpan={4}>
-                                                <div className="blockwrap">
-                                                  {!block || block.status === 'loading' ? (
-                                                    <p className="muted small" style={{ margin: 0 }}>Loading students…</p>
-                                                  ) : block.status === 'error' ? (
-                                                    <div className="notice notice-error">
-                                                      <div className="notice-title">Couldn&apos;t load this group</div>
-                                                      <div className="muted">{block.message}</div>
-                                                    </div>
-                                                  ) : (
-                                                    renderDetail(block.rows, lang)
-                                                  )}
-                                                </div>
-                                              </td>
-                                            </tr>
-                                          ) : null}
-                                        </Fragment>
+                                        <tr className="tnode lvl3" key={`${gradeNodeId}:${sch.id}`}>
+                                          <th className="col-task">
+                                            <span className="tchev" style={{ visibility: 'hidden' }}>▸</span>{sch.name}
+                                          </th>
+                                          <StudentsCell c={sc} />
+                                          <ResultsCell c={sc} />
+                                          <MeetCell c={sc} />
+                                        </tr>
                                       )
                                     })
                                   : null}

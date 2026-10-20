@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { ReadingRollupRow, ReadingGroupRow } from '@/lib/data'
 import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
 import { RollupTree } from './RollupTree'
@@ -10,7 +10,7 @@ import { loadReadingGroup } from './actions'
 // Reading oversight roll-up: School → Grade/Homeroom → students (EN/FR reading level + band). Thin
 // wrapper over the shared RollupTree; the per-group detail shows each student's English + French level.
 
-export default function ReadingRollupTree({ rows, cycle, showAll }: { rows: ReadingRollupRow[]; cycle: string | null; showAll?: boolean }) {
+export default function ReadingRollupTree({ rows, cycle, showAll, viewToggle }: { rows: ReadingRollupRow[]; cycle: string | null; showAll?: boolean; viewToggle?: ReactNode }) {
   const schools = useMemo(() => {
     const byKey = new Map<string, RollupStudent>()
     for (const r of rows) {
@@ -37,6 +37,7 @@ export default function ReadingRollupTree({ rows, cycle, showAll }: { rows: Read
       showAll={showAll}
       loadGroup={loadReadingGroup}
       renderDetail={(groupRows, lang) => <ReadingDetail rows={groupRows} lang={lang} />}
+      viewToggle={viewToggle}
     />
   )
 }
@@ -83,13 +84,15 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
   // Language filter: show only students with a result in the selected language (both level columns stay).
   const students = lang === 'All' ? all : all.filter((s) => (lang === 'EN' ? s.en : s.fr))
   if (students.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
+  // Grade column only when the group spans >1 grade (redundant under a grade node; useful for a split homeroom).
+  const showGrade = new Set(students.map((s) => s.grade)).size > 1
   return (
     <div className="mscroll">
       <table className="mgrid">
         <thead>
           <tr>
             <th className="col-task">Student</th>
-            <th className="stu">Grade</th>
+            {showGrade ? <th className="stu">Grade</th> : null}
             <th className="stu">English</th>
             <th className="stu">French</th>
           </tr>
@@ -100,7 +103,7 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
               <th className="col-task" scope="row">
                 <Link href={`/reports/${s.key}`} className="back-link">{s.name}</Link>
               </th>
-              <td className="stu">{s.grade ?? '—'}</td>
+              {showGrade ? <td className="stu">{s.grade ?? '—'}</td> : null}
               <LevelCell cell={s.en} ipp={s.ipp} />
               <LevelCell cell={s.fr} ipp={s.ipp} />
             </tr>
