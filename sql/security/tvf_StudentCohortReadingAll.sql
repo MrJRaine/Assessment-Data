@@ -61,7 +61,7 @@ RETURN
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
     LatestReading AS (   -- latest result per (student, language) across the selected windows
-        SELECT far.StudentNumber, drs.ScaleSystem, far.ReadingDelta,
+        SELECT far.StudentNumber, drs.ScaleSystem, far.ReadingDelta, far.AssessmentDate,
                ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
@@ -83,6 +83,7 @@ RETURN
         sch.SchoolName,
         ipp.IsIPP                         AS ReadingIPPStatus,
         lr.ScaleSystem,                                     -- language of THIS result; NULL = no reading result
+        lr.AssessmentDate                 AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
         dal.AchievementLevelCode          AS AchievementLevelCode  -- band for THIS result; NULL = none/IPP/unresolved
     FROM DimStudent s
     INNER JOIN DimGrade g ON g.GradeCode = s.Grade

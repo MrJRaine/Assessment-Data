@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import type { CohortStudent, AchievementBand } from '@/lib/data'
+import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
+import CohortCharts from './CohortCharts'
 
 // Distinct, order-preserving helper.
 function distinct<T>(xs: T[]): T[] {
@@ -100,38 +101,35 @@ function multiCmp(a: CohortStudent, b: CohortStudent, spec: SortSpec[]): number 
   return 0
 }
 
-// Last 6 month buckets ending with the current month (oldest first).
-function monthBuckets(now: Date): { label: string; nextMonthStart: Date }[] {
-  const out: { label: string; nextMonthStart: Date }[] = []
-  const fmt = new Intl.DateTimeFormat('en-CA', { month: 'short' })
-  for (let i = 5; i >= 0; i--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-    out.push({ label: fmt.format(start), nextMonthStart: next })
-  }
-  return out
-}
-
 export default function CohortView({
   cohort,
   bands,
+  cycles,
   subject = 'Reading',
   assessableRange = null,
+  trendCohort,
+  showCharts = true,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
+  cycles: ReportCycle[]
   subject?: 'Reading' | 'Writing'
   // Grade-order range of students actually assessed for this subject (e.g. Reading = P–8), from the
   // window metadata. When set, the "Assessable grades only" toggle (default ON) narrows the table +
   // total to this range. null = no scope known → toggle hidden, all students shown.
   assessableRange?: { minOrder: number; maxOrder: number } | null
+  // All-cycles cohort for the by-cycle trend (independent of the cycle selector). Falls back to `cohort`
+  // when not supplied (i.e. when no cycle is selected, both are the same dataset).
+  trendCohort?: CohortStudent[]
+  // Oversight renders the charts once at the page top (from the roll-up feed), so the in-view copy is
+  // suppressed there; teachers keep them inside the cohort view.
+  showCharts?: boolean
 }) {
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
     () => [...bands].sort((a, b) => Number(a.code) - Number(b.code)),
     [bands],
   )
-  const bandByCode = useMemo(() => new Map(orderedBands.map((b) => [Number(b.code), b])), [orderedBands])
 
   // Option lists derived from the (already RLS-scoped) cohort.
   const grades = useMemo(
@@ -325,60 +323,20 @@ export default function CohortView({
     return [...filtered].sort((a, b) => multiCmp(a, b, spec))
   }, [filtered, sortKey, sortDir])
 
-  // Chart-eligible subset (IPP / unresolved students excluded from aggregate stats).
-  const chartRows = useMemo(() => filtered.filter((s) => s.chartEligible), [filtered])
-
-  // Donut: current achievement distribution over assessed, chart-eligible students.
-  const donut = useMemo(() => {
-    const assessed = chartRows.filter((s) => s.achievementCode != null)
-    const counts = new Map<number, number>()
-    for (const s of assessed) counts.set(s.achievementCode!, (counts.get(s.achievementCode!) ?? 0) + 1)
-    const total = assessed.length
-    let acc = 0
-    const slices = orderedBands.map((b) => {
-      const code = Number(b.code)
-      const count = counts.get(code) ?? 0
-      const startPct = total ? (acc / total) * 100 : 0
-      acc += count
-      const endPct = total ? (acc / total) * 100 : 0
-      return {
-        code,
-        name: b.name,
-        color: b.hexColor,
-        count,
-        pct: total ? (count / total) * 100 : 0,
-        startPct,
-        endPct,
-      }
-    })
-    const gradient = total
-      ? slices
-          .filter((s) => s.count > 0)
-          .map((s) => `${s.color} ${s.startPct.toFixed(2)}% ${s.endPct.toFixed(2)}%`)
-          .join(', ')
-      : 'var(--border) 0% 100%'
-    return { slices, total, gradient }
-  }, [chartRows, orderedBands])
-
-  // 6-month bar: cumulative most-recent achievement as-of each month end.
-  const months = useMemo(() => {
-    const buckets = monthBuckets(new Date())
-    const maxCode = 4
-    return buckets.map((bk) => {
-      const counts: Record<number, number> = {}
-      for (let c = 1; c <= maxCode; c++) counts[c] = 0
-      let total = 0
-      for (const s of chartRows) {
-        if (!s.mostRecentDate || s.achievementCode == null) continue
-        if (new Date(s.mostRecentDate) < bk.nextMonthStart) {
-          counts[s.achievementCode] = (counts[s.achievementCode] ?? 0) + 1
-          total++
-        }
-      }
-      return { label: bk.label, counts, total }
-    })
-  }, [chartRows])
-  const monthMax = useMemo(() => Math.max(1, ...months.map((m) => m.total)), [months])
+  // Chart feeds (shared CohortCharts component). The DONUT reflects the current filters/cycle (chart-
+  // eligible subset of what's in view); the by-cycle TREND is independent of the cycle selector, so it's
+  // fed from the all-cycles `trendCohort` (falling back to `cohort` when no cycle is selected).
+  const donutRows = useMemo(
+    () => filtered.filter((s) => s.chartEligible).map((s) => ({ code: s.achievementCode })),
+    [filtered],
+  )
+  const trendRows = useMemo(
+    () =>
+      (trendCohort ?? cohort)
+        .filter((s) => s.chartEligible)
+        .map((s) => ({ code: s.achievementCode, date: s.mostRecentDate })),
+    [trendCohort, cohort],
+  )
 
   return (
     <>
@@ -552,64 +510,7 @@ export default function CohortView({
         </div>
       ) : null}
 
-      <div className="cohort-charts">
-        <div className="chart-card">
-          <div className="chart-title">Current achievement distribution</div>
-          <div className="donut-wrap">
-            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
-              <div className="donut-hole">
-                <div className="donut-total">{donut.total}</div>
-                <div className="donut-label">ASSESSED</div>
-              </div>
-            </div>
-            <ul className="donut-legend">
-              {donut.slices.map((s) => (
-                <li key={s.code}>
-                  <span className="swatch" style={{ background: s.color }} />
-                  <span className="legend-name">{s.name}</span>
-                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {donut.total === 0 ? <div className="muted chart-empty">No assessed, chart-eligible students match.</div> : null}
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-title">Achievement by month (last 6 months)</div>
-          <div className="monthbars">
-            {months.map((m) => (
-              <div key={m.label} className="monthbar">
-                <div className="monthbar-stack">
-                  {[1, 2, 3, 4].map((c) => {
-                    const v = m.counts[c] ?? 0
-                    if (!v) return null
-                    const band = bandByCode.get(c)
-                    const h = (v / monthMax) * 100
-                    return (
-                      <div
-                        key={c}
-                        className="monthbar-seg"
-                        style={{ height: `${h}%`, background: band?.hexColor ?? 'var(--border)' }}
-                        title={`${band?.name ?? c}: ${v}`}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="monthbar-label">{m.label}</div>
-              </div>
-            ))}
-          </div>
-          <ul className="bar-legend">
-            {orderedBands.map((b) => (
-              <li key={b.code}>
-                <span className="swatch" style={{ background: b.hexColor }} />
-                {b.name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
 
       {filtered.length === 0 ? (
         <div className="notice notice-empty">

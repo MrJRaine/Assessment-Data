@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo } from 'react'
 import type { ReadingRollupRow, ReadingGroupRow } from '@/lib/data'
 import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
@@ -96,7 +97,9 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
         <tbody>
           {students.map((s) => (
             <tr key={s.key}>
-              <th className="col-task" scope="row">{s.name}</th>
+              <th className="col-task" scope="row">
+                <Link href={`/reports/${s.key}`} className="back-link">{s.name}</Link>
+              </th>
               <td className="stu">{s.grade ?? '—'}</td>
               <LevelCell cell={s.en} ipp={s.ipp} />
               <LevelCell cell={s.fr} ipp={s.ipp} />
