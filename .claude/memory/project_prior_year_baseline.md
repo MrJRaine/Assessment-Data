@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-10T17:32:03.359Z
+  modified: 2026-10-15T16:00:52.205Z
 ---
 
 **Goal:** teachers see each student's **starting point** (prior-year reading level + writing) on
@@ -47,3 +47,16 @@ instant save (revalidatePath/router.refresh removed). Year-flip view `dbo.vw_Stu
 **WRITING intentionally has NO prior-June baseline** — last year's writing was too sporadic to anchor.
 Still DEFERRED: student-detail per-cycle Δ (fast follow), option-A full historical star-schema.
 See [[project_assessment_platform]], [[project_ongoing_assessment_model]] (latest-in-window picks).
+
+**COLLAPSE added to `vw_StudentReadingStartingPoint` — LIVE 2026-10-15** (server-side 1.2.0 patch,
+`sql/deploy/live_1.2.0/deploy_startingpoint_collapse_2026-10-15.sql`): the view now enforces its grain
+with a final `ROW_NUMBER` collapse to EXACTLY one row per (StudentNumber, ScaleSystem) — prefer fact over
+seed, then a mappable level, then a deterministic tiebreak. WHY: `PriorYearBaseline` legitimately holds
+MULTIPLE same-language rows per student (per-school aggregated sheets → a prior-year cross-school transfer
+has one row per school; flat ×2 regardless of this year's SCD version count). Before the collapse the
+starting-point join multiplied those students in the reading cohort — they appeared 2× by name AND lingered
+through filters. The filter leak was a SECOND effect of the same fan-out: the cohort table keys rows on
+`studentKey`, so duplicate rows gave duplicate React keys → React couldn't reconcile them out on filter
+change. Collapsing to one row fixed BOTH. Do NOT dedupe via ActiveFlag (breaks historical scale resolution).
+General lesson: a server-side row fan-out that reaches a React list keyed on a non-unique id shows up as
+duplication AND as filter/selection "leaks" — fix at the source grain, not the client.

@@ -451,12 +451,12 @@ BEGIN
     ELSE
     BEGIN
         INSERT INTO FactAssessmentReading (
-            StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta,
+            StudentKey, StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta,
             LevelCode, ExpectedMinLevelCode, ExpectedMaxLevelCode,
             AssessmentDate, EnteredByStaffKey, SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @ReadingScaleID_BI, @ReadingDelta,
+            @StudentKey, @StudentNumber, @AssessmentWindowID_BI, @ReadingScaleID_BI, @ReadingDelta,
             @StudentLevelCode, @ExpectedMinLevel, @ExpectedMaxLevel,
             @AssessmentDate, @CallerStaffKey, @Now, @Now
         );
@@ -491,3 +491,8 @@ BEGIN
         @Now
     );
 END;
+GO
+
+-- Self-contained redeploy: DROP+CREATE drops the EXECUTE grant, so re-grant to the SP.
+GRANT EXECUTE ON [dbo].[usp_UpsertReadingAssessment] TO [StudentDataAssessment];
+GO

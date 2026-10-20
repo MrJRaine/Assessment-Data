@@ -75,8 +75,8 @@ RETURN
     ),
     -- Most-recent reading -> achievement code (delta mapped through DimAchievementLevel bounds).
     ReadLatest AS (
-        SELECT far.StudentKey, far.ReadingDelta, far.AssessmentDate,
-               ROW_NUMBER() OVER (PARTITION BY far.StudentKey
+        SELECT far.StudentNumber, far.ReadingDelta, far.AssessmentDate,
+               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
         -- @CycleGroupID: NULL = lifetime latest; a cycle id scopes to that cycle's Reading window(s).
@@ -86,7 +86,7 @@ RETURN
                 WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1)
     ),
     ReadAch AS (
-        SELECT rl.StudentKey, dal.AchievementLevelCode AS Code
+        SELECT rl.StudentNumber, dal.AchievementLevelCode AS Code
         FROM ReadLatest rl
         LEFT JOIN DimAchievementLevel dal
                ON dal.ActiveFlag = 1
@@ -106,7 +106,7 @@ RETURN
     -- all drop. NB (Fabric gotcha): TRY_CAST('-' AS INT) = 0 (not NULL), and a bare COALESCE(IdeasScore,0)
     -- would hard-CAST '-' and error — so gate on the explicit allow-list.
     WriteLatest AS (
-        SELECT faw.StudentKey,
+        SELECT faw.StudentNumber,
                CAST(
                    (COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
                     + COALESCE(CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN CAST(faw.OrganizationScore AS INT) END, 0)
@@ -117,7 +117,7 @@ RETURN
                           + (CASE WHEN faw.LanguageScore     IN ('1','2','3','4') THEN 1 ELSE 0 END)
                           + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                    AS DECIMAL(5,2)) AS AvgScore,
-               ROW_NUMBER() OVER (PARTITION BY faw.StudentKey
+               ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber
                                   ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
         -- @CycleGroupID: NULL = lifetime latest; a cycle id scopes to that cycle's Writing window(s).
@@ -127,7 +127,7 @@ RETURN
                 WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Writing' AND w.ActiveFlag = 1)
     ),
     WriteAch AS (
-        SELECT wl.StudentKey,
+        SELECT wl.StudentNumber,
                CASE WHEN wl.AvgScore IS NULL   THEN NULL
                     WHEN wl.AvgScore >= 3.50   THEN 4
                     WHEN wl.AvgScore >= 2.75   THEN 3
@@ -137,21 +137,21 @@ RETURN
     ),
     -- Math roll-up: latest result per task (current-year windows) -> per-unit avg -> avg of unit avgs.
     MathLatest AS (
-        SELECT fm.StudentKey, fm.MathTaskKey, fm.Result,
-               ROW_NUMBER() OVER (PARTITION BY fm.StudentKey, fm.MathTaskKey
+        SELECT fm.StudentNumber, fm.MathTaskKey, fm.Result,
+               ROW_NUMBER() OVER (PARTITION BY fm.StudentNumber, fm.MathTaskKey
                                   ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
         FROM FactAssessmentMath fm
         WHERE fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
     ),
     MathUnit AS (
-        SELECT ml.StudentKey, mt.UnitName, AVG(CAST(ml.Result AS FLOAT)) AS UnitAvg
+        SELECT ml.StudentNumber, mt.UnitName, AVG(CAST(ml.Result AS FLOAT)) AS UnitAvg
         FROM MathLatest ml
         INNER JOIN DimMathTask mt ON mt.MathTaskKey = ml.MathTaskKey AND mt.ActiveFlag = 1
         WHERE ml.rn = 1
-        GROUP BY ml.StudentKey, mt.UnitName
+        GROUP BY ml.StudentNumber, mt.UnitName
     ),
     MathRoll AS (   -- blanks EXCLUDED: unit avg over recorded tasks only
-        SELECT StudentKey, AVG(UnitAvg) AS RollupPct FROM MathUnit GROUP BY StudentKey
+        SELECT StudentNumber, AVG(UnitAvg) AS RollupPct FROM MathUnit GROUP BY StudentNumber
     ),
     -- blanks COUNT-AS-0: denominator = every configured task for the grade's units this year, so an
     -- un-recorded task counts as a miss. Universe = active tasks at the current-year math months.
@@ -162,21 +162,21 @@ RETURN
         GROUP BY mt.GradeCode, mt.UnitName
     ),
     MathUnitOnes AS (   -- recorded 1s per (student, unit)
-        SELECT ml.StudentKey, mt.GradeCode, mt.UnitName, SUM(CAST(ml.Result AS INT)) AS Ones
+        SELECT ml.StudentNumber, mt.GradeCode, mt.UnitName, SUM(CAST(ml.Result AS INT)) AS Ones
         FROM MathLatest ml
         INNER JOIN DimMathTask mt ON mt.MathTaskKey = ml.MathTaskKey AND mt.ActiveFlag = 1
         WHERE ml.rn = 1
-        GROUP BY ml.StudentKey, mt.GradeCode, mt.UnitName
+        GROUP BY ml.StudentNumber, mt.GradeCode, mt.UnitName
     ),
     MathZeroUnit AS (   -- one row per (student, configured unit): ones / configured (fully-blank unit = 0)
-        SELECT isc.StudentKey,
+        SELECT isc.StudentNumber,
                CAST(COALESCE(mo.Ones, 0) AS FLOAT) / NULLIF(tu.ConfiguredCount, 0) AS UnitAvg
         FROM InScope isc
         INNER JOIN TaskUniverse tu ON tu.GradeCode = isc.Grade
-        LEFT  JOIN MathUnitOnes mo ON mo.StudentKey = isc.StudentKey AND mo.GradeCode = isc.Grade AND mo.UnitName = tu.UnitName
+        LEFT  JOIN MathUnitOnes mo ON mo.StudentNumber = isc.StudentNumber AND mo.GradeCode = isc.Grade AND mo.UnitName = tu.UnitName
     ),
     MathZeroRoll AS (
-        SELECT StudentKey, AVG(UnitAvg) AS RollupPct FROM MathZeroUnit GROUP BY StudentKey
+        SELECT StudentNumber, AVG(UnitAvg) AS RollupPct FROM MathZeroUnit GROUP BY StudentNumber
     )
     SELECT
         CAST(isc.StudentKey AS VARCHAR(20))            AS StudentKey,
@@ -204,14 +204,14 @@ RETURN
          + CASE WHEN wa.Code IN (3, 4) THEN 1 ELSE 0 END
          + CASE WHEN mr.RollupPct >= 0.75 THEN 1 ELSE 0 END)               AS RWMScore,
         -- "has any evidence" per area, so the UI can tell "not meeting" from "no result yet".
-        CAST(CASE WHEN ra.StudentKey IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasReading,
-        CAST(CASE WHEN wa.StudentKey IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasWriting,
-        CAST(CASE WHEN mr.StudentKey IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasMath
+        CAST(CASE WHEN ra.StudentNumber IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasReading,
+        CAST(CASE WHEN wa.StudentNumber IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasWriting,
+        CAST(CASE WHEN mr.StudentNumber IS NOT NULL THEN 1 ELSE 0 END AS BIT)  AS HasMath
     FROM InScope isc
-    LEFT JOIN ReadAch   ra ON ra.StudentKey = isc.StudentKey
-    LEFT JOIN WriteAch  wa ON wa.StudentKey = isc.StudentKey
-    LEFT JOIN MathRoll  mr ON mr.StudentKey = isc.StudentKey
-    LEFT JOIN MathZeroRoll mz ON mz.StudentKey = isc.StudentKey
+    LEFT JOIN ReadAch   ra ON ra.StudentNumber = isc.StudentNumber
+    LEFT JOIN WriteAch  wa ON wa.StudentNumber = isc.StudentNumber
+    LEFT JOIN MathRoll  mr ON mr.StudentNumber = isc.StudentNumber
+    LEFT JOIN MathZeroRoll mz ON mz.StudentNumber = isc.StudentNumber
     WHERE NOT EXISTS (SELECT 1 FROM AnyIPP ai WHERE ai.StudentKey = isc.StudentKey)
 );
 GO

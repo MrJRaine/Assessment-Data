@@ -21,6 +21,10 @@
  *          DimCourseAssessment) — the section decides the language, NOT the student's program. The
  *          volatile writing-scores half is unchanged. Membership logic lives in
  *          usp_RebuildRosterMembership — keep the two in lockstep.
+ * Modified: 2026-10-13 — SpecialistTeacher REMOVED from the oversight path (user: specialist teachers
+ *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
+ *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
+ *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
  * Region: Canada East (PIIDPA compliant)
  *
  * Band = average mapped to a code (3.50/2.75/1.75) then joined to
@@ -64,14 +68,13 @@ RETURN
         CROSS JOIN Caller c
         CROSS JOIN WindowEffectiveDates wed
         WHERE (
-                (c.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst')
+                (c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
                  AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
                              WHERE ssa.StaffKey = c.StaffKey AND ssa.SchoolID = m.SchoolID))
              OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
                         WHERE fst.SectionID = m.SectionID
                           AND LOWER(fst.TeacherEmail) = c.Email
-                          AND m.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
-                                                        AND COALESCE(fst.EffectiveEndDate, '9999-12-31')))
+                          AND fst.IsCurrent = 1))   -- B (2026-10-13): CURRENT teacher sees every cycle (was as-of-EndDate)
           -- Language track = the SECTION's course language. Effective language is the cycle's scope
           -- when set, else the EN/FR toggle. (For a scoped window the base already holds only that
           -- language's sections; the predicate is a harmless no-op then and does the real work when
@@ -81,7 +84,7 @@ RETURN
     -- Most recent writing entry per (student, window) -- multiple dated entries are allowed.
     LatestWritingInWindow AS (
         SELECT
-            StudentKey, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
+            StudentNumber, AssessmentWindowID, IdeasScore, OrganizationScore, LanguageScore, ConventionsScore,
             -- Average over the NUMERICALLY-SCORED traits only. Count a trait ONLY when it is explicitly
             -- '1'-'4': '-' (excluded = deliberately not assessed), 'SCR' (scribed) and NULL all drop from
             -- BOTH the sum and the count (never counted as 0). All-dropped -> NULL. NB (Fabric gotcha):
@@ -98,7 +101,7 @@ RETURN
                 AS DECIMAL(5,2)) AS AvgScore,
             AssessmentDate,
             ROW_NUMBER() OVER (
-                PARTITION BY StudentKey, AssessmentWindowID
+                PARTITION BY StudentNumber, AssessmentWindowID
                 ORDER BY AssessmentDate DESC, WritingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentWriting
@@ -145,7 +148,7 @@ RETURN
     LEFT JOIN DimProgram dp ON dp.ProgramCode = ds.ProgramCode
     LEFT JOIN LatestWritingInWindow faw
            ON faw.AssessmentWindowID = sg.AssessmentWindowID
-          AND faw.StudentKey         = sg.StudentKey
+          AND faw.StudentNumber      = sg.StudentNumber
           AND faw.rn = 1
     LEFT JOIN FactStudentIPP ipp
            ON ipp.StudentKey    = sg.StudentKey

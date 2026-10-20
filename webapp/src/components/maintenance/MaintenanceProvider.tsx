@@ -57,11 +57,13 @@ export function useMaintenanceControls(): MaintenanceControls {
 export default function MaintenanceProvider({
   children,
   isSysAdmin = false,
+  canMaintain = false,
   canRunIngest = false,
   authSlot = null,
 }: {
   children: React.ReactNode
   isSysAdmin?: boolean
+  canMaintain?: boolean // Technology Services — full maintenance control (1.3.0)
   canRunIngest?: boolean
   authSlot?: React.ReactNode // AuthArea (sign in / sign out), rendered on the down overlay
 }) {
@@ -238,7 +240,9 @@ export default function MaintenanceProvider({
     })
   }, [recompute])
 
-  const admin = isSysAdmin ? { onClear: clearNow, clearing } : null
+  // Clear control shows for a sysadmin OR a maintenance-capable user; the server still enforces LOTO
+  // (only the window's opener or a sysadmin can actually clear it) and returns a friendly message if not.
+  const admin = isSysAdmin || canMaintain ? { onClear: clearNow, clearing } : null
 
   // Pages that EXIST to run maintenance are not covered by it — otherwise the documented procedure
   // (schedule -> wait -> run the ingest) is impossible: the window lands, the overlay covers /ingest,
@@ -268,7 +272,7 @@ export default function MaintenanceProvider({
             message={state.message}
             admin={admin}
             authSlot={authSlot}
-            links={{ ingest: canRunIngest, maintenance: isSysAdmin }}
+            links={{ ingest: canRunIngest, maintenance: isSysAdmin || canMaintain }}
           />
         ) : null}
       </Ctx.Provider>

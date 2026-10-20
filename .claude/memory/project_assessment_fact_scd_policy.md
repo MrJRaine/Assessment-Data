@@ -3,6 +3,7 @@ name: Fact-Table SCD Linking Policy
 description: When fact tables freeze surrogate keys vs re-resolve them — design decisions per fact, with rationale
 type: project
 originSessionId: 22e078d6-e607-4d91-8331-841a7d446663
+modified: 2026-10-13T19:43:07.152Z
 ---
 Fact tables in this warehouse fall into two categories based on how their surrogate-key links to Type 2 dims are maintained over time. The policy is per-fact and was made deliberately.
 
@@ -35,6 +36,30 @@ JOIN DimStudent s
 
 **How to apply:** When building `usp_MergeAssessmentReading` (Step 31): no UPDATE on StudentKey ever. Insert-only path uses effective-date JOIN. Score corrections via separate UPDATE filtered by `ReadingAssessmentID` or equivalent stable identifier — touches only score columns.
 
+## StudentNumber on the facts — durable fix for SCD-reversion stranding (LIVE 2026-10-13)
+
+The freeze-at-insert policy above is correct and UNCHANGED — StudentKey still captures the
+point-in-time grade/school/program. But the READS had a latent bug: the cohort/roster/entered-count/
+history TVFs joined the CURRENT student to the fact on **StudentKey**. When a student re-versioned
+(new StudentKey after a PS grade/school/program change), `currentStudent.StudentKey = fact.StudentKey`
+stopped matching the pre-reversion rows, so entered Reading/Writing/Math data read as missing
+(0 progress / blank roster / gone from reports+history). Found 2026-10-13 via william.keyzers@tcrce.ca;
+live stranded counts ~772 math / 77 reading / 24 writing.
+
+**Fix (three stages, live as a server-side patch under 1.2.0 — NO semver bump,
+`sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql`):**
+1. Added **`StudentNumber BIGINT`** (the stable business key) to FactAssessmentMath/Reading/Writing and
+   backfilled from each row's entry-time version (StudentKey→DimStudent.StudentNumber; stable across versions).
+   Fabric guard = `sys.columns` (COL_LENGTH unsupported). Backfill did NOT touch LastUpdated.
+2. The 3 upsert procs persist StudentNumber on INSERT (they already took @StudentNumber + resolved @StudentKey).
+3. The **15 read objects** now match the current student to the fact on **StudentNumber**, not StudentKey
+   (join / PARTITION / per-student filter). One-time relink recovery had already restored the live rows.
+
+**Rule going forward:** any NEW read that ties a CURRENT student to an assessment fact must match on
+**StudentNumber** (StudentKey only for the frozen point-in-time attributes). IPP/Adaptation/Enrollment
+reads still key on StudentKey (re-pointed on ingest / current-filtered) — out of scope, revisit only if
+they ever strand. LEGACY Power Apps views (vw_StudentCohort etc.) were NOT converted (web app doesn't read them).
+
 ## Summary table
 
 | Fact table              | Link policy   | Re-resolution trigger                         | Insert resolution           |
@@ -42,6 +67,7 @@ JOIN DimStudent s
 | FactEnrollment          | Type 1 active | Re-resolve while active; freeze when inactive (planned refinement) | `IsCurrent = 1` |
 | FactSectionTeachers     | N/A           | Bridge keys on business keys (SectionID, TeacherEmail) — no surrogate key dependency | N/A |
 | FactStaffAssignment     | Type 2 versioned | SCD Type 2 on the bridge itself; closes/reopens on staff merge | `IsCurrent = 1` for current StaffKey |
-| FactAssessmentReading   | Type 2 frozen | Never re-resolve StudentKey                   | Effective-date join on AssessmentDate |
+| FactAssessmentReading   | Type 2 frozen | Never re-resolve StudentKey; **reads match current student by StudentNumber** (2026-10-13) | Effective-date join on AssessmentDate |
 | FactAssessmentWriting   | Type 2 frozen | Same as FactAssessmentReading                 | Same                        |
+| FactAssessmentMath      | Type 2 frozen | Same as FactAssessmentReading (grain +MathTaskKey) | Same                   |
 | FactSubmissionAudit     | None          | No dim links                                  | N/A                         |

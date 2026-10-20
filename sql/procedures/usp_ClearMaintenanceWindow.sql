@@ -5,9 +5,14 @@
  *          the banner and re-enable entry immediately (no waiting for auto-expiry).
  * Params:
  *   @CallerUPN  VARCHAR(255)  -- signed-in UPN (web-app/SP path); NULL -> CURRENT_USER
+ * LOCK-OUT/TAG-OUT (1.3.0): a maintenance window is "owned" by whoever opened it (AppMaintenance.SetByEmail).
+ *   Only that owner — OR any sysadmin (fallback) — may clear it, so another capable user can't absent-
+ *   mindedly end a window while the server is down for infra work or mid-ingest. The ingest flow's own
+ *   auto-clear still works because it's the same user who opened the window.
  * THROW codes:
- *   51040  caller is not a sysadmin (StaffAppAccess.IsSysAdmin)
- * SECURITY: sysadmin-gated in-proc (defense in depth). Region: Canada East. Created 2026-09-16.
+ *   51042  caller is neither the window's owner nor a sysadmin (window is locked)
+ * SECURITY: owner/sysadmin-gated in-proc (defense in depth). Region: Canada East. Created 2026-09-16.
+ *   Modified 2026-10-19 (LOTO: owner-or-sysadmin instead of sysadmin-only).
  ******************************************************************************/
 
 DROP PROCEDURE IF EXISTS usp_ClearMaintenanceWindow;
@@ -20,9 +25,15 @@ BEGIN
     SET NOCOUNT ON;
     DECLARE @Caller VARCHAR(255) = LOWER(COALESCE(@CallerUPN, CURRENT_USER));
 
-    IF NOT EXISTS (SELECT 1 FROM StaffAppAccess WHERE LOWER(Email) = @Caller AND IsSysAdmin = 1)
+    -- LOTO gate: the window's owner (who opened it) OR any sysadmin may clear it.
+    DECLARE @OpenedBy VARCHAR(255);
+    DECLARE @IsSys    BIT = 0;
+    SELECT @OpenedBy = LOWER(SetByEmail) FROM AppMaintenance WHERE Id = 1;
+    SELECT @IsSys = CASE WHEN IsSysAdmin = 1 THEN 1 ELSE 0 END FROM StaffAppAccess WHERE LOWER(Email) = @Caller;
+
+    IF COALESCE(@IsSys, 0) = 0 AND (@OpenedBy IS NULL OR @OpenedBy <> @Caller)
     BEGIN
-        ;THROW 51040, 'usp_ClearMaintenanceWindow: caller is not a sysadmin.', 1;
+        ;THROW 51042, 'usp_ClearMaintenanceWindow: this maintenance window is locked by the user who opened it; only they or a sysadmin can clear it.', 1;
     END;
 
     UPDATE AppMaintenance

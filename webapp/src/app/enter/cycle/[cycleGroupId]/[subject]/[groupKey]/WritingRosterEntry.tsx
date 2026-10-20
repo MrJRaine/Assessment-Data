@@ -6,14 +6,9 @@ import type { WritingRosterStudent, WritingLanguage } from '@/lib/data'
 import { SmallGroupFilter, useSmallGroup } from './smallGroup'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
 import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
+import { traitsInOrder, WRITING_TRAIT_KEYS, type WritingTraitKey } from '@/lib/writingTraits'
+import { useTraitOrder, TraitOrderToggle } from '@/components/TraitOrderToggle'
 
-const TRAITS = [
-  { key: 'ideas', label: 'Ideas' },
-  { key: 'organization', label: 'Org.' },
-  { key: 'language', label: 'Lang.' },
-  { key: 'conventions', label: 'Conv.' },
-] as const
-type TraitKey = (typeof TRAITS)[number]['key']
 // Conventions may be 'SCR' (Scribed) — someone else physically wrote for the student, so conventions
 // aren't the student's own production. 'SCR' is OMITTED from the average. Ideas/Org/Language are 1-4.
 type ConvValue = number | 'SCR' | null
@@ -59,13 +54,13 @@ function writingBand(avg: number | null): { name: string; hex: string; tint: str
 // and an EXCLUDED trait (WritingTraitExclusion) is dropped too. The exclusion check is defensive: the
 // proc forces an excluded trait to NULL on save, but a legacy/seeded row can still carry a stale value
 // under the hidden cell, and the on-screen average must match the VISIBLE traits regardless.
-function avgOf(s: ScoreSet, excluded: Set<TraitKey>): number | null {
+function avgOf(s: ScoreSet, excluded: Set<WritingTraitKey>): number | null {
   const vals = ([
     ['ideas', s.ideas],
     ['organization', s.organization],
     ['language', s.language],
     ['conventions', numOf(s.conventions)],
-  ] as [TraitKey, number | null][])
+  ] as [WritingTraitKey, number | null][])
     .filter(([k, v]) => !excluded.has(k) && v != null)
     .map(([, v]) => v as number)
   return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
@@ -73,8 +68,8 @@ function avgOf(s: ScoreSet, excluded: Set<TraitKey>): number | null {
 // A row is COMPLETE (saveable) when every trait is set — Conventions counts 'SCR' as set. A trait
 // EXCLUDED for this student's grade×program×benchmark month (WritingTraitExclusion) is never asked
 // for, so it counts as satisfied: the grid hides its dropdown and the proc forces its score NULL.
-function isComplete(s: ScoreSet, excluded: Set<TraitKey>): boolean {
-  const ok = (key: TraitKey, v: number | ConvValue) => excluded.has(key) || v != null
+function isComplete(s: ScoreSet, excluded: Set<WritingTraitKey>): boolean {
+  const ok = (key: WritingTraitKey, v: number | ConvValue) => excluded.has(key) || v != null
   return ok('ideas', s.ideas) && ok('organization', s.organization) && ok('language', s.language) && ok('conventions', s.conventions)
 }
 function eqSet(a: ScoreSet, b: ScoreSet): boolean {
@@ -104,11 +99,10 @@ export default function WritingRosterEntry({
   const pfByKey = new Map(roster.map((s) => [s.studentKey, s.programFamily] as const))
   // Traits NOT assessed for each student this cycle (data-driven WritingTraitExclusion). The grid
   // hides these dropdowns, they don't gate completeness, and they save as NULL (dropped from the avg).
-  const TRAIT_KEYS = new Set<string>(TRAITS.map((t) => t.key))
   const excludedByKey = new Map(
-    roster.map((s) => [s.studentKey, new Set(s.excludedTraits.filter((t) => TRAIT_KEYS.has(t)) as TraitKey[])] as const),
+    roster.map((s) => [s.studentKey, new Set(s.excludedTraits.filter((t) => WRITING_TRAIT_KEYS.has(t as WritingTraitKey)) as WritingTraitKey[])] as const),
   )
-  const emptyExcluded = new Set<TraitKey>()
+  const emptyExcluded = new Set<WritingTraitKey>()
   const exclOf = (k: string) => excludedByKey.get(k) ?? emptyExcluded
 
   const baselineFromProps: Record<string, ScoreSet> = {}
@@ -127,6 +121,9 @@ export default function WritingRosterEntry({
   const editable = !locked || override
   const ro = !editable
   const sg = useSmallGroup(roster)
+  // Writing-trait display order (COIL default; per-viewer toggle, shared with the writing report).
+  const [traitMode, setTraitMode] = useTraitOrder()
+  const TRAITS = useMemo(() => traitsInOrder(traitMode), [traitMode])
 
   // --- Unsaved-entry draft (localStorage, 90-min TTL, studentKey-keyed; separate per language) -----
   // Survives a refresh / closed tab / crash. Stores ONLY surrogate keys + the 1–4/SCR trait scores
@@ -164,7 +161,7 @@ export default function WritingRosterEntry({
   // finished rows and flags partial ones (never a partial-row failure).
   const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyCount > 0, onSave: () => onSave() })
 
-  function setTrait(sk: string, trait: TraitKey, val: ConvValue) {
+  function setTrait(sk: string, trait: WritingTraitKey, val: ConvValue) {
     // Only Conventions is ever set to 'SCR' (the SCR option is Conventions-only); the assertion
     // reconciles the computed-key write with ScoreSet's precise field types.
     setSel((p) => ({ ...p, [sk]: { ...p[sk], [trait]: val } as ScoreSet }))
@@ -263,7 +260,7 @@ export default function WritingRosterEntry({
             </>
           ) : (
             <>
-              <strong>This cycle is locked (view only).</strong> The grace period for late entry has ended.{' '}
+              <strong>This cycle is locked (view only).</strong>{' '}
               {canOverride && (
                 <button type="button" className="btn-ghost" onClick={() => setOverride(true)}>
                   Override lock for this group
@@ -284,7 +281,16 @@ export default function WritingRosterEntry({
           <button type="button" className="btn-ghost" onClick={() => setRestored(null)}>Dismiss</button>
         </div>
       )}
-      <SmallGroupFilter sg={sg} />
+      <div className="entry-toolbar">
+        <SmallGroupFilter sg={sg} />
+        <TraitOrderToggle mode={traitMode} onChange={setTraitMode} />
+      </div>
+      <p className="trait-order-note">
+        ***Please note that the order of the data entry grid has changed. The default order is now COIL, if you
+        wish to continue using the IOLC order that matches the{' '}
+        <strong><em>Nova Scotia Assessments: Analytic Rubric for Scoring Writing (LM3/RWM6/RWM8)</em></strong>,
+        please ensure that you have selected IOLC just above the grid on the right.***
+      </p>
       <table className="grid">
         <thead>
           <tr>

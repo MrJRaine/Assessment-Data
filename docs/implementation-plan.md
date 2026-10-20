@@ -131,6 +131,33 @@ Tracked separately from the 36-step count (parallel fork). Stack: Next.js 15 + T
 > TOP of the chain — never append at the bottom. `session-start` reads the first `### Left Off` heading
 > and trusts it to be the most recent; appending at the bottom silently feeds the next session stale
 
+### Left Off — 2026-10-19 — 🟡 v1.3.0 FULLY BUILT ON DEV + bundled; awdev up; TESTING STARTS 2026-10-20
+- **Last completed**: Finished the v1.3.0 access/permissions theme on `dev` (all image-build typechecked, pushed): **maintenance LOTO + CanMaintain** (2026-10-16); **#1 staff-merge write rule** (`usp_MergeStaff` Step 2 — persist only access-roles / section-teachers / overrides) + **Admin Assistant DimRole 11/13/17/20 → SupportStaff**; **#2 coach role overrides** (`StaffRoleOverride` table + `usp_SetStaffRoleOverride` + `/admin/staff-roles`); **add-by-email "not in the system" checkbox** on both admin screens + **role-override ingest-deferral Save prompt** (maintenance grants stay immediate). **Bundled ALL v1.3.0 SQL** at `sql/deploy/live_1.3.0/deploy_1.3.0.sql` (idempotent, ordered). Created `.claude/skills/dev-containers.md`. Spun up **awdev on `assessment-webapp:1.3.0-dev` (:3001)** — running, ready.
+- **In progress**: Nothing mid-edit. All v1.3.0 code on `dev` (origin current); **no SQL deployed to the dev OR live warehouse yet**.
+- **Next action**: Run `sql/deploy/live_1.3.0/deploy_1.3.0.sql` on the **dev** warehouse (one session, top-to-bottom). Then — BEFORE any dev re-ingest — seed coach/override rows at `/admin/staff-roles`. Then walk `docs/v1.3.0-testing-plan.md` §0→§8 against awdev (:3001), ticking the sign-off grid. Run `cleanup_staff_email_ghosts` PART 1 (preview) on dev before PART 2. Decide the 1.3.0 cut after dev passes (version bump + patchNotes + release ritual at the live deploy).
+- **Blockers**: None. (Reports trees + role overrides need the bundle on the dev warehouse to render; the webapp otherwise builds clean.)
+
+### Left Off — 2026-10-16 — 🟡 v1.3.0 BUILT ON DEV (COIL, reports rebuild, Build C, staff reconciliation); nothing deployed yet
+- **Last completed**: Finished the 1.2.0 carry-over patches on LIVE (reading-report duplicate-student fix via `vw_StudentReadingStartingPoint` collapse, 2026-10-15; A+B card/current-teacher fix confirmed PRESENT on live, 2026-10-16). Then built ALL of v1.3.0 on `dev` (committed/pushed, image-build typechecked): **COIL** writing-trait order + toggle & grace-wording removal; **reports rebuild** — Reading + Writing oversight roll-up trees (School→Grade/Homeroom→students, Students·Results·%Meeting/Exceeding, EN/FR hover, per-group drill, writing 4-trait COIL detail), **TCRCE** all-schools row (R/W/Math), **language filter**; **Build C** IPP/adaptation persistence (`usp_MergeStudent` step-6-pre repoint); **staff email-change reconciliation** (`usp_MergeStaff` step 3.5) + ghost-cleanup script. Wrote `docs/v1.3.0-testing-plan.md`.
+- **In progress**: Nothing mid-edit. All v1.3.0 code is on `dev`; **no SQL deployed to the dev OR live warehouse yet**, no container cut.
+- **Next action**: Deploy the v1.3.0 SQL to the **dev** warehouse — the 4 reports TVFs (`tvf_StudentCohort{Reading,Writing}{All,Group}`), redeploy `usp_MergeStudent` + `usp_MergeStaff` — then rebuild `awdev` and work through `docs/v1.3.0-testing-plan.md` (§0 deploy checklist → §1–8). Run `cleanup_staff_email_ghosts` PART 1 (preview) on dev and review the pairs before PART 2. Then decide the 1.3.0 cut (version bump + patchNotes + release ritual happen at the live deploy).
+- **Blockers**: None. (Reports trees need the 4 TVFs on the dev warehouse to render real data; the webapp otherwise builds clean.)
+
+### Left Off — 2026-10-13 — 🟢 1.2.0 LIVE; StudentNumber durable fix shipped (server-side patch); dev==main
+- **Last completed**: 1.2.0 cutover live + release ritual + dev-impersonation reconcile done. Second math-task batch
+  (2026-27) loaded (month remaps now at conversion time). Specialist-teacher entry scope fixed (server-side patch).
+  **StudentNumber durable fix LIVE** — the SCD-reversion "stranded entries" bug: assessment facts keyed only on the
+  mutable StudentKey, so a re-versioned student's entered data went invisible. Added stable `StudentNumber` to the 3
+  facts (backfilled), persisted it on the 3 upsert procs, and switched the 15 reads to match current student↔fact on
+  StudentNumber. One consolidated server-side bundle `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql`
+  (no semver bump; CHANGELOG blockquote under [1.2.0]). Live verify StillNull=0. Detail: [[project_assessment_fact_scd_policy]].
+- **Next action**: nothing pending on this thread. Resume math-reports #2 **Phase 2** (Grade-first pivot for analysts +
+  school multi-select within a grade band) when picked up.
+- **Watch**: #1119 ingest `COPY INTO` error recurred under 1.2.0 (WI OneLake, tenant/transient — loaders unchanged); root
+  cause still parked. If assessment data ever strands again, check whether IPP/Adaptation/Enrollment reads (still keyed
+  on StudentKey, out of scope this fix) are the culprit.
+- **Blockers**: none. `dev` and `main` are level at cb551d2.
+
 ### Left Off — 2026-10-12 — 🟢 1.2.0 SIGNED OFF; cutover first thing 2026-10-13
 - **Last completed**: 1.2.0 built + signed off on awdev — math-reports #2 **Phase 1** (oversight roll-up tree), Entra-only
   auth (dev-auth bypass removed from dev/main), server-side error logging, plus the 10-09 fixes (math save, cohort stale

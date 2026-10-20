@@ -3,7 +3,7 @@ name: Assessment Platform — Session Archive (read on demand)
 description: "ARCHIVE — verbatim chronological session-by-session log of the assessment platform project (2026-04 through 2026-06-08). NOT auto-read at session start. The distilled, current-state decision record lives in project_assessment_platform.md; read THAT first. Come here only to recover a specific historical detail, the rationale behind a reversed decision, or the exact state at a past session end. Superseded narrative is preserved here intentionally."
 type: reference
 originSessionId: 4e72a76d-8a9e-4688-9831-7b79552a94a1
-modified: 2026-09-09T18:45:47.281Z
+modified: 2026-10-16T21:41:35.120Z
 ---
 
 > **This file is the historical archive.** It was split out of `project_assessment_platform.md` on 2026-06-09 to stop the auto-read session-start cost from growing every session. Everything below is the original running log, verbatim and unedited. For the *current* state of any decision, read the distilled `project_assessment_platform.md` instead — it captures the resolved endpoint of every thread below. Only dig in here when the distillation points you here or when you need a superseded/intermediate detail.
@@ -1702,3 +1702,150 @@ key-names-only listing.
 
 **End state.** All committed + pushed on `dev`. awdev :3001 = 1.2.0 (Entra). Tar written. Cutover 2026-10-13 AM by the
 user. No PR (release ritual runs after a successful live deploy). Impersonation container still 1.1.0-imp.
+
+## Session 2026-10-13 — 1.2.0 cutover; StudentNumber durable fix for SCD-reversion stranding (LIVE)
+
+**1.2.0 live + housekeeping.** Cutover went fine (user). #1119 closed as a workaround (WI-credential for OneLake
+COPY INTO; root cause unresolved, not pursued). Dev-impersonation reconciled (merged 1.2.0 + reverted 1ecb3c9 to
+restore dev-auth; 1.2.0-imp built + swapped). Second math-task batch (2026-27) prepped + loaded — month remaps
+(10→9, 2→1, 5→4) now baked into `transform-mathtasks.ps1` at CONVERSION time, not a post-seed UPDATE. Specialist-
+teacher Data-Entry scoping fixed as a server-side patch (specialists = own sections only; keep whole-school VIEW).
+`#1119` ingest error RECURRED under 1.2.0 (loaders confirmed present/unchanged — tenant-side or transient WI OneLake
+failure, not our code); root cause stays parked.
+
+**THE BIG ONE — SCD re-versioning stranded entered data (root cause found + durably fixed).** william.keyzers@tcrce.ca
+reported all his entered data invisible (cards 0/blank rosters). I invented a "half-applied ingest this morning"
+narrative — WRONG, user angry; there was no such ingest. Lesson re-learned: gather facts, don't theorize. Real cause:
+the assessment facts stored ONLY StudentKey (the SCD Type-2 surrogate, frozen at entry). When a student re-versions
+(new StudentKey after a PS grade/school/program change), the current-state reads joined
+`currentStudent.StudentKey = fact.StudentKey` and MISSED the pre-reversion rows → data read as missing. (User asserted
+"that was always the schema / tied to student ID" — verified via git + DDLs that StudentNumber was NEVER a fact column;
+surfaced tactfully with evidence.) Live stranded counts ~772 math / 77 reading / 24 writing. One-time
+`relink_stranded_assessment_studentkeys.sql` re-pointed the stranded rows to current StudentKey by StudentNumber
+(user confirmed it fixed the symptom).
+
+**Durable fix (3 stages).** (1) Added stable `StudentNumber BIGINT` to FactAssessmentMath/Reading/Writing + backfill
+from entry-time version (StudentKey→DimStudent.StudentNumber; stable across versions); LastUpdated NOT touched.
+(2) The 3 upsert procs persist StudentNumber on INSERT. (3) The 15 read objects (cohort ×5, roster ×4, entered-count
+×2 — UserAssessmentWindows/TeacherGroups, history ×3, + vw_StudentReadingStartingPoint) now match current student↔fact
+on StudentNumber, not StudentKey. Built staged on dev, each committed; regression-tested on dev (reads still pull
+normal data); mechanism already proven on live by the relink. IPP/Adaptation/Enrollment reads left on StudentKey
+(re-pointed on ingest / current-filtered — out of scope); legacy Power Apps views not converted (web app doesn't read).
+
+**Fabric gotchas hit (both added to fabric-warehouse-sql skill, item 21 / and surfaced):** `COL_LENGTH` is NOT
+supported (Msg 15871) — the guarded ADD erred so the ALTER was skipped and the backfill then hit Msg 207; switched to
+the `sys.columns`+`OBJECT_ID` guard the repo's migrations already use. And a latent defect: `usp_UpsertReadingAssessment.sql`
+ended at `END;` with NO trailing `GO`/`GRANT` (Math + Writing had them) → in the Stage-2 bundle it glued the Reading
+CREATE to the Writing section → Msg 2714; fixed the source to be self-contained.
+
+**Deploy shape (user call).** Server-side patch under 1.2.0 — NO semver bump, no container, recorded as a dated
+blockquote bullet under `## [1.2.0]` in CHANGELOG (not patchNotes). Three dev stage files consolidated into ONE
+idempotent top-to-bottom bundle `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql`; stage files
+removed (one source of truth). Live Stage-1 verify returned StillNull=0 (Math 1147 / Reading 528 / Writing 914);
+all three stages applied + verified good on live.
+
+**End state.** All on `dev`, then FAST-FORWARDED `dev→main` (user: "move the SQL server-side 1.2.0 patches down to main
+with the rest of 1.2.0") — main == dev == cb551d2, pushed. `[Unreleased]` empty. No PR (main already current; project
+flow is PR-only-when-instructed). Memory: durable fix recorded in [[project_assessment_fact_scd_policy]] (+ its MEMORY.md
+hook) and the distilled platform record.
+
+## Session 2026-10-16 — reading-report dup fix (live) + A+B deploy (live) + v1.3.0 built on dev (COIL, reports rebuild, Build C, staff reconciliation)
+
+**Carry-over 1.2.0 server-side patches finished + verified on LIVE first.**
+- **Reading-report duplicate students.** Reports showed students 2–4× (same students, all devices/users). Chased it
+  with ~8 diagnostics; I was WRONG TWICE on the root cause (proposed an ActiveFlag filter — user corrected: "collapse
+  duplicate student IDs, not the active flag"; then blamed a benchmark `drb` ScaleSystem-missing join — user ruled it
+  out). Real cause, measured not inferred: `vw_StudentReadingStartingPoint` returned >1 row per (StudentNumber,
+  ScaleSystem) because `PriorYearBaseline` holds duplicate same-language rows per student — which are **legitimate**
+  (the prior-year seed is aggregated per school, so a cross-school transfer has one row per school; NOT a loader bug).
+  Fixed by COLLAPSING the view to exactly one row per (StudentNumber, ScaleSystem) via a final ROW_NUMBER (prefer fact
+  over seed) — `deploy_startingpoint_collapse_2026-10-15.sql`, LIVE 2026-10-15. The user's "×4" = server ×2 (baseline
+  dup) compounded by a CLIENT duplicate-React-key effect (the cohort table keys `<tr>` on `studentKey`; two identical
+  rows → duplicate keys → React couldn't reconcile them out on filter change, which was ALSO the "school filter leak").
+  Collapsing to one row closed both symptoms; user confirmed on their end + other users after a cache-bypassing refresh.
+- **A+B card-count / current-teacher fix.** Was built on dev 2026-10-13 but NEVER deployed. Settled it with a marker-scan
+  diag — and hit a Fabric gotcha: `sys.sql_modules.definition` / `OBJECT_DEFINITION` begins at `CREATE`, so a marker in
+  the file's leading header comment is stripped → false MISSING. Fixed the diag to use in-body markers (added as
+  fabric-warehouse-sql item 22). Deployed dev then LIVE; all 6 objects PRESENT on live 2026-10-16.
+
+**I also fumbled the typecheck method** (improvised a host-mount `podman run tsc` that MSYS path-mangled `-v`/`-w`;
+user: "why are you struggling to do something you've done 100s of times"). The project way is the **image build**
+(`next build` typechecks) — recorded in [[reference_podman_windows_dev_container]]. Used the image build for every
+webapp change after.
+
+**v1.3.0 — ALL BUILT ON `dev` THIS SESSION, committed/pushed, image-build typechecked; NOT deployed to any warehouse, NOT cut to live.**
+- **Workstream 1 — COIL.** Writing entry grid now orders traits **Conventions·Organization·Ideas·Language** by default
+  with a per-viewer **COIL⇄IOLC toggle** (localStorage). Shared `lib/writingTraits.ts` + `components/TraitOrderToggle.tsx`;
+  display-order only, no DB/TVF change. Also **removed all grace-period wording** from teacher-facing entry UI (cards +
+  locked banners) at the user's request — mechanism + admin override kept; silent (no patchNotes). "Grace Period Hidden
+  From Teachers" was a design rule that had leaked into the UI in a rushed ship.
+- **Workstream 2 — reports rebuild (4 slices).** Oversight roles (Admin/Specialist/RegionalAnalyst) now get a Math-style
+  **School→Grade/Homeroom→students roll-up** for **Reading (Slice 1+1b)** and **Writing (Slice 2)**; teachers keep the
+  flat cohort list. Columns **Students · Results · % Meeting/Exceeding**, EN/FR on hover, IPP excluded from the %.
+  Writing student-detail shows the **4 traits in COIL order + average** with the COIL/IOLC toggle. **Slice 3 — TCRCE**
+  all-schools roll-up row for `RegionalAnalyst` (grade-only, no homerooms; added to Math too). **Slice 4 — All/English/
+  French language filter** narrowing counts/%/detail. New oversight TVFs `tvf_StudentCohort{Reading,Writing}{All,Group}`
+  (counts/measure-only for the All feeds; per-group detail with names on expand). Reading+Writing trees refactored onto a
+  shared generic `reports/RollupTree.tsx` + `rollupModel.ts` (the refactor also fixed the reading % to exclude IPP).
+  **Dual-language counting model (user-agreed):** distinct Students vs Results-per-language + overall, "assessment" count
+  labelled **"Results"** (avoid-assessment-term rule). **Reading IS dual-language-capable** — I had inferred "single-
+  language per student" from a stale memory; user pushed back, I checked the save path (scale comes from the entry
+  instance/window the course-scoped picker routes to) and confirmed a student CAN hold EN+FR reading results; live sizing
+  diag showed 0 today (1 test artifact). Corrected [[project_assessment_language_tracks]].
+- **Workstream 3 — backend durability (SQL-only).** **Build C:** IPP/adaptation no longer reset on an SCD re-version —
+  chose the minimal **repoint** approach over a StudentNumber-column + 18-read sweep (surfaced both options + cost;
+  user picked repoint). `usp_MergeStudent` step-6-pre repoints a still-flagged student's current FactStudentIPP/
+  FactStudentAdaptation row to the new StudentKey (matched by StudentNumber) before the step-6 close/insert; scoped to
+  IPP=1/Adap=1 so a de-flagged student still detaches via 6a (user's timing concern); dup-guarded; going-forward only.
+  **Staff email-change reconciliation:** `usp_MergeStaff` step 3.5 renames a DimStaff row in place when a corrected
+  email shares a per-assignment `SourceSystemID` with the outgoing email (stops the NULL-access ghost pile); 1:1-guarded;
+  new-email-not-already-current guarded; returning-teacher (same email, new account) unchanged. One-time review-first
+  `cleanup_staff_email_ghosts_2026-10-16.sql` for existing ghosts.
+- **Testing + wrap.** Wrote `docs/v1.3.0-testing-plan.md` (deploy prereqs + per-feature acceptance tests by role).
+  Everything pushed to `dev`. Did NOT open a dev→main PR — 1.3.0 is mid-development, not live-deployed; per the
+  release-on-live-deploy + PR-only-when-instructed rules, main waits.
+
+**End state.** All v1.3.0 work on `dev` (origin up to date). Nothing deployed to dev or live warehouses yet. Next
+session: deploy the 4 reports TVFs + `usp_MergeStudent` + `usp_MergeStaff` to the **dev** warehouse, rebuild `awdev`,
+and walk `docs/v1.3.0-testing-plan.md`; run the ghost-cleanup PART 1 preview; then decide the 1.3.0 cut.
+
+## Session 2026-10-19 — v1.3.0 access/permissions completed: staff-merge write rule + coach role overrides + admin-assistant remap; SQL bundle; dev-containers skill
+Continuation of the 1.3.0 access/permissions/maintenance theme (maintenance LOTO #3 was built 2026-10-16).
+
+- **#1 Staff-merge WRITE RULE (`usp_MergeStaff` Step 2).** A person is persisted to DimStaff only if they hold a
+  data-access role (RegionalAnalyst/Administrator/SpecialistTeacher), teach/co-teach a section this import (reads
+  `Stg_Section.Email_Addr` + `Stg_CoTeacher.Email` — orchestrator loads all staging before merges, so these are
+  populated), or carry a manual override. Everyone else drops out → closes on next ingest. **Admin Assistant DimRole
+  groups 11/13/17/20 remapped Administrator→SupportStaff** (seed + `migrate_DimRole_admin_assistants_to_support.sql`).
+  Steps 5b/5c extended to close + withhold FactStaffAssignment rows for dropped persons so none strand under a
+  deactivation marker. Final rule confirmed by the user over several corrections: "the only roles that override the
+  requirement to have a section attached are RegionalAnalyst and Administrator" + "include specialist teachers."
+- **#2 Coach ROLE OVERRIDES.** New `StaffRoleOverride` table (email→Administrator/RegionalAnalyst/SpecialistTeacher) +
+  `usp_SetStaffRoleOverride` (sole writer) + SysAdmin screen `/admin/staff-roles` (page/actions/manager/data read,
+  nav + home card, constants.ts for the role list since a 'use server' file can't export non-async). Read by
+  `usp_MergeStaff` Step 2: override WINS the AccessLevel and keeps the person; **scope still derives from PS**. An
+  excluded coach still in the PS export is re-included as Administrator via the existing multi-day-return path (4c-prime2 → 4d).
+- **Add-by-email corrections (two rounds, both prompted by the user).** First I had gated add on a current DimStaff
+  record — wrong (coaches already excluded, or Tech Services not in PS, couldn't be added). Fixed to allow unknown
+  emails. Then the user asked for an explicit **"not in the system" checkbox** (unchecked = require a match, so typos
+  are caught; `findStaff` gained `allowExternal`, server-enforced) on BOTH admin screens. Also added a **role-override
+  Save prompt** stating the change is effective only on the next ingest (when PS-derived school scope is verified).
+  User clarified maintenance-only IT folks don't wait for ingest and have no RLS — so NO deferral prompt on the
+  staff-access/CanMaintain path (that capability is read live, immediate).
+- **SQL bundle.** All 13 v1.3.0 objects assembled idempotently in dependency order at
+  `sql/deploy/live_1.3.0/deploy_1.3.0.sql` (schema → procs → report TVFs). Ghost-cleanup stays a separate by-hand
+  script. Deploy-live coupling documented: the write rule + StaffRoleOverride go live together; seed coaches BEFORE
+  the first post-deploy ingest or they're dropped.
+- **dev-containers skill.** User noted I "keep forgetting" the container launches, so created
+  `.claude/skills/dev-containers.md` (+ `.github/skills/` mirror, CLAUDE.md row): exact podman run commands for
+  awlive/awdev/awdev-impersonation (recovered from `podman inspect … CreateCommand`), and the image-build typecheck
+  (`MSYS_NO_PATHCONV=1 podman build`) as the ONLY supported typecheck (no host tsc — MSYS path-mangles).
+- **awdev spun up** on `assessment-webapp:1.3.0-dev` (tagged from the clean `1.3.0-wip` typecheck build), :3001,
+  `webapp/.env.dev`, Entra, `SQL_TIMING=1`, restart unless-stopped. Ready; "✓ Ready" confirmed in logs.
+- All webapp changes image-build typechecked clean each round; committed + pushed to `dev` across commits
+  3489185 / 26eb715 / 05b69eb / 8ba6eb5 (+ the wrap). **Did NOT open a dev→main PR** — 1.3.0 is mid-development, not
+  live-deployed; release-on-live-deploy + PR-only-when-instructed → main waits.
+
+**End state.** All v1.3.0 code on `dev` (origin up to date). NOTHING deployed to dev or live warehouses yet. Next
+session (2026-10-20): run `sql/deploy/live_1.3.0/deploy_1.3.0.sql` on the **dev** warehouse, seed any coach overrides
+at `/admin/staff-roles`, then walk `docs/v1.3.0-testing-plan.md` (§1–§8) against awdev on :3001.

@@ -63,9 +63,9 @@ RETURN
     -- Latest reading entry per (student, window) — most recent wins (ongoing-assessment model).
     LatestReadingInWindow AS (
         SELECT
-            StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, AssessmentDate,
+            StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta, AssessmentDate,
             ROW_NUMBER() OVER (
-                PARTITION BY StudentKey, AssessmentWindowID
+                PARTITION BY StudentNumber, AssessmentWindowID
                 ORDER BY AssessmentDate DESC, ReadingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentReading
@@ -124,7 +124,7 @@ RETURN
     INNER JOIN WindowDominantMonth wdm  ON wdm.AssessmentWindowID = sg.AssessmentWindowID
     LEFT JOIN LatestReadingInWindow far
            ON far.AssessmentWindowID = sg.AssessmentWindowID
-          AND far.StudentKey         = sg.StudentKey
+          AND far.StudentNumber      = sg.StudentNumber
           AND far.rn = 1
     LEFT JOIN DimReadingScale drs
            ON drs.ReadingScaleID = far.ReadingScaleID

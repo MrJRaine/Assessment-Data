@@ -34,14 +34,14 @@ RETURN
 (
     WITH LatestReading AS (
         SELECT
-            far.StudentKey,
+            far.StudentNumber,   -- match the latest result to the student by the STABLE key (survives SCD re-version)
             far.ReadingAssessmentID,
             far.AssessmentWindowID,
             far.ReadingScaleID,
             far.ReadingDelta,
             far.AssessmentDate,
             ROW_NUMBER() OVER (
-                PARTITION BY far.StudentKey
+                PARTITION BY far.StudentNumber
                 ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC
             ) AS rn
         FROM FactAssessmentReading far
@@ -126,7 +126,7 @@ RETURN
     LEFT JOIN CurrentReadingIPP crd
            ON crd.StudentKey    = s.StudentKey
           AND crd.ProgramFamily = p.ProgramFamily
-    LEFT JOIN LatestReading lr ON lr.StudentKey = s.StudentKey AND lr.rn = 1
+    LEFT JOIN LatestReading lr ON lr.StudentNumber = s.StudentNumber AND lr.rn = 1
     LEFT JOIN DimAssessmentWindow aw ON aw.AssessmentWindowID = lr.AssessmentWindowID
     LEFT JOIN DimReadingScale drs ON drs.ReadingScaleID = lr.ReadingScaleID
     -- Expected range for the most-recent window's month + the student's reading family (J020 -> English).

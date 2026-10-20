@@ -252,11 +252,11 @@ BEGIN
     ELSE
     BEGIN
         INSERT INTO FactAssessmentMath (
-            StudentKey, AssessmentWindowID, MathTaskKey, Result,
+            StudentKey, StudentNumber, AssessmentWindowID, MathTaskKey, Result,
             AssessmentDate, EnteredByStaffKey, SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @MathTaskKey_BI, @ResultBit,
+            @StudentKey, @StudentNumber, @AssessmentWindowID_BI, @MathTaskKey_BI, @ResultBit,
             @AssessmentDate, @CallerStaffKey, @Now, @Now
         );
         SET @Action = 'INSERT';

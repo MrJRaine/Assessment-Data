@@ -66,9 +66,9 @@ export interface NoticeResult { ok: boolean; at?: string; error?: string }
  * as though they did something wrong. Maintenance mode's staged banner -> lock -> AUTO-SAVE is
  * exactly the fix: it flushes in-flight work before the data shifts underneath it.
  *
- * NOTE ON PERMISSIONS: usp_SetMaintenanceWindow throws 51040 unless the caller is a SYSADMIN, which
- * is a different capability from CanRunIngest. An ingest admin who is not also a sysadmin gets a
- * clear message rather than a raw SQL error -- see the runbook for the SQL fallback.
+ * PERMISSIONS (1.3.0): the ingest-scoped window needs only CanRunIngest (or CanMaintain/sysadmin) —
+ * usp_SetMaintenanceWindow is called with Scope='ingest', which admits ingest operators. (It used to be
+ * sysadmin-only, so a non-sysadmin ingest admin couldn't do this step of their own process.)
  */
 export async function scheduleIngestMaintenance(): Promise<NoticeResult> {
   let upn: string
@@ -83,6 +83,7 @@ export async function scheduleIngestMaintenance(): Promise<NoticeResult> {
       MaintenanceAt: at.toISOString().slice(0, 19).replace('T', ' '),
       Message: 'Student data is being updated. Your work is saved automatically before the app pauses.',
       CallerUPN: upn,
+      Scope: 'ingest',
     })
     revalidatePath('/ingest')
     return { ok: true, at: at.toISOString() }
@@ -90,8 +91,8 @@ export async function scheduleIngestMaintenance(): Promise<NoticeResult> {
     const msg = toUserMessage(e)
     return {
       ok: false,
-      error: /51040|sysadmin/i.test(msg)
-        ? 'Scheduling maintenance needs sysadmin rights, which this account does not have. Ask a sysadmin, or set the window in SQL (see docs/ingest-runbook.md).'
+      error: /51040/i.test(msg)
+        ? 'Scheduling maintenance needs Run-Ingest (or Maintenance) access, which this account does not have.'
         : msg,
     }
   }

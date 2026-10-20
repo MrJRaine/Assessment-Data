@@ -6,11 +6,11 @@ import MaintenanceControl from './MaintenanceControl'
 
 export const dynamic = 'force-dynamic'
 
-// Sysadmin-only control page for the maintenance window (StaffAppAccess.IsSysAdmin).
+// Maintenance control page — CanMaintain (Technology Services) OR sysadmin (1.3.0; was sysadmin-only).
 export default async function MaintenanceAdminPage() {
   const upn = await getCurrentUpn()
   const caps = await getCallerCapabilities(upn, { fresh: true })
-  if (!caps.isSysAdmin) redirect('/')
+  if (!caps.canMaintain && !caps.isSysAdmin) redirect('/')
 
   // Resilient if AppMaintenance isn't deployed yet — show "none" rather than erroring the page.
   let current = { maintenanceAt: null as string | null, message: null as string | null }

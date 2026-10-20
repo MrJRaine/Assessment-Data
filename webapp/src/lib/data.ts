@@ -538,6 +538,7 @@ export interface CallerCapabilities {
   canRunIngest: boolean // /ingest admin
   canOverrideMath: boolean // flip a Math roster editable in a grace-locked cycle (0.7.0)
   canOverrideLiteracy: boolean // same, for Reading + Writing rosters (0.7.0)
+  canMaintain: boolean // full /admin/maintenance access — set/clear windows (Tech Services; 1.3.0)
 }
 
 /**
@@ -574,8 +575,9 @@ export async function getCallerCapabilities(
         CanRunIngest: boolean
         CanOverrideMath: boolean | null
         CanOverrideLiteracy: boolean | null
+        CanMaintain: boolean | null
       }>(
-        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy
+        `SELECT TOP 1 IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy, CanMaintain
          FROM dbo.StaffAppAccess WHERE LOWER(Email) = LOWER(@UPN)`,
         { UPN: upn },
       )
@@ -587,6 +589,7 @@ export async function getCallerCapabilities(
         canRunIngest: sysAdmin || Boolean(r?.CanRunIngest),
         canOverrideMath: sysAdmin || Boolean(r?.CanOverrideMath),
         canOverrideLiteracy: sysAdmin || Boolean(r?.CanOverrideLiteracy),
+        canMaintain: sysAdmin || Boolean(r?.CanMaintain),
       }
       // Only cached on SUCCESS — a thrown query falls through to the retry below and must never
       // poison the cache with a "no capabilities" answer for an hour.
@@ -611,6 +614,7 @@ export interface StaffAccessRow {
   canRunIngest: boolean
   canOverrideMath: boolean
   canOverrideLiteracy: boolean
+  canMaintain: boolean
 }
 
 /** Only staff who ALREADY hold a StaffAppAccess row (the curated access list) — NOT all ~500 staff.
@@ -627,9 +631,10 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     CanRunIngest: boolean | null
     CanOverrideMath: boolean | null
     CanOverrideLiteracy: boolean | null
+    CanMaintain: boolean | null
   }>(`
     SELECT a.Email, d.FirstName, d.LastName,
-           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy
+           a.IsSysAdmin, a.CanManageCycles, a.CanRunIngest, a.CanOverrideMath, a.CanOverrideLiteracy, a.CanMaintain
     FROM StaffAppAccess a
     LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(a.Email) AND d.IsCurrent = 1
     ORDER BY d.LastName, d.FirstName, a.Email`)
@@ -641,6 +646,7 @@ export async function getStaffAppAccessList(): Promise<StaffAccessRow[]> {
     canRunIngest: Boolean(r.CanRunIngest),
     canOverrideMath: Boolean(r.CanOverrideMath),
     canOverrideLiteracy: Boolean(r.CanOverrideLiteracy),
+    canMaintain: Boolean(r.CanMaintain),
   }))
 }
 
@@ -654,6 +660,39 @@ export async function lookupStaffByEmail(email: string): Promise<{ email: string
   if (!rows.length) return null
   const r = rows[0]
   return { email: r.Email, name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email }
+}
+
+export interface StaffRoleOverrideRow {
+  email: string
+  name: string
+  overrideRole: string
+  notes: string | null
+  active: boolean
+}
+
+/** The curated StaffRoleOverride list — RLS-role context the PS export can't encode (e.g.
+ *  Instructional Coaches classified as Administrator). LEFT JOIN DimStaff for a display name.
+ *  SysAdmin-only screen; a plain SP read, gated by the page + the write action. */
+export async function getStaffRoleOverrideList(): Promise<StaffRoleOverrideRow[]> {
+  const rows = await query<{
+    Email: string
+    FirstName: string | null
+    LastName: string | null
+    OverrideRole: string
+    Notes: string | null
+    ActiveFlag: boolean | null
+  }>(`
+    SELECT o.Email, d.FirstName, d.LastName, o.OverrideRole, o.Notes, o.ActiveFlag
+    FROM StaffRoleOverride o
+    LEFT JOIN DimStaff d ON LOWER(d.Email) = LOWER(o.Email) AND d.IsCurrent = 1
+    ORDER BY o.ActiveFlag DESC, d.LastName, d.FirstName, o.Email`)
+  return rows.map((r) => ({
+    email: r.Email,
+    name: `${r.LastName ?? ''}, ${r.FirstName ?? ''}`.replace(/^, |, $/g, '') || r.Email,
+    overrideRole: r.OverrideRole,
+    notes: r.Notes,
+    active: Boolean(r.ActiveFlag),
+  }))
 }
 
 // Maintenance window (single AppMaintenance row). Read unscoped (non-PII operational state);
@@ -761,6 +800,176 @@ export async function getStudentCohort(upn: string, cycleGroupId: string | null 
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
+  }))
+}
+
+// Reading OVERSIGHT roll-up feed (1.3.0) — one row per (student × reading-result language) + a
+// NULL-language row for a student with no reading result. Counts/measure only (no names); the client
+// rolls it up School → Grade/Homeroom with distinct-student vs results-per-language counting.
+export interface ReadingRollupRow {
+  studentKey: string
+  grade: string | null
+  homeroom: string | null
+  homeroomKey: string | null // homeroom GroupKey (for the Homeroom summarize mode)
+  schoolId: string | null
+  schoolName: string | null
+  readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
+  achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
+}
+
+export async function getReadingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<ReadingRollupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortReadingAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    homeroomKey: (r.HomeroomKey as string) ?? null,
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    scaleSystem: (r.ScaleSystem as string) ?? null,
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+  }))
+}
+
+// Per-group reading detail (1.3.0 Slice 1b) — the individual students in one Grade/Homeroom node of the
+// reading roll-up, loaded on expand. One row per (student × reading-result language) + a NULL-language
+// row for a no-result student; the client pivots to one row per student (EN + FR cells).
+export interface ReadingGroupRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  readingIPP: boolean | null
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result
+  levelCode: string | null // the reading level (e.g. 'M'); null = no result
+  levelOrder: number | null
+  readingDelta: number | null
+  achievementCode: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+}
+
+export async function getReadingGroup(
+  upn: string,
+  groupKey: string,
+  cycleGroupId: string | null = null,
+): Promise<ReadingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortReadingGroup(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    scaleSystem: (r.ScaleSystem as string) ?? null,
+    levelCode: (r.LevelCode as string) ?? null,
+    levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
+    readingDelta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
+  }))
+}
+
+// Writing OVERSIGHT roll-up feed (1.3.0 Slice 2) — one row per (student × writing AssessmentLanguage)
+// + a NULL-language row for no-result students. Counts/measure only.
+export interface WritingRollupRow {
+  studentKey: string
+  grade: string | null
+  homeroom: string | null
+  homeroomKey: string | null
+  schoolId: string | null
+  schoolName: string | null
+  writingIPP: boolean | null
+  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
+}
+
+export async function getWritingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<WritingRollupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWritingAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    homeroomKey: (r.HomeroomKey as string) ?? null,
+    schoolId: (r.SchoolID as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+  }))
+}
+
+// Per-group writing detail (1.3.0 Slice 2) — students in one Grade/Homeroom node with their four trait
+// scores + average + band, one row per (student × writing language) + a NULL-language row.
+export interface WritingGroupRow {
+  studentKey: string
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+  schoolName: string | null
+  writingIPP: boolean | null
+  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  ideasScore: string | null // '1'-'4' | 'SCR' | '-' | null
+  organizationScore: string | null
+  languageScore: string | null
+  conventionsScore: string | null
+  avgScore: number | null
+  achievementCode: number | null
+  achievementName: string | null
+  achievementHexColor: string | null
+}
+
+export async function getWritingGroup(
+  upn: string,
+  groupKey: string,
+  cycleGroupId: string | null = null,
+): Promise<WritingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_StudentCohortWritingGroup(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName',
+    { GroupKey: groupKey, CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    studentKey: String(r.StudentKey),
+    studentNumber: String(r.StudentNumber),
+    firstName: String(r.FirstName),
+    lastName: String(r.LastName),
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+    schoolName: (r.SchoolName as string) ?? null,
+    writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    ideasScore: (r.IdeasScore as string) ?? null,
+    organizationScore: (r.OrganizationScore as string) ?? null,
+    languageScore: (r.LanguageScore as string) ?? null,
+    conventionsScore: (r.ConventionsScore as string) ?? null,
+    avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
+    achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    achievementName: (r.AchievementLevelName as string) ?? null,
+    achievementHexColor: (r.AchievementHexColor as string) ?? null,
   }))
 }
 

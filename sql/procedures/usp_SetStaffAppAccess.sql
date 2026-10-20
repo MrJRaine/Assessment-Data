@@ -31,6 +31,7 @@ CREATE PROCEDURE usp_SetStaffAppAccess
     @CanRunIngest         BIT,
     @CanOverrideMath      BIT,
     @CanOverrideLiteracy  BIT,
+    @CanMaintain          BIT,
     @CallerUPN            VARCHAR(255) = NULL   -- signed-in SysAdmin UPN; NULL -> CURRENT_USER
 AS
 BEGIN
@@ -44,9 +45,9 @@ BEGIN
     -- 51010: required-parameter guard
     IF NULLIF(@Target, '') IS NULL
        OR @IsSysAdmin IS NULL OR @CanManageCycles IS NULL OR @CanRunIngest IS NULL
-       OR @CanOverrideMath IS NULL OR @CanOverrideLiteracy IS NULL
+       OR @CanOverrideMath IS NULL OR @CanOverrideLiteracy IS NULL OR @CanMaintain IS NULL
     BEGIN
-        ;THROW 51010, 'usp_SetStaffAppAccess: @TargetEmail and all five capability flags are required.', 1;
+        ;THROW 51010, 'usp_SetStaffAppAccess: @TargetEmail and all capability flags are required.', 1;
     END;
 
     -- 51050: caller must be a SysAdmin (re-checked here; the page gate is NOT the authority)
@@ -73,7 +74,7 @@ BEGIN
     -- guard above already blocks doing this to the last sysadmin. A no-op if no row exists (e.g. a
     -- staff member who was added-by-email but never granted anything).
     IF @IsSysAdmin = 0 AND @CanManageCycles = 0 AND @CanRunIngest = 0
-       AND @CanOverrideMath = 0 AND @CanOverrideLiteracy = 0
+       AND @CanOverrideMath = 0 AND @CanOverrideLiteracy = 0 AND @CanMaintain = 0
     BEGIN
         DELETE FROM StaffAppAccess WHERE LOWER(Email) = @Target;
 
@@ -94,15 +95,16 @@ BEGIN
             CanRunIngest        = @CanRunIngest,
             CanOverrideMath     = @CanOverrideMath,
             CanOverrideLiteracy = @CanOverrideLiteracy,
+            CanMaintain         = @CanMaintain,
             LastUpdated         = @Now
         WHERE LOWER(Email) = @Target;
     END
     ELSE
     BEGIN
         INSERT INTO StaffAppAccess
-            (Email, IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy, LastUpdated)
+            (Email, IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy, CanMaintain, LastUpdated)
         VALUES
-            (@Target, @IsSysAdmin, @CanManageCycles, @CanRunIngest, @CanOverrideMath, @CanOverrideLiteracy, @Now);
+            (@Target, @IsSysAdmin, @CanManageCycles, @CanRunIngest, @CanOverrideMath, @CanOverrideLiteracy, @CanMaintain, @Now);
     END;
 
     INSERT INTO FactSubmissionAudit
@@ -111,7 +113,7 @@ BEGIN
         ('StaffAppAccess', 'WebApp', @CallerEmail, @Now, 'Accepted',
          CONCAT('usp_SetStaffAppAccess: ', @Target,
                 ' | SysAdmin=',  @IsSysAdmin,  ' Cycles=', @CanManageCycles, ' Ingest=', @CanRunIngest,
-                ' MathOvr=',     @CanOverrideMath, ' LitOvr=', @CanOverrideLiteracy),
+                ' MathOvr=',     @CanOverrideMath, ' LitOvr=', @CanOverrideLiteracy, ' Maintain=', @CanMaintain),
          1, @Now);
 END;
 GO

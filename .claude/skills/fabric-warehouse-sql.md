@@ -376,6 +376,21 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
     (`pool.min` — note `tarn` defaults to `min: 0` and `idleTimeoutMillis: 30000`, so a pool left idle
     30s empties and the next request pays the full 1.8s again). (2026-09-18)
 
+21. **`COL_LENGTH` is NOT supported (Msg 15871) — guard an idempotent `ADD COLUMN` with `sys.columns`.**
+    `IF COL_LENGTH('dbo.T','Col') IS NULL ALTER TABLE …` errors in Fabric, which (since the `IF` throws)
+    also SKIPS the `ALTER`, so a later same-script batch referencing the new column then fails with
+    `Msg 207 Invalid column name`. Use the pattern the repo's migrations already use:
+    `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.T') AND name = 'Col') ALTER TABLE dbo.T ADD Col …;` then `GO`.
+    (2026-10-13, StudentNumber durable-fix Stage 1.)
+
+22. **A module's stored definition (`sys.sql_modules.definition` / `OBJECT_DEFINITION`) begins at `CREATE` — a
+    leading header comment is NOT stored.** Our deploy files put a `/* header */` block then `DROP … IF EXISTS; GO`
+    then `CREATE …`; the header is a separate batch (and even in the same batch, text before `CREATE` is dropped),
+    so it never lands in the stored definition. Consequence: a "is this patch deployed?" check that greps the live
+    definition for a marker string must use a marker that lives **inside the module body (after `CREATE`)**, never one
+    from the file header — a header marker yields a false MISSING even when the object IS deployed.
+    (2026-10-16, A+B card-fix deploy-verification diag — first version false-negatived 2 of 6 objects.)
+
 ## NEWID() in a CROSS APPLY is folded to ONE value per query (2026-09-22)
 
 Per-row randomness via `NEWID()` fails when the expression sits in a `CROSS APPLY (VALUES ( …NEWID()… ))`:

@@ -13,7 +13,134 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased]
 
+### Added
+- **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
+  longer sysadmin-only: the `/ingest` **15-minute** button now works for anyone with **Run Ingest** (it was
+  blocking ingest operators mid-process), and a new **Maintenance** capability (`StaffAppAccess.CanMaintain`)
+  gives **Technology Services** the full `/admin/maintenance` page with no student-data access. A window is
+  now **owned by whoever opened it** — only that person **or a sysadmin** can clear it, so no one ends a
+  window while the server is down for infra work or mid-ingest. SQL: `migrate_StaffAppAccess_add_CanMaintain`
+  + redeploy `usp_SetMaintenanceWindow` (scope-based gate), `usp_ClearMaintenanceWindow` (LOTO),
+  `usp_SetStaffAppAccess` (new flag). Grant the capability at `/admin/staff-access`.
+- **Role overrides for staff the PowerSchool export can't classify.** A new sysadmin screen
+  (**Role Overrides**, `/admin/staff-roles`) lets you classify a staff member as Administrator, Regional
+  Analyst, or Specialist Teacher when PowerSchool has no distinct role for them — the first case being
+  **Instructional Coaches**, who now count as Administrator for the schools they already have in
+  PowerSchool. The override changes only the *role*; the *schools* still come from PowerSchool, so access
+  stays derived. People are added **by email** — a current staff record isn't required, so a coach already
+  excluded from active staff (or not yet in PowerSchool) can still be listed. (Same for the Maintenance
+  capability on `/admin/staff-access` — Technology Services needn't be in PowerSchool.) SQL: new
+  `StaffRoleOverride` table + `usp_SetStaffRoleOverride`; read by `usp_MergeStaff`.
+
+### Changed
+- **Staff ingest now only keeps people who need an account.** A person is written to the staff directory
+  only if they hold a data-access role (Administrator / Regional Analyst / Specialist Teacher), **teach or
+  co-teach a section**, or carry a manual role override. Everyone else — Support Staff, and the four
+  **Admin Assistant** PowerSchool groups, which are **reclassified from Administrator to Support Staff** —
+  is dropped and closed out on the next ingest, ending the pile-up of no-access accounts. SQL: redeploy
+  `usp_MergeStaff` (Step 2 write rule) + `migrate_DimRole_admin_assistants_to_support`. **Deploy note:** seed
+  any coaches/overrides *before* the first ingest after this deploys, or they're dropped with everyone else.
+
+### Fixed
+- **Corrected staff emails no longer spawn "ghost" accounts.** When a staff email was fixed in
+  PowerSchool, the ingest treated the corrected address as a brand-new person and left the old one as a
+  no-access ghost (an ever-growing pile). The ingest now recognises it's the same individual — via the
+  per-assignment PowerSchool id, which is unchanged by an email correction — and **renames the account in
+  place** (1:1-guarded; won't merge two genuinely different people). SQL: redeploy `usp_MergeStaff`
+  (step 3.5). A one-time, review-first cleanup (`sql/scripts/cleanup_staff_email_ghosts_2026-10-16.sql`)
+  closes the ghosts already on the books, leaving genuine departures alone.
+- **IPP / adaptation confirmations no longer reset when a student's record changes.** A teacher's
+  IPP/adaptation answer was tied to the student's internal versioned key; when PowerSchool re-sent the
+  student with a changed grade/school/program (a new version), the answer was dropped and the student
+  showed as unresolved again. The ingest now carries each resolved IPP/adaptation across the re-version
+  (matched by the stable student number), so it **persists until a teacher changes it**. A student who is
+  no longer flagged IPP/adaptation in PowerSchool still has it correctly removed. SQL: redeploy
+  `usp_MergeStudent` (adds the step-6-pre repoint). Going-forward fix — answers already lost to a past
+  re-version are re-entered by the teacher.
+
+### Added
+- **Reading report — oversight roll-up tree** (admins / specialists / regional staff): instead of the flat
+  list, oversight roles now land on a **School → (Grade or Homeroom) → …** tree (a *Summarize by* toggle),
+  each row showing **Students**, **Results**, and **% Meeting/Exceeding** with an **EN/FR breakdown on hover**
+  (a student assessed in both languages counts once in Students, twice in Results). **Expanding a grade or
+  homeroom lists its students** with their English and French reading level + achievement band. Teachers keep
+  the flat per-student list. New oversight-scoped feeds `tvf_StudentCohortReadingAll` (roll-up) +
+  `tvf_StudentCohortReadingGroup` (per-group student detail) (SQL — deploy alongside). First slice of the
+  1.3.0 reports rebuild; the TCRCE all-schools roll-up and the language filter follow. (% Meeting/Exceeding
+  excludes IPP students, matching the Math roll-up.)
+- **Writing report — oversight roll-up tree** (Slice 2): the same School → Grade/Homeroom → students tree
+  for Writing, with distinct Students / Results / % Meeting/Exceeding (EN/FR on hover). Expanding a group
+  lists its students with their **four traits in COIL order + the average**, and the **COIL ⇄ IOLC toggle**
+  (shared with data entry) re-orders the trait columns. Writing language is real per result
+  (`FactAssessmentWriting.AssessmentLanguage`), so a dual-language writer counts once in Students, twice in
+  Results. New oversight feeds `tvf_StudentCohortWritingAll` + `tvf_StudentCohortWritingGroup` (SQL — deploy
+  alongside). Reading + Writing trees now share one `RollupTree` component + counting model.
+- **TCRCE all-schools roll-up line** (Slice 3) on Reading, Writing **and Math**: a region-wide viewer
+  (`RegionalAnalyst`) sees a top **TCRCE** row that rolls up every school, openable **by grade only** (no
+  homerooms). Client-side over the existing feeds — no new SQL.
+- **Language-of-assessment filter** (Slice 4) on the Reading + Writing roll-ups: an **All / English / French**
+  toggle that narrows the whole view — counts, % Meeting/Exceeding, and the student detail — to the chosen
+  language (a specific language drops students with no result in it). Completes the 1.3.0 reports rebuild.
+
+### Changed
+- **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,
+  Ideas, Language), with a per-viewer **COIL ⇄ IOLC toggle** (remembered in the browser). Display order
+  only — the stored trait scores and every TVF/proc are unchanged; each score keeps its identity. The
+  writing report gets the same shared order + toggle in the reports rebuild.
+- **Removed grace-period wording from the teacher-facing entry UI** — the `/enter` cards (no more
+  "late entry · N left") and the entry locked banners (no more "The grace period for late entry has
+  ended"). The grace *mechanism* and the admin "Override lock" are unchanged; this only hides the
+  wording so teachers don't rely on the post-close window. Deliberately **not** in the in-app What's New.
+
 ## [1.2.0] — 2026-10-12
+
+> **Server-side patches since 1.2.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
+> - **2026-10-13 — Specialist teachers enter data only for the sections they teach.** Counsellors,
+>   registrars and Resource Teachers (PS groups 12/19/21/23/37/45 → `SpecialistTeacher`) were reaching
+>   every course-mapped section in their school on Data Entry through the oversight path. They are
+>   teachers, so Data Entry now follows the classroom-teacher rule (own sections via `FactSectionTeachers`);
+>   they KEEP whole-school viewing in Reports and whole-school Programming (IPP/adaptations) entry. The
+>   save scope gate follows the rosters, so it's enforced on save too. SQL:
+>   `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql` +
+>   `fix_specialist_entry_cards_2026-10-13.sql` (5 entry TVFs).
+> - **2026-10-13 — Entered data no longer disappears when a student's record changes.** Reading, writing
+>   and math results are now tied to the student by their stable student number, not the internal
+>   versioned key that changes whenever PowerSchool re-sends the student with a new grade/school/program.
+>   Before, results entered before such a change stopped showing on rosters, reports and history (the card
+>   read "0 started"); they are now matched durably so they always surface. Adds `StudentNumber` to the
+>   three assessment fact tables (backfilled), persists it on every new entry (3 upsert procs), and switches
+>   the 15 read objects to match on it. One-time relink recovery had already restored the affected live rows.
+>   SQL: `sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql` (run top-to-bottom).
+> - **2026-10-13 — Closed-cycle rosters no longer go blank when a class record changes.** A section's
+>   roster for a *closed* Short Cycle collapsed to ~1 student whenever PowerSchool re-sent the section with
+>   a new internal key (enrolment-count/teacher changes), because the roster rebuild resolved the section
+>   as of the cycle's end date and then matched the stale key. The rebuild now matches students to a
+>   section by its stable section identity across all its versions, so every cycle (open or closed) shows
+>   the full class; a student who was enrolled during a cycle but has since left stays on that cycle's entry
+>   roster so a teacher can still enter paper results for them. SQL:
+>   `sql/deploy/live_1.2.0/deploy_rostermembership_section_stable_2026-10-13.sql` (redeploys
+>   `usp_RebuildRosterMembership` + rebuilds the membership tables).
+> - **2026-10-13 — Data-Entry card counts for closed cycles fixed, and a section's current teacher sees
+>   its whole year.** Two follow-ons to the roster fix above. (1) The `/enter` **card counts** (started /
+>   done / applicable) are computed live and had the same closed-cycle stranding the roster body fix
+>   already cured — a re-versioned section could show a card at "0 of N" or drop it entirely; the card
+>   logic now matches students to a section by its stable identity across all its versions. (2) A teacher
+>   who takes over a section partway through the year now sees and can enter **every cycle back to the
+>   start of the year** for it (access follows the current teacher-of-record, not who taught it when the
+>   cycle closed). SQL:
+>   `sql/deploy/live_1.2.0/deploy_card_section_stable_teacher_current_2026-10-13.sql` (redeploys the
+>   rebuild proc + 5 TVFs + rebuilds membership).
+> - **2026-10-15 — Students no longer appear more than once in the reading report.** Some students were
+>   listed two (or more) times in the reading cohort because the reading starting-point view returned
+>   duplicate rows for them — the pre-system prior-year baseline seed held duplicate entries for those
+>   students, and the report's starting-point join multiplied them. The view now collapses to exactly one
+>   starting point per student and reading scale (preferring an in-system result over the seed), so each
+>   student appears once regardless of any duplication upstream; this also clears the related case where a
+>   duplicated student lingered in the list after a filter was applied. SQL:
+>   `sql/deploy/live_1.2.0/deploy_startingpoint_collapse_2026-10-15.sql` (view redeploy only; no app change).
+>   The multiple baseline rows are expected, not a bug: the prior-year seed is aggregated per school, so a
+>   student who changed schools last year legitimately has one row per school — the view now resolves a
+>   single starting point from them (newest in-system result first, else a deterministic pick of the seed).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and

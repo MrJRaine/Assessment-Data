@@ -331,12 +331,12 @@ BEGIN
     ELSE
     BEGIN
         INSERT INTO FactAssessmentWriting (
-            StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
+            StudentKey, StudentNumber, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
             LanguageScore, ConventionsScore, WritingAverage, AssessmentDate, EnteredByStaffKey,
             SubmissionTimestamp, LastUpdated
         )
         VALUES (
-            @StudentKey, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasStore, @OrgStore,
+            @StudentKey, @StudentNumber, @AssessmentWindowID_BI, @AssessmentLanguage, @IdeasStore, @OrgStore,
             @LangStore, @ConvStore, @WritingAverage, @AssessmentDate, @CallerStaffKey,
             @Now, @Now
         );

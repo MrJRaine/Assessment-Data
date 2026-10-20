@@ -85,8 +85,8 @@ RETURN
     ),
     -- Latest result per (student, task) across ALL of the year's math windows.
     LatestMath AS (
-        SELECT fm.StudentKey, fm.MathTaskKey, fm.Result, fm.AssessmentDate,
-               ROW_NUMBER() OVER (PARTITION BY fm.StudentKey, fm.MathTaskKey
+        SELECT fm.StudentNumber, fm.MathTaskKey, fm.Result, fm.AssessmentDate,
+               ROW_NUMBER() OVER (PARTITION BY fm.StudentNumber, fm.MathTaskKey
                                   ORDER BY fm.AssessmentDate DESC, fm.MathAssessmentID DESC) AS rn
         FROM FactAssessmentMath fm
         WHERE fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
@@ -119,8 +119,8 @@ RETURN
     FROM GroupStudents gs
     INNER JOIN Tasks t ON t.GradeCode = gs.Grade   -- each student gets THEIR grade's tasks
     LEFT JOIN LatestMath lm
-           ON lm.StudentKey  = gs.StudentKey
-          AND lm.MathTaskKey = CAST(t.MathTaskKey AS BIGINT)
+           ON lm.StudentNumber = gs.StudentNumber
+          AND lm.MathTaskKey   = CAST(t.MathTaskKey AS BIGINT)
           AND lm.rn = 1
     LEFT JOIN MathIPP ipp ON ipp.StudentKey = gs.StudentKey
 );
