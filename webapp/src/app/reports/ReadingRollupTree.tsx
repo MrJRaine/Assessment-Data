@@ -75,10 +75,11 @@ function pivot(rows: ReadingGroupRow[]): DetailStudent[] {
   return [...byKey.values()]
 }
 
-function LevelCell({ cell, ipp }: { cell: DetailCell | null; ipp: boolean }) {
+function LevelCell({ cell, ipp, sep }: { cell: DetailCell | null; ipp: boolean; sep?: boolean }) {
+  const cls = `stu${sep ? ' grp-sep' : ''}`
   if (!cell || cell.levelCode == null) {
     return (
-      <td className="stu">
+      <td className={cls}>
         {ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : <span className="muted">—</span>}
       </td>
     )
@@ -86,7 +87,7 @@ function LevelCell({ cell, ipp }: { cell: DetailCell | null; ipp: boolean }) {
   // Colour-code the CELL (uniform block, easy to scan) rather than the variable-width level text; limited
   // to this one level column so a dual-language student's EN/FR bands never clash.
   return (
-    <td className="stu" title={cell.name ?? undefined} style={cell.tint ? { background: cell.tint } : undefined}>
+    <td className={cls} title={cell.name ?? undefined} style={cell.tint ? { background: cell.tint } : undefined}>
       <span style={{ fontWeight: 600 }}>{cell.levelCode}</span>
     </td>
   )
@@ -105,9 +106,17 @@ function fmtDiff(cell: DetailCell | null): string {
 type SortKey = 'name' | 'grade' | 'enLevel' | 'enExp' | 'enDiff' | 'frLevel' | 'frExp' | 'frDiff'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
-function SortHead({ label, col, sort, onSort, className = 'stu' }: { label: string; col: SortKey; sort: SortState; onSort: (k: SortKey) => void; className?: string }) {
+// Sorting an English column secondarily sorts by the SAME French column (and vice-versa), so the
+// other-language students (null in the primary column, sunk to the bottom) stay ordered the same way.
+const PAIR_SORT: Partial<Record<SortKey, SortKey>> = {
+  enLevel: 'frLevel', frLevel: 'enLevel',
+  enExp: 'frExp', frExp: 'enExp',
+  enDiff: 'frDiff', frDiff: 'enDiff',
+}
+
+function SortHead({ label, col, sort, onSort, className = 'stu', rowSpan }: { label: string; col: SortKey; sort: SortState; onSort: (k: SortKey) => void; className?: string; rowSpan?: number }) {
   const ind = sort.key === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
-  return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
+  return <th rowSpan={rowSpan} className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
 }
 
 function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilter }) {
@@ -131,14 +140,23 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
       case 'frDiff': return s.fr?.delta ?? null
     }
   }
-  const students = [...filtered].sort((a, b) => {
-    const va = val(a, sort.key)
-    const vb = val(b, sort.key)
-    if (va == null && vb == null) return a.name.localeCompare(b.name)
-    if (va == null) return 1 // nulls last
+  // Nulls ALWAYS sort last (regardless of direction); otherwise compare with the active direction.
+  const dirCmp = (va: string | number | null, vb: string | number | null): number => {
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
     if (vb == null) return -1
     const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
-    return base !== 0 ? (sort.dir === 'desc' ? -base : base) : a.name.localeCompare(b.name)
+    return sort.dir === 'desc' ? -base : base
+  }
+  const secondary = PAIR_SORT[sort.key]
+  const students = [...filtered].sort((a, b) => {
+    const p = dirCmp(val(a, sort.key), val(b, sort.key))
+    if (p !== 0) return p
+    if (secondary) {
+      const s = dirCmp(val(a, secondary), val(b, secondary))
+      if (s !== 0) return s
+    }
+    return a.name.localeCompare(b.name)
   })
   const click = (k: SortKey) => setSort((p) => (p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }))
 
@@ -147,12 +165,16 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
       <table className="mgrid">
         <thead>
           <tr>
-            <SortHead label="Student" col="name" sort={sort} onSort={click} className="col-task" />
-            {showGrade ? <SortHead label="Grade" col="grade" sort={sort} onSort={click} /> : null}
-            <SortHead label="English" col="enLevel" sort={sort} onSort={click} />
+            <SortHead label="Student" col="name" sort={sort} onSort={click} className="col-task" rowSpan={2} />
+            {showGrade ? <SortHead label="Grade" col="grade" sort={sort} onSort={click} rowSpan={2} /> : null}
+            <th className="stu grp-head" colSpan={3}>English</th>
+            <th className="stu grp-head grp-sep" colSpan={3}>French</th>
+          </tr>
+          <tr>
+            <SortHead label="Reading Level" col="enLevel" sort={sort} onSort={click} />
             <SortHead label="Expected" col="enExp" sort={sort} onSort={click} />
             <SortHead label="Diff" col="enDiff" sort={sort} onSort={click} />
-            <SortHead label="French" col="frLevel" sort={sort} onSort={click} />
+            <SortHead label="Reading Level" col="frLevel" sort={sort} onSort={click} className="stu grp-sep" />
             <SortHead label="Expected" col="frExp" sort={sort} onSort={click} />
             <SortHead label="Diff" col="frDiff" sort={sort} onSort={click} />
           </tr>
@@ -167,7 +189,7 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
               <LevelCell cell={s.en} ipp={s.ipp} />
               <td className="stu muted">{fmtExpected(s.en)}</td>
               <td className="stu">{fmtDiff(s.en)}</td>
-              <LevelCell cell={s.fr} ipp={s.ipp} />
+              <LevelCell cell={s.fr} ipp={s.ipp} sep />
               <td className="stu muted">{fmtExpected(s.fr)}</td>
               <td className="stu">{fmtDiff(s.fr)}</td>
             </tr>
