@@ -4,6 +4,7 @@
 - [Project: Session Archive](project_session_archive.md) — ARCHIVE, do NOT auto-read; verbatim session log (2026-04 → 06-08). Open only to recover history.
 
 ## How I work with this user (feedback)
+- [Batch Builds During Review Bursts](feedback_batch_builds.md) — don't rebuild/relaunch/commit after every bullet of feedback; accumulate edits and do ONE build cycle when the user says done.
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML/reads against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over.
 - [RLS Review: Verify Every Role Branch](feedback_rls_review_verify_per_role.md) — check each role's scoping against the documented design (DimRole/StaffSchoolAccess) across the WHOLE surface; a region-wide branch is a red flag; never assert an access claim unverified or double down when challenged.
 - [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — never hand over run-now SQL with a `<placeholder>`; substitute real values or DECLARE them at the top. An empty result = suspect the parameters first.

@@ -3,9 +3,12 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import {
   type Counts, type RollupSchool, type RollupStudent, type SummarizeBy, type LangFilter,
+  type Measure, type MeasureStat,
   tally, pctOf, childrenOf, gradeLabel, gradeRank,
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
+
+type MeasureMode = 'pct' | 'mean'
 
 type BlockState<T> = { status: 'loading' } | { status: 'done'; rows: T[] } | { status: 'error'; message: string }
 
@@ -26,6 +29,26 @@ function MeetCell({ c }: { c: Counts }) {
   const title = `Meeting/Exceeding ${c.meet} of ${c.band} results with a level\nEN ${c.meetEN}/${c.bandEN} · FR ${c.meetFR}/${c.bandFR}${ippNote}`
   return <td className={`rpct ${heatClass(p)}`} title={title}>{fmtPct(p)}</td>
 }
+// One rolled-up measure cell, rendered as either % Meeting/Exceeding or the Mean score (toggle). Mean is
+// heat-coloured by normalising the 1–4 scale to 0..1 so it uses the same heat ramp as the %.
+function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
+  if (mode === 'mean') {
+    const m = stat.count > 0 ? stat.sum / stat.count : null
+    if (m == null) {
+      const t = stat.ippExcluded > 0 ? `No scored results here (${stat.ippExcluded} IPP excluded)` : 'No scored results here'
+      return <td className="rpct none" title={t}>—</td>
+    }
+    const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
+    return <td className={`rpct ${heatClass((m - 1) / 3)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${ippNote}`}>{m.toFixed(2)}</td>
+  }
+  const p = pctOf(stat.meet, stat.band)
+  if (p == null) {
+    const t = stat.ippExcluded > 0 ? `No results with a level here (${stat.ippExcluded} IPP excluded)` : 'No results with a level here'
+    return <td className="rpct none" title={t}>—</td>
+  }
+  const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
+  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${ippNote}`}>{fmtPct(p)}</td>
+}
 
 // Generic School → Grade/Homeroom → (expand) student-detail roll-up. The subject wrapper supplies the
 // pre-built schools, a per-group loader, and how to render one group's student detail.
@@ -41,7 +64,7 @@ function gradeGroups(students: RollupStudent[]): { grade: string; students: Roll
 const TCRCE_ID = '__TCRCE__'
 
 export function RollupTree<T>({
-  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, showAll = false,
+  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, measures, showAll = false,
 }: {
   schools: RollupSchool[]
   cycle: string | null
@@ -49,10 +72,15 @@ export function RollupTree<T>({
   renderDetail: (rows: T[], lang: LangFilter) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
   viewToggle?: ReactNode // page-level Summary/Student-list switch, rendered inline at the start of the toolbar
+  // Per-node measure columns. When supplied (writing = 4 traits + avg), they REPLACE the single
+  // % Meeting/Exceeding column and a %/Mean toggle appears. When omitted (reading), the single
+  // benchmark-% column (with EN/FR hover) is used.
+  measures?: Measure[]
   showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
   const [lang, setLang] = useState<LangFilter>('All')
+  const [measureMode, setMeasureMode] = useState<MeasureMode>('pct')
   const [openSchools, setOpenSchools] = useState<Set<string>>(
     () => new Set(schools.length === 1 ? [schools[0].id] : []),
   )
@@ -90,6 +118,17 @@ export function RollupTree<T>({
 
   const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
+  // Measure columns: writing supplies 4 traits + avg (with a %/Mean toggle); reading uses the single
+  // benchmark % column.
+  const measureCount = measures ? measures.length : 1
+  const measureHead: ReactNode = measures
+    ? measures.map((m) => <th className="rpct-h" key={m.key}>{m.label}</th>)
+    : <th className="rpct-h">% Meeting/Exceeding</th>
+  const measureCells = (students: RollupStudent[]): ReactNode =>
+    measures
+      ? measures.map((m) => <MeasureCell key={m.key} stat={m.compute(students, lang)} mode={measureMode} />)
+      : <MeetCell c={tally(students, lang)} />
+
   if (schools.length === 0) {
     return (
       <div className="notice notice-empty">
@@ -118,6 +157,15 @@ export function RollupTree<T>({
             </button>
           ))}
         </div>
+        {measures ? (
+          <>
+            <span className="muted" style={{ marginLeft: '1rem' }}>Show</span>
+            <div className="subject-toggle" style={{ margin: 0 }}>
+              <button className={measureMode === 'pct' ? 'toggle-on' : ''} onClick={() => setMeasureMode('pct')}>% Meeting/Exceeding</button>
+              <button className={measureMode === 'mean' ? 'toggle-on' : ''} onClick={() => setMeasureMode('mean')}>Mean score</button>
+            </div>
+          </>
+        ) : null}
         {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : null}
       </div>
 
@@ -142,7 +190,7 @@ export function RollupTree<T>({
               <th className="col-task">School</th>
               <th className="rn">Students</th>
               <th className="rn">Results</th>
-              <th className="rpct-h">% Meeting/Exceeding</th>
+              {measureHead}
             </tr>
           </thead>
           <tbody>
@@ -160,7 +208,7 @@ export function RollupTree<T>({
                         </th>
                         <StudentsCell c={tc} />
                         <ResultsCell c={tc} />
-                        <MeetCell c={tc} />
+                        {measureCells(allStudents)}
                       </tr>
                       {tOpen
                         ? gradeGroups(allStudents).map((g) => {
@@ -182,7 +230,7 @@ export function RollupTree<T>({
                                   </th>
                                   <StudentsCell c={gc} />
                                   <ResultsCell c={gc} />
-                                  <MeetCell c={gc} />
+                                  {measureCells(g.students)}
                                 </tr>
                                 {gOpen
                                   ? schoolsForGrade.map(({ sch, students }) => {
@@ -197,7 +245,7 @@ export function RollupTree<T>({
                                           </th>
                                           <StudentsCell c={sc} />
                                           <ResultsCell c={sc} />
-                                          <MeetCell c={sc} />
+                                          {measureCells(students)}
                                         </tr>
                                       )
                                     })
@@ -222,7 +270,7 @@ export function RollupTree<T>({
                     </th>
                     <StudentsCell c={c} />
                     <ResultsCell c={c} />
-                    <MeetCell c={c} />
+                    {measureCells(sch.students)}
                   </tr>
                   {open
                     ? childrenOf(sch, summarizeBy).map((node) => {
@@ -239,11 +287,11 @@ export function RollupTree<T>({
                               </th>
                               <StudentsCell c={nc} />
                               <ResultsCell c={nc} />
-                              <MeetCell c={nc} />
+                              {measureCells(node.students)}
                             </tr>
                             {nOpen && node.groupKey ? (
                               <tr className="blockrow">
-                                <td colSpan={4}>
+                                <td colSpan={3 + measureCount}>
                                   <div className="blockwrap">
                                     {!block || block.status === 'loading' ? (
                                       <p className="muted small" style={{ margin: 0 }}>Loading students…</p>

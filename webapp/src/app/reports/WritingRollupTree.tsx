@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useMemo, type ReactNode } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
+import { type RollupStudent, type LangFilter, type Measure, buildSchools, traitMeasure, avgMeasure } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -38,11 +38,31 @@ export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: 
         byKey.set(r.studentKey, s)
       }
       if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
-        s.results.push({ en: r.assessmentLanguage === 'English', code: r.achievementCode })
+        s.results.push({
+          en: r.assessmentLanguage === 'English',
+          code: r.achievementCode,
+          avgScore: r.avgScore,
+          traits: {
+            conventions: traitNum(r.conventionsScore),
+            organization: traitNum(r.organizationScore),
+            ideas: traitNum(r.ideasScore),
+            language: traitNum(r.languageScore),
+          },
+        })
       }
     }
     return buildSchools([...byKey.values()])
   }, [rows])
+
+  // Roll-up measure columns in the active COIL/IOLC order: one per trait (% at score >= 3, or mean) + the
+  // overall average. The %/Mean toggle lives in RollupTree; these just supply the stats + labels.
+  const measures: Measure[] = useMemo(
+    () => [
+      ...traits.map((t) => ({ key: t.key, label: t.label, compute: (s: RollupStudent[], l: LangFilter) => traitMeasure(s, l, t.key) })),
+      { key: 'avg', label: 'Avg', compute: (s: RollupStudent[], l: LangFilter) => avgMeasure(s, l) },
+    ],
+    [traits],
+  )
 
   return (
     <RollupTree<WritingGroupRow>
@@ -53,8 +73,17 @@ export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: 
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
       renderDetail={(groupRows, lang) => <WritingDetail rows={groupRows} traits={traits} lang={lang} />}
       viewToggle={viewToggle}
+      measures={measures}
     />
   )
+}
+
+// A trait score string ('1'-'4' | 'SCR' | '-' | null) → its numeric value, or null when not a 1–4 score
+// (SCR / '-' / blank are dropped from both the % and the mean).
+function traitNum(v: string | null): number | null {
+  if (v == null || v === 'SCR' || v === '-') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 // ── One group's students: the four writing traits (in the active COIL/IOLC order) + average, per

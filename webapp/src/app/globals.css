@@ -592,6 +592,9 @@ a { color: inherit; text-decoration: none; }
 .mtree tr.lvl1 th.col-task { font-weight: 700; }
 .mtree tr.lvl2 th.col-task { padding-left: 1.7rem; font-weight: 500; }
 .mtree tr.lvl3 th.col-task { padding-left: 3rem; font-weight: 500; }
+/* Sortable headers in the per-group student detail (reading roll-up). */
+.mgrid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.mgrid th.sortable:hover { color: var(--primary); }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }

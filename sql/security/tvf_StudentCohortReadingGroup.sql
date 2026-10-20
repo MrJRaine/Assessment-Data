@@ -43,6 +43,17 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
+    -- Effective benchmark month per selected reading window (BenchmarkMonth, else dominant calendar
+    -- month) — matched against DimReadingBenchmark for the Expected range (mirrors tvf_StudentCohort).
+    WindowMonth AS (
+        SELECT w.AssessmentWindowID,
+               COALESCE(w.BenchmarkMonth,
+                   (SELECT TOP 1 dc.Month FROM DimCalendar dc
+                    WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
+                    GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
+        FROM DimAssessmentWindow w
+        WHERE w.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+    ),
     -- The group's students (current, in the reading grade span), intersected with the caller's scope.
     GroupStudents AS (
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
@@ -75,7 +86,7 @@ RETURN
           )
     ),
     LatestReading AS (   -- latest result per (student, language) across the selected windows
-        SELECT far.StudentNumber, drs.ScaleSystem, drs.LevelCode, drs.LevelOrder, far.ReadingDelta,
+        SELECT far.StudentNumber, far.AssessmentWindowID, drs.ScaleSystem, drs.LevelCode, drs.LevelOrder, far.ReadingDelta,
                ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
@@ -100,14 +111,29 @@ RETURN
         lr.ScaleSystem,                               -- language of THIS result; NULL = no reading result
         lr.LevelCode,                                 -- the reading level (e.g. 'M'); NULL = no result
         lr.LevelOrder,
-        lr.ReadingDelta,
+        lr.ReadingDelta,                              -- signed difference from the expected benchmark
+        drb.ExpectedMinLevel      AS ExpectedMinLevel, -- expected benchmark range for THIS result's language
+        drb.ExpectedMaxLevel      AS ExpectedMaxLevel,
+        expMin.LevelOrder         AS ExpectedMinOrder, -- order of ExpectedMinLevel (for sorting the Expected column)
         dal.AchievementLevelCode  AS AchievementLevelCode,
         dal.AchievementLevelName  AS AchievementLevelName,
-        dal.HexColor              AS AchievementHexColor
+        dal.HexColor              AS AchievementHexColor,
+        dal.HexColorTint          AS AchievementHexColorTint  -- cell-background tint (coloured cell, not text)
     FROM GroupStudents gs
     LEFT JOIN ReadingIPP ipp ON ipp.StudentKey = gs.StudentKey
     -- one row per (student, language-with-a-result); NULL when the student has no reading result
     LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr ON lr.StudentNumber = gs.StudentNumber
+    -- Expected benchmark range for THIS result's window month + the language's family (EN_Reading ->
+    -- English, FR_Reading -> French Immersion), so a French result shows the French expectation.
+    LEFT JOIN WindowMonth wm ON wm.AssessmentWindowID = lr.AssessmentWindowID
+    LEFT JOIN DimReadingBenchmark drb
+           ON drb.GradeCode       = gs.Grade
+          AND drb.AssessmentMonth = wm.BenchMonth
+          AND drb.ProgramFamily   = CASE lr.ScaleSystem WHEN 'EN_Reading' THEN 'English'
+                                                         WHEN 'FR_Reading' THEN 'French Immersion' END
+    LEFT JOIN DimReadingScale expMin
+           ON expMin.LevelCode  = drb.ExpectedMinLevel
+          AND expMin.ScaleSystem = lr.ScaleSystem
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
           AND lr.ReadingDelta IS NOT NULL

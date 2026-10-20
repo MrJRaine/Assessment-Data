@@ -55,6 +55,7 @@ RETURN
     ),
     LatestWriting AS (   -- latest result per (student, language) across the selected windows + its average
         SELECT faw.StudentNumber, faw.AssessmentLanguage, faw.AssessmentDate,
+            faw.IdeasScore, faw.OrganizationScore, faw.LanguageScore, faw.ConventionsScore,  -- per-trait rollup (score >= 3 = Meeting/Exceeding)
             CAST(
                 (COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
                  + COALESCE(CASE WHEN faw.OrganizationScore IN ('1','2','3','4') THEN CAST(faw.OrganizationScore AS INT) END, 0)
@@ -86,6 +87,11 @@ RETURN
         ipp.IsIPP                         AS WritingIPPStatus,
         lw.AssessmentLanguage,                               -- 'English' | 'French'; NULL = no writing result
         lw.AssessmentDate                 AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
+        lw.IdeasScore                     AS IdeasScore,        -- the four trait scores ('1'-'4'/'SCR'/'-'/NULL)
+        lw.OrganizationScore              AS OrganizationScore, -- for the per-trait roll-up (% Meeting/Exceeding or Mean)
+        lw.LanguageScore                  AS LanguageScore,
+        lw.ConventionsScore               AS ConventionsScore,
+        lw.AvgScore                       AS AvgScore,          -- the 4-trait average (for the Mean measure)
         CASE WHEN lw.AvgScore IS NULL THEN NULL
              WHEN lw.AvgScore >= 3.50 THEN 4
              WHEN lw.AvgScore >= 2.75 THEN 3
