@@ -106,6 +106,14 @@ function fmtDiff(cell: DetailCell | null): string {
 type SortKey = 'name' | 'grade' | 'enLevel' | 'enExp' | 'enDiff' | 'frLevel' | 'frExp' | 'frDiff'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
 
+// Sorting an English column secondarily sorts by the SAME French column (and vice-versa), so the
+// other-language students (null in the primary column, sunk to the bottom) stay ordered the same way.
+const PAIR_SORT: Partial<Record<SortKey, SortKey>> = {
+  enLevel: 'frLevel', frLevel: 'enLevel',
+  enExp: 'frExp', frExp: 'enExp',
+  enDiff: 'frDiff', frDiff: 'enDiff',
+}
+
 function SortHead({ label, col, sort, onSort, className = 'stu', rowSpan }: { label: string; col: SortKey; sort: SortState; onSort: (k: SortKey) => void; className?: string; rowSpan?: number }) {
   const ind = sort.key === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
   return <th rowSpan={rowSpan} className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
@@ -132,14 +140,23 @@ function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilt
       case 'frDiff': return s.fr?.delta ?? null
     }
   }
-  const students = [...filtered].sort((a, b) => {
-    const va = val(a, sort.key)
-    const vb = val(b, sort.key)
-    if (va == null && vb == null) return a.name.localeCompare(b.name)
-    if (va == null) return 1 // nulls last
+  // Nulls ALWAYS sort last (regardless of direction); otherwise compare with the active direction.
+  const dirCmp = (va: string | number | null, vb: string | number | null): number => {
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
     if (vb == null) return -1
     const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
-    return base !== 0 ? (sort.dir === 'desc' ? -base : base) : a.name.localeCompare(b.name)
+    return sort.dir === 'desc' ? -base : base
+  }
+  const secondary = PAIR_SORT[sort.key]
+  const students = [...filtered].sort((a, b) => {
+    const p = dirCmp(val(a, sort.key), val(b, sort.key))
+    if (p !== 0) return p
+    if (secondary) {
+      const s = dirCmp(val(a, secondary), val(b, secondary))
+      if (s !== 0) return s
+    }
+    return a.name.localeCompare(b.name)
   })
   const click = (k: SortKey) => setSort((p) => (p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }))
 
