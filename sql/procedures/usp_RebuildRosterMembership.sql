@@ -23,7 +23,7 @@
  * Reads:  DimAssessmentWindow, DimSection (current for mapping, all versions for enrolment match),
  *         DimCourseAssessment, FactEnrollment (date-overlap), DimStudent (current by StudentNumber),
  *         DimSchool, DimGrade, DimProgram, FactSectionTeachers.
- * Writes: SectionRosterMembership, TeacherRosterMembership (both TRUNCATE + INSERT).
+ * Writes: SectionRosterMembership, TeacherRosterMembership, StudentExpectedAssessment (all TRUNCATE + INSERT).
  *
  * The base SELECT mirrors the section-selection rules from tvf_TeacherGroups (DimCourseAssessment
  * subject/language mapping) and the student-enumeration rules from tvf_TeacherRoster's StudentGroups
@@ -140,6 +140,24 @@ BEGIN
            AND fst.IsCurrent = 1;   -- B (2026-10-13): CURRENT teacher gets the fast-path for EVERY cycle of
                                     -- the year for their current sections (was as-of-EndDate, which stranded
                                     -- the current teacher off closed cycles after a reassignment).
+
+    -- ------------------------------------------------------------------------
+    -- 3) Expected-assessment projection: which (Subject x Language) each student is EXPECTED to be
+    --    assessed in, per cycle. Pure student-grain DISTINCT of the base ⨝ its window's cycle/subject.
+    --    SectionLanguage (the course's EN/FR) is the expected language; Math (NULL language) is excluded.
+    --    The reports read this to show a language's row only when the student is expected in it.
+    -- ------------------------------------------------------------------------
+    TRUNCATE TABLE dbo.StudentExpectedAssessment;
+
+    INSERT INTO dbo.StudentExpectedAssessment (
+        StudentKey, StudentNumber, CycleGroupID, AssessmentType, Language, LastRebuiltAt
+    )
+    SELECT DISTINCT
+        b.StudentKey, b.StudentNumber, w.CycleGroupID, w.AssessmentType, b.SectionLanguage, @Now
+    FROM dbo.SectionRosterMembership b
+    INNER JOIN DimAssessmentWindow w ON w.AssessmentWindowID = b.AssessmentWindowID
+    WHERE b.SectionLanguage IS NOT NULL                 -- literacy only (Math is single-track, no EN/FR split)
+      AND w.AssessmentType IN ('Reading', 'Writing');
 END;
 GO
 
