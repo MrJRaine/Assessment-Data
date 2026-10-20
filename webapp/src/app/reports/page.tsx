@@ -100,61 +100,77 @@ export default async function StudentsPage({
     return qs ? `/reports?${qs}` : '/reports'
   }
 
+  // Dynamic, printable page title — reflects the current subject + selected cycle.
+  const subjectLabel = isWriting ? 'Writing' : 'Reading'
+  const cycleName = cycle ? cycles.find((c) => c.cycleGroupId === cycle)?.name ?? null : null
+  const reportTitle = `${subjectLabel} Report${cycleName ? ` — ${cycleName}` : ''}`
+
+  // Summary / Student-list switch (oversight). Rendered inline in the roll-up toolbar on Summary, and
+  // standalone above the cohort table on the Student-list view.
+  const viewToggle = (
+    <div className="subject-toggle" role="tablist" aria-label="Report view" style={{ margin: 0 }}>
+      <Link href={viewHref('summary')} className={view === 'summary' ? 'toggle-on' : 'toggle'}>
+        Summary
+      </Link>
+      <Link href={viewHref('list')} className={view === 'list' ? 'toggle-on' : 'toggle'}>
+        Student list
+      </Link>
+    </div>
+  )
+
   return (
     <>
-      <PageHeader title="Reports" subtitle="Cohort — filter, view distribution, and drill down to the student level" />
-      <div className="subject-toggle">
-        <Link href="/reports" className={!isWriting ? 'toggle-on' : 'toggle'}>
-          Reading
-        </Link>
-        <Link href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
-          Writing
-        </Link>
-        <Link href="/reports/math" className="toggle">
-          Math
-        </Link>
-        <Link href="/reports/rwm" className="toggle">
-          RWM
-        </Link>
+      <PageHeader title={reportTitle} />
+      <div className="report-top-row">
+        <div className="subject-toggle" style={{ margin: 0 }}>
+          <Link href="/reports" className={!isWriting ? 'toggle-on' : 'toggle'}>
+            Reading
+          </Link>
+          <Link href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
+            Writing
+          </Link>
+          <Link href="/reports/math" className="toggle">
+            Math
+          </Link>
+          <Link href="/reports/rwm" className="toggle">
+            RWM
+          </Link>
+        </div>
+        {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       </div>
-      {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       {error ? (
         <ErrorNote message={error} />
       ) : oversight ? (
         <>
           {/* Two charts on top of BOTH views: donut follows the cycle selector; the by-cycle trend is
-              independent of it (always the full year). */}
+              independent of it (always the full year). The Summary/Student-list toggle rides inside the
+              roll-up toolbar on Summary, and standalone above the table on the list view. */}
           <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} />
-          <div className="subject-toggle" role="tablist" aria-label="Report view">
-            <Link href={viewHref('summary')} className={view === 'summary' ? 'toggle-on' : 'toggle'}>
-              Summary
-            </Link>
-            <Link href={viewHref('list')} className={view === 'list' ? 'toggle-on' : 'toggle'}>
-              Student list
-            </Link>
-          </div>
           {view === 'list' ? (
-            cohort.length === 0 ? (
-              <EmptyState
-                title="No students in your scope"
-                hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
-              />
-            ) : (
-              // Charts render at the page top for oversight, so suppress CohortView's own copy.
-              <CohortView
-                key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
-                cohort={cohort}
-                bands={bands}
-                cycles={cycles}
-                subject={isWriting ? 'Writing' : 'Reading'}
-                assessableRange={assessableRange}
-                showCharts={false}
-              />
-            )
+            <>
+              <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
+              {cohort.length === 0 ? (
+                <EmptyState
+                  title="No students in your scope"
+                  hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
+                />
+              ) : (
+                // Charts render at the page top for oversight, so suppress CohortView's own copy.
+                <CohortView
+                  key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
+                  cohort={cohort}
+                  bands={bands}
+                  cycles={cycles}
+                  subject={isWriting ? 'Writing' : 'Reading'}
+                  assessableRange={assessableRange}
+                  showCharts={false}
+                />
+              )}
+            </>
           ) : isWriting ? (
-            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} />
+            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           ) : (
-            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} />
+            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           )}
         </>
       ) : cohort.length === 0 ? (

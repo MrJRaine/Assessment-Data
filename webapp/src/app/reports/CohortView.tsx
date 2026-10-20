@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
 import CohortCharts from './CohortCharts'
+import { traitsInOrder, type WritingTraitKey } from '@/lib/writingTraits'
+import { useTraitOrder, TraitOrderToggle } from '@/components/TraitOrderToggle'
 
 // Distinct, order-preserving helper.
 function distinct<T>(xs: T[]): T[] {
@@ -52,6 +54,14 @@ function triMatch(sel: Tri, v: boolean | null): boolean {
 type SortKey =
   | 'student' | 'lastName' | 'firstName' | 'studentNumber'
   | 'grade' | 'homeroom' | 'school' | 'level' | 'expected' | 'diffExpected' | 'diffJune' | 'achievement'
+  | 'tIdeas' | 'tOrganization' | 'tLanguage' | 'tConventions'
+
+// A writing trait score string ('1'-'4'/'SCR'/'-'/null) → its numeric value, else null (sorts blank/last).
+function traitScoreNum(v: string | null): number | null {
+  if (v == null || v === 'SCR' || v === '-') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
 
 function sortVal(s: CohortStudent, key: SortKey): number | string | null {
   const lc = (v: string | null) => (v == null ? null : v.toLowerCase())
@@ -72,8 +82,21 @@ function sortVal(s: CohortStudent, key: SortKey): number | string | null {
     // IPP / unresolved (unconfirmed-IPP) students show no achievement band, so they must not sort by
     // a stray code — null sorts them blank (to the bottom), treating unconfirmed IPPs like IPPs.
     case 'achievement': return s.chartEligible ? s.achievementCode : null
+    case 'tIdeas': return traitScoreNum(s.ideasScore)
+    case 'tOrganization': return traitScoreNum(s.organizationScore)
+    case 'tLanguage': return traitScoreNum(s.languageScore)
+    case 'tConventions': return traitScoreNum(s.conventionsScore)
     default: return null
   }
+}
+
+// Writing-trait column → its sort key + score accessor, so the four trait columns render in the active
+// COIL/IOLC order.
+const TRAIT_SORTKEY: Record<WritingTraitKey, SortKey> = {
+  ideas: 'tIdeas', organization: 'tOrganization', language: 'tLanguage', conventions: 'tConventions',
+}
+function traitScoreOf(s: CohortStudent, k: WritingTraitKey): string | null {
+  return k === 'ideas' ? s.ideasScore : k === 'organization' ? s.organizationScore : k === 'language' ? s.languageScore : s.conventionsScore
 }
 
 type SortSpec = { key: SortKey; dir: 'asc' | 'desc' }
@@ -85,7 +108,7 @@ const DEFAULT_ORDER: SortSpec[] = [
   { key: 'lastName', dir: 'asc' }, { key: 'firstName', dir: 'asc' }, { key: 'studentNumber', dir: 'asc' },
 ]
 // Keys with a clickable header (the ▲/▼ indicator + highlight show on these).
-const SORTABLE_HEADERS: SortKey[] = ['student', 'grade', 'homeroom', 'school', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement']
+const SORTABLE_HEADERS: SortKey[] = ['student', 'grade', 'homeroom', 'school', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement', 'tIdeas', 'tOrganization', 'tLanguage', 'tConventions']
 
 // Compare by an ordered spec; NULL/blank always sorts LAST regardless of direction; ties fall through.
 function multiCmp(a: CohortStudent, b: CohortStudent, spec: SortSpec[]): number {
@@ -125,6 +148,11 @@ export default function CohortView({
   // suppressed there; teachers keep them inside the cohort view.
   showCharts?: boolean
 }) {
+  const isWriting = subject === 'Writing'
+  // Writing student list shows the four trait scores as sortable columns, in the COIL/IOLC order the
+  // viewer picks (shared toggle with the roster + writing report).
+  const [traitMode, setTraitMode] = useTraitOrder()
+  const writingTraits = useMemo(() => traitsInOrder(traitMode), [traitMode])
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
     () => [...bands].sort((a, b) => Number(a.code) - Number(b.code)),
@@ -342,6 +370,7 @@ export default function CohortView({
     <>
       <div className="cohort-bar">
         <span className="muted">{filtered.length} of {baseTotal} students match</span>
+        {isWriting ? <TraitOrderToggle mode={traitMode} onChange={setTraitMode} /> : null}
         {assessableRange ? (
           <label className="assessable-toggle" title={`Show only the grades that participate in ${subject} — the rest don't take part, so they'd only pad the total.`}>
             <input type="checkbox" checked={assessableOnly} onChange={(e) => setAssessableOnly(e.target.checked)} />
@@ -524,6 +553,13 @@ export default function CohortView({
               <th className={thCls('grade')} onClick={() => onSort('grade')}>Grade{caret('grade')}</th>
               <th className={thCls('homeroom')} onClick={() => onSort('homeroom')}>Homeroom{caret('homeroom')}</th>
               <th className={thCls('school')} onClick={() => onSort('school')}>School{caret('school')}</th>
+              {isWriting
+                ? writingTraits.map((t) => (
+                    <th key={t.key} className={thCls(TRAIT_SORTKEY[t.key])} onClick={() => onSort(TRAIT_SORTKEY[t.key])}>
+                      {t.label}{caret(TRAIT_SORTKEY[t.key])}
+                    </th>
+                  ))
+                : null}
               <th className={thCls('level')} onClick={() => onSort('level')}>{subject === 'Writing' ? 'Avg' : 'Level'}{caret('level')}</th>
               {subject === 'Reading' ? (
                 <th className={thCls('expected')} onClick={() => onSort('expected')}>Expected{caret('expected')}</th>
@@ -556,6 +592,12 @@ export default function CohortView({
                   <td>{s.grade ?? '—'}</td>
                   <td>{s.homeroom ?? <span className="muted">—</span>}</td>
                   <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
+                  {isWriting
+                    ? writingTraits.map((t) => {
+                        const v = traitScoreOf(s, t.key)
+                        return <td key={t.key}>{v == null ? <span className="muted">—</span> : v}</td>
+                      })
+                    : null}
                   <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
                   {subject === 'Reading' ? (
                     <td>

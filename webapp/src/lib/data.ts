@@ -745,6 +745,12 @@ export interface CohortStudent {
   achievementName: string | null
   achievementHexColor: string | null
   achievementHexColorTint: string | null
+  // Writing-only: the four trait scores of the most-recent writing result ('1'-'4'/'SCR'/'-'/null);
+  // null for Reading. Shown as sortable columns in the Writing student list.
+  ideasScore: string | null
+  organizationScore: string | null
+  languageScore: string | null
+  conventionsScore: string | null
 }
 
 function toBool(v: unknown): boolean | null {
@@ -800,6 +806,7 @@ export async function getStudentCohort(upn: string, cycleGroupId: string | null 
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
+    ideasScore: null, organizationScore: null, languageScore: null, conventionsScore: null, // Reading: no writing traits
   }))
 }
 
@@ -854,10 +861,14 @@ export interface ReadingGroupRow {
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result
   levelCode: string | null // the reading level (e.g. 'M'); null = no result
   levelOrder: number | null
-  readingDelta: number | null
+  readingDelta: number | null // signed difference from the expected benchmark
+  expectedMin: string | null // expected benchmark range for this result's language; null = no benchmark
+  expectedMax: string | null
+  expectedMinOrder: number | null // order of expectedMin (for sorting the Expected column)
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
+  achievementHexColorTint: string | null // light tint for the level-cell background
 }
 
 export async function getReadingGroup(
@@ -883,9 +894,13 @@ export async function getReadingGroup(
     levelCode: (r.LevelCode as string) ?? null,
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
     readingDelta: r.ReadingDelta == null ? null : Number(r.ReadingDelta),
+    expectedMin: (r.ExpectedMinLevel as string) ?? null,
+    expectedMax: (r.ExpectedMaxLevel as string) ?? null,
+    expectedMinOrder: r.ExpectedMinOrder == null ? null : Number(r.ExpectedMinOrder),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
   }))
 }
 
@@ -901,6 +916,12 @@ export interface WritingRollupRow {
   writingIPP: boolean | null
   assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
+  // The four trait scores ('1'-'4' | 'SCR' | '-' | null) + the average, for the per-trait roll-up measures.
+  ideasScore: string | null
+  organizationScore: string | null
+  languageScore: string | null
+  conventionsScore: string | null
+  avgScore: number | null
   achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
 }
 
@@ -920,6 +941,11 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    ideasScore: (r.IdeasScore as string) ?? null,
+    organizationScore: (r.OrganizationScore as string) ?? null,
+    languageScore: (r.LanguageScore as string) ?? null,
+    conventionsScore: (r.ConventionsScore as string) ?? null,
+    avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
   }))
 }
@@ -1086,6 +1112,10 @@ export async function getStudentCohortWriting(upn: string, cycleGroupId: string 
     achievementName: (r.MostRecentAchievementLevelName as string) ?? null,
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
+    ideasScore: (r.MostRecentIdeasScore as string) ?? null,
+    organizationScore: (r.MostRecentOrganizationScore as string) ?? null,
+    languageScore: (r.MostRecentLanguageScore as string) ?? null,
+    conventionsScore: (r.MostRecentConventionsScore as string) ?? null,
   }))
 }
 

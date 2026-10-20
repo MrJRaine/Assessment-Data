@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
+import { type RollupStudent, type LangFilter, type Measure, buildSchools, traitMeasure, avgMeasure } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -21,7 +21,7 @@ const scoreFor = (r: WritingGroupRow, key: WritingTraitKey): string | null =>
       : key === 'language' ? r.languageScore
         : r.conventionsScore
 
-export default function WritingRollupTree({ rows, cycle, showAll }: { rows: WritingRollupRow[]; cycle: string | null; showAll?: boolean }) {
+export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: { rows: WritingRollupRow[]; cycle: string | null; showAll?: boolean; viewToggle?: ReactNode }) {
   const [traitMode, setTraitMode] = useTraitOrder()
   const traits = useMemo(() => traitsInOrder(traitMode), [traitMode])
 
@@ -38,11 +38,31 @@ export default function WritingRollupTree({ rows, cycle, showAll }: { rows: Writ
         byKey.set(r.studentKey, s)
       }
       if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
-        s.results.push({ en: r.assessmentLanguage === 'English', code: r.achievementCode })
+        s.results.push({
+          en: r.assessmentLanguage === 'English',
+          code: r.achievementCode,
+          avgScore: r.avgScore,
+          traits: {
+            conventions: traitNum(r.conventionsScore),
+            organization: traitNum(r.organizationScore),
+            ideas: traitNum(r.ideasScore),
+            language: traitNum(r.languageScore),
+          },
+        })
       }
     }
     return buildSchools([...byKey.values()])
   }, [rows])
+
+  // Roll-up measure columns in the active COIL/IOLC order: one per trait (% at score >= 3, or mean) + the
+  // overall average. The %/Mean toggle lives in RollupTree; these just supply the stats + labels.
+  const measures: Measure[] = useMemo(
+    () => [
+      ...traits.map((t) => ({ key: t.key, label: t.label, compute: (s: RollupStudent[], l: LangFilter) => traitMeasure(s, l, t.key) })),
+      { key: 'avg', label: 'Avg', compute: (s: RollupStudent[], l: LangFilter) => avgMeasure(s, l) },
+    ],
+    [traits],
+  )
 
   return (
     <RollupTree<WritingGroupRow>
@@ -52,8 +72,18 @@ export default function WritingRollupTree({ rows, cycle, showAll }: { rows: Writ
       loadGroup={loadWritingGroup}
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
       renderDetail={(groupRows, lang) => <WritingDetail rows={groupRows} traits={traits} lang={lang} />}
+      viewToggle={viewToggle}
+      measures={measures}
     />
   )
+}
+
+// A trait score string ('1'-'4' | 'SCR' | '-' | null) → its numeric value, or null when not a 1–4 score
+// (SCR / '-' / blank are dropped from both the % and the mean).
+function traitNum(v: string | null): number | null {
+  if (v == null || v === 'SCR' || v === '-') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 // ── One group's students: the four writing traits (in the active COIL/IOLC order) + average, per
@@ -76,13 +106,15 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
     [rows, lang],
   )
   if (sorted.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
+  // Grade column only when the group spans >1 grade (redundant under a grade node; useful for a split homeroom).
+  const showGrade = new Set(sorted.map((r) => r.grade)).size > 1
   return (
     <div className="mscroll">
       <table className="mgrid">
         <thead>
           <tr>
             <th className="col-task">Student</th>
-            <th className="stu">Grade</th>
+            {showGrade ? <th className="stu">Grade</th> : null}
             <th className="stu">Lang</th>
             {traits.map((t) => <th className="stu" key={t.key}>{t.label}</th>)}
             <th className="stu">Avg</th>
@@ -97,7 +129,7 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
                   <Link href={`/reports/${r.studentKey}?subject=writing`} className="back-link">{r.lastName}, {r.firstName}</Link>
                   {r.writingIPP ? <span className="tsub" title="Writing IPP — excluded from % Meeting/Exceeding">IPP</span> : null}
                 </th>
-                <td className="stu">{r.grade ?? '—'}</td>
+                {showGrade ? <td className="stu">{r.grade ?? '—'}</td> : null}
                 <td className="stu">{langShort(r.assessmentLanguage)}</td>
                 {traits.map((t) =>
                   noResult ? <td className="stu" key={t.key}><span className="muted">—</span></td>

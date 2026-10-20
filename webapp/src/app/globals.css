@@ -187,6 +187,11 @@ a { color: inherit; text-decoration: none; }
 /* TCRCE all-schools roll-up row (region-wide reports) — set it apart from the per-school rows. */
 .mgrid .tnode.tcrce > th.col-task { font-weight: 700; }
 .mgrid .tnode.tcrce { border-top: 2px solid var(--border); }
+/* Reports: subject toggle + cycle selector share one row (reclaims vertical space above the table). */
+.report-top-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin: 0.25rem 0 0.9rem; }
+.report-top-row .cycle-selector { margin: 0; }
+/* The Summary/Student-list switch sits at the start of the roll-up toolbar. */
+.mtoolbar-view { display: inline-flex; margin-right: 0.75rem; }
 .cycle-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0 0 1.1rem; }
 .cycle-label { font-size: 0.75rem; color: var(--muted); font-weight: 700; margin-right: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .cycle-btn { padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; color: var(--muted); background: var(--card); white-space: nowrap; }
@@ -629,6 +634,9 @@ a { color: inherit; text-decoration: none; }
 .mtree tr.lvl1 th.col-task { font-weight: 700; }
 .mtree tr.lvl2 th.col-task { padding-left: 1.7rem; font-weight: 500; }
 .mtree tr.lvl3 th.col-task { padding-left: 3rem; font-weight: 500; }
+/* Sortable headers in the per-group student detail (reading roll-up). */
+.mgrid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.mgrid th.sortable:hover { color: var(--primary); }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }

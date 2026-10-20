@@ -14,9 +14,15 @@ export const GRADE_ORDER: Record<string, number> = {
 export const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
 export const gradeRank = (g: string) => GRADE_ORDER[g] ?? 99
 
+export type WritingTraitKey = 'conventions' | 'organization' | 'ideas' | 'language'
+
 export interface RollupResult {
   en: boolean // true = English track, false = French
   code: number | null // achievement band for this result; null = no band (no delta/avg)
+  // Writing only — the four trait scores (1–4; null = SCR/'-'/unscored) + the 4-trait average, for the
+  // per-trait roll-up measures. Reading results omit these.
+  traits?: { conventions: number | null; organization: number | null; ideas: number | null; language: number | null }
+  avgScore?: number | null
 }
 export interface RollupStudent {
   key: string
@@ -96,6 +102,47 @@ export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Coun
 }
 
 export const pctOf = (meet: number, band: number): number | null => (band === 0 ? null : meet / band)
+
+// A rolled-up measure over a set of students (one per column in the writing roll-up): both the
+// % Meeting/Exceeding inputs (meet/band) AND the Mean inputs (sum/count), so a client toggle can switch
+// between them without re-querying. IPP results are excluded (not measured) and counted in ippExcluded.
+export interface MeasureStat { meet: number; band: number; sum: number; count: number; ippExcluded: number }
+export interface Measure {
+  key: string
+  label: string
+  compute: (students: RollupStudent[], lang: LangFilter) => MeasureStat
+}
+
+// One writing trait's roll-up: band/count over scored results (1–4), meet over score >= Meeting, mean via sum.
+export function traitMeasure(students: RollupStudent[], lang: LangFilter, key: WritingTraitKey): MeasureStat {
+  const st: MeasureStat = { meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0 }
+  for (const s of students) {
+    const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
+    for (const r of rs) {
+      const v = r.traits?.[key]
+      if (v == null) continue
+      if (s.ipp) { st.ippExcluded++; continue }
+      st.band++; st.count++; st.sum += v
+      if (v >= MEETING_MIN) st.meet++
+    }
+  }
+  return st
+}
+
+// The "average" column: meet/band from the average BAND (code), mean from the average SCORE.
+export function avgMeasure(students: RollupStudent[], lang: LangFilter): MeasureStat {
+  const st: MeasureStat = { meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0 }
+  for (const s of students) {
+    const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
+    for (const r of rs) {
+      if (r.code == null && r.avgScore == null) continue
+      if (s.ipp) { if (r.code != null) st.ippExcluded++; continue }
+      if (r.code != null) { st.band++; if (r.code >= MEETING_MIN) st.meet++ }
+      if (r.avgScore != null) { st.count++; st.sum += r.avgScore }
+    }
+  }
+  return st
+}
 
 export function buildSchools(students: RollupStudent[]): RollupSchool[] {
   const bySchool = new Map<string, RollupSchool>()
