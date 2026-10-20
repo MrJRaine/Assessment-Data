@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-22T21:07:21.574Z
+  modified: 2026-10-20T16:29:10.364Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -86,6 +86,10 @@ we're not blocked and it's not our queue item.)*
   sufficient-contrast EDGE **≥ 1px rendered** defines the shape (a sub-pixel stroke antialiases away and
   the fill silently carries the ratio; a checker can't see this). Chasing the fill colour can't work.
 - **Dark mode** *(user: "1.2 or later")*. Full scoping in [[project_dark_mode]].
+- **Persistent per-USER preferences (server-side)** *(user 2026-10-20: "QoL for down the road; per-browser is fine for now")*.
+  UI prefs (COIL/IOLC trait order via `useTraitOrder` → localStorage key `writingTraitOrder`; later others)
+  are per-BROWSER today. Move to a per-UPN store so a preference follows the user across devices. Would need
+  a small prefs table + read/write path (SP-scoped) + a load on sign-in. Low priority; don't build until asked.
 
 ---
 

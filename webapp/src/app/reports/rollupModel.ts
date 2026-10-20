@@ -14,6 +14,23 @@ export const GRADE_ORDER: Record<string, number> = {
 export const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
 export const gradeRank = (g: string) => GRADE_ORDER[g] ?? 99
 
+// Compact grade-span label for a split homeroom, using grade CODES (P/PP/1…): a single grade -> "Grade P";
+// two CONSECUTIVE grades -> "Grade P/1"; three or more consecutive -> "Grade P-2" (lower–upper); any
+// NON-consecutive set -> "Grade P,2" / "Grade P,1,3".
+export function gradeSpanLabel(grades: string[]): string {
+  const sorted = [...new Set(grades)].sort((a, b) => gradeRank(a) - gradeRank(b))
+  if (sorted.length === 0) return ''
+  if (sorted.length === 1) return `Grade ${sorted[0]}`
+  const ranks = sorted.map(gradeRank)
+  const consecutive = ranks[ranks.length - 1] - ranks[0] === sorted.length - 1
+  if (consecutive) {
+    return sorted.length === 2
+      ? `Grade ${sorted[0]}/${sorted[1]}`
+      : `Grade ${sorted[0]}-${sorted[sorted.length - 1]}`
+  }
+  return `Grade ${sorted.join(',')}`
+}
+
 export type WritingTraitKey = 'conventions' | 'organization' | 'ideas' | 'language'
 
 export interface RollupResult {
@@ -172,7 +189,7 @@ export function childrenOf(sch: RollupSchool, summarizeBy: SummarizeBy): RollupC
     return {
       id: `H:${sch.id}:${k}`,
       label: k && hr ? `Homeroom ${hr}` : 'No homeroom',
-      sub: grades.map(gradeLabel).join(', '),
+      sub: gradeSpanLabel(grades),
       groupKey: k || null,
       grades,
       students,
