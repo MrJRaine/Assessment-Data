@@ -10,6 +10,10 @@ import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % fo
 
 type MeasureMode = 'pct' | 'mean'
 
+// Heat bucket for a 1–4 MEAN score by the writing achievement cut scores (Not Yet < 1.75 < Approaching
+// < 2.75 < Meeting < 3.50 <= Exceeding) — so a Mean of ~2 reads as Approaching, not "<50" red.
+const meanHeat = (m: number): string => (m >= 3.5 ? 'h4' : m >= 2.75 ? 'h3' : m >= 1.75 ? 'h2' : 'h1')
+
 type BlockState<T> = { status: 'loading' } | { status: 'done'; rows: T[] } | { status: 'error'; message: string }
 
 function StudentsCell({ c }: { c: Counts }) {
@@ -39,7 +43,7 @@ function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
       return <td className="rpct none" title={t}>—</td>
     }
     const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
-    return <td className={`rpct ${heatClass((m - 1) / 3)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${ippNote}`}>{m.toFixed(2)}</td>
+    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${ippNote}`}>{m.toFixed(2)}</td>
   }
   const p = pctOf(stat.meet, stat.band)
   if (p == null) {
@@ -141,41 +145,55 @@ export function RollupTree<T>({
     <div className="math-entry">
       <div className="mtoolbar">
         {viewToggle ? <span className="mtoolbar-view">{viewToggle}</span> : null}
-        <span className="muted">Summarize by</span>
-        <div className="subject-toggle" style={{ margin: 0 }}>
-          {(['Grade', 'Homeroom'] as SummarizeBy[]).map((m) => (
-            <button key={m} className={summarizeBy === m ? 'toggle-on' : ''} onClick={() => setSummarizeBy(m)}>
-              {m}
-            </button>
-          ))}
-        </div>
-        <span className="muted" style={{ marginLeft: '1rem' }}>Language of Assessment</span>
-        <div className="subject-toggle" style={{ margin: 0 }}>
-          {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
-            <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <span className="mtoolbar-pair">
+          <span className="muted">Summarize by</span>
+          <div className="subject-toggle" style={{ margin: 0 }}>
+            {(['Grade', 'Homeroom'] as SummarizeBy[]).map((m) => (
+              <button key={m} className={summarizeBy === m ? 'toggle-on' : ''} onClick={() => setSummarizeBy(m)}>
+                {m}
+              </button>
+            ))}
+          </div>
+        </span>
+        <span className="mtoolbar-pair">
+          <span className="muted">Language of Assessment</span>
+          <div className="subject-toggle" style={{ margin: 0 }}>
+            {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
+              <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </span>
         {measures ? (
-          <>
-            <span className="muted" style={{ marginLeft: '1rem' }}>Show</span>
+          <span className="mtoolbar-pair">
+            <span className="muted">Show</span>
             <div className="subject-toggle" style={{ margin: 0 }}>
               <button className={measureMode === 'pct' ? 'toggle-on' : ''} onClick={() => setMeasureMode('pct')}>% Meeting/Exceeding</button>
               <button className={measureMode === 'mean' ? 'toggle-on' : ''} onClick={() => setMeasureMode('mean')}>Mean score</button>
             </div>
-          </>
+          </span>
         ) : null}
         {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : null}
       </div>
 
-      <div className="mlegend">
-        <span className="grp"><strong>% Meeting or Exceeding</strong></span>
-        <span className="grp">
-          <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80
-        </span>
-        <span className="grp">Out of results with a level. IPP / No data excluded — hover any figure for the EN/FR breakdown.</span>
-      </div>
+      {measures && measureMode === 'mean' ? (
+        <div className="mlegend">
+          <span className="grp"><strong>Mean score (1–4)</strong></span>
+          <span className="grp">
+            <span className="sw h1" /> &lt;1.75 <span className="sw h2" /> 1.75–2.74 <span className="sw h3" /> 2.75–3.49 <span className="sw h4" /> &ge;3.5
+          </span>
+          <span className="grp">Mean of the 1–4 scores (SCR / not-assessed excluded). IPP / No data excluded.</span>
+        </div>
+      ) : (
+        <div className="mlegend">
+          <span className="grp"><strong>% Meeting or Exceeding</strong></span>
+          <span className="grp">
+            <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–64 <span className="sw h3" /> 65–80 <span className="sw h4" /> &gt;80
+          </span>
+          <span className="grp">Out of results with a level. IPP / No data excluded — hover any figure for the EN/FR breakdown.</span>
+        </div>
+      )}
       {summarizeBy === 'Homeroom' && noHomeroomCount > 0 ? (
         <p className="muted small" style={{ margin: '0 0 .7rem' }}>
           {noHomeroomCount} student{noHomeroomCount === 1 ? ' has' : 's have'} no homeroom in PowerSchool; they are grouped
