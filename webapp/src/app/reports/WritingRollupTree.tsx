@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
 import { type RollupStudent, type LangFilter, buildSchools } from './rollupModel'
@@ -93,7 +94,7 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
             return (
               <tr key={`${r.studentKey}:${r.assessmentLanguage ?? 'none'}:${i}`}>
                 <th className="col-task" scope="row">
-                  {r.lastName}, {r.firstName}
+                  <Link href={`/reports/${r.studentKey}?subject=writing`} className="back-link">{r.lastName}, {r.firstName}</Link>
                   {r.writingIPP ? <span className="tsub" title="Writing IPP — excluded from % Meeting/Exceeding">IPP</span> : null}
                 </th>
                 <td className="stu">{r.grade ?? '—'}</td>

@@ -815,6 +815,7 @@ export interface ReadingRollupRow {
   schoolName: string | null
   readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
+  assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
   achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
 }
 
@@ -833,6 +834,7 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
     schoolName: (r.SchoolName as string) ?? null,
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
     scaleSystem: (r.ScaleSystem as string) ?? null,
+    assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
   }))
 }
@@ -898,6 +900,7 @@ export interface WritingRollupRow {
   schoolName: string | null
   writingIPP: boolean | null
   assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
   achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
 }
 
@@ -916,6 +919,7 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     schoolName: (r.SchoolName as string) ?? null,
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
   }))
 }
