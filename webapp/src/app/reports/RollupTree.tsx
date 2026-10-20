@@ -164,15 +164,64 @@ export function RollupTree<T>({
                         ? gradeGroups(allStudents).map((g) => {
                             const gc = tally(g.students, lang)
                             if (lang !== 'All' && gc.students === 0) return null
+                            // TCRCE grade row → expands to a per-SCHOOL breakdown of that grade (each
+                            // school then drills to students via the shared GRADE:<school>:<grade> loader).
+                            const gradeNodeId = `${TCRCE_ID}:G:${g.grade}`
+                            const gOpen = openNodes.has(gradeNodeId)
+                            const schoolsForGrade = schools
+                              .map((sch) => ({ sch, students: sch.students.filter((s) => s.grade === g.grade) }))
+                              .filter((x) => x.students.length > 0)
                             return (
-                              <tr className="tnode lvl2" key={`${TCRCE_ID}:${g.grade}`}>
-                                <th className="col-task">
-                                  <span className="tchev" style={{ visibility: 'hidden' }}>▸</span>{gradeLabel(g.grade)}
-                                </th>
-                                <StudentsCell c={gc} />
-                                <ResultsCell c={gc} />
-                                <MeetCell c={gc} />
-                              </tr>
+                              <Fragment key={gradeNodeId}>
+                                <tr className="tnode lvl2">
+                                  <th className="col-task" onClick={() => toggleNode(gradeNodeId, null)}>
+                                    <span className="tchev">{gOpen ? '▾' : '▸'}</span>{gradeLabel(g.grade)}
+                                  </th>
+                                  <StudentsCell c={gc} />
+                                  <ResultsCell c={gc} />
+                                  <MeetCell c={gc} />
+                                </tr>
+                                {gOpen
+                                  ? schoolsForGrade.map(({ sch, students }) => {
+                                      const sc = tally(students, lang)
+                                      if (lang !== 'All' && sc.students === 0) return null
+                                      const schNodeId = `${gradeNodeId}:${sch.id}`
+                                      const schGroupKey = `GRADE:${sch.id}:${g.grade}` // shared with the per-school tree's grade node
+                                      const sOpen = openNodes.has(schNodeId)
+                                      const block = blocks[schGroupKey]
+                                      return (
+                                        <Fragment key={schNodeId}>
+                                          <tr className="tnode lvl3">
+                                            <th className="col-task" onClick={() => toggleNode(schNodeId, schGroupKey)}>
+                                              <span className="tchev">{sOpen ? '▾' : '▸'}</span>{sch.name}
+                                            </th>
+                                            <StudentsCell c={sc} />
+                                            <ResultsCell c={sc} />
+                                            <MeetCell c={sc} />
+                                          </tr>
+                                          {sOpen ? (
+                                            <tr className="blockrow">
+                                              <td colSpan={4}>
+                                                <div className="blockwrap">
+                                                  {!block || block.status === 'loading' ? (
+                                                    <p className="muted small" style={{ margin: 0 }}>Loading students…</p>
+                                                  ) : block.status === 'error' ? (
+                                                    <div className="notice notice-error">
+                                                      <div className="notice-title">Couldn&apos;t load this group</div>
+                                                      <div className="muted">{block.message}</div>
+                                                    </div>
+                                                  ) : (
+                                                    renderDetail(block.rows, lang)
+                                                  )}
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          ) : null}
+                                        </Fragment>
+                                      )
+                                    })
+                                  : null}
+                              </Fragment>
                             )
                           })
                         : null}
