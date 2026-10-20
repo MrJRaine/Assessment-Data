@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, type Measure, buildSchools, traitMeasure, avgMeasure } from './rollupModel'
+import { type RollupStudent, type LangFilter, type Measure, buildSchools, traitMeasure, avgMeasure, gradeRank } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -95,33 +95,56 @@ function TraitScoreCell({ value }: { value: string | null }) {
   return <td className="stu">{value}</td>
 }
 
+type WSortKey = 'student' | 'grade' | 'lang' | 'avg' | WritingTraitKey
+type WSortState = { key: WSortKey; dir: 'asc' | 'desc' }
+
+function WSortHead({ label, col, sort, onSort, className = 'stu' }: { label: string; col: WSortKey; sort: WSortState; onSort: (k: WSortKey) => void; className?: string }) {
+  const ind = sort.key === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
+}
+
 function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter }) {
-  const sorted = useMemo(
-    () =>
-      [...(lang === 'All' ? rows : rows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French')))].sort(
-        (a, b) =>
-          `${a.lastName}, ${a.firstName}`.localeCompare(`${b.lastName}, ${b.firstName}`) ||
-          (a.assessmentLanguage ?? '').localeCompare(b.assessmentLanguage ?? ''),
-      ),
-    [rows, lang],
-  )
-  if (sorted.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
+  const [sort, setSort] = useState<WSortState>({ key: 'student', dir: 'asc' })
+  const filtered = lang === 'All' ? rows : rows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French'))
+  if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
   // Grade column only when the group spans >1 grade (redundant under a grade node; useful for a split homeroom).
-  const showGrade = new Set(sorted.map((r) => r.grade)).size > 1
+  const showGrade = new Set(filtered.map((r) => r.grade)).size > 1
+
+  const val = (r: WritingGroupRow, k: WSortKey): string | number | null => {
+    switch (k) {
+      case 'student': return `${r.lastName}, ${r.firstName}`.toLowerCase()
+      case 'grade': return gradeRank(r.grade ?? '')
+      case 'lang': return r.assessmentLanguage // 'English' | 'French' | null
+      case 'avg': return r.avgScore
+      default: return traitNum(scoreFor(r, k)) // one of the four trait keys
+    }
+  }
+  const sortedRows = [...filtered].sort((a, b) => {
+    const nameCmp = `${a.lastName}, ${a.firstName}`.localeCompare(`${b.lastName}, ${b.firstName}`)
+    const va = val(a, sort.key)
+    const vb = val(b, sort.key)
+    if (va == null && vb == null) return nameCmp
+    if (va == null) return 1 // nulls last
+    if (vb == null) return -1
+    const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
+    return base !== 0 ? (sort.dir === 'desc' ? -base : base) : nameCmp
+  })
+  const click = (k: WSortKey) => setSort((p) => (p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }))
+
   return (
     <div className="mscroll">
       <table className="mgrid">
         <thead>
           <tr>
-            <th className="col-task">Student</th>
-            {showGrade ? <th className="stu">Grade</th> : null}
-            <th className="stu">Lang</th>
-            {traits.map((t) => <th className="stu" key={t.key}>{t.label}</th>)}
-            <th className="stu">Avg</th>
+            <WSortHead label="Student" col="student" sort={sort} onSort={click} className="col-task" />
+            {showGrade ? <WSortHead label="Grade" col="grade" sort={sort} onSort={click} /> : null}
+            <WSortHead label="Lang" col="lang" sort={sort} onSort={click} />
+            {traits.map((t) => <WSortHead key={t.key} label={t.label} col={t.key} sort={sort} onSort={click} />)}
+            <WSortHead label="Avg" col="avg" sort={sort} onSort={click} />
           </tr>
         </thead>
         <tbody>
-          {sorted.map((r, i) => {
+          {sortedRows.map((r, i) => {
             const noResult = r.assessmentLanguage == null
             return (
               <tr key={`${r.studentKey}:${r.assessmentLanguage ?? 'none'}:${i}`}>
