@@ -97,6 +97,9 @@ function TraitScoreCell({ value }: { value: string | null }) {
 
 type WSortKey = 'student' | 'grade' | 'lang' | 'avg' | WritingTraitKey
 type WSortState = { key: WSortKey; dir: 'asc' | 'desc' }
+// A per-result sort SPLITS a student's stacked rows; a demographic sort (student/grade) keeps them merged.
+const PER_RESULT_W: ReadonlySet<WSortKey> = new Set<WSortKey>(['lang', 'avg', 'ideas', 'organization', 'language', 'conventions'])
+const langRankW = (l: string | null) => (l === 'English' ? 0 : l === 'French' ? 1 : 2)
 
 function WSortHead({ label, col, sort, onSort, className = 'stu' }: { label: string; col: WSortKey; sort: WSortState; onSort: (k: WSortKey) => void; className?: string }) {
   const ind = sort.key === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
@@ -119,17 +122,60 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
       default: return traitNum(scoreFor(r, k)) // one of the four trait keys
     }
   }
-  const sortedRows = [...filtered].sort((a, b) => {
+  const sorted = [...filtered].sort((a, b) => {
     const nameCmp = `${a.lastName}, ${a.firstName}`.localeCompare(`${b.lastName}, ${b.firstName}`)
     const va = val(a, sort.key)
     const vb = val(b, sort.key)
-    if (va == null && vb == null) return nameCmp
+    if (va == null && vb == null) return nameCmp || langRankW(a.assessmentLanguage) - langRankW(b.assessmentLanguage)
     if (va == null) return 1 // nulls last
     if (vb == null) return -1
     const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
-    return base !== 0 ? (sort.dir === 'desc' ? -base : base) : nameCmp
+    return base !== 0 ? (sort.dir === 'desc' ? -base : base) : (nameCmp || langRankW(a.assessmentLanguage) - langRankW(b.assessmentLanguage))
   })
   const click = (k: WSortKey) => setSort((p) => (p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }))
+
+  // MERGE (demographic sort): a student's language rows stay together, Student/Grade merged (rowSpan).
+  // SPLIT (per-result sort): rows flat, demographics repeated.
+  const mergeMode = !PER_RESULT_W.has(sort.key)
+  let groups: WritingGroupRow[][]
+  if (mergeMode) {
+    const byNum = new Map<string, WritingGroupRow[]>()
+    const order: string[] = []
+    for (const r of sorted) {
+      let g = byNum.get(r.studentNumber)
+      if (!g) { g = []; byNum.set(r.studentNumber, g); order.push(r.studentNumber) }
+      g.push(r)
+    }
+    groups = order.map((n) => byNum.get(n)!.slice().sort((a, b) => langRankW(a.assessmentLanguage) - langRankW(b.assessmentLanguage)))
+  } else {
+    groups = sorted.map((r) => [r])
+  }
+
+  const renderRow = (r: WritingGroupRow, showDemo: boolean, span: number) => {
+    const noResult = r.assessmentLanguage == null
+    return (
+      <tr key={`${r.studentNumber}:${r.assessmentLanguage ?? 'none'}`}>
+        {showDemo ? (
+          <>
+            <th className="col-task" scope="row" rowSpan={span}>
+              <Link href={`/reports/${r.studentKey}?subject=writing`} className="back-link">{r.lastName}, {r.firstName}</Link>
+              {r.writingIPP ? <span className="tsub" title="Writing IPP — excluded from % Meeting/Exceeding">IPP</span> : null}
+            </th>
+            {showGrade ? <td className="stu" rowSpan={span}>{r.grade ?? '—'}</td> : null}
+          </>
+        ) : null}
+        <td className="stu">{langShort(r.assessmentLanguage)}</td>
+        {traits.map((t) =>
+          noResult ? <td className="stu" key={t.key}><span className="muted">—</span></td>
+            : <TraitScoreCell key={t.key} value={scoreFor(r, t.key)} />,
+        )}
+        <td className="stu" style={r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}
+            title={r.achievementName ?? undefined}>
+          {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
+        </td>
+      </tr>
+    )
+  }
 
   return (
     <div className="mscroll">
@@ -144,27 +190,7 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map((r, i) => {
-            const noResult = r.assessmentLanguage == null
-            return (
-              <tr key={`${r.studentKey}:${r.assessmentLanguage ?? 'none'}:${i}`}>
-                <th className="col-task" scope="row">
-                  <Link href={`/reports/${r.studentKey}?subject=writing`} className="back-link">{r.lastName}, {r.firstName}</Link>
-                  {r.writingIPP ? <span className="tsub" title="Writing IPP — excluded from % Meeting/Exceeding">IPP</span> : null}
-                </th>
-                {showGrade ? <td className="stu">{r.grade ?? '—'}</td> : null}
-                <td className="stu">{langShort(r.assessmentLanguage)}</td>
-                {traits.map((t) =>
-                  noResult ? <td className="stu" key={t.key}><span className="muted">—</span></td>
-                    : <TraitScoreCell key={t.key} value={scoreFor(r, t.key)} />,
-                )}
-                <td className="stu" style={r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}
-                    title={r.achievementName ?? undefined}>
-                  {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
-                </td>
-              </tr>
-            )
-          })}
+          {groups.flatMap((g) => g.map((r, i) => renderRow(r, i === 0, g.length)))}
         </tbody>
       </table>
     </div>
