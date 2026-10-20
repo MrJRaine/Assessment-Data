@@ -597,6 +597,9 @@ a { color: inherit; text-decoration: none; }
 /* Sortable headers in the per-group student detail (reading roll-up). */
 .mgrid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .mgrid th.sortable:hover { color: var(--primary); }
+/* Grouped two-row header (English / French over Reading Level · Expected · Diff). */
+.mgrid th.grp-head { text-align: center; font-weight: 700; }
+.mgrid .grp-sep { border-left: 1px solid var(--border); }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }
