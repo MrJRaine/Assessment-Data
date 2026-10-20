@@ -1849,3 +1849,38 @@ Continuation of the 1.3.0 access/permissions/maintenance theme (maintenance LOTO
 **End state.** All v1.3.0 code on `dev` (origin up to date). NOTHING deployed to dev or live warehouses yet. Next
 session (2026-10-20): run `sql/deploy/live_1.3.0/deploy_1.3.0.sql` on the **dev** warehouse, seed any coach overrides
 at `/admin/staff-roles`, then walk `docs/v1.3.0-testing-plan.md` (§1–§8) against awdev on :3001.
+
+---
+
+## Session 2026-10-20 — v1.3.0 reports polish + dual-language student list (BIG, dev-only, UNTESTED SQL)
+
+Long iterative reports session on `dev` (v1.3.0 in development; nothing to live). Containers rebuilt many
+times; awdev :3001 + awdev-impersonation :3002 both on 1.3.0; 1.3.0-imp reconciled (dev-auth re-applied
+per the recipe). Git: all committed + pushed to `dev` and `dev-impersonation` throughout (no PR to main —
+still in development).
+
+**Reports polish (shipped to dev, image-built):**
+- Writing entry grid: red attention notice below the COIL/IOLC toggle (literal `***`, rubric name bold+italic). NOT in CHANGELOG (user: part of the feature).
+- Version bump DURING dev (process change): package.json 1.2.0 -> **1.3.0-dev**; two 1.3.0 patchNotes entries. Footer now reads the build. Strip `-dev` at cutover. See [[feedback_changelog_as_you_go]] / [[feedback_commit_cadence]].
+- Reports layout: **dynamic printable `<h1>`** ("Reading Report — <cycle>"), subtitle dropped; subject toggle + cycle selector share one row; Summary/Student-list toggle moved inline with Summarize-by + "Language of Assessment" (relabelled); tighter toggle padding; `.mtoolbar-pair` keeps each caption glued to its toggle.
+- Reading roll-up drill: Expected + Diff columns, sortable, cell-tinted level, grouped 2-row header (later REPLACED by stacking), paired EN<->FR secondary sort.
+- **TCRCE drill**: grade -> per-school breakdown (stops at school; students via the per-school tree).
+- Homeroom node grade label: compact (`Grade P/1`, `Grade 4/5`, `Grade P-2`, `Grade P,1,3`) via `gradeSpanLabel`.
+- Writing roll-up: rolls up **all 5 items** (4 traits + avg) as heat columns in COIL/IOLC order, with a **%/Mean toggle** (`measures` prop on RollupTree; Mean heat by the 1-4 cut scores + legend swap). Writing student list got the 4 trait columns + COIL/IOLC toggle; writing drill made sortable; grade column hidden unless the group spans >1 grade.
+
+**Dual-language student list (the big piece — SQL + client, dev-only, NOT visually verifiable on dev):**
+- NEW **`StudentExpectedAssessment`** table (per student x cycle x subject x language) = DISTINCT projection of `SectionRosterMembership ⨝ DimAssessmentWindow`, built in **`usp_RebuildRosterMembership` Step 3** (ingest Phase 3.5). PURE config (course enrolment x cycle instances) — no program/grade rules.
+- **`tvf_StudentCohort` + `tvf_StudentCohortWriting` REWRITTEN**: one row per (student x language) = expected langs UNION langs-with-a-result, + a NULL-language row for neither. Each row carries `AssessmentLanguage` + `IsExpected`. **Identity = StudentNumber throughout** (never StudentKey); demographics from current DimStudent by StudentNumber.
+- **CohortView STACKED**: demographics merged (rowSpan) on a demographic sort, split on a per-result sort; new Lang column; `-` = expected-but-unassessed, muted `—` = n/a; counts deduped to distinct students; charts/filter per result.
+- **Roll-up drill STACKED** (ReadingDetail/WritingDetail): converted from side-by-side EN/FR columns to stacked rows matching the student list. NOTE: the drill is fed by the GROUP TVFs which DON'T use the expected table, so it shows result-langs + a no-data row, NOT expected-`-` (parity gap — would need expected wired into the 2 group TVFs).
+- Deploy scripts (user runs on dev): `sql/deploy/live_1.3.0/deploy_dual_language_studentlist_2026-10-20.sql` (+ run `usp_RebuildRosterMembership`). User DID run it (dashes appeared) — single-language expected-`-` behaviour CONFIRMED working.
+
+**Can't verify dual-lang on dev**: dev `seed_DimCourseAssessment_dev.sql` maps French-literacy + Math only (no English-LA), so NO dev student is expected in both EN+FR; plus the synthetic students REUSE NAMES (user-made, duplicates within sections) so same-named rows are DISTINCT students, not merge bugs. `sql/scripts/diag_studentlist_namecheck_2026-10-20.sql` written to confirm (query 2 must be empty). OFFERED but not yet built: a dev-only seed that inserts EN+FR results for one uniquely-named sentinel student so the two-row merge is watchable.
+
+**Process corrections this session (user, repeated):**
+- BATCH builds during a review burst — don't rebuild/relaunch/commit after every bullet. New memory [[feedback_batch_builds]].
+- STOP hardcoding assessment-methodology (expected language) — it's config-driven via cycle instances + course enrolment ([[project_assessment_language_tracks]], already emphatic; I relapsed, got corrected).
+- StudentNumber is the identity, never the mutable StudentKey (the 2026-10-13 durable fix) — I kept reaching for StudentKey; corrected.
+- "continuing with X next" then stopping = don't narrate, just work.
+
+**Other backlog:** persistent per-USER preferences (server-side, post-1.0) added to [[project_prelaunch_queue]]. MEMORY.md approaching the 24.4KB read cap — compaction deferred.
