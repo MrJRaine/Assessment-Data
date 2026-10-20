@@ -169,10 +169,10 @@ a { color: inherit; text-decoration: none; }
 
 /* Reading | Writing subject toggle (cohort + detail) */
 .subject-toggle { display: inline-flex; gap: 0.25rem; margin: 0.25rem 0 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }
-.subject-toggle a { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); }
+.subject-toggle a { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); }
 .subject-toggle a:hover { color: var(--ink); }
 .subject-toggle a.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
-.subject-toggle button { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; }
+.subject-toggle button { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
 .subject-toggle button:hover { color: var(--ink); }
 .subject-toggle button.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
 /* Entry-grid toolbar: small-group filter on the left, trait-order toggle on the right. */
@@ -479,8 +479,10 @@ a { color: inherit; text-decoration: none; }
 /* ---- Math roster entry (student x task mastery matrix) ---- */
 .math-entry { margin-top: 0; }
 .math-entry .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.mtoolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.mtoolbar { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
 .math-entry .spacer { flex: 1; }
+/* A label + its toggle wrap together as one unit, so the caption never orphans from its buttons. */
+.mtoolbar-pair { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
 .linkbtn { border: none; background: none; color: var(--primary-hover); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .btn-ghost.editing { border-color: var(--primary); color: var(--primary-hover); background: #e3f2f9; }
 .mlegend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 0.7rem; font-size: .8rem; color: var(--muted); align-items: center; }
