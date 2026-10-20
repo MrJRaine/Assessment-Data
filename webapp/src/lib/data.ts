@@ -751,6 +751,13 @@ export interface CohortStudent {
   organizationScore: string | null
   languageScore: string | null
   conventionsScore: string | null
+  // Dual-language: ONE CohortStudent per (student x language). AssessmentLanguage = this row's language
+  // ('English'|'French'); null = the student is expected in no language AND has no result (shown once).
+  // isExpected = this (student, language) is a config-expected assessment (so an unassessed expected row
+  // shows '-' rather than being hidden). Stack/dedupe on studentNumber (the stable identity).
+  assessmentLanguage: string | null
+  isExpected: boolean
+  expectedMinOrder: number | null // order of expectedMin (sorting the reading Expected column); null for writing
 }
 
 function toBool(v: unknown): boolean | null {
@@ -807,6 +814,9 @@ export async function getStudentCohort(upn: string, cycleGroupId: string | null 
     achievementHexColor: (r.MostRecentAchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.MostRecentAchievementHexColorTint as string) ?? null,
     ideasScore: null, organizationScore: null, languageScore: null, conventionsScore: null, // Reading: no writing traits
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    isExpected: r.IsExpected === 1 || r.IsExpected === true,
+    expectedMinOrder: r.ExpectedMinOrder == null ? null : Number(r.ExpectedMinOrder),
   }))
 }
 
@@ -1116,6 +1126,9 @@ export async function getStudentCohortWriting(upn: string, cycleGroupId: string 
     organizationScore: (r.MostRecentOrganizationScore as string) ?? null,
     languageScore: (r.MostRecentLanguageScore as string) ?? null,
     conventionsScore: (r.MostRecentConventionsScore as string) ?? null,
+    assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
+    isExpected: r.IsExpected === 1 || r.IsExpected === true,
+    expectedMinOrder: null, // reading-only
   }))
 }
 
