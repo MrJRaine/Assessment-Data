@@ -285,6 +285,12 @@ export default function WritingRosterEntry({
         <SmallGroupFilter sg={sg} />
         <TraitOrderToggle mode={traitMode} onChange={setTraitMode} />
       </div>
+      <p className="trait-order-note">
+        ***Please note that the order of the data entry grid has changed. The default order is now COIL, if you
+        wish to continue using the IOLC order that matches the{' '}
+        <strong><em>Nova Scotia Assessments: Analytic Rubric for Scoring Writing (LM3/RWM6/RWM8)</em></strong>,
+        please ensure that you have selected IOLC just above the grid on the right.***
+      </p>
       <table className="grid">
         <thead>
           <tr>

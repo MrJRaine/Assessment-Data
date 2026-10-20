@@ -182,6 +182,8 @@ a { color: inherit; text-decoration: none; }
 .trait-order-toggle button { padding: 0.25rem 0.7rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; }
 .trait-order-toggle button:hover { color: var(--ink); }
 .trait-order-toggle button.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
+/* One-time notice about the COIL/IOLC reorder — sits below the toolbar, above the grid header. */
+.trait-order-note { color: var(--danger); margin: 0 0 0.75rem; font-size: 0.9rem; line-height: 1.4; }
 /* TCRCE all-schools roll-up row (region-wide reports) — set it apart from the per-school rows. */
 .mgrid .tnode.tcrce > th.col-task { font-weight: 700; }
 .mgrid .tnode.tcrce { border-top: 2px solid var(--border); }
