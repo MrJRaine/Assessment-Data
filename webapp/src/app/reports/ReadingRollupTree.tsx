@@ -42,158 +42,146 @@ export default function ReadingRollupTree({ rows, cycle, showAll, viewToggle }: 
   )
 }
 
-// ── One group's students: per-language reading Level, Expected benchmark, and Diff from expected ──
-interface DetailCell {
+// ── One group's students, STACKED: one row per (student x reading language); demographics merge ──
+interface RowItem {
+  studentNumber: string
+  studentKey: string
+  name: string
+  grade: string | null
+  ipp: boolean
+  language: 'English' | 'French' | null
   levelCode: string | null
   levelOrder: number | null
-  name: string | null
-  tint: string | null // achievement-band tint for the level-cell background
-  delta: number | null // signed difference from the expected benchmark
+  tint: string | null
+  achName: string | null
+  delta: number | null
   expMin: string | null
   expMax: string | null
   expMinOrder: number | null
 }
-interface DetailStudent { key: string; name: string; grade: string | null; ipp: boolean; en: DetailCell | null; fr: DetailCell | null }
 
-function pivot(rows: ReadingGroupRow[]): DetailStudent[] {
-  const byKey = new Map<string, DetailStudent>()
-  for (const r of rows) {
-    let s = byKey.get(r.studentKey)
-    if (!s) {
-      s = { key: r.studentKey, name: `${r.lastName}, ${r.firstName}`, grade: r.grade, ipp: r.readingIPP === true, en: null, fr: null }
-      byKey.set(r.studentKey, s)
-    }
-    if (r.scaleSystem === 'EN_Reading' || r.scaleSystem === 'FR_Reading') {
-      const cell: DetailCell = {
-        levelCode: r.levelCode, levelOrder: r.levelOrder, name: r.achievementName, tint: r.achievementHexColorTint,
-        delta: r.readingDelta, expMin: r.expectedMin, expMax: r.expectedMax, expMinOrder: r.expectedMinOrder,
-      }
-      if (r.scaleSystem === 'EN_Reading') s.en = cell
-      else s.fr = cell
-    }
-  }
-  return [...byKey.values()]
+function toRows(rows: ReadingGroupRow[]): RowItem[] {
+  return rows.map((r) => ({
+    studentNumber: r.studentNumber,
+    studentKey: r.studentKey,
+    name: `${r.lastName}, ${r.firstName}`,
+    grade: r.grade,
+    ipp: r.readingIPP === true,
+    language: r.scaleSystem === 'EN_Reading' ? 'English' : r.scaleSystem === 'FR_Reading' ? 'French' : null,
+    levelCode: r.levelCode,
+    levelOrder: r.levelOrder,
+    tint: r.achievementHexColorTint,
+    achName: r.achievementName,
+    delta: r.readingDelta,
+    expMin: r.expectedMin,
+    expMax: r.expectedMax,
+    expMinOrder: r.expectedMinOrder,
+  }))
 }
 
-function LevelCell({ cell, ipp, sep }: { cell: DetailCell | null; ipp: boolean; sep?: boolean }) {
-  const cls = `stu${sep ? ' grp-sep' : ''}`
-  if (!cell || cell.levelCode == null) {
-    return (
-      <td className={cls}>
-        {ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : <span className="muted">—</span>}
-      </td>
-    )
-  }
-  // Colour-code the CELL (uniform block, easy to scan) rather than the variable-width level text; limited
-  // to this one level column so a dual-language student's EN/FR bands never clash.
-  return (
-    <td className={cls} title={cell.name ?? undefined} style={cell.tint ? { background: cell.tint } : undefined}>
-      <span style={{ fontWeight: 600 }}>{cell.levelCode}</span>
-    </td>
-  )
-}
-// Expected benchmark range (collapse when min==max); only where the student has a result in that language.
-function fmtExpected(cell: DetailCell | null): string {
-  if (!cell || cell.levelCode == null || cell.expMin == null) return '—'
-  return cell.expMax && cell.expMax !== cell.expMin ? `${cell.expMin}–${cell.expMax}` : cell.expMin
-}
-// Signed difference from the expected benchmark.
-function fmtDiff(cell: DetailCell | null): string {
-  if (!cell || cell.levelCode == null || cell.delta == null) return '—'
-  return cell.delta > 0 ? `+${cell.delta}` : String(cell.delta)
-}
-
-type SortKey = 'name' | 'grade' | 'enLevel' | 'enExp' | 'enDiff' | 'frLevel' | 'frExp' | 'frDiff'
+type SortKey = 'name' | 'grade' | 'lang' | 'level' | 'expected' | 'diff'
 type SortState = { key: SortKey; dir: 'asc' | 'desc' }
-
-// Sorting an English column secondarily sorts by the SAME French column (and vice-versa), so the
-// other-language students (null in the primary column, sunk to the bottom) stay ordered the same way.
-const PAIR_SORT: Partial<Record<SortKey, SortKey>> = {
-  enLevel: 'frLevel', frLevel: 'enLevel',
-  enExp: 'frExp', frExp: 'enExp',
-  enDiff: 'frDiff', frDiff: 'enDiff',
+// A per-result sort SPLITS a student's stacked rows; a demographic sort (name/grade) keeps them merged.
+const PER_RESULT: ReadonlySet<SortKey> = new Set<SortKey>(['lang', 'level', 'expected', 'diff'])
+const langRank = (l: string | null) => (l === 'English' ? 0 : l === 'French' ? 1 : 2)
+const langShort = (l: string | null) => (l === 'English' ? 'EN' : l === 'French' ? 'FR' : <span className="muted">—</span>)
+const fmtExp = (r: RowItem): string => {
+  if (r.levelCode == null || r.expMin == null) return '—'
+  return r.expMax && r.expMax !== r.expMin ? `${r.expMin}–${r.expMax}` : r.expMin
 }
 
-function SortHead({ label, col, sort, onSort, className = 'stu', rowSpan }: { label: string; col: SortKey; sort: SortState; onSort: (k: SortKey) => void; className?: string; rowSpan?: number }) {
+function SortHead({ label, col, sort, onSort, className = 'stu' }: { label: string; col: SortKey; sort: SortState; onSort: (k: SortKey) => void; className?: string }) {
   const ind = sort.key === col ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
-  return <th rowSpan={rowSpan} className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
+  return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
 }
 
 function ReadingDetail({ rows, lang }: { rows: ReadingGroupRow[]; lang: LangFilter }) {
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' })
-  const all = pivot(rows)
-  // Language filter: show only students with a result in the selected language (both level columns stay).
-  const filtered = lang === 'All' ? all : all.filter((s) => (lang === 'EN' ? s.en : s.fr))
+  const all = toRows(rows)
+  // Language filter: only rows in the selected language (a NULL-language no-result row shows under 'All').
+  const filtered = lang === 'All' ? all : all.filter((r) => r.language === (lang === 'EN' ? 'English' : 'French'))
   if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
-  // Grade column only when the group spans >1 grade (redundant under a grade node; useful for a split homeroom).
-  const showGrade = new Set(filtered.map((s) => s.grade)).size > 1
+  const showGrade = new Set(filtered.map((r) => r.grade)).size > 1
 
-  const val = (s: DetailStudent, k: SortKey): string | number | null => {
+  const val = (r: RowItem, k: SortKey): string | number | null => {
     switch (k) {
-      case 'name': return s.name
-      case 'grade': return gradeRank(s.grade ?? '')
-      case 'enLevel': return s.en?.levelOrder ?? null
-      case 'enExp': return s.en?.expMinOrder ?? null
-      case 'enDiff': return s.en?.delta ?? null
-      case 'frLevel': return s.fr?.levelOrder ?? null
-      case 'frExp': return s.fr?.expMinOrder ?? null
-      case 'frDiff': return s.fr?.delta ?? null
+      case 'name': return r.name
+      case 'grade': return gradeRank(r.grade ?? '')
+      case 'lang': return r.language
+      case 'level': return r.levelOrder
+      case 'expected': return r.expMinOrder
+      case 'diff': return r.delta
     }
   }
-  // Nulls ALWAYS sort last (regardless of direction); otherwise compare with the active direction.
   const dirCmp = (va: string | number | null, vb: string | number | null): number => {
     if (va == null && vb == null) return 0
-    if (va == null) return 1
+    if (va == null) return 1 // nulls last
     if (vb == null) return -1
     const base = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb))
     return sort.dir === 'desc' ? -base : base
   }
-  const secondary = PAIR_SORT[sort.key]
-  const students = [...filtered].sort((a, b) => {
+  const sorted = [...filtered].sort((a, b) => {
     const p = dirCmp(val(a, sort.key), val(b, sort.key))
     if (p !== 0) return p
-    if (secondary) {
-      const s = dirCmp(val(a, secondary), val(b, secondary))
-      if (s !== 0) return s
-    }
-    return a.name.localeCompare(b.name)
+    return a.name.localeCompare(b.name) || langRank(a.language) - langRank(b.language)
   })
   const click = (k: SortKey) => setSort((p) => (p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }))
+
+  // MERGE (demographic sort): a student's language rows stay together, Student/Grade merged (rowSpan).
+  // SPLIT (per-result sort): rows flat, demographics repeated.
+  const mergeMode = !PER_RESULT.has(sort.key)
+  let groups: RowItem[][]
+  if (mergeMode) {
+    const byNum = new Map<string, RowItem[]>()
+    const order: string[] = []
+    for (const r of sorted) {
+      let g = byNum.get(r.studentNumber)
+      if (!g) { g = []; byNum.set(r.studentNumber, g); order.push(r.studentNumber) }
+      g.push(r)
+    }
+    groups = order.map((n) => byNum.get(n)!.slice().sort((a, b) => langRank(a.language) - langRank(b.language)))
+  } else {
+    groups = sorted.map((r) => [r])
+  }
+
+  const renderRow = (r: RowItem, showDemo: boolean, span: number) => {
+    const miss = <span className="muted">—</span>
+    const hasResult = r.levelCode != null
+    return (
+      <tr key={`${r.studentNumber}:${r.language ?? 'none'}`}>
+        {showDemo ? (
+          <>
+            <th className="col-task" scope="row" rowSpan={span}>
+              <Link href={`/reports/${r.studentKey}`} className="back-link">{r.name}</Link>
+            </th>
+            {showGrade ? <td className="stu" rowSpan={span}>{r.grade ?? '—'}</td> : null}
+          </>
+        ) : null}
+        <td className="stu">{langShort(r.language)}</td>
+        <td className="stu" title={r.achName ?? undefined} style={hasResult && r.tint ? { background: r.tint } : undefined}>
+          {hasResult ? <span style={{ fontWeight: 600 }}>{r.levelCode}</span> : (r.ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : miss)}
+        </td>
+        <td className="stu muted">{fmtExp(r)}</td>
+        <td className="stu">{hasResult && r.delta != null ? (r.delta > 0 ? `+${r.delta}` : String(r.delta)) : miss}</td>
+      </tr>
+    )
+  }
 
   return (
     <div className="mscroll">
       <table className="mgrid">
         <thead>
           <tr>
-            <SortHead label="Student" col="name" sort={sort} onSort={click} className="col-task" rowSpan={2} />
-            {showGrade ? <SortHead label="Grade" col="grade" sort={sort} onSort={click} rowSpan={2} /> : null}
-            <th className="stu grp-head" colSpan={3}>English</th>
-            <th className="stu grp-head grp-sep" colSpan={3}>French</th>
-          </tr>
-          <tr>
-            <SortHead label="Reading Level" col="enLevel" sort={sort} onSort={click} />
-            <SortHead label="Expected" col="enExp" sort={sort} onSort={click} />
-            <SortHead label="Diff" col="enDiff" sort={sort} onSort={click} />
-            <SortHead label="Reading Level" col="frLevel" sort={sort} onSort={click} className="stu grp-sep" />
-            <SortHead label="Expected" col="frExp" sort={sort} onSort={click} />
-            <SortHead label="Diff" col="frDiff" sort={sort} onSort={click} />
+            <SortHead label="Student" col="name" sort={sort} onSort={click} className="col-task" />
+            {showGrade ? <SortHead label="Grade" col="grade" sort={sort} onSort={click} /> : null}
+            <SortHead label="Lang" col="lang" sort={sort} onSort={click} />
+            <SortHead label="Reading Level" col="level" sort={sort} onSort={click} />
+            <SortHead label="Expected" col="expected" sort={sort} onSort={click} />
+            <SortHead label="Diff" col="diff" sort={sort} onSort={click} />
           </tr>
         </thead>
         <tbody>
-          {students.map((s) => (
-            <tr key={s.key}>
-              <th className="col-task" scope="row">
-                <Link href={`/reports/${s.key}`} className="back-link">{s.name}</Link>
-              </th>
-              {showGrade ? <td className="stu">{s.grade ?? '—'}</td> : null}
-              <LevelCell cell={s.en} ipp={s.ipp} />
-              <td className="stu muted">{fmtExpected(s.en)}</td>
-              <td className="stu">{fmtDiff(s.en)}</td>
-              <LevelCell cell={s.fr} ipp={s.ipp} sep />
-              <td className="stu muted">{fmtExpected(s.fr)}</td>
-              <td className="stu">{fmtDiff(s.fr)}</td>
-            </tr>
-          ))}
+          {groups.flatMap((g) => g.map((r, i) => renderRow(r, i === 0, g.length)))}
         </tbody>
       </table>
     </div>
