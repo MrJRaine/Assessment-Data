@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PageHeader } from '@/components/ui'
-import { LinkSpinner } from '@/components/ToggleLink'
 import type { HistoryRow, WritingHistoryRow, StudentNavItem } from '@/lib/data'
 
 type AnyHistory = HistoryRow[] | WritingHistoryRow[]
@@ -137,8 +136,8 @@ export default function StudentDetailView({
       </div>
 
       <div className="subject-toggle">
-        <Link href={`/reports/${currentKey}`} className={!isWriting ? 'toggle-on' : ''} prefetch={false}>Reading<LinkSpinner /></Link>
-        <Link href={`/reports/${currentKey}?subject=writing`} className={isWriting ? 'toggle-on' : ''} prefetch={false}>Writing<LinkSpinner /></Link>
+        <Link href={`/reports/${currentKey}`} className={!isWriting ? 'toggle-on' : ''}>Reading</Link>
+        <Link href={`/reports/${currentKey}?subject=writing`} className={isWriting ? 'toggle-on' : ''}>Writing</Link>
       </div>
 
       <div className="meta-strip">{meta.join('   ·   ')}</div>

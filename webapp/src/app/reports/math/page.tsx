@@ -1,4 +1,4 @@
-import { ToggleLink } from '@/components/ToggleLink'
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
@@ -35,10 +35,10 @@ export default async function MathReportsPage({ searchParams }: { searchParams: 
 
   const toggle = (
     <div className="subject-toggle">
-      <ToggleLink href="/reports" className="toggle">Reading</ToggleLink>
-      <ToggleLink href="/reports?subject=writing" className="toggle">Writing</ToggleLink>
-      <ToggleLink href="/reports/math" className="toggle-on">Math</ToggleLink>
-      <ToggleLink href="/reports/rwm" className="toggle">RWM</ToggleLink>
+      <Link href="/reports" className="toggle">Reading</Link>
+      <Link href="/reports?subject=writing" className="toggle">Writing</Link>
+      <Link href="/reports/math" className="toggle-on">Math</Link>
+      <Link href="/reports/rwm" className="toggle">RWM</Link>
     </div>
   )
 

@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { LinkSpinner } from '@/components/ToggleLink'
 import type { ReportCycle } from '@/lib/data'
 
 /**
@@ -28,9 +27,8 @@ export default function CycleSelector({ cycles }: { cycles: ReportCycle[] }) {
   return (
     <div className="cycle-selector">
       <span className="cycle-label">Cycle</span>
-      <Link href={hrefFor(null)} className={!current ? 'cycle-btn cycle-on' : 'cycle-btn'} title="Most recent result so far this year" prefetch={false}>
+      <Link href={hrefFor(null)} className={!current ? 'cycle-btn cycle-on' : 'cycle-btn'} title="Most recent result so far this year">
         Current
-        <LinkSpinner />
       </Link>
       {cycles.map((c) => (
         <Link
@@ -38,10 +36,8 @@ export default function CycleSelector({ cycles }: { cycles: ReportCycle[] }) {
           href={hrefFor(c.cycleGroupId)}
           className={current === c.cycleGroupId ? 'cycle-btn cycle-on' : 'cycle-btn'}
           title={`${c.startDate} – ${c.endDate}`}
-          prefetch={false}
         >
           {c.name}
-          <LinkSpinner />
         </Link>
       ))}
     </div>
