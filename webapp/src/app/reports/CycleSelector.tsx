@@ -1,7 +1,7 @@
 'use client'
 
-import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
+import { ToggleLink } from '@/components/ToggleLink'
 import type { ReportCycle } from '@/lib/data'
 
 /**
@@ -27,18 +27,18 @@ export default function CycleSelector({ cycles }: { cycles: ReportCycle[] }) {
   return (
     <div className="cycle-selector">
       <span className="cycle-label">Cycle</span>
-      <Link href={hrefFor(null)} className={!current ? 'cycle-btn cycle-on' : 'cycle-btn'} title="Most recent result so far this year">
+      <ToggleLink href={hrefFor(null)} className={!current ? 'cycle-btn cycle-on' : 'cycle-btn'} title="Most recent result so far this year">
         Current
-      </Link>
+      </ToggleLink>
       {cycles.map((c) => (
-        <Link
+        <ToggleLink
           key={c.cycleGroupId}
           href={hrefFor(c.cycleGroupId)}
           className={current === c.cycleGroupId ? 'cycle-btn cycle-on' : 'cycle-btn'}
           title={`${c.startDate} – ${c.endDate}`}
         >
           {c.name}
-        </Link>
+        </ToggleLink>
       ))}
     </div>
   )
