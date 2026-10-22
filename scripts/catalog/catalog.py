@@ -199,8 +199,18 @@ def table_columns(code, start):
 
 def routine_params(code, start, typ):
     if typ == 'function':
-        m = re.compile(r'\(([^)]*(?:\([^)]*\)[^)]*)*)\)', re.S).search(code, start)
-        seg = m.group(1) if m else ''
+        # balanced-paren scan: VARCHAR(255) inside the list must not end it
+        i = code.find('(', start)
+        depth, j = 0, i
+        while 0 <= j < len(code):
+            if code[j] == '(':
+                depth += 1
+            elif code[j] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        seg = code[i + 1:j] if i >= 0 else ''
     else:
         m = re.compile(r'\bAS\b', re.I).search(code, start)
         seg = code[start:m.start()] if m else ''

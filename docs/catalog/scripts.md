@@ -5,8 +5,10 @@
 Search here BEFORE writing a new diagnostic or fix. Reuse or extend; template it with variables if a near-duplicate exists. Kinds: diagnostic (read-only) · template (DECLARE variables) · fix/migration · seed · dev-helper. “(auto)” = classified from the SQL alone, not yet reviewed.
 
 - [DDL / object changes (auto)](#ddl--object-changes-(auto)) (25)
-- [diagnostic (auto)](#diagnostic-(auto)) (42)
-- [writes data (auto)](#writes-data-(auto)) (66)
+- [diagnostic (auto)](#diagnostic-(auto)) (39)
+- [fix/migration](#fixmigration) (2)
+- [template](#template) (3)
+- [writes data (auto)](#writes-data-(auto)) (64)
 
 ## DDL / object changes (auto)
 
@@ -18,7 +20,6 @@ RLS REMEDIATION -- scope RegionalAnalyst by StaffSchoolAccess (their CanChangeSc
 
 effect: **ddl**
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
-**Writes:** `tvf_ProgrammingGroups` (drop); `tvf_ProgrammingRoster` (drop); `tvf_StudentAdaptation` (drop); `tvf_StudentAssessmentHistory` (drop); `tvf_StudentAssessmentHistoryWriting` (drop); `tvf_StudentCohort` (drop); `tvf_StudentCohortWriting` (drop); `tvf_StudentIPP` (drop); `tvf_TeacherGroups` (drop); `tvf_TeacherRoster` (drop); `tvf_TeacherRosterMath` (drop); `tvf_TeacherRosterWriting` (drop); `tvf_UserAssessmentWindows` (drop)
 
 ### deploy_groupkey_tvfs.sql
 
@@ -28,7 +29,6 @@ Deploy all four roster/group TVFs together. Verbatim concatenation of the indivi
 
 effect: **ddl**
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
-**Writes:** `tvf_TeacherGroups` (drop); `tvf_TeacherRoster` (drop); `tvf_TeacherRosterMath` (drop); `tvf_TeacherRosterWriting` (drop)
 
 ### deploy_groupkey_tvfs_live.sql
 
@@ -38,7 +38,6 @@ The three TVFs that exist on LIVE for the URL-safe GroupKey fix (Groups + Readin
 
 effect: **ddl**
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
-**Writes:** `tvf_TeacherGroups` (drop); `tvf_TeacherRoster` (drop); `tvf_TeacherRosterWriting` (drop)
 
 ### deploy_timezone_audit.sql
 
@@ -94,7 +93,6 @@ effect: **ddl**
 Reshape DimAssessmentWindow for the new window-applicability model.
 
 effect: **ddl**
-**Writes:** `DimAssessmentWindow` (drop)
 
 ### migrate_DimSection_add_fields.sql
 
@@ -103,7 +101,6 @@ effect: **ddl**
 Add 4 fields to DimSection — SectionNumber, CourseName, EnrollmentCount, MaxEnrollment. All Type 2 SCD triggers per the updated all-business-fields-Type-2 policy on DimSection (see DimSection.sql header).
 
 effect: **ddl**
-**Writes:** `DimSection` (drop)
 
 ### migrate_DimStaff_add_AccessLevel.sql
 
@@ -119,7 +116,6 @@ effect: **ddl**
 Add Title VARCHAR(100) NULL to DimStaff. Pulled from PS Title field. Also a Type 2 SCD trigger per the all-business-fields-Type-2 policy (see DimStaff.sql header).
 
 effect: **ddl**
-**Writes:** `DimStaff` (drop)
 
 ### migrate_DimStaff_v2.sql
 
@@ -128,7 +124,6 @@ effect: **ddl**
 Change DimStaff business key from StaffID (INT) to Email (VARCHAR). Drops StaffID and StaffNumber columns; makes HomeSchoolID nullable. Run this against Assessment_Warehouse to apply the schema change.
 
 effect: **ddl**
-**Writes:** `DimStaff` (drop)
 
 ### migrate_DimStudent_add_demographics.sql
 
@@ -137,7 +132,6 @@ effect: **ddl**
 Add 6 fields to DimStudent — Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap. Gender NOT NULL, rest NULL. All are Type 2 SCD triggers per the policy in DimStudent.sql (every business-meaningful field triggers a new version on change, for report reproducibility). Pattern: DROP + CREATE (DimStudent has no data yet pre-MVP).
 
 effect: **ddl**
-**Writes:** `DimStudent` (drop)
 
 ### migrate_DimStudent_strip_current_prefix.sql
 
@@ -155,7 +149,6 @@ effect: **ddl**
 Replace StudentID (INT) with StudentNumber (BIGINT) in DimStudent. Run this against Assessment_Warehouse to apply the schema change.
 
 effect: **ddl**
-**Writes:** `DimStudent` (drop)
 
 ### migrate_FactSectionTeachers_decouple.sql
 
@@ -164,7 +157,6 @@ effect: **ddl**
 Replace surrogate-key references (SectionKey, StaffKey) with business-key references (SectionID, TeacherEmail). Decouples this bridge from DimSection / DimStaff Type 2 versioning so it doesn't churn whenever those dims version for unrelated reasons (e.g. DimSection.EnrollmentCount changes, DimStaff name correction).
 
 effect: **ddl**
-**Writes:** `FactSectionTeachers` (drop)
 
 ### migrate_MathTask_add_AnswerKeyFR_live.sql
 
@@ -174,7 +166,6 @@ Add a French answer key to the math task bank and widen the English one: - DimMa
 
 effect: **ddl**
 **Reads:** `DimMathTask`
-**Writes:** `DimMathTask` (drop); `Stg_MathTask` (drop)
 
 ### migrate_SchoolID_to_VARCHAR.sql
 
@@ -183,7 +174,6 @@ effect: **ddl**
 Bring DimStudent, DimStaff, DimSection, and StaffSchoolAccess into alignment with the updated schema: - StudentID (INT) → StudentNumber (BIGINT) business key on DimStudent - StaffID (INT) → Email (VARCHAR) business key on DimStaff - SchoolID INT → VARCHAR(10) everywhere - HomeSchoolID made nullable (for itinerant staff)
 
 effect: **ddl**
-**Writes:** `DimSection` (drop); `DimStaff` (drop); `DimStudent` (drop); `StaffSchoolAccess` (drop)
 
 ### migrate_StaffSchoolAccess_materialize.sql
 
@@ -192,7 +182,7 @@ effect: **ddl**
 Replace the dynamic vw_StaffSchoolAccess view with a materialized StaffSchoolAccess table. Rebuilt on every usp_MergeStaff run. See sql/security/StaffSchoolAccess.sql for the full rationale.
 
 effect: **ddl**
-**Writes:** `StaffSchoolAccess` (drop); `usp_MergeStaff` (drop); `vw_SchoolStudents` (drop); `vw_StaffSchoolAccess` (drop)
+**Writes:** `usp_MergeStaff` (drop); `vw_SchoolStudents` (drop); `vw_StaffSchoolAccess` (drop)
 
 ### migrate_add_LastUpdated_step1_schema.sql
 
@@ -201,7 +191,6 @@ effect: **ddl**
 Add LastUpdated DATETIME2(0) NOT NULL to 7 tables that were created before the project standard was enforced. STEP 1 OF 2 — schema only.
 
 effect: **ddl**
-**Writes:** `DimAssessmentWindow` (drop); `DimCalendar` (drop); `DimReadingScale` (drop); `FactAssessmentReading` (drop); `FactAssessmentWriting` (drop); `FactEnrollment` (drop); `FactSubmissionAudit` (drop)
 
 ### migrate_views_AssessmentWindowID_VARCHAR.sql
 
@@ -209,7 +198,6 @@ effect: **ddl**
 
 effect: **ddl**
 **Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
-**Writes:** `vw_TeacherGroups` (drop); `vw_TeacherRoster` (drop); `vw_UserAssessmentWindows` (drop)
 
 ### migrate_vw_TeacherRoster_add_AchievementContext.sql
 
@@ -219,7 +207,6 @@ scrRosterGrid needs expected level range (for display), expected min/max LevelOr
 
 effect: **ddl**
 **Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
-**Writes:** `vw_TeacherRoster` (drop)
 
 ### migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql
 
@@ -227,7 +214,6 @@ effect: **ddl**
 
 effect: **ddl**
 **Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
-**Writes:** `vw_UserAssessmentWindows` (drop)
 
 ### reconcile_scoped_tvfs_live.sql
 
@@ -237,7 +223,6 @@ effect: **ddl**
 
 effect: **ddl**
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `SectionRosterMembership`, `StaffSchoolAccess`, `TeacherRosterMembership`, `vw_StudentReadingStartingPoint`
-**Writes:** `tvf_ProgrammingGroups` (drop); `tvf_ProgrammingRoster` (drop); `tvf_StudentAdaptation` (drop); `tvf_StudentAssessmentHistory` (drop); `tvf_StudentAssessmentHistoryWriting` (drop); `tvf_StudentCohort` (drop); `tvf_StudentCohortWriting` (drop); `tvf_StudentIPP` (drop); `tvf_TeacherGroups` (drop); `tvf_TeacherRoster` (drop); `tvf_TeacherRosterMath` (drop); `tvf_TeacherRosterOwn` (drop); `tvf_TeacherRosterWriting` (drop); `tvf_UserAssessmentWindows` (drop)
 
 ## diagnostic (auto)
 
@@ -408,14 +393,6 @@ Verify that the ACTUALLY-DEPLOYED proc definitions in the warehouse carry the ex
 effect: **read-only**
 **Reads:** `sys.objects`, `sys.sql_modules`
 
-### diag_math_report_blank_roster.sql
-
-[sql/scripts/diag_math_report_blank_roster.sql](../../sql/scripts/diag_math_report_blank_roster.sql) · skeleton (not yet reviewed) · last change: 2026-09-25 db8bc45 diag: Math report blank-roster investigation (card counts vs empty matrix)
-
-effect: **read-only**
-**Variables:** `@School` = `'Carleton Consolidated Elementary School'`, `@Homeroom` = `'Doucette'`, `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@Yr` = `CASE WHEN MONTH(@Today) >= 9`
-**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimMathTask`, `DimSchool`, `DimStudent`
-
 ### diag_math_roster_dropped_students.sql
 
 [sql/scripts/diag_math_roster_dropped_students.sql](../../sql/scripts/diag_math_roster_dropped_students.sql) · skeleton (not yet reviewed) · last change: 2026-09-18 d203faf diag(math): script explaining roster students dropped by the task INNER JOIN
@@ -425,16 +402,6 @@ Explain why a Math card shows "0/4" but the roster opens with fewer students tha
 effect: **read-only**
 **Variables:** `@CycleGroupID` = `'609ba4af-8168-492e-bb55-baefbfd540d8'`, `@SectionID` = `'9000001'`
 **Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimMathTask`, `DimSection`, `DimStudent`, `FactEnrollment`
-
-### diag_math_save_landed.sql
-
-[sql/scripts/diag_math_save_landed.sql](../../sql/scripts/diag_math_save_landed.sql) · skeleton (not yet reviewed) · last change: 2026-10-09 25b5414 memory+diag: math save timeout = false failure (114 marks committed); record batching consideration
-
-When a math save shows the "Could not save right now — your marks are still on screen" backstop (one line per data point), determine whether the marks ACTUALLY committed. That message is a whole-request failure backstop (e.g. the action timing out behind IIS/ARR after 114 sequential per-mark round-trips); the per-row upserts may well have landed before the request was cut off.
-
-effect: **read-only**
-**Variables:** `@SinceUtc` = `DATEADD(DAY, -2, SYSUTCDATETIME())`, `@TeacherEmail` = `'shanna.maxwell@tcrce.ca'`, `@WindowId` = `NULL`
-**Reads:** `DimAssessmentWindow`, `DimStaff`, `FactAssessmentMath`
 
 ### diag_math_task_month_mismatch.sql
 
@@ -506,16 +473,6 @@ Diagnose the HS section under-count (Drumlin/DHCS English 10 shows ~4, should be
 effect: **read-only**
 **Variables:** `@SchoolID` = `'0981'`
 **Reads:** `DimSection`, `FactEnrollment`, `FactSectionTeachers`
-
-### diag_staff_lookup.sql
-
-[sql/scripts/diag_staff_lookup.sql](../../sql/scripts/diag_staff_lookup.sql) · skeleton (not yet reviewed) · last change: 2026-10-09 39d135d sql(diag): add reusable staff-lookup template (DimStaff + Stg_Staff, by email + last name)
-
-Read-only diagnostic TEMPLATE — look up a staff member by email and do a last-name search, in BOTH the person dimension (DimStaff, all SCD versions) and the raw ingest landing zone (Stg_Staff). Handy for "why isn't this person connected to anything when they log in?" (e.g. a mistyped PowerSchool email → DimStaff keyed the wrong UPN).
-
-effect: **read-only**
-**Variables:** `@Email` = `'<staff.email@tcrce.ca>'`, `@LastName` = `'<lastname>'`
-**Reads:** `DimStaff`, `Stg_Staff`
 
 ### diag_unresolved_enrollment_sections_live.sql
 
@@ -615,6 +572,60 @@ List which impersonable staff currently see an OPEN cycle in Data Entry, and for
 effect: **read-only**
 **Reads:** `DimStaff`
 
+## fix/migration
+
+### fix_dimstaff_stacked_markers.sql
+
+[sql/scripts/fix_dimstaff_stacked_markers.sql](../../sql/scripts/fix_dimstaff_stacked_markers.sql) · reviewed 2026-10-22 · last change: 2026-09-08 2ceb74c fix(ingest): stop usp_MergeStaff stacking duplicate DimStaff markers
+
+Remove stacked duplicate current staff rows left by same-day re-ingests.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: live 2026-09-08 (with the usp_MergeStaff 4c guard deployed first)
+**Reads:** `DimStaff`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactStaffAssignment`, `StaffSchoolAccess`
+**Writes:** `DimStaff` (delete)
+
+### set_cycle_grade_ranges_by_subject.sql
+
+[sql/scripts/set_cycle_grade_ranges_by_subject.sql](../../sql/scripts/set_cycle_grade_ranges_by_subject.sql) · reviewed 2026-10-22 · last change: 2026-10-09 0523706 math reports: units collapsed by default; regional staff default to Grade lens; Math scope P-5
+
+Reset the per-subject grade bands on every cycle window.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev + live 2026-09-04/08 (P–6 era); Math P–5 applied on 1.2.0 via the narrower live bundle step instead
+**Reads:** `DimAssessmentWindow`
+**Writes:** `DimAssessmentWindow` (update — `LastUpdated`, `MaxGrade`, `MinGrade`)
+
+## template
+
+### diag_math_report_blank_roster.sql
+
+[sql/scripts/diag_math_report_blank_roster.sql](../../sql/scripts/diag_math_report_blank_roster.sql) · reviewed 2026-10-22 · last change: 2026-09-25 db8bc45 diag: Math report blank-roster investigation (card counts vs empty matrix)
+
+Why is a class's math matrix empty when its card shows students?
+
+effect: **read-only** · target: live (counts only) · re-run safe: yes · applied: 2026-10-02 — confirmed grades 4/5 had no seeded tasks; resolved by seeding (no app fix, by decision)
+**Variables:** `@School` = `'Carleton Consolidated Elementary School'`, `@Homeroom` = `'Doucette'`, `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@Yr` = `CASE WHEN MONTH(@Today) >= 9`
+**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimMathTask`, `DimSchool`, `DimStudent`
+
+### diag_math_save_landed.sql
+
+[sql/scripts/diag_math_save_landed.sql](../../sql/scripts/diag_math_save_landed.sql) · reviewed 2026-10-22 · last change: 2026-10-09 25b5414 memory+diag: math save timeout = false failure (114 marks committed); record batching consideration
+
+Did a teacher's math marks really save, partly save, or not save?
+
+effect: **read-only** · target: live or dev (aggregate only, no student PII) · re-run safe: yes · applied: used 2026-10-09 — proved a false failure (114 marks committed); led to the parallel-save fix in 1.2.0
+**Variables:** `@SinceUtc` = `DATEADD(DAY, -2, SYSUTCDATETIME())`, `@TeacherEmail` = `'shanna.maxwell@tcrce.ca'`, `@WindowId` = `NULL`
+**Reads:** `DimAssessmentWindow`, `DimStaff`, `FactAssessmentMath`
+
+### diag_staff_lookup.sql
+
+[sql/scripts/diag_staff_lookup.sql](../../sql/scripts/diag_staff_lookup.sql) · reviewed 2026-10-22 · last change: 2026-10-09 39d135d sql(diag): add reusable staff-lookup template (DimStaff + Stg_Staff, by email + last name)
+
+Is this staff member in the warehouse, under what email/role/school, and does the latest PowerSchool staff load agree?
+
+effect: **read-only** · target: dev or live (staff name + work email are not PII) · re-run safe: yes
+**Variables:** `@Email` = `'<staff.email@tcrce.ca>'`, `@LastName` = `'<lastname>'`
+**Reads:** `DimStaff`, `Stg_Staff`
+
 ## writes data (auto)
 
 ### add_Abbreviation_to_DimSchool.sql
@@ -670,7 +681,7 @@ effect: **writes-data**
 Bring the DEV staging loaders up to the LIVE "cutover" format so dev mirrors production. Live already runs the PowerSchool sqlReport CSV loaders (comma-delimited, FIELDQUOTE, FIRSTROW=2, Students*, Staff*, Sections*, Enrollments*, Co-Teachers* filenames); dev still ran the old direct-extract TAB loaders. This replaces the five dev load procs with the CSV format, pointed at the DEV lakehouse.
 
 effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate); `usp_LoadCoTeacherStaging` (drop); `usp_LoadEnrollmentStaging` (drop); `usp_LoadSectionStaging` (drop); `usp_LoadStaffStaging` (drop); `usp_LoadStudentsStaging` (drop)
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
 
 ### deploy_dev_loaders_workspace_identity.sql
 
@@ -679,7 +690,7 @@ effect: **writes-data**
 TEST the Workspace-Identity fix for the #1119 COPY INTO OneLake token failure. Redeploys the five DEV staging loaders identically to deploy_dev_cutover_loaders.sql EXCEPT each COPY INTO now authorizes the OneLake source read with the WORKSPACE IDENTITY instead of the caller's (SP) passthrough token: CREDENTIAL = (IDENTITY = 'Workspace Identity') This decouples the source read from the SP's control-plane Fabric token, so it needs no token bootstrap and never lapses.
 
 effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate); `usp_LoadCoTeacherStaging` (drop); `usp_LoadEnrollmentStaging` (drop); `usp_LoadSectionStaging` (drop); `usp_LoadStaffStaging` (drop); `usp_LoadStudentsStaging` (drop)
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
 
 ### deploy_load_staging_procs.sql
 
@@ -688,7 +699,7 @@ effect: **writes-data**
 Strategy A loader — TRUNCATE Stg_Student and COPY INTO from the OneLake students/ folder. Decoupled from usp_MergeStudent so that the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
 
 effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate); `usp_LoadCoTeacherStaging` (drop); `usp_LoadEnrollmentStaging` (drop); `usp_LoadSectionStaging` (drop); `usp_LoadStaffStaging` (drop); `usp_LoadStudentsStaging` (drop)
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
 
 ### deploy_step14_data_quality.sql
 
@@ -697,7 +708,7 @@ effect: **writes-data**
 effect: **writes-data**
 **Variables:** `@RunTimestamp` = `GETDATE()`, `@ViolationCount`, `@CycleStart` = `GETDATE()`, `@DqViolations`
 **Reads:** `DimAssessmentWindow`, `DimGender`, `DimProgram`, `DimReadingScale`, `DimRole`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactAssessmentReading`, `FactDataQualityAudit`, `FactEnrollment`, `FactSectionTeachers`, `FactStaffAssignment`, `StaffSchoolAccess`
-**Writes:** `FactDataQualityAudit` (insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`); `usp_RunDataQualityChecks` (drop); `usp_RunFullIngestCycle` (drop)
+**Writes:** `FactDataQualityAudit` (insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
 
 ### dev_build_cycles_to_match_live_2026-10-06.sql
 
@@ -762,16 +773,6 @@ effect: **writes-data**
 **Variables:** `@Email` = `'jeffrey.raine@tcrce.ca'`, `@KeepKey`
 **Reads:** `DimSchool`, `DimStaff`, `StaffAppAccess`, `StaffSchoolAccess`
 **Writes:** `DimStaff` (update — `ActiveFlag`, `EffectiveEndDate`, `IsCurrent`, `LastUpdated`); `StaffAppAccess` (delete/insert — `CanManageCycles`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`); `StaffSchoolAccess` (delete/insert — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`)
-
-### fix_dimstaff_stacked_markers.sql
-
-[sql/scripts/fix_dimstaff_stacked_markers.sql](../../sql/scripts/fix_dimstaff_stacked_markers.sql) · skeleton (not yet reviewed) · last change: 2026-09-08 2ceb74c fix(ingest): stop usp_MergeStaff stacking duplicate DimStaff markers
-
-Collapse stacked current DimStaff rows to ONE per email, clearing the DQ "multiple IsCurrent=1 rows" (#18) and "overlapping windows" (#29) checks. Companion to the usp_MergeStaff 4c guard (2026-09-08): repeat same-day ingests after a teacher was deactivated stacked duplicate [today, NULL] deactivation markers; the proc guard stops NEW stacking, this cleans what already stacked.
-
-effect: **writes-data**
-**Reads:** `DimStaff`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactStaffAssignment`, `StaffSchoolAccess`
-**Writes:** `DimStaff` (delete)
 
 ### fix_math_cycle_months_and_task_miscoding.sql
 
@@ -937,7 +938,7 @@ effect: **writes-data**
 effect: **writes-data**
 **Variables:** `@Now` = `GETDATE()`, `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@CallerEmail` = `LOWER(CURRENT_USER)`, `@CallerStaffKey`, `@CallerAccessLevel`, `@AssessmentWindowID_BI`, `@ReadingScaleID_BI`, `@WindowStartDate`, `@WindowEndDate`, `@WindowMinGrade`, `@WindowMaxGrade`, `@WindowProgramFamily`, `@WindowScaleSystem`, `@WindowAssessmentType`, `@WindowStatus`, `@StudentKey`, `@StudentGrade`, `@StudentProgramCode`, `@StudentProgramFamily`, `@StudentGradeOrder`, `@MinGradeOrder`, `@MaxGradeOrder`, `@ScaleSystem`, `@StudentLevelOrder`, `@DominantMonth`, `@ExpectedMinLevel`, `@ExpectedMaxLevel`, `@ExpectedMinOrder`, `@ExpectedMaxOrder`, `@ReadingDelta` = `NULL`, `@AuditWarning` = `NULL`, `@ExistingAssessmentID`
 **Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimStaff`, `DimStudent`, `FactAssessmentReading`
-**Writes:** `FactAssessmentReading` (insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`); `usp_UpsertReadingAssessment` (drop); `vw_DimReadingScale` (drop)
+**Writes:** `FactAssessmentReading` (insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
 
 ### reconcile_cycle_instances.sql
 
@@ -1248,16 +1249,6 @@ effect: **writes-data**
 **Variables:** `@Now` = `GETDATE()`
 **Reads:** `DimGrade`, `DimStudent`
 **Writes:** `DimStudent` (update — `Grade`, `LastUpdated`)
-
-### set_cycle_grade_ranges_by_subject.sql
-
-[sql/scripts/set_cycle_grade_ranges_by_subject.sql](../../sql/scripts/set_cycle_grade_ranges_by_subject.sql) · skeleton (not yet reviewed) · last change: 2026-10-09 0523706 math reports: units collapsed by default; regional staff default to Grade lens; Math scope P-5
-
-Split the grade band of EXISTING assessment cycles (Short Cycles of Response rows in DimAssessmentWindow) by subject: Reading -> P .. 8 (Primary through Grade 8) Writing -> P .. RG (Primary through Returning Graduate) Math -> P .. 5 (Primary through Grade 5; grade 6 tasks not ready for 2026-27) MinGrade moves to 'P' (Primary) for all three (previously the whole-population default 'PP'/Pre-Primary).
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`
-**Writes:** `DimAssessmentWindow` (update — `LastUpdated`, `MaxGrade`, `MinGrade`)
 
 ### test_slash_homeroom_dev.sql
 

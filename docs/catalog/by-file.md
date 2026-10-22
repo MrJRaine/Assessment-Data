@@ -2,7 +2,7 @@
 
 # Catalog — by file
 
-Extracted 2026-10-22 from `e0036d7`. Scripts are in [scripts.md](scripts.md). “(auto)” = mechanically extracted, not yet verified by reading.
+Extracted 2026-10-22 from `71e2e1e`. Scripts are in [scripts.md](scripts.md). “(auto)” = mechanically extracted, not yet verified by reading.
 
 - [Tables (dimensions & facts)](#tables-(dimensions-&-facts)) (31)
 - [Staging tables](#staging-tables) (13)
@@ -310,8 +310,6 @@ DENORMALIZED prior-year (2025-2026) end-of-June reading + writing baseline, so t
 
 **Defines:** table `PriorYearBaseline`
 **Grants:** SELECT on `PriorYearBaseline` → StudentDataAssessment
-**Writes:**
-- `PriorYearBaseline` — drop
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
 
 ## Staging tables
@@ -349,9 +347,6 @@ All-VARCHAR landing table for the math task-bank seed CSV (one file per grade, a
 All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the ELA/FLA Reading & Writing workbooks). Columns are in the CSV column order so COPY INTO maps positionally. AssessmentLanguage is the last column, left out of COPY INTO and set by an UPDATE after each program's file loads (the file has no program column — it's implied by the sheet).
 
 **Defines:** table `Stg_PriorReading`, table `Stg_PriorWriting`
-**Writes:**
-- `Stg_PriorReading` — drop
-- `Stg_PriorWriting` — drop
 
 ### sql/staging/Stg_Section.sql
 
@@ -458,8 +453,6 @@ Pre-joins the expensive, ingest-STABLE half of the entry roster — which studen
 
 **Defines:** table `SectionRosterMembership`
 **Grants:** SELECT on `SectionRosterMembership` → StudentDataAssessment
-**Writes:**
-- `SectionRosterMembership` — drop
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`
 
 ### sql/security/StaffAppAccess.sql
@@ -489,8 +482,6 @@ The Taught-scope projection of SectionRosterMembership — one row per (TeacherE
 
 **Defines:** table `TeacherRosterMembership`
 **Grants:** SELECT on `TeacherRosterMembership` → StudentDataAssessment
-**Writes:**
-- `TeacherRosterMembership` — drop
 **Used on routes (auto):** `/ingest`
 
 ## Stored procedures (usp_*)
@@ -509,7 +500,6 @@ Cancel a scheduled window / post "all clear" after a swap — sets the single Ap
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
 - `AppMaintenance` — update — `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
-- `usp_ClearMaintenanceWindow` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51040 “usp_ClearMaintenanceWindow: caller is not a sysadmin.” (line 25)
@@ -533,7 +523,6 @@ Power Apps wrapper for removing a single reading assessment row. Called from `sc
 **Writes:**
 - `FactAssessmentReading` — delete
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_DeleteReadingAssessment` — drop
 **Errors raised (auto):**
 - 51010 “usp_DeleteReadingAssessment: @StudentNumber and @AssessmentWindowID are both required.” (line 79)
 - 51030 “usp_DeleteReadingAssessment: caller does not resolve to a current DimStaff row.” (line 96)
@@ -554,7 +543,6 @@ Create monthly assessment-window bins for a school year. The model (2026-06-25) 
 **Writes:**
 - `DimAssessmentWindow` — insert — `ActiveFlag`, `AssessmentType`, `CreatedBy`, `CreatedDate`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_GenerateMonthlyWindows` — drop
 
 ### sql/procedures/usp_InsertSubmissionAudit.sql
 
@@ -566,7 +554,6 @@ Power Apps writeable wrapper for inserting one row into FactSubmissionAudit. Byp
 **Parameters (usp_InsertSubmissionAudit):** `@RecordType VARCHAR(50)`, `@Source VARCHAR(50)`, `@SubmittedBy VARCHAR(255)`, `@Status VARCHAR(50)`, `@Message VARCHAR(MAX)`, `@RecordCount INT`
 **Writes:**
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_InsertSubmissionAudit` — drop
 **Errors raised (auto):**
 - 51010 “usp_InsertSubmissionAudit: @RecordType, @Source, @SubmittedBy, and @Status are required (no NULLs).” (line 92)
 - 51011 “usp_InsertSubmissionAudit: @RecordType must be one of ReadingAssessment, WritingAssessment, CSVImport, Test, DataQualityCheck.” (line 99)
@@ -583,7 +570,6 @@ Strategy A loader — TRUNCATE Stg_CoTeacher and COPY INTO from the OneLake sect
 **Defines:** procedure `usp_LoadCoTeacherStaging`
 **Writes:**
 - `Stg_CoTeacher` — copy-into/truncate
-- `usp_LoadCoTeacherStaging` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_LoadEnrollmentStaging.sql
@@ -595,7 +581,6 @@ Strategy A loader — TRUNCATE Stg_Enrollment and COPY INTO from the OneLake enr
 **Defines:** procedure `usp_LoadEnrollmentStaging`
 **Writes:**
 - `Stg_Enrollment` — copy-into/truncate
-- `usp_LoadEnrollmentStaging` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_LoadMathTasks.sql
@@ -612,7 +597,6 @@ Seed / refresh DimMathTask from a grade-level task CSV (authored to mirror the t
 **Writes:**
 - `DimMathTask` — insert/update — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `LastUpdated`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
 - `Stg_MathTask` — truncate
-- `usp_LoadMathTasks` — drop
 
 ### sql/procedures/usp_LoadSectionStaging.sql
 
@@ -623,7 +607,6 @@ Strategy A loader — TRUNCATE Stg_Section and COPY INTO from the OneLake sectio
 **Defines:** procedure `usp_LoadSectionStaging`
 **Writes:**
 - `Stg_Section` — copy-into/truncate
-- `usp_LoadSectionStaging` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_LoadStaffStaging.sql
@@ -635,7 +618,6 @@ Strategy A loader — TRUNCATE Stg_Staff and COPY INTO from the OneLake staff/ f
 **Defines:** procedure `usp_LoadStaffStaging`
 **Writes:**
 - `Stg_Staff` — copy-into/truncate
-- `usp_LoadStaffStaging` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_LoadStudentsStaging.sql
@@ -647,7 +629,6 @@ Strategy A loader — TRUNCATE Stg_Student and COPY INTO from the OneLake studen
 **Defines:** procedure `usp_LoadStudentsStaging`
 **Writes:**
 - `Stg_Student` — copy-into/truncate
-- `usp_LoadStudentsStaging` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_MergeEnrollment.sql
@@ -669,7 +650,6 @@ Type 1 reconciliation from Stg_Enrollment into FactEnrollment. FactEnrollment is
 - `FactEnrollment` — insert/update — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `Wrk_Enrollment` — insert/truncate — `ActiveFlag`, `EndDate`, `SectionID`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`, `StudentNumber`
-- `usp_MergeEnrollment` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_MergeSection.sql
@@ -689,7 +669,6 @@ SCD Type 2 reconciliation from Stg_Section into DimSection. All 8 business attri
 - `DimSection` — insert/update — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `LastUpdated`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `Wrk_Section` — insert/truncate — `CourseCode`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherEmail`, `TeacherStaffKey`, `TermID`
-- `usp_MergeSection` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_MergeSectionTeachers.sql
@@ -711,7 +690,6 @@ Type 2 reconciliation into FactSectionTeachers from the UNION of Stg_Section (pr
 - `FactSectionTeachers` — insert/update — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `Wrk_SectionTeacher` — insert/truncate — `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
-- `usp_MergeSectionTeachers` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_MergeStaff.sql
@@ -738,7 +716,6 @@ SCD Type 2 reconciliation for BOTH DimStaff (person-grain) and FactStaffAssignme
 - `StaffSchoolAccess` — insert/truncate — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`
 - `Wrk_StaffAssignment` — insert/truncate — `Email`, `RoleCode`, `SchoolID`, `SourceSystemID`
 - `Wrk_StaffPersons` — insert/truncate — `AccessLevel`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `IsDistrictLevel`, `LastName`, `Title`
-- `usp_MergeStaff` — drop
 **Calls functions:** `STRING_SPLIT`
 **Used on routes (auto):** `/ingest`
 
@@ -765,7 +742,6 @@ SCD Type 2 reconciliation from Stg_Student into DimStudent. All 14 business attr
 - `FactStudentIPP` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `Wrk_Student` — insert/truncate — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
-- `usp_MergeStudent` — drop
 **Used on routes (auto):** `/ingest`
 
 ### sql/procedures/usp_RebuildRosterMembership.sql
@@ -790,7 +766,6 @@ Rebuild the materialized roster skeleton — SectionRosterMembership (base, sour
 **Writes:**
 - `SectionRosterMembership` — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionKey`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
 - `TeacherRosterMembership` — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `TeacherEmail`
-- `usp_RebuildRosterMembership` — drop
 **Executes:** `ON`
 **Used on routes (auto):** `/ingest`
 
@@ -821,7 +796,6 @@ Comprehensive data quality validation for Assessment_Warehouse. Runs 52 checks a
 - `StaffSchoolAccess` — `Email`, `SchoolID`, `StaffKey`, `StaffSchoolAccessID`
 **Writes:**
 - `FactDataQualityAudit` — insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`
-- `usp_RunDataQualityChecks` — drop
 
 ### sql/procedures/usp_RunFullIngestCycle.sql
 
@@ -841,7 +815,6 @@ Production orchestrator — runs all five load procs and all five merge procs in
 **Writes:**
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `IngestRunLog` — insert — `CallerUPN`, `CycleStart`, `LastUpdated`, `LoggedAt`, `Message`, `Phase`, `RowsLoaded`, `Source`, `Status`, `Topic`
-- `usp_RunFullIngestCycle` — drop
 **Executes:** `usp_LoadCoTeacherStaging`, `usp_LoadEnrollmentStaging`, `usp_LoadSectionStaging`, `usp_LoadStaffStaging`, `usp_LoadStudentsStaging`, `usp_MergeEnrollment`, `usp_MergeSection`, `usp_MergeSectionTeachers`, `usp_MergeStaff`, `usp_MergeStudent`, `usp_RebuildRosterMembership`
 **Errors raised (auto):**
 - 51000 “usp_RunFullIngestCycle halted: data quality checks failed. See FactDataQualityAudit for details.” (line 173)
@@ -862,7 +835,6 @@ Schedule (or reschedule) the app maintenance window — the moment T the contain
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
 - `AppMaintenance` — insert/update — `Id`, `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
-- `usp_SetMaintenanceWindow` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51040 “usp_SetMaintenanceWindow: caller is not a sysadmin.” (line 33)
@@ -884,7 +856,6 @@ The SOLE writer of StaffAppAccess — upserts one staff email's five app-capabil
 **Writes:**
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
 - `StaffAppAccess` — delete/insert/update — `CanManageCycles`, `CanOverrideLiteracy`, `CanOverrideMath`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`
-- `usp_SetStaffAppAccess` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51010 “usp_SetStaffAppAccess: @TargetEmail and all five capability flags are required.” (line 49)
@@ -904,8 +875,6 @@ Web-app/Power Apps wrapper for the Ingest screen. Validates that the caller has 
 **Grants:** EXECUTE on `usp_TriggerIngestCycle` → StudentDataAssessment
 **Reads:**
 - `StaffAppAccess` — *(columns not resolved — see file)*
-**Writes:**
-- `usp_TriggerIngestCycle` — drop
 **Executes:** `ON`, `usp_RunFullIngestCycle`
 **Errors raised (auto):**
 - 51033 “usp_TriggerIngestCycle: you do not have permission to run an ingest cycle (StaffAppAccess CanRunIngest or IsSysAdmin required).” (line 73)
@@ -934,7 +903,6 @@ Web-app wrapper for entering / correcting a single MATH task result (can-do 1 / 
 **Writes:**
 - `FactAssessmentMath` — delete/insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `MathTaskKey`, `Result`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_UpsertMathAssessment` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51010 “usp_UpsertMathAssessment: @StudentNumber, @AssessmentWindowID, @MathTaskKey and @AssessmentDate are required (no NULLs).” (line 88)
@@ -976,7 +944,6 @@ Power Apps wrapper for entering or correcting a single reading assessment. Calle
 **Writes:**
 - `FactAssessmentReading` — insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LastUpdated`, `LevelCode`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_UpsertReadingAssessment` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51010 “usp_UpsertReadingAssessment: @StudentNumber, @AssessmentWindowID, @ReadingScaleID, and @AssessmentDate are all required (no NULLs).” (line 167)
@@ -1008,7 +975,6 @@ Create or edit a "Short Cycle of Response" — a manually-defined, REGION-WIDE a
 - `DimGrade` — *(columns not resolved — see file)*
 **Writes:**
 - `DimAssessmentWindow` — insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
-- `usp_UpsertShortCycle` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51030 “usp_UpsertShortCycle: @AssessmentType must be Reading, Writing, or Math.” (line 68)
@@ -1036,7 +1002,6 @@ Create or edit a Short Cycle of Response HEADER (DimShortCycle) -- the display n
 **Writes:**
 - `DimAssessmentWindow` — update — `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`, `WindowName`
 - `DimShortCycle` — insert/update — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `GraceHours`, `LastUpdated`, `SchoolYear`, `StartDate`
-- `usp_UpsertShortCycleHeader` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51040 “usp_UpsertShortCycleHeader: @CycleGroupID is required.” (line 38)
@@ -1060,7 +1025,6 @@ Web-app wrapper for setting (or flipping) a student's ADAPTATION status for a sp
 **Writes:**
 - `FactStudentAdaptation` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_UpsertStudentAdaptation` — drop
 **Errors raised (auto):**
 - 51010 “usp_UpsertStudentAdaptation: @StudentKey, @Subject, @ProgramFamily, and @HasAdaptation are all required.” (line 70)
 - 51012 “usp_UpsertStudentAdaptation: @Subject must be 'Reading', 'Writing', or 'Math'.” (line 78)
@@ -1086,7 +1050,6 @@ Power Apps wrapper for setting (or flipping) a student's IPP status for a specif
 **Writes:**
 - `FactStudentIPP` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_UpsertStudentIPP` — drop
 **Errors raised (auto):**
 - 51010 “usp_UpsertStudentIPP: @StudentKey, @Subject, @ProgramFamily, and @IsIPP are all required.” (line 92)
 - 51012 “usp_UpsertStudentIPP: @Subject must be 'Reading', 'Writing', or 'Math'.” (line 104)
@@ -1119,7 +1082,6 @@ Web-app / Power Apps wrapper for entering or correcting a single writing assessm
 **Writes:**
 - `FactAssessmentWriting` — insert/update — `AssessmentDate`, `AssessmentLanguage`, `AssessmentWindowID`, `ConventionsScore`, `EnteredByStaffKey`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`, `WritingAverage`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_UpsertWritingAssessment` — drop
 **Executes:** `ON`
 **Errors raised (auto):**
 - 51010 “usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, and @AssessmentDate are required.” (line 103)
@@ -1157,19 +1119,18 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactEnrollment` — update — `ActiveFlag`, `EndDate`, `LastUpdated`
 - `FactSectionTeachers` — update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `usp_YearEndCloseOut` — drop
 
 ## Table-valued functions (tvf_*)
 
 ### sql/security/tvf_MathCohortGroups.sql
 
-[sql/security/tvf_MathCohortGroups.sql](../../sql/security/tvf_MathCohortGroups.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_MathCohortGroups.sql](../../sql/security/tvf_MathCohortGroups.sql) · **function** · reviewed 2026-10-22
 
-@UPN choose-a-group resolution for the Reports > Math cohort (0.7.0, item 4). The math cohort matrix is group-scoped (a whole school/region is unusable), so the caller first picks a HOMEROOM or a GRADE cohort; this returns those groups. Same shape as tvf_TeacherGroups / tvf_ProgrammingGroups so the existing GroupCards renders it. Over ALL current P-6 students (math is P-6) — NOT flagged-only like Programming.
+Card-picker groups for Reports → Math (teachers): Homeroom and Grade cohorts over current Primary–5 students, tagged Taught (the caller's own sections) or Oversight (school-wide). Same row shape as tvf_TeacherGroups so GroupCards renders it; no entered counts (reports picker).
 
 **Defines:** function `tvf_MathCohortGroups`
-**Parameters (tvf_MathCohortGroups):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_MathCohortGroups):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser)
+**Access / row scope:** Taught = students in sections the caller currently teaches (any role). Oversight = Administrator / SpecialistTeacher / RegionalAnalyst → students in their StaffSchoolAccess schools. Grades P–5 only.
 **Grants:** SELECT on `tvf_MathCohortGroups` → StudentDataAssessment
 **Reads:**
 - `DimGrade` — `GradeCode`, `GradeOrder`
@@ -1180,19 +1141,18 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactEnrollment` — `ActiveFlag`, `SectionKey`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `tvf_MathCohortGroups` — drop
-**Used on routes (auto):** `/reports/math`
+**Used in the app:**
+- `/reports/math` — a TEACHER opens Reports → Math (oversight roles get the roll-up tree instead and never call this); a single group auto-redirects to it
 
 ### sql/security/tvf_ProgrammingGroups.sql
 
-[sql/security/tvf_ProgrammingGroups.sql](../../sql/security/tvf_ProgrammingGroups.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_ProgrammingGroups.sql](../../sql/security/tvf_ProgrammingGroups.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized choose-a-group resolution for the Programming section (IPP + Adaptations). Window-LESS sibling of tvf_TeacherGroups: Programming is student-level (IPP/Adaptation status), not tied to an assessment window, so there is no window param, no benchmark/grade-band filter, and roster reconciliation is CURRENT-only (IsCurrent / ActiveFlag). Same two SCOPES and three lenses as tvf_TeacherGroups: 'Taught' — the caller's OWN taught homerooms (PP-9) / sections (10+), via FactSectionTeachers, ANY AccessLevel (dual-role fix). 'Oversight' — above-teacher (Administrator/SpecialistTeacher = t
+Choose-a-group for Programming (IPP + Adaptations). Window-less sibling of tvf_TeacherGroups: groups of FLAGGED students (those with an IPP or Adaptation row), Taught and Oversight scopes, Homeroom / Section / Grade lenses.
 
 **Defines:** function `tvf_ProgrammingGroups`
-**Parameters (tvf_ProgrammingGroups):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_ProgrammingGroups):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser)
+**Access / row scope:** Taught = flagged students in the caller's own current sections (any role). Oversight = Administrator / SpecialistTeacher / RegionalAnalyst → flagged students in their StaffSchoolAccess schools (whole-school Programming is intended for specialists — 2026-10-13).
 **Grants:** SELECT on `tvf_ProgrammingGroups` → StudentDataAssessment
 **Reads:**
 - `DimGrade` — `GradeCode`, `GradeOrder`
@@ -1205,19 +1165,18 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactStudentAdaptation` — `IsCurrent`, `StudentAdaptationID`, `StudentKey`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `StudentIPPID`, `StudentKey`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `tvf_ProgrammingGroups` — drop
-**Used on routes (auto):** `/programming`
+**Used in the app:**
+- `/programming` — landing page group cards
 
 ### sql/security/tvf_ProgrammingRoster.sql
 
-[sql/security/tvf_ProgrammingRoster.sql](../../sql/security/tvf_ProgrammingRoster.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_ProgrammingRoster.sql](../../sql/security/tvf_ProgrammingRoster.sql) · **function** · reviewed 2026-10-22
 
-@UPN + @GroupKey roster for the Programming section. Returns the flagged students of ONE group (from tvf_ProgrammingGroups) with their per-subject, per-program-family IPP + Adaptation status combined — ONE row per (Student, Subject, ProgramFamily) that exists in EITHER fact, carrying both IsIPP (NULL = unconfirmed gate / no IPP row) and HasAdaptation (NULL = unresolved / no adaptation row). The client pivots these into the two collapsed rosters (IPP and Adaptations), student rows x Reading|Writing| Math columns; an FI grade-3+ literacy student appears with BOTH an 'English' and a 'French Immer
+One Programming group's flagged students with combined IPP + Adaptation status: one row per (Student, Subject, ProgramFamily) present in either fact, carrying IsIPP and the adaptation flag.
 
 **Defines:** function `tvf_ProgrammingRoster`
-**Parameters (tvf_ProgrammingRoster):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_ProgrammingRoster):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@GroupKey VARCHAR(70)` — group from tvf_ProgrammingGroups — homeroom GroupKey, SEC:<SectionID> or GRADE:<SchoolID>:<Grade>
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. (Same rule gives specialists whole-school Programming ENTRY.)
 **Grants:** SELECT on `tvf_ProgrammingRoster` → StudentDataAssessment
 **Reads:**
 - `DimProgram` — `ProgramCode`, `ProgramFamily`
@@ -1229,19 +1188,19 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactStudentAdaptation` — `HasAdaptation`, `IsCurrent`, `ProgramFamily`, `StudentAdaptationID`, `StudentKey`, `Subject`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_ProgrammingRoster` — drop
-**Used on routes (auto):** `/programming/[groupKey]`
+**Used in the app:**
+- `/programming/[groupKey]` — opening a group (the IPP ⟷ Adaptations grid)
+- `/programming/[groupKey]` — Save — saveProgramming re-reads this roster and only updates rows present in it (scope + existence gate)
 
 ### sql/security/tvf_StudentAdaptation.sql
 
-[sql/security/tvf_StudentAdaptation.sql](../../sql/security/tvf_StudentAdaptation.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentAdaptation.sql](../../sql/security/tvf_StudentAdaptation.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized per-student ADAPTATION status for the web app's Programming > Adaptations roster. Structural mirror of tvf_StudentIPP, reading FactStudentAdaptation instead of FactStudentIPP. One row per (Student, Subject, ProgramFamily) with a current FactStudentAdaptation row, in the signed-in user's scope. Same OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher), with CURRENT_USER -> LOWER(@UPN) since the SP can't use CURRENT_USER RLS.
+Per-student ADAPTATION status — one row per (Student, Subject, ProgramFamily) with a current FactStudentAdaptation row. Structural mirror of tvf_StudentIPP.
 
 **Defines:** function `tvf_StudentAdaptation`
-**Parameters (tvf_StudentAdaptation):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentAdaptation):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentAdaptation` → StudentDataAssessment
 **Reads:**
 - `DimProgram` — `ProgramCode`, `ProgramFamily`
@@ -1251,19 +1210,18 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentAdaptation` — `HasAdaptation`, `IsCurrent`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentAdaptation` — drop
-**Used on routes (auto):** `/programming`
+**Used in the app:**
+- `/programming` — getProgrammingSummary — the landing page's adaptation counts
 
 ### sql/security/tvf_StudentAssessmentHistory.sql
 
-[sql/security/tvf_StudentAssessmentHistory.sql](../../sql/security/tvf_StudentAssessmentHistory.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentAssessmentHistory.sql](../../sql/security/tvf_StudentAssessmentHistory.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized equivalent of vw_StudentAssessmentHistory for the web app (Phase 3b). One row per (student, completed reading assessment) for students in the signed-in user's scope. Powers the per-student detail timeline + trend line.
+One student's reading history — one row per completed reading result — for the student-detail timeline and trend line.
 
 **Defines:** function `tvf_StudentAssessmentHistory`
-**Parameters (tvf_StudentAssessmentHistory):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentAssessmentHistory):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@StudentKey VARCHAR(20)` — the student (surrogate key as VARCHAR(20) — BIGINT precision)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. A key outside scope returns no rows.
 **Grants:** SELECT on `tvf_StudentAssessmentHistory` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
@@ -1280,19 +1238,19 @@ Scheduled close-out for a completed school year. Closes any rows that are still 
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
 - `vw_StudentReadingStartingPoint` — `ScaleSystem`, `StartingLevelCode`, `StartingLevelOrder`, `StudentNumber`
-**Writes:**
-- `tvf_StudentAssessmentHistory` — drop
-**Used on routes (auto):** `/reports/[studentKey]`
+**Used in the app:**
+- `/reports/[studentKey]` — opening a student (Reading tab)
+- `/reports/[studentKey]` — loadStudentHistory action — prev/next neighbour prefetch
 
 ### sql/security/tvf_StudentAssessmentHistoryWriting.sql
 
-[sql/security/tvf_StudentAssessmentHistoryWriting.sql](../../sql/security/tvf_StudentAssessmentHistoryWriting.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentAssessmentHistoryWriting.sql](../../sql/security/tvf_StudentAssessmentHistoryWriting.sql) · **function** · reviewed 2026-10-22
 
-Writing counterpart of tvf_StudentAssessmentHistory. One row per (student, writing assessment) for students in the signed-in user's scope -- the four trait scores, their average, and the achievement band that average falls in. Powers the per-student detail timeline / trend line on the Writing tab. Optional @StudentKey scopes to one.
+Writing counterpart of tvf_StudentAssessmentHistory: one row per writing result with the four trait scores, their average (allow-list '1'–'4'; '-' excluded / SCR dropped) and the band.
 
 **Defines:** function `tvf_StudentAssessmentHistoryWriting`
-**Parameters (tvf_StudentAssessmentHistoryWriting):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentAssessmentHistoryWriting):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@StudentKey VARCHAR(20)` — the student (VARCHAR(20) surrogate key)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentAssessmentHistoryWriting` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`
@@ -1305,19 +1263,19 @@ Writing counterpart of tvf_StudentAssessmentHistory. One row per (student, writi
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentAssessmentHistoryWriting` — drop
-**Used on routes (auto):** `/reports/[studentKey]`
+**Used in the app:**
+- `/reports/[studentKey]` — student detail, Writing tab
+- `/reports/[studentKey]` — loadStudentHistoryWriting action — neighbour prefetch
 
 ### sql/security/tvf_StudentCohort.sql
 
-[sql/security/tvf_StudentCohort.sql](../../sql/security/tvf_StudentCohort.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentCohort.sql](../../sql/security/tvf_StudentCohort.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized equivalent of vw_StudentCohort for the web app (Phase 3b). The app connects as the StudentDataAssessment service principal, so CURRENT_USER is the SP, not the teacher -- the caller-scoped view returns nothing. This iTVF takes the signed-in UPN and runs the SAME OR-across-EXISTS role branches (RegionalAnalyst
+Reports → Reading cohort table: one row per in-scope student with their latest reading level, delta, achievement band and Reading-IPP gate.
 
 **Defines:** function `tvf_StudentCohort`
-**Parameters (tvf_StudentCohort):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentCohort):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@CycleGroupID VARCHAR(36)` — DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = "Current" (latest result so far this school year / lifetime)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentCohort` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
@@ -1336,19 +1294,18 @@ Writing counterpart of tvf_StudentAssessmentHistory. One row per (student, writi
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
 - `vw_StudentReadingStartingPoint` — `ScaleSystem`, `StartingLevelCode`, `StudentNumber`
-**Writes:**
-- `tvf_StudentCohort` — drop
-**Used on routes (auto):** `/reports`
+**Used in the app:**
+- `/reports` — Reports, Reading tab (and every cycle-selector change)
 
 ### sql/security/tvf_StudentCohortMath.sql
 
-[sql/security/tvf_StudentCohortMath.sql](../../sql/security/tvf_StudentCohortMath.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentCohortMath.sql](../../sql/security/tvf_StudentCohortMath.sql) · **function** · reviewed 2026-10-22
 
-READ-ONLY math cohort matrix for the Reports > Math view (0.7.0, item 4). One row per (student x applicable task) for ONE group (homeroom / grade / section) across ALL of the CURRENT school year's math cycles, carrying the student's LATEST recorded result for that task. The client pivots these into the read-only matrix (styled like the data-entry grid), groups tasks by unit, and rolls up class % / per-student averages for the colour-coding + charts.
+One group's math matrix: one row per (student × their grade's task) with the LATEST result across the selected math windows, plus Math-IPP status. Students are keyed by StudentNumber in the fact.
 
 **Defines:** function `tvf_StudentCohortMath`
-**Parameters (tvf_StudentCohortMath):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentCohortMath):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@GroupKey VARCHAR(70)` — 'GRADE:<SchoolID>:<Grade>', 'SEC:<SectionID>' or a homeroom DimStudent.GroupKey, `@CycleGroupID VARCHAR(36)` — DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = "Current" (latest result so far this school year / lifetime)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. Grades P–5 only. Grades with no configured tasks return no rows (INNER JOIN to tasks).
 **Grants:** SELECT on `tvf_StudentCohortMath` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentType`, `AssessmentWindowID`, `BenchmarkMonth`, `CycleGroupID`, `EndDate`, `SchoolYear`, `StartDate`
@@ -1364,19 +1321,19 @@ READ-ONLY math cohort matrix for the Reports > Math view (0.7.0, item 4). One ro
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentCohortMath` — drop
-**Used on routes (auto):** `/reports/math`, `/reports/math/[groupKey]`
+**Used in the app:**
+- `/reports/math/[groupKey]` — the full class view (charts, tasks down/students down)
+- `/reports/math` — loadMathGroup action — expanding a Grade/Homeroom row in the oversight tree
 
 ### sql/security/tvf_StudentCohortMathAll.sql
 
-[sql/security/tvf_StudentCohortMathAll.sql](../../sql/security/tvf_StudentCohortMathAll.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentCohortMathAll.sql](../../sql/security/tvf_StudentCohortMathAll.sql) · **function** · reviewed 2026-10-22
 
-READ-ONLY feed for the Reports > Math OVERSIGHT roll-up tree (math-reports #2, Phase 1, 1.2.0). One row per (student x unit) for EVERY P-5 student in the caller's oversight scope, carrying COUNTS only — the unit's task count, how many of those tasks have a latest result, and how many of those are 1 (can do). The client turns the counts into each student's unit / overall Achievement Level and rolls them up School -> Grade|Homeroom (% Meeting-or-In-depth). Task-level detail is NOT here: expanding a grade/homeroom loads that one group's matrix through tvf_StudentCohortMath (same scope gate), so t
+Feed for the oversight roll-up tree: one row per (student × unit) for every P–5 student in scope, COUNTS only (TaskCount, ScoredCount, CanDoCount) — no names. A grade with no tasks returns one NULL-unit row per student so the tree shows them as No data.
 
 **Defines:** function `tvf_StudentCohortMathAll`
-**Parameters (tvf_StudentCohortMathAll):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess
+**Parameters (tvf_StudentCohortMathAll):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@CycleGroupID VARCHAR(36)` — DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = "Current" (latest result so far this school year / lifetime)
+**Access / row scope:** OVERSIGHT ONLY: students in schools where the caller has a StaffSchoolAccess row with AccessLevel Administrator / SpecialistTeacher / RegionalAnalyst. A plain teacher gets no rows.
 **Grants:** SELECT on `tvf_StudentCohortMathAll` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentType`, `AssessmentWindowID`, `BenchmarkMonth`, `CycleGroupID`, `EndDate`, `SchoolYear`, `StartDate`
@@ -1388,19 +1345,18 @@ READ-ONLY feed for the Reports > Math OVERSIGHT roll-up tree (math-reports #2, P
 - `FactAssessmentMath` — `AssessmentDate`, `AssessmentWindowID`, `MathAssessmentID`, `MathTaskKey`, `Result`, `StudentNumber`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentCohortMathAll` — drop
-**Used on routes (auto):** `/reports/math`
+**Used in the app:**
+- `/reports/math` — an oversight role opens Reports → Math (tree first load, and on cycle change)
 
 ### sql/security/tvf_StudentCohortRWM.sql
 
-[sql/security/tvf_StudentCohortRWM.sql](../../sql/security/tvf_StudentCohortRWM.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentCohortRWM.sql](../../sql/security/tvf_StudentCohortRWM.sql) · **function** · reviewed 2026-10-22
 
-READ-ONLY Reading·Writing·Math achievement roll-up for Reports > RWM (0.7.0, item 5). One row per in-scope Primary-6 student with a 0-3 score: how many of {Reading, Writing, Math} the student is CURRENTLY meeting or exceeding (their most-recent result in each area).
+Reading·Writing·Math roll-up: one row per in-scope P–5 student with a 0–3 score — how many of the three areas they are currently Meeting or above (plus per-area codes and has-evidence flags).
 
 **Defines:** function `tvf_StudentCohortRWM`
-**Parameters (tvf_StudentCohortRWM):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentCohortRWM):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@CycleGroupID VARCHAR(36)` — DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = "Current" (latest result so far this school year / lifetime)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. EXCLUDES any student with a confirmed IPP (IsIPP = 1) in Reading, Writing or Math.
 **Grants:** SELECT on `tvf_StudentCohortRWM` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `ActiveFlag`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
@@ -1419,19 +1375,19 @@ READ-ONLY Reading·Writing·Math achievement roll-up for Reports > RWM (0.7.0, i
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentCohortRWM` — drop
-**Used on routes (auto):** `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Used in the app:**
+- `/reports/rwm` — Reports → RWM cohort
+- `/reports/rwm/[studentKey]` — the student's header row on the RWM individual page
 
 ### sql/security/tvf_StudentCohortWriting.sql
 
-[sql/security/tvf_StudentCohortWriting.sql](../../sql/security/tvf_StudentCohortWriting.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentCohortWriting.sql](../../sql/security/tvf_StudentCohortWriting.sql) · **function** · reviewed 2026-10-22
 
-Writing counterpart of tvf_StudentCohort for the web app's cohort screen (Reading|Writing toggle). One row per student in the signed-in user's scope + their MOST-RECENT writing evidence: the four trait scores (Ideas/Organization/Language/Conventions), their average, and the achievement band that average falls in. Plus the Writing-IPP gate.
+Reports → Writing cohort table: one row per in-scope student with their latest writing result (four traits, average, band).
 
 **Defines:** function `tvf_StudentCohortWriting`
-**Parameters (tvf_StudentCohortWriting):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentCohortWriting):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@CycleGroupID VARCHAR(36)` — DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = "Current" (latest result so far this school year / lifetime)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentCohortWriting` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`
@@ -1446,19 +1402,18 @@ Writing counterpart of tvf_StudentCohort for the web app's cohort screen (Readin
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentCohortWriting` — drop
-**Used on routes (auto):** `/reports`
+**Used in the app:**
+- `/reports` — Reports, Writing tab (?subject=writing)
 
 ### sql/security/tvf_StudentIPP.sql
 
-[sql/security/tvf_StudentIPP.sql](../../sql/security/tvf_StudentIPP.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentIPP.sql](../../sql/security/tvf_StudentIPP.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized equivalent of vw_StudentIPP for the web app (Phase 3b) -- the bulk IPP-management screen (/ipp, mirrors the Power App scrIPP). One row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row, in the signed-in user's scope. The SP can't use CURRENT_USER RLS, so this runs the SAME OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher) with CURRENT_USER -> LOWER(@UPN).
+Per-student IPP status — one row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row.
 
 **Defines:** function `tvf_StudentIPP`
-**Parameters (tvf_StudentIPP):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentIPP):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentIPP` → StudentDataAssessment
 **Reads:**
 - `DimProgram` — `ProgramCode`, `ProgramFamily`
@@ -1468,19 +1423,19 @@ Writing counterpart of tvf_StudentCohort for the web app's cohort screen (Readin
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentIPP` — drop
-**Used on routes (auto):** `/programming`
+**Used in the app:**
+- `/programming` — getProgrammingSummary — the landing page's IPP counts
+**Caveats:** data.ts also has getStudentIPPList over this TVF, but nothing calls it (dead code, 2026-10-22).
 
 ### sql/security/tvf_StudentRWMHistory.sql
 
-[sql/security/tvf_StudentRWMHistory.sql](../../sql/security/tvf_StudentRWMHistory.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_StudentRWMHistory.sql](../../sql/security/tvf_StudentRWMHistory.sql) · **function** · reviewed 2026-10-22
 
-Per-cycle RWM trend for the Reports > RWM individual page (0.7.0, item 5). One row per monthly SCoR cycle in the current school year, carrying the student's AS-OF standing in each area (most-recent result up to the end of that month) and the resulting 0-3 RWM score. Powers the per-cycle table + the trend graph.
+Per-cycle RWM trend for one student: one row per monthly SCoR cycle this year with their as-of standing in each area and the 0–3 score.
 
 **Defines:** function `tvf_StudentRWMHistory`
-**Parameters (tvf_StudentRWMHistory):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_StudentRWMHistory):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@StudentKey VARCHAR(20)` — the student (VARCHAR(20) surrogate key)
+**Access / row scope:** Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.
 **Grants:** SELECT on `tvf_StudentRWMHistory` → StudentDataAssessment
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `ActiveFlag`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
@@ -1495,19 +1450,18 @@ Per-cycle RWM trend for the Reports > RWM individual page (0.7.0, item 5). One r
 - `FactEnrollment` — `ActiveFlag`, `SectionKey`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `tvf_StudentRWMHistory` — drop
-**Used on routes (auto):** `/reports/rwm/[studentKey]`
+**Used in the app:**
+- `/reports/rwm/[studentKey]` — the per-cycle table + trend on the RWM individual page
 
 ### sql/security/tvf_TeacherGroups.sql
 
-[sql/security/tvf_TeacherGroups.sql](../../sql/security/tvf_TeacherGroups.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_TeacherGroups.sql](../../sql/security/tvf_TeacherGroups.sql) · **function** · reviewed 2026-10-22
 
-Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT (NOT a single instance). You pick a Cycle, not an instance — a SCoR's Reading work is ONE card on /enter, and this resolves the sections behind it across ALL of that cycle's instances of that subject.
+Data Entry section picker for one cycle + subject: one card per mapped-course SECTION (course → language via DimCourseAssessment), with applicable / entered / done counts, the teacher names, and the cycle instance(s) (WindowIDs) its students fall under.
 
 **Defines:** function `tvf_TeacherGroups`
-**Parameters (tvf_TeacherGroups):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_TeacherGroups):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@CycleGroupID VARCHAR(36)` — the cycle (DimShortCycle) — resolves across ALL its instances of the subject, `@AssessmentType VARCHAR(20)` — 'Reading' | 'Writing' | 'Math'
+**Access / row scope:** Taught scope = sections the caller teaches (FactSectionTeachers), ANY role. Oversight scope = Administrator / RegionalAnalyst only → every mapped-course section in their StaffSchoolAccess schools. SpecialistTeacher gets Taught only (2026-10-13).
 **Grants:** SELECT on `tvf_TeacherGroups` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `AssessmentWindowID`, `BenchmarkMonth`, `CycleGroupID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `StartDate`
@@ -1526,19 +1480,19 @@ Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT (NOT a si
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `tvf_TeacherGroups` — drop
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]` — the section picker (cached 30s in lib/groupCache; cleared on every save)
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — roster page — resolves the selected sections to their window(s) for routing saves
 
 ### sql/security/tvf_TeacherRoster.sql
 
-[sql/security/tvf_TeacherRoster.sql](../../sql/security/tvf_TeacherRoster.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_TeacherRoster.sql](../../sql/security/tvf_TeacherRoster.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized roster for the web app entry grid (Phase 3b). Combines vw_TeacherRoster's three role branches (Teacher / SchoolAdmin+SpecialistTeacher / RegionalAnalyst) with the per-student entry context the grid shows (existing level + delta, expected benchmark range for the window's dominant month, reading-IPP status). Returns one row per student for the given window + group.
+Reading entry roster for one window + selected sections: one row per student with the current level, expected range (benchmark), IPP status/confirm flag, Prev June starting point, last and previous-cycle levels. Membership comes pre-joined from SectionRosterMembership.
 
 **Defines:** function `tvf_TeacherRoster`
-**Parameters (tvf_TeacherRoster):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_TeacherRoster):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@AssessmentWindowID VARCHAR(20)` — the cycle instance (window) being entered, `@GroupKeys VARCHAR(4000)` — comma-delimited 'SEC:<SectionID>' keys (several same-language sections = one combined roster)
+**Access / row scope:** Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.
 **Grants:** SELECT on `tvf_TeacherRoster` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentLanguage`, `AssessmentWindowID`, `BenchmarkMonth`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`
@@ -1553,19 +1507,20 @@ Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT (NOT a si
 - `SectionRosterMembership` — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
 - `vw_StudentReadingStartingPoint` — `ScaleSystem`, `StartingLevelCode`, `StudentNumber`
-**Writes:**
-- `tvf_TeacherRoster` — drop
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — opening a Reading roster
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save (saveReadingAssessments) — scope gate: a student not in this roster gets "Not in your roster for this window/group — not saved."
+**Caveats:** Membership logic lives in usp_RebuildRosterMembership — keep the two in lockstep.
 
 ### sql/security/tvf_TeacherRosterMath.sql
 
-[sql/security/tvf_TeacherRosterMath.sql](../../sql/security/tvf_TeacherRosterMath.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_TeacherRosterMath.sql](../../sql/security/tvf_TeacherRosterMath.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized roster for the web-app MATH entry grid. Returns ONE ROW PER (student x applicable task): each student joined to THEIR grade's DimMathTask set for the cycle's month, with the latest recorded result and Math-IPP status. The web app pivots these into the student x task matrix.
+Math entry roster: one row per (student × their grade's task for the cycle's benchmark month) with the latest result, answer key (FR for immersion) and Math-IPP status. LEFT join so a grade with no tasks still lists the student.
 
 **Defines:** function `tvf_TeacherRosterMath`
-**Parameters (tvf_TeacherRosterMath):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_TeacherRosterMath):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@AssessmentWindowID VARCHAR(20)` — the Math window, `@GroupKeys VARCHAR(4000)` — comma-delimited 'SEC:' keys
+**Access / row scope:** Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.
 **Grants:** SELECT on `tvf_TeacherRosterMath` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentType`, `AssessmentWindowID`, `BenchmarkMonth`, `EndDate`, `ProgramFamily`, `StartDate`
@@ -1577,19 +1532,20 @@ Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT (NOT a si
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
 - `SectionRosterMembership` — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `tvf_TeacherRosterMath` — drop
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — opening a Math roster (matrix)
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save (math) — scope gate before the parallel per-mark usp_UpsertMathAssessment calls
+**Caveats:** Membership logic lives in usp_RebuildRosterMembership — keep in lockstep.
 
 ### sql/security/tvf_TeacherRosterOwn.sql
 
-[sql/security/tvf_TeacherRosterOwn.sql](../../sql/security/tvf_TeacherRosterOwn.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_TeacherRosterOwn.sql](../../sql/security/tvf_TeacherRosterOwn.sql) · **function** · reviewed 2026-10-22
 
-FAST-PATH Reading roster for a TEACHER opening their OWN class (Taught scope). Reads the pre-projected TeacherRosterMembership table directly by (TeacherEmail, GroupKey) — no DimStaff Caller lookup and NO access-check subqueries (FactSectionTeachers / StaffSchoolAccess): a row's presence in that table IS the authorization (it was built as base ⨝ the teacher's own sections). The volatile reading-enrichment half is identical to tvf_TeacherRoster, so the two return the same shape.
+FAST-PATH Reading roster for a teacher opening their OWN class: reads TeacherRosterMembership by (TeacherEmail, GroupKey) with no access subqueries — a row's presence is the access proof.
 
 **Defines:** function `tvf_TeacherRosterOwn`
-**Parameters (tvf_TeacherRosterOwn):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN
+**Parameters (tvf_TeacherRosterOwn):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@AssessmentWindowID VARCHAR(20)` — window, `@GroupKeys VARCHAR(4000)` — comma-delimited 'SEC:' keys
+**Access / row scope:** Implicit: only rows whose TeacherEmail = @UPN, i.e. sections the caller teaches.
 **Grants:** SELECT on `tvf_TeacherRosterOwn` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentLanguage`, `AssessmentWindowID`, `BenchmarkMonth`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`
@@ -1601,18 +1557,17 @@ FAST-PATH Reading roster for a TEACHER opening their OWN class (Taught scope). R
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
 - `TeacherRosterMembership` — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramCode`, `ProgramFamily`, `SchoolName`, `StudentKey`, `StudentNumber`, `TeacherEmail`
 - `vw_StudentReadingStartingPoint` — `ScaleSystem`, `StartingLevelCode`, `StudentNumber`
-**Writes:**
-- `tvf_TeacherRosterOwn` — drop
+**Caveats:** NOT CALLED by the app (no data.ts function) — the fast-path routing ("D") is parked. If wired up it must stay in lockstep with usp_RebuildRosterMembership / TeacherRosterMembership.
 
 ### sql/security/tvf_TeacherRosterWriting.sql
 
-[sql/security/tvf_TeacherRosterWriting.sql](../../sql/security/tvf_TeacherRosterWriting.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_TeacherRosterWriting.sql](../../sql/security/tvf_TeacherRosterWriting.sql) · **function** · reviewed 2026-10-22
 
-Writing counterpart of tvf_TeacherRoster for the web app entry grid. IDENTICAL scoping — only the per-student entry context differs: the MOST RECENT writing entry's four trait scores + their average + achievement band, plus Writing-IPP status. No benchmark / delta (writing has none). One row per student for the given window + group.
+Writing entry roster: latest four trait scores + average per student for the window and language track, Writing-IPP status, and the data-driven excluded traits (WritingTraitExclusion) for each student.
 
 **Defines:** function `tvf_TeacherRosterWriting`
-**Parameters (tvf_TeacherRosterWriting):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_TeacherRosterWriting):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser), `@AssessmentWindowID VARCHAR(20)` — the Writing window, `@GroupKeys VARCHAR(4000)` — comma-delimited 'SEC:' keys, `@Language VARCHAR(10)` — 'English' | 'French' — used only when the window has no AssessmentLanguage (the section's course language must match)
+**Access / row scope:** Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.
 **Grants:** SELECT on `tvf_TeacherRosterWriting` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentLanguage`, `AssessmentWindowID`, `BenchmarkMonth`, `StartDate`
@@ -1625,19 +1580,20 @@ Writing counterpart of tvf_TeacherRoster for the web app entry grid. IDENTICAL s
 - `SectionRosterMembership` — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
 - `WritingTraitExclusion` — `ActiveFlag`, `BenchmarkMonth`, `GradeCode`, `ProgramFamily`, `Trait`
-**Writes:**
-- `tvf_TeacherRosterWriting` — drop
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — opening a Writing roster
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save (saveWritingAssessments) — per-language scope gate
+**Caveats:** Membership logic lives in usp_RebuildRosterMembership — keep in lockstep.
 
 ### sql/security/tvf_UserAssessmentWindows.sql
 
-[sql/security/tvf_UserAssessmentWindows.sql](../../sql/security/tvf_UserAssessmentWindows.sql) · **function** · skeleton (not yet reviewed)
+[sql/security/tvf_UserAssessmentWindows.sql](../../sql/security/tvf_UserAssessmentWindows.sql) · **function** · reviewed 2026-10-22
 
-@UPN-parameterized equivalent of vw_UserAssessmentWindows for the web app (Phase 3b). The web app connects as the StudentDataAssessment service principal, so CURRENT_USER is the SP, not the teacher -- the caller-scoped views return nothing. This iTVF takes the signed-in user's UPN and runs the SAME role-branched logic (Teacher / SchoolAdmin+SpecialistTeacher / RegionalAnalyst), so admins/analysts get their full multi-school scope (coverage when a teacher is out).
+The /enter landing: every active cycle instance (window) the caller has students in, with status (Upcoming / Open / ClosesToday / Closed = in grace / Locked), grace end, and applicable / entered / done counts. The client collapses instances into one card per cycle × subject.
 
 **Defines:** function `tvf_UserAssessmentWindows`
-**Parameters (tvf_UserAssessmentWindows):** `@UPN VARCHAR`
-**Access signals (auto):** caller-scoped via @UPN; roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Parameters (tvf_UserAssessmentWindows):** `@UPN VARCHAR(255)` — signed-in user (Entra UPN, supplied server-side by the app — never by the browser)
+**Access / row scope:** Teacher route = sections the caller teaches, for AccessLevel NULL (Teacher) or SpecialistTeacher. Oversight route = Administrator / RegionalAnalyst → mapped-course sections in their StaffSchoolAccess schools. (Specialists: own sections only, 2026-10-13.)
 **Grants:** SELECT on `tvf_UserAssessmentWindows` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `AssessmentWindowID`, `BenchmarkMonth`, `CycleGroupID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
@@ -1656,9 +1612,9 @@ Writing counterpart of tvf_TeacherRoster for the web app entry grid. IDENTICAL s
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `tvf_UserAssessmentWindows` — drop
-**Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Used in the app:**
+- `/enter` — Data Entry landing cycle cards (cached in lib/groupCache)
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — roster page — window status / grace-lock check
 
 ## Legacy views (vw_*, Power Apps era)
 
@@ -1684,12 +1640,6 @@ warehouse-side sources for the Fabric bridge that maintains the SharePoint lists
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
-**Writes:**
-- `vw_BridgeAssessmentHistoryAll` — drop
-- `vw_BridgeScaleLevels` — drop
-- `vw_BridgeSchoolRosterAll` — drop
-- `vw_BridgeStudentCohortAll` — drop
-- `vw_BridgeTeacherRosterAll` — drop
 
 ### sql/security/vw_DimReadingScale.sql
 
@@ -1700,8 +1650,6 @@ Power Apps-facing wrapper over DimReadingScale that casts the BIGINT IDENTITY Re
 **Defines:** view `vw_DimReadingScale`
 **Reads:**
 - `DimReadingScale` — *(columns not resolved — see file)*
-**Writes:**
-- `vw_DimReadingScale` — drop
 
 ### sql/security/vw_RegionalData.sql
 
@@ -1715,8 +1663,6 @@ RLS-gated region-wide student roster for the 10 regional analyst users. One row 
 - `DimSchool` — `SchoolID`, `SchoolName`
 - `DimStaff` — `AccessLevel`, `ActiveFlag`, `Email`, `IsCurrent`
 - `DimStudent` — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
-**Writes:**
-- `vw_RegionalData` — drop
 
 ### sql/security/vw_SchoolStudents.sql
 
@@ -1730,8 +1676,6 @@ RLS-gated school admin roster — returns the current students assigned to schoo
 - `DimSchool` — `SchoolID`, `SchoolName`
 - `DimStudent` — `Adap`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `vw_SchoolStudents` — drop
 
 ### sql/security/vw_StudentAssessmentHistory.sql
 
@@ -1754,8 +1698,6 @@ Power-Apps-facing history view for scrStudentData. One row per (student, complet
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `vw_StudentAssessmentHistory` — drop
 
 ### sql/security/vw_StudentCohort.sql
 
@@ -1780,8 +1722,6 @@ Power-Apps-facing cohort view for scrStudentData. One row per student in the cal
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `vw_StudentCohort` — drop
 
 ### sql/security/vw_StudentCohortTeachers.sql
 
@@ -1798,8 +1738,6 @@ Companion bridge view to vw_StudentCohort for the scrStudentData Teacher filter 
 - `FactEnrollment` — `ActiveFlag`, `SectionKey`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `vw_StudentCohortTeachers` — drop
 
 ### sql/security/vw_StudentIPP.sql
 
@@ -1818,8 +1756,6 @@ Power-Apps-facing view of per-student IPP status, RLS-filtered to the calling us
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `ChangedBy`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
-**Writes:**
-- `vw_StudentIPP` — drop
 
 ### sql/security/vw_StudentReadingStartingPoint.sql
 
@@ -1834,8 +1770,6 @@ Each student's READING "starting point" for the current school year — the last
 - `DimReadingScale` — `LevelCode`, `LevelOrder`, `ReadingScaleID`, `ScaleSystem`
 - `FactAssessmentReading` — `AssessmentDate`, `AssessmentWindowID`, `ReadingAssessmentID`, `ReadingScaleID`, `StudentNumber`
 - `PriorYearBaseline` — `AssessmentLanguage`, `ReadingLevel`, `SchoolYear`, `StudentNumber`
-**Writes:**
-- `vw_StudentReadingStartingPoint` — drop
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
 
 ### sql/security/vw_TeacherGroups.sql
@@ -1857,8 +1791,6 @@ Returns one row per (calling user, applicable window, group) tuple. Powers `scrG
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `vw_TeacherGroups` — drop
 
 ### sql/security/vw_TeacherRoster.sql
 
@@ -1880,8 +1812,6 @@ Returns one row per (calling user, applicable window, group, student) tuple with
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `vw_TeacherRoster` — drop
 
 ### sql/security/vw_TeacherStudents.sql
 
@@ -1895,8 +1825,6 @@ RLS-gated teacher roster — returns the current students enrolled in sections t
 - `DimStudent` — `Adap`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
 - `FactEnrollment` — `ActiveFlag`, `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`, `TeacherRole`
-**Writes:**
-- `vw_TeacherStudents` — drop
 
 ### sql/security/vw_UserAssessmentWindows.sql
 
@@ -1917,8 +1845,6 @@ Returns one row per (calling user, applicable assessment window) tuple. Powers `
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
-**Writes:**
-- `vw_UserAssessmentWindows` — drop
 
 ## Grants
 

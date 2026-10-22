@@ -6239,79 +6239,127 @@
      "tvf_UserAssessmentWindows": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_TeacherGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
+      },
+      {
+       "name": "AssessmentType",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_TeacherRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ],
      "tvf_TeacherRosterMath": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ],
      "tvf_TeacherRosterWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
+      },
+      {
+       "name": "Language",
+       "type": "VARCHAR(10)"
       }
      ],
      "tvf_StudentCohort": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentCohortWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentAssessmentHistory": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_StudentAssessmentHistoryWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_StudentIPP": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentAdaptation": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_ProgrammingGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_ProgrammingRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ]
     },
@@ -6942,25 +6990,53 @@
      "tvf_TeacherGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_TeacherRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ],
      "tvf_TeacherRosterWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ],
      "tvf_TeacherRosterMath": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ]
     },
@@ -7214,19 +7290,39 @@
      "tvf_TeacherGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_TeacherRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ],
      "tvf_TeacherRosterWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ]
     },
@@ -8556,9 +8652,20 @@
   },
   "sql/scripts/diag_math_report_blank_roster.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "fcb785cfc67fd531207a3e1d1e515e6f2ef1dee6",
    "notes": {
-    "purpose": ""
+    "purpose": "Explain a Math report card that shows N students while the matrix says \"No students in this group\": counts active math tasks per grade at this year's math benchmark months for one school + homeroom. Grades with zero tasks are dropped by tvf_StudentCohortMath's INNER JOIN to tasks.",
+    "script": {
+     "kind": "template",
+     "question": "Why is a class's math matrix empty when its card shows students?",
+     "target": "live (counts only)",
+     "rerunSafe": true,
+     "applied": "2026-10-02 — confirmed grades 4/5 had no seeded tasks; resolved by seeding (no app fix, by decision)"
+    },
+    "params": {
+     "School": "school name exactly as in DimSchool",
+     "Homeroom": "homeroom (teacher) name"
+    }
    },
    "blob": "fcb785cfc67fd531207a3e1d1e515e6f2ef1dee6",
    "auto": {
@@ -8622,7 +8729,8 @@
     ],
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-25 db8bc45 diag: Math report blank-roster investigation (card counts vs empty matrix)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/scripts/diag_math_roster_dropped_students.sql": {
    "kind": "script",
@@ -8687,9 +8795,22 @@
   },
   "sql/scripts/diag_math_save_landed.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "da8216c239c5a7f964f6e4d0109387fcd34d106a",
    "notes": {
-    "purpose": ""
+    "purpose": "After a math save showed \"Could not save\" errors, determine whether the marks actually committed: counts of the teacher's recent FactAssessmentMath writes by window and submission time (aggregate only — no student rows).",
+    "script": {
+     "kind": "template",
+     "question": "Did a teacher's math marks really save, partly save, or not save?",
+     "target": "live or dev (aggregate only, no student PII)",
+     "rerunSafe": true,
+     "applied": "used 2026-10-09 — proved a false failure (114 marks committed); led to the parallel-save fix in 1.2.0"
+    },
+    "params": {
+     "SinceUtc": "look-back start (UTC; default 2 days)",
+     "TeacherEmail": "the teacher who saw the error",
+     "WindowId": "optional: one Math AssessmentWindowID"
+    },
+    "caveats": "Full burst = false failure (timeout/transport); partial = request cut off mid-save (re-save is safe, the upsert is idempotent); zero = nothing committed, look elsewhere."
    },
    "blob": "da8216c239c5a7f964f6e4d0109387fcd34d106a",
    "auto": {
@@ -8732,7 +8853,8 @@
     "lastCommit": "2026-10-09 25b5414 memory+diag: math save timeout = false failure (114 marks committed); record batching consideration",
     "headerPurpose": "When a math save shows the \"Could not save right now — your marks are still on screen\" backstop (one line per data point), determine whether the marks ACTUALLY committed. That message is a whole-request failure backstop (e.g. the action timing out behind IIS/ARR after 114 sequential per-mark round-trips); the per-row upserts may well have landed before the request was cut off.",
     "headerScript": "diag_math_save_landed.sql (LIVE or DEV — read-only, AGGREGATE ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/scripts/diag_math_task_month_mismatch.sql": {
    "kind": "script",
@@ -9095,9 +9217,20 @@
   },
   "sql/scripts/diag_staff_lookup.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "83d602268fe04f9fa1ea510f6797d29443c0bb05",
    "notes": {
-    "purpose": ""
+    "purpose": "Look up one staff member by email AND by last-name pattern, in DimStaff (every SCD version) and in the raw staff landing table Stg_Staff. Answers \"why isn't this person connected to anything when they log in?\" — e.g. a mistyped PowerSchool email that keyed DimStaff to the wrong UPN.",
+    "script": {
+     "kind": "template",
+     "question": "Is this staff member in the warehouse, under what email/role/school, and does the latest PowerSchool staff load agree?",
+     "target": "dev or live (staff name + work email are not PII)",
+     "rerunSafe": true
+    },
+    "params": {
+     "Email": "exact work email (UPN) to look up",
+     "LastName": "matched as LIKE '%<name>%' to catch spelling/case variants"
+    },
+    "caveats": "Ships with <placeholder> values — substitute real values (or set them at the top) before handing it over; never hand over the placeholders. Stg_Staff only reflects the most recent staff load."
    },
    "blob": "83d602268fe04f9fa1ea510f6797d29443c0bb05",
    "auto": {
@@ -9122,7 +9255,8 @@
     "lastCommit": "2026-10-09 39d135d sql(diag): add reusable staff-lookup template (DimStaff + Stg_Staff, by email + last name)",
     "headerPurpose": "Read-only diagnostic TEMPLATE — look up a staff member by email and do a last-name search, in BOTH the person dimension (DimStaff, all SCD versions) and the raw ingest landing zone (Stg_Staff). Handy for \"why isn't this person connected to anything when they log in?\" (e.g. a mistyped PowerSchool email → DimStaff keyed the wrong UPN).",
     "headerScript": "diag_staff_lookup.sql"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/scripts/diag_unresolved_enrollment_sections_live.sql": {
    "kind": "script",
@@ -9547,9 +9681,17 @@
   },
   "sql/scripts/fix_dimstaff_stacked_markers.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "47d809ab15fa193d2f5cfe15ea8a836e6af5bbfc",
    "notes": {
-    "purpose": ""
+    "purpose": "Collapse duplicate CURRENT DimStaff rows to one per email (keep the newest StaffKey), deleting only surplus rows no fact references. Clears DQ checks #18 (multiple IsCurrent=1) and #29 (overlapping windows).",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Remove stacked duplicate current staff rows left by same-day re-ingests.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-08 (with the usp_MergeStaff 4c guard deployed first)"
+    },
+    "caveats": "Run the pre-check first; if any surplus row has a reference count > 0, STOP. Deploy the usp_MergeStaff guard before this or the next same-day ingest re-stacks."
    },
    "blob": "47d809ab15fa193d2f5cfe15ea8a836e6af5bbfc",
    "auto": {
@@ -9586,7 +9728,8 @@
     "lastCommit": "2026-09-08 2ceb74c fix(ingest): stop usp_MergeStaff stacking duplicate DimStaff markers",
     "headerPurpose": "Collapse stacked current DimStaff rows to ONE per email, clearing the DQ \"multiple IsCurrent=1 rows\" (#18) and \"overlapping windows\" (#29) checks. Companion to the usp_MergeStaff 4c guard (2026-09-08): repeat same-day ingests after a teacher was deactivated stacked duplicate [today, NULL] deactivation markers; the proc guard stops NEW stacking, this cleans what already stacked.",
     "headerScript": "fix_dimstaff_stacked_markers.sql (LIVE + DEV data remediation)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/scripts/fix_math_cycle_months_and_task_miscoding.sql": {
    "kind": "script",
@@ -13066,85 +13209,141 @@
      "tvf_StudentIPP": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentAdaptation": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_ProgrammingRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ],
      "tvf_ProgrammingGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentCohort": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentCohortWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_StudentAssessmentHistory": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_StudentAssessmentHistoryWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_UserAssessmentWindows": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ],
      "tvf_TeacherGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
+      },
+      {
+       "name": "AssessmentType",
+       "type": "VARCHAR(20)"
       }
      ],
      "tvf_TeacherRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ],
      "tvf_TeacherRosterOwn": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ],
      "tvf_TeacherRosterWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
+      },
+      {
+       "name": "Language",
+       "type": "VARCHAR(10)"
       }
      ],
      "tvf_TeacherRosterMath": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ]
     },
@@ -15625,9 +15824,17 @@
   },
   "sql/scripts/set_cycle_grade_ranges_by_subject.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "540491d831bc5527ffe6292b856b7aefc54af260",
    "notes": {
-    "purpose": ""
+    "purpose": "Set every cycle window's grade band by subject: Reading P–8, Writing P–RG, Math P–5 (MinGrade P). Updates ALL rows of each AssessmentType in DimAssessmentWindow.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Reset the per-subject grade bands on every cycle window.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev + live 2026-09-04/08 (P–6 era); Math P–5 applied on 1.2.0 via the narrower live bundle step instead"
+    },
+    "caveats": "DANGER since per-instance scoping: re-running overwrites bands configured per cycle instance on /cycles (dev had Reading 7–8 and Writing 7–RG instances on 2026-10-12). For one subject, use a targeted UPDATE (as the 1.2.0 bundle did for Math) instead of re-running this whole script."
    },
    "blob": "540491d831bc5527ffe6292b856b7aefc54af260",
    "auto": {
@@ -15651,7 +15858,8 @@
     "lastCommit": "2026-10-09 0523706 math reports: units collapsed by default; regional staff default to Grade lens; Math scope P-5",
     "headerPurpose": "Split the grade band of EXISTING assessment cycles (Short Cycles of Response rows in DimAssessmentWindow) by subject: Reading -> P .. 8 (Primary through Grade 8) Writing -> P .. RG (Primary through Returning Graduate) Math -> P .. 5 (Primary through Grade 5; grade 6 tasks not ready for 2026-27) MinGrade moves to 'P' (Primary) for all three (previously the whole-population default 'PP'/Pre-Primary).",
     "headerScript": "set_cycle_grade_ranges_by_subject.sql"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/scripts/staff_roster_linkage_dev.sql": {
    "kind": "script",
@@ -16626,9 +16834,19 @@
   },
   "sql/security/tvf_MathCohortGroups.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "1a052f0d2ea462afc6058cf7c73c76e5550b3963",
    "notes": {
-    "purpose": ""
+    "purpose": "Card-picker groups for Reports → Math (teachers): Homeroom and Grade cohorts over current Primary–5 students, tagged Taught (the caller's own sections) or Oversight (school-wide). Same row shape as tvf_TeacherGroups so GroupCards renders it; no entered counts (reports picker).",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)"
+    },
+    "access": "Taught = students in sections the caller currently teaches (any role). Oversight = Administrator / SpecialistTeacher / RegionalAnalyst → students in their StaffSchoolAccess schools. Grades P–5 only.",
+    "usedIn": [
+     {
+      "route": "/reports/math",
+      "trigger": "a TEACHER opens Reports → Math (oversight roles get the roll-up tree instead and never call this); a single group auto-redirects to it"
+     }
+    ]
    },
    "blob": "1a052f0d2ea462afc6058cf7c73c76e5550b3963",
    "auto": {
@@ -16642,7 +16860,7 @@
      "tvf_MathCohortGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ]
     },
@@ -16720,13 +16938,24 @@
     },
     "headerPurpose": "@UPN choose-a-group resolution for the Reports > Math cohort (0.7.0, item 4). The math cohort matrix is group-scoped (a whole school/region is unusable), so the caller first picks a HOMEROOM or a GRADE cohort; this returns those groups. Same shape as tvf_TeacherGroups / tvf_ProgrammingGroups so the existing GroupCards renders it. Over ALL current P-6 students (math is P-6) — NOT flagged-only like Programming.",
     "headerFunction": "tvf_MathCohortGroups (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_ProgrammingGroups.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "3dae1446c044c16d1bc2988813424be087996710",
    "notes": {
-    "purpose": ""
+    "purpose": "Choose-a-group for Programming (IPP + Adaptations). Window-less sibling of tvf_TeacherGroups: groups of FLAGGED students (those with an IPP or Adaptation row), Taught and Oversight scopes, Homeroom / Section / Grade lenses.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)"
+    },
+    "access": "Taught = flagged students in the caller's own current sections (any role). Oversight = Administrator / SpecialistTeacher / RegionalAnalyst → flagged students in their StaffSchoolAccess schools (whole-school Programming is intended for specialists — 2026-10-13).",
+    "usedIn": [
+     {
+      "route": "/programming",
+      "trigger": "landing page group cards"
+     }
+    ]
    },
    "blob": "3dae1446c044c16d1bc2988813424be087996710",
    "auto": {
@@ -16740,7 +16969,7 @@
      "tvf_ProgrammingGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ]
     },
@@ -16830,13 +17059,29 @@
     },
     "headerPurpose": "@UPN-parameterized choose-a-group resolution for the Programming section (IPP + Adaptations). Window-LESS sibling of tvf_TeacherGroups: Programming is student-level (IPP/Adaptation status), not tied to an assessment window, so there is no window param, no benchmark/grade-band filter, and roster reconciliation is CURRENT-only (IsCurrent / ActiveFlag). Same two SCOPES and three lenses as tvf_TeacherGroups: 'Taught' — the caller's OWN taught homerooms (PP-9) / sections (10+), via FactSectionTeachers, ANY AccessLevel (dual-role fix). 'Oversight' — above-teacher (Administrator/SpecialistTeacher = t",
     "headerFunction": "tvf_ProgrammingGroups (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_ProgrammingRoster.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "fa6adeff906a20d4f0e60beaf32833c55d67d16c",
    "notes": {
-    "purpose": ""
+    "purpose": "One Programming group's flagged students with combined IPP + Adaptation status: one row per (Student, Subject, ProgramFamily) present in either fact, carrying IsIPP and the adaptation flag.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "GroupKey": "group from tvf_ProgrammingGroups — homeroom GroupKey, SEC:<SectionID> or GRADE:<SchoolID>:<Grade>"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. (Same rule gives specialists whole-school Programming ENTRY.)",
+    "usedIn": [
+     {
+      "route": "/programming/[groupKey]",
+      "trigger": "opening a group (the IPP ⟷ Adaptations grid)"
+     },
+     {
+      "route": "/programming/[groupKey]",
+      "trigger": "Save — saveProgramming re-reads this roster and only updates rows present in it (scope + existence gate)"
+     }
+    ]
    },
    "blob": "fa6adeff906a20d4f0e60beaf32833c55d67d16c",
    "auto": {
@@ -16850,7 +17095,11 @@
      "tvf_ProgrammingRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
       }
      ]
     },
@@ -16942,13 +17191,24 @@
     },
     "headerPurpose": "@UPN + @GroupKey roster for the Programming section. Returns the flagged students of ONE group (from tvf_ProgrammingGroups) with their per-subject, per-program-family IPP + Adaptation status combined — ONE row per (Student, Subject, ProgramFamily) that exists in EITHER fact, carrying both IsIPP (NULL = unconfirmed gate / no IPP row) and HasAdaptation (NULL = unresolved / no adaptation row). The client pivots these into the two collapsed rosters (IPP and Adaptations), student rows x Reading|Writing| Math columns; an FI grade-3+ literacy student appears with BOTH an 'English' and a 'French Immer",
     "headerFunction": "tvf_ProgrammingRoster (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentAdaptation.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "22db19505ae38779b3b7da455a429f9a6c0d3982",
    "notes": {
-    "purpose": ""
+    "purpose": "Per-student ADAPTATION status — one row per (Student, Subject, ProgramFamily) with a current FactStudentAdaptation row. Structural mirror of tvf_StudentIPP.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/programming",
+      "trigger": "getProgrammingSummary — the landing page's adaptation counts"
+     }
+    ]
    },
    "blob": "22db19505ae38779b3b7da455a429f9a6c0d3982",
    "auto": {
@@ -16962,7 +17222,7 @@
      "tvf_StudentAdaptation": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ]
     },
@@ -17040,13 +17300,29 @@
     },
     "headerPurpose": "@UPN-parameterized per-student ADAPTATION status for the web app's Programming > Adaptations roster. Structural mirror of tvf_StudentIPP, reading FactStudentAdaptation instead of FactStudentIPP. One row per (Student, Subject, ProgramFamily) with a current FactStudentAdaptation row, in the signed-in user's scope. Same OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher), with CURRENT_USER -> LOWER(@UPN) since the SP can't use CURRENT_USER RLS.",
     "headerFunction": "tvf_StudentAdaptation (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentAssessmentHistory.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "dbc49af7859d52ab912450b75a325f8ebb3c20aa",
    "notes": {
-    "purpose": ""
+    "purpose": "One student's reading history — one row per completed reading result — for the student-detail timeline and trend line.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "StudentKey": "the student (surrogate key as VARCHAR(20) — BIGINT precision)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. A key outside scope returns no rows.",
+    "usedIn": [
+     {
+      "route": "/reports/[studentKey]",
+      "trigger": "opening a student (Reading tab)"
+     },
+     {
+      "route": "/reports/[studentKey]",
+      "trigger": "loadStudentHistory action — prev/next neighbour prefetch"
+     }
+    ]
    },
    "blob": "dbc49af7859d52ab912450b75a325f8ebb3c20aa",
    "auto": {
@@ -17060,7 +17336,11 @@
      "tvf_StudentAssessmentHistory": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ]
     },
@@ -17189,13 +17469,29 @@
     },
     "headerPurpose": "@UPN-parameterized equivalent of vw_StudentAssessmentHistory for the web app (Phase 3b). One row per (student, completed reading assessment) for students in the signed-in user's scope. Powers the per-student detail timeline + trend line.",
     "headerFunction": "tvf_StudentAssessmentHistory (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentAssessmentHistoryWriting.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "d95f0cae1173a3477106b0f3e43e32c1a1fd74ac",
    "notes": {
-    "purpose": ""
+    "purpose": "Writing counterpart of tvf_StudentAssessmentHistory: one row per writing result with the four trait scores, their average (allow-list '1'–'4'; '-' excluded / SCR dropped) and the band.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "StudentKey": "the student (VARCHAR(20) surrogate key)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/reports/[studentKey]",
+      "trigger": "student detail, Writing tab"
+     },
+     {
+      "route": "/reports/[studentKey]",
+      "trigger": "loadStudentHistoryWriting action — neighbour prefetch"
+     }
+    ]
    },
    "blob": "d95f0cae1173a3477106b0f3e43e32c1a1fd74ac",
    "auto": {
@@ -17209,7 +17505,11 @@
      "tvf_StudentAssessmentHistoryWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ]
     },
@@ -17313,13 +17613,25 @@
     },
     "headerPurpose": "Writing counterpart of tvf_StudentAssessmentHistory. One row per (student, writing assessment) for students in the signed-in user's scope -- the four trait scores, their average, and the achievement band that average falls in. Powers the per-student detail timeline / trend line on the Writing tab. Optional @StudentKey scopes to one.",
     "headerFunction": "tvf_StudentAssessmentHistoryWriting (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentCohort.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "090ccb9d88b756f733d5a0f458c9265e805c2c93",
    "notes": {
-    "purpose": ""
+    "purpose": "Reports → Reading cohort table: one row per in-scope student with their latest reading level, delta, achievement band and Reading-IPP gate.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "CycleGroupID": "DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = \"Current\" (latest result so far this school year / lifetime)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/reports",
+      "trigger": "Reports, Reading tab (and every cycle-selector change)"
+     }
+    ]
    },
    "blob": "090ccb9d88b756f733d5a0f458c9265e805c2c93",
    "auto": {
@@ -17333,7 +17645,11 @@
      "tvf_StudentCohort": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
       }
      ]
     },
@@ -17476,13 +17792,30 @@
     },
     "headerPurpose": "@UPN-parameterized equivalent of vw_StudentCohort for the web app (Phase 3b). The app connects as the StudentDataAssessment service principal, so CURRENT_USER is the SP, not the teacher -- the caller-scoped view returns nothing. This iTVF takes the signed-in UPN and runs the SAME OR-across-EXISTS role branches (RegionalAnalyst",
     "headerFunction": "tvf_StudentCohort (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentCohortMath.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "12ecf9605ec5634d8b065c89ded391130c6bc481",
    "notes": {
-    "purpose": ""
+    "purpose": "One group's math matrix: one row per (student × their grade's task) with the LATEST result across the selected math windows, plus Math-IPP status. Students are keyed by StudentNumber in the fact.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "GroupKey": "'GRADE:<SchoolID>:<Grade>', 'SEC:<SectionID>' or a homeroom DimStudent.GroupKey",
+     "CycleGroupID": "DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = \"Current\" (latest result so far this school year / lifetime)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. Grades P–5 only. Grades with no configured tasks return no rows (INNER JOIN to tasks).",
+    "usedIn": [
+     {
+      "route": "/reports/math/[groupKey]",
+      "trigger": "the full class view (charts, tasks down/students down)"
+     },
+     {
+      "route": "/reports/math",
+      "trigger": "loadMathGroup action — expanding a Grade/Homeroom row in the oversight tree"
+     }
+    ]
    },
    "blob": "12ecf9605ec5634d8b065c89ded391130c6bc481",
    "auto": {
@@ -17496,7 +17829,15 @@
      "tvf_StudentCohortMath": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "GroupKey",
+       "type": "VARCHAR(70)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
       }
      ]
     },
@@ -17618,13 +17959,25 @@
     },
     "headerPurpose": "READ-ONLY math cohort matrix for the Reports > Math view (0.7.0, item 4). One row per (student x applicable task) for ONE group (homeroom / grade / section) across ALL of the CURRENT school year's math cycles, carrying the student's LATEST recorded result for that task. The client pivots these into the read-only matrix (styled like the data-entry grid), groups tasks by unit, and rolls up class % / per-student averages for the colour-coding + charts.",
     "headerFunction": "tvf_StudentCohortMath (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentCohortMathAll.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "a8fc93cb99b103656ed36d770b499833602d99f3",
    "notes": {
-    "purpose": ""
+    "purpose": "Feed for the oversight roll-up tree: one row per (student × unit) for every P–5 student in scope, COUNTS only (TaskCount, ScoredCount, CanDoCount) — no names. A grade with no tasks returns one NULL-unit row per student so the tree shows them as No data.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "CycleGroupID": "DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = \"Current\" (latest result so far this school year / lifetime)"
+    },
+    "access": "OVERSIGHT ONLY: students in schools where the caller has a StaffSchoolAccess row with AccessLevel Administrator / SpecialistTeacher / RegionalAnalyst. A plain teacher gets no rows.",
+    "usedIn": [
+     {
+      "route": "/reports/math",
+      "trigger": "an oversight role opens Reports → Math (tree first load, and on cycle change)"
+     }
+    ]
    },
    "blob": "a8fc93cb99b103656ed36d770b499833602d99f3",
    "auto": {
@@ -17638,7 +17991,11 @@
      "tvf_StudentCohortMathAll": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
       }
      ]
     },
@@ -17733,13 +18090,29 @@
     },
     "headerPurpose": "READ-ONLY feed for the Reports > Math OVERSIGHT roll-up tree (math-reports #2, Phase 1, 1.2.0). One row per (student x unit) for EVERY P-5 student in the caller's oversight scope, carrying COUNTS only — the unit's task count, how many of those tasks have a latest result, and how many of those are 1 (can do). The client turns the counts into each student's unit / overall Achievement Level and rolls them up School -> Grade|Homeroom (% Meeting-or-In-depth). Task-level detail is NOT here: expanding a grade/homeroom loads that one group's matrix through tvf_StudentCohortMath (same scope gate), so t",
     "headerFunction": "tvf_StudentCohortMathAll (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentCohortRWM.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "0606328cfe71c4b7865dde008a22bf7b1fc84f44",
    "notes": {
-    "purpose": ""
+    "purpose": "Reading·Writing·Math roll-up: one row per in-scope P–5 student with a 0–3 score — how many of the three areas they are currently Meeting or above (plus per-area codes and has-evidence flags).",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "CycleGroupID": "DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = \"Current\" (latest result so far this school year / lifetime)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students. EXCLUDES any student with a confirmed IPP (IsIPP = 1) in Reading, Writing or Math.",
+    "usedIn": [
+     {
+      "route": "/reports/rwm",
+      "trigger": "Reports → RWM cohort"
+     },
+     {
+      "route": "/reports/rwm/[studentKey]",
+      "trigger": "the student's header row on the RWM individual page"
+     }
+    ]
    },
    "blob": "0606328cfe71c4b7865dde008a22bf7b1fc84f44",
    "auto": {
@@ -17753,7 +18126,11 @@
      "tvf_StudentCohortRWM": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
       }
      ]
     },
@@ -17894,13 +18271,25 @@
     },
     "headerPurpose": "READ-ONLY Reading·Writing·Math achievement roll-up for Reports > RWM (0.7.0, item 5). One row per in-scope Primary-6 student with a 0-3 score: how many of {Reading, Writing, Math} the student is CURRENTLY meeting or exceeding (their most-recent result in each area).",
     "headerFunction": "tvf_StudentCohortRWM (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentCohortWriting.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "9c9c8aabe5f6c161904857c318d4b0b368b6c43c",
    "notes": {
-    "purpose": ""
+    "purpose": "Reports → Writing cohort table: one row per in-scope student with their latest writing result (four traits, average, band).",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "CycleGroupID": "DimShortCycle.CycleGroupID to bind results to ONE cycle; NULL = \"Current\" (latest result so far this school year / lifetime)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/reports",
+      "trigger": "Reports, Writing tab (?subject=writing)"
+     }
+    ]
    },
    "blob": "9c9c8aabe5f6c161904857c318d4b0b368b6c43c",
    "auto": {
@@ -17914,7 +18303,11 @@
      "tvf_StudentCohortWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
       }
      ]
     },
@@ -18030,13 +18423,25 @@
     },
     "headerPurpose": "Writing counterpart of tvf_StudentCohort for the web app's cohort screen (Reading|Writing toggle). One row per student in the signed-in user's scope + their MOST-RECENT writing evidence: the four trait scores (Ideas/Organization/Language/Conventions), their average, and the achievement band that average falls in. Plus the Writing-IPP gate.",
     "headerFunction": "tvf_StudentCohortWriting (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentIPP.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "2f21501a2568db8847bfb79950298a475cfd1697",
    "notes": {
-    "purpose": ""
+    "purpose": "Per-student IPP status — one row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/programming",
+      "trigger": "getProgrammingSummary — the landing page's IPP counts"
+     }
+    ],
+    "caveats": "data.ts also has getStudentIPPList over this TVF, but nothing calls it (dead code, 2026-10-22)."
    },
    "blob": "2f21501a2568db8847bfb79950298a475cfd1697",
    "auto": {
@@ -18050,7 +18455,7 @@
      "tvf_StudentIPP": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ]
     },
@@ -18128,13 +18533,25 @@
     },
     "headerPurpose": "@UPN-parameterized equivalent of vw_StudentIPP for the web app (Phase 3b) -- the bulk IPP-management screen (/ipp, mirrors the Power App scrIPP). One row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row, in the signed-in user's scope. The SP can't use CURRENT_USER RLS, so this runs the SAME OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher) with CURRENT_USER -> LOWER(@UPN).",
     "headerFunction": "tvf_StudentIPP (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_StudentRWMHistory.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "9f51cbf4ddcfaccdb380ef4cbbb46e61f280a338",
    "notes": {
-    "purpose": ""
+    "purpose": "Per-cycle RWM trend for one student: one row per monthly SCoR cycle this year with their as-of standing in each area and the 0–3 score.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "StudentKey": "the student (VARCHAR(20) surrogate key)"
+    },
+    "access": "Reports VIEW rule: a student is returned if the caller has a StaffSchoolAccess row for the student's school with AccessLevel Administrator, SpecialistTeacher or RegionalAnalyst (whole school; an analyst = every school in their list — no region-wide branch), OR the caller currently teaches a section the student is actively enrolled in (FactSectionTeachers → DimSection → FactEnrollment). Plain teachers therefore see only their own students.",
+    "usedIn": [
+     {
+      "route": "/reports/rwm/[studentKey]",
+      "trigger": "the per-cycle table + trend on the RWM individual page"
+     }
+    ]
    },
    "blob": "9f51cbf4ddcfaccdb380ef4cbbb46e61f280a338",
    "auto": {
@@ -18148,7 +18565,11 @@
      "tvf_StudentRWMHistory": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "StudentKey",
+       "type": "VARCHAR(20)"
       }
      ]
     },
@@ -18262,13 +18683,30 @@
     },
     "headerPurpose": "Per-cycle RWM trend for the Reports > RWM individual page (0.7.0, item 5). One row per monthly SCoR cycle in the current school year, carrying the student's AS-OF standing in each area (most-recent result up to the end of that month) and the resulting 0-3 RWM score. Powers the per-cycle table + the trend graph.",
     "headerFunction": "tvf_StudentRWMHistory (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_TeacherGroups.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "f310dac44ba83b26f3e67a72f0dd71649889f51d",
    "notes": {
-    "purpose": ""
+    "purpose": "Data Entry section picker for one cycle + subject: one card per mapped-course SECTION (course → language via DimCourseAssessment), with applicable / entered / done counts, the teacher names, and the cycle instance(s) (WindowIDs) its students fall under.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "CycleGroupID": "the cycle (DimShortCycle) — resolves across ALL its instances of the subject",
+     "AssessmentType": "'Reading' | 'Writing' | 'Math'"
+    },
+    "access": "Taught scope = sections the caller teaches (FactSectionTeachers), ANY role. Oversight scope = Administrator / RegionalAnalyst only → every mapped-course section in their StaffSchoolAccess schools. SpecialistTeacher gets Taught only (2026-10-13).",
+    "usedIn": [
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]",
+      "trigger": "the section picker (cached 30s in lib/groupCache; cleared on every save)"
+     },
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "roster page — resolves the selected sections to their window(s) for routing saves"
+     }
+    ]
    },
    "blob": "f310dac44ba83b26f3e67a72f0dd71649889f51d",
    "auto": {
@@ -18282,7 +18720,15 @@
      "tvf_TeacherGroups": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "CycleGroupID",
+       "type": "VARCHAR(36)"
+      },
+      {
+       "name": "AssessmentType",
+       "type": "VARCHAR(20)"
       }
      ]
     },
@@ -18408,13 +18854,31 @@
     },
     "headerPurpose": "Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT (NOT a single instance). You pick a Cycle, not an instance — a SCoR's Reading work is ONE card on /enter, and this resolves the sections behind it across ALL of that cycle's instances of that subject.",
     "headerFunction": "tvf_TeacherGroups (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_TeacherRoster.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "dedf32815e95f53acb01b13f124f58f8cc8897e0",
    "notes": {
-    "purpose": ""
+    "purpose": "Reading entry roster for one window + selected sections: one row per student with the current level, expected range (benchmark), IPP status/confirm flag, Prev June starting point, last and previous-cycle levels. Membership comes pre-joined from SectionRosterMembership.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "AssessmentWindowID": "the cycle instance (window) being entered",
+     "GroupKeys": "comma-delimited 'SEC:<SectionID>' keys (several same-language sections = one combined roster)"
+    },
+    "access": "Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.",
+    "usedIn": [
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "opening a Reading roster"
+     },
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "Save (saveReadingAssessments) — scope gate: a student not in this roster gets \"Not in your roster for this window/group — not saved.\""
+     }
+    ],
+    "caveats": "Membership logic lives in usp_RebuildRosterMembership — keep the two in lockstep."
    },
    "blob": "dedf32815e95f53acb01b13f124f58f8cc8897e0",
    "auto": {
@@ -18428,7 +18892,15 @@
      "tvf_TeacherRoster": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ]
     },
@@ -18551,13 +19023,31 @@
     },
     "headerPurpose": "@UPN-parameterized roster for the web app entry grid (Phase 3b). Combines vw_TeacherRoster's three role branches (Teacher / SchoolAdmin+SpecialistTeacher / RegionalAnalyst) with the per-student entry context the grid shows (existing level + delta, expected benchmark range for the window's dominant month, reading-IPP status). Returns one row per student for the given window + group.",
     "headerFunction": "tvf_TeacherRoster (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_TeacherRosterMath.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "8833d8882df573ea792fcb3d2e079407fbf74447",
    "notes": {
-    "purpose": ""
+    "purpose": "Math entry roster: one row per (student × their grade's task for the cycle's benchmark month) with the latest result, answer key (FR for immersion) and Math-IPP status. LEFT join so a grade with no tasks still lists the student.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "AssessmentWindowID": "the Math window",
+     "GroupKeys": "comma-delimited 'SEC:' keys"
+    },
+    "access": "Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.",
+    "usedIn": [
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "opening a Math roster (matrix)"
+     },
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "Save (math) — scope gate before the parallel per-mark usp_UpsertMathAssessment calls"
+     }
+    ],
+    "caveats": "Membership logic lives in usp_RebuildRosterMembership — keep in lockstep."
    },
    "blob": "8833d8882df573ea792fcb3d2e079407fbf74447",
    "auto": {
@@ -18571,7 +19061,15 @@
      "tvf_TeacherRosterMath": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ]
     },
@@ -18674,13 +19172,21 @@
     },
     "headerPurpose": "@UPN-parameterized roster for the web-app MATH entry grid. Returns ONE ROW PER (student x applicable task): each student joined to THEIR grade's DimMathTask set for the cycle's month, with the latest recorded result and Math-IPP status. The web app pivots these into the student x task matrix.",
     "headerFunction": "tvf_TeacherRosterMath (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_TeacherRosterOwn.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "4d33bd68272ea79372feb7428da113d1765c0a5e",
    "notes": {
-    "purpose": ""
+    "purpose": "FAST-PATH Reading roster for a teacher opening their OWN class: reads TeacherRosterMembership by (TeacherEmail, GroupKey) with no access subqueries — a row's presence is the access proof.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "AssessmentWindowID": "window",
+     "GroupKeys": "comma-delimited 'SEC:' keys"
+    },
+    "access": "Implicit: only rows whose TeacherEmail = @UPN, i.e. sections the caller teaches.",
+    "caveats": "NOT CALLED by the app (no data.ts function) — the fast-path routing (\"D\") is parked. If wired up it must stay in lockstep with usp_RebuildRosterMembership / TeacherRosterMembership."
    },
    "blob": "4d33bd68272ea79372feb7428da113d1765c0a5e",
    "auto": {
@@ -18694,7 +19200,15 @@
      "tvf_TeacherRosterOwn": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
       }
      ]
     },
@@ -18796,13 +19310,32 @@
     },
     "headerPurpose": "FAST-PATH Reading roster for a TEACHER opening their OWN class (Taught scope). Reads the pre-projected TeacherRosterMembership table directly by (TeacherEmail, GroupKey) — no DimStaff Caller lookup and NO access-check subqueries (FactSectionTeachers / StaffSchoolAccess): a row's presence in that table IS the authorization (it was built as base ⨝ the teacher's own sections). The volatile reading-enrichment half is identical to tvf_TeacherRoster, so the two return the same shape.",
     "headerFunction": "tvf_TeacherRosterOwn (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_TeacherRosterWriting.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "86e5508bd7b3291d81d569d39d0a3b147d5c9a7f",
    "notes": {
-    "purpose": ""
+    "purpose": "Writing entry roster: latest four trait scores + average per student for the window and language track, Writing-IPP status, and the data-driven excluded traits (WritingTraitExclusion) for each student.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)",
+     "AssessmentWindowID": "the Writing window",
+     "GroupKeys": "comma-delimited 'SEC:' keys",
+     "Language": "'English' | 'French' — used only when the window has no AssessmentLanguage (the section's course language must match)"
+    },
+    "access": "Data Entry rule (2026-10-13): Administrator / RegionalAnalyst reach every mapped-course section in their StaffSchoolAccess schools; everyone else — Teacher AND SpecialistTeacher — reaches only the sections they are listed on in FactSectionTeachers (effective-dated to the window). Because the save actions re-check every student against this roster before writing, this is also the SAVE scope gate.",
+    "usedIn": [
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "opening a Writing roster"
+     },
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "Save (saveWritingAssessments) — per-language scope gate"
+     }
+    ],
+    "caveats": "Membership logic lives in usp_RebuildRosterMembership — keep in lockstep."
    },
    "blob": "86e5508bd7b3291d81d569d39d0a3b147d5c9a7f",
    "auto": {
@@ -18816,7 +19349,19 @@
      "tvf_TeacherRosterWriting": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
+      },
+      {
+       "name": "AssessmentWindowID",
+       "type": "VARCHAR(20)"
+      },
+      {
+       "name": "GroupKeys",
+       "type": "VARCHAR(4000)"
+      },
+      {
+       "name": "Language",
+       "type": "VARCHAR(10)"
       }
      ]
     },
@@ -18914,13 +19459,28 @@
     },
     "headerPurpose": "Writing counterpart of tvf_TeacherRoster for the web app entry grid. IDENTICAL scoping — only the per-student entry context differs: the MOST RECENT writing entry's four trait scores + their average + achievement band, plus Writing-IPP status. No benchmark / delta (writing has none). One row per student for the given window + group.",
     "headerFunction": "tvf_TeacherRosterWriting (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/tvf_UserAssessmentWindows.sql": {
    "kind": "function",
-   "reviewedBlob": null,
+   "reviewedBlob": "87dcc50c2ef0e722cd5128e68cf396b6c28d24d1",
    "notes": {
-    "purpose": ""
+    "purpose": "The /enter landing: every active cycle instance (window) the caller has students in, with status (Upcoming / Open / ClosesToday / Closed = in grace / Locked), grace end, and applicable / entered / done counts. The client collapses instances into one card per cycle × subject.",
+    "params": {
+     "UPN": "signed-in user (Entra UPN, supplied server-side by the app — never by the browser)"
+    },
+    "access": "Teacher route = sections the caller teaches, for AccessLevel NULL (Teacher) or SpecialistTeacher. Oversight route = Administrator / RegionalAnalyst → mapped-course sections in their StaffSchoolAccess schools. (Specialists: own sections only, 2026-10-13.)",
+    "usedIn": [
+     {
+      "route": "/enter",
+      "trigger": "Data Entry landing cycle cards (cached in lib/groupCache)"
+     },
+     {
+      "route": "/enter/cycle/[cycleGroupId]/[subject]/[groupKey]",
+      "trigger": "roster page — window status / grace-lock check"
+     }
+    ]
    },
    "blob": "87dcc50c2ef0e722cd5128e68cf396b6c28d24d1",
    "auto": {
@@ -18934,7 +19494,7 @@
      "tvf_UserAssessmentWindows": [
       {
        "name": "UPN",
-       "type": "VARCHAR"
+       "type": "VARCHAR(255)"
       }
      ]
     },
@@ -19059,7 +19619,8 @@
     },
     "headerPurpose": "@UPN-parameterized equivalent of vw_UserAssessmentWindows for the web app (Phase 3b). The web app connects as the StudentDataAssessment service principal, so CURRENT_USER is the SP, not the teacher -- the caller-scoped views return nothing. This iTVF takes the signed-in user's UPN and runs the SAME role-branched logic (Teacher / SchoolAdmin+SpecialistTeacher / RegionalAnalyst), so admins/analysts get their full multi-school scope (coverage when a teacher is out).",
     "headerFunction": "tvf_UserAssessmentWindows (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-22"
   },
   "sql/security/vw_DimReadingScale.sql": {
    "kind": "legacy-view",
@@ -23559,5 +24120,5 @@
   }
  },
  "extractedAt": "2026-10-22",
- "extractedFrom": "e0036d7"
+ "extractedFrom": "71e2e1e"
 }

@@ -50,7 +50,11 @@ class Model:
         n = self.notes(p).get('writes')
         if isinstance(n, dict) and n:
             return n
-        return self.files[p]['auto'].get('writes', {})
+        a = self.files[p]['auto']
+        own = {d['name'] for d in a.get('defines', [])}
+        # an object's own DROP-IF-EXISTS (redeploy idiom) is not a write worth listing
+        return {t: w for t, w in a.get('writes', {}).items()
+                if not (t in own and set(w.get('ops', [])) <= {'drop'})}
 
     def purpose(self, p):
         n = self.notes(p).get('purpose')
