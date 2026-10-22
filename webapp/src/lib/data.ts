@@ -875,6 +875,8 @@ export interface ReadingGroupRow {
   expectedMin: string | null // expected benchmark range for this result's language; null = no benchmark
   expectedMax: string | null
   expectedMinOrder: number | null // order of expectedMin (for sorting the Expected column)
+  juneReadingLevel: string | null // prior-June starting level (same language); parity with the flat list
+  diffFromPrevJune: number | null // signed growth since prior June
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
@@ -907,6 +909,8 @@ export async function getReadingGroup(
     expectedMin: (r.ExpectedMinLevel as string) ?? null,
     expectedMax: (r.ExpectedMaxLevel as string) ?? null,
     expectedMinOrder: r.ExpectedMinOrder == null ? null : Number(r.ExpectedMinOrder),
+    juneReadingLevel: (r.JuneReadingLevel as string) ?? null,
+    diffFromPrevJune: r.DiffFromPrevJune == null ? null : Number(r.DiffFromPrevJune),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
@@ -980,6 +984,7 @@ export interface WritingGroupRow {
   achievementCode: number | null
   achievementName: string | null
   achievementHexColor: string | null
+  achievementHexColorTint: string | null // Avg-cell background tint (parity with the flat list)
 }
 
 export async function getWritingGroup(
@@ -1010,6 +1015,7 @@ export async function getWritingGroup(
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
+    achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
   }))
 }
 

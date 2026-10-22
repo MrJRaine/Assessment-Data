@@ -110,7 +110,8 @@ RETURN
         lw.AvgScore,
         dal.AchievementLevelCode  AS AchievementLevelCode,
         dal.AchievementLevelName  AS AchievementLevelName,
-        dal.HexColor              AS AchievementHexColor
+        dal.HexColor              AS AchievementHexColor,
+        dal.HexColorTint          AS AchievementHexColorTint  -- Avg-cell background tint (parity with the flat list)
     FROM GroupStudents gs
     LEFT JOIN WritingIPP ipp ON ipp.StudentKey = gs.StudentKey
     LEFT JOIN (SELECT * FROM LatestWriting WHERE rn = 1) lw ON lw.StudentNumber = gs.StudentNumber

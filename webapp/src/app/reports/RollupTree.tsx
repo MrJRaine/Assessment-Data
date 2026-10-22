@@ -73,7 +73,9 @@ export function RollupTree<T>({
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
-  renderDetail: (rows: T[], lang: LangFilter) => ReactNode
+  // summarizeBy lets the detail drop the column already given by the node (a Grade node's drill shows
+  // Homeroom, a Homeroom node's drill shows Grade — neither repeats School).
+  renderDetail: (rows: T[], lang: LangFilter, summarizeBy: SummarizeBy) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
   viewToggle?: ReactNode // page-level Summary/Student-list switch, rendered inline at the start of the toolbar
   // Per-node measure columns. When supplied (writing = 4 traits + avg), they REPLACE the single
@@ -319,7 +321,7 @@ export function RollupTree<T>({
                                         <div className="muted">{block.message}</div>
                                       </div>
                                     ) : (
-                                      renderDetail(block.rows, lang)
+                                      renderDetail(block.rows, lang, summarizeBy)
                                     )}
                                   </div>
                                 </td>
