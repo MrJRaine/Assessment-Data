@@ -20,6 +20,10 @@
  * Writes (DEV only, synthetic):
  *   - UPDATE DimStudent  — rename ONE existing current student to "Dualang Sentinel"
  *                          (a name confirmed unique — query 1 of the namecheck diag).
+ *   - UPDATE FactStudentIPP — resolve this student's UNRESOLVED (IsIPP=NULL) IPP gates
+ *                          to IsIPP=0 (not-IPP), so the sentinel is CHART-ELIGIBLE and the
+ *                          report shows Expected/Diff/Achievement (an unresolved-IPP student
+ *                          is deliberately suppressed — chartEligible=0 — which blanked them).
  *   - DELETE + INSERT FactAssessmentReading  — 2 rows for the sentinel (EN + FR scale).
  *   - DELETE + INSERT FactAssessmentWriting  — 2 rows for the sentinel (English + French).
  *   - INSERT FactSubmissionAudit             — one marker row (optional trail).
@@ -42,9 +46,10 @@ DECLARE @Now          DATETIME2(0) = GETDATE();
 DECLARE @SentinelFirst VARCHAR(50) = 'Dualang';
 DECLARE @SentinelLast  VARCHAR(50) = 'Sentinel';
 
-DECLARE @StudentNumber BIGINT;
-DECLARE @StudentKey    BIGINT;
-DECLARE @StaffKey      BIGINT;
+DECLARE @StudentNumber     BIGINT;
+DECLARE @StudentKey        BIGINT;
+DECLARE @StudentGradeOrder INT;
+DECLARE @StaffKey          BIGINT;
 
 DECLARE @EnScaleId  BIGINT, @EnLevelCode VARCHAR(10);
 DECLARE @FrScaleId  BIGINT, @FrLevelCode VARCHAR(10);
@@ -87,9 +92,18 @@ UPDATE DimStudent
 SET FirstName = @SentinelFirst, LastName = @SentinelLast, LastUpdated = @Now
 WHERE StudentNumber = @StudentNumber AND IsCurrent = 1;
 
-SELECT @StudentKey = StudentKey
-FROM DimStudent
-WHERE StudentNumber = @StudentNumber AND IsCurrent = 1;
+SELECT @StudentKey = s.StudentKey, @StudentGradeOrder = g.GradeOrder
+FROM DimStudent s
+JOIN DimGrade g ON g.GradeCode = s.Grade
+WHERE s.StudentNumber = @StudentNumber AND s.IsCurrent = 1;
+
+-- Resolve the sentinel's auto-created UNRESOLVED IPP gates (IsIPP=NULL) to not-IPP (0) so the
+-- student is CHART-ELIGIBLE and the report renders Expected/Diff/Achievement. An FI grade-3+ student
+-- gets unresolved Reading+Writing IPP placeholders in BOTH families; MAX(IsIPP)=0 across the current
+-- rows makes both subjects eligible. Leaves already-resolved rows as-is (0 stays 0).
+UPDATE FactStudentIPP
+SET IsIPP = 0, ChangedBy = 'devseed', LastUpdated = @Now
+WHERE StudentKey = @StudentKey AND IsCurrent = 1 AND (IsIPP IS NULL OR IsIPP = 1);
 
 -- =============================================================================
 -- 2) Resolve an entering-staff key (any current staff), and the EN + FR reading
@@ -116,13 +130,33 @@ ORDER BY ABS(LevelOrder - @FrMid), LevelOrder;
 --    one window per subject keeps all the sentinel's rows inside a single cycle so a
 --    cycle-scoped view shows them too.
 -- =============================================================================
-SELECT TOP 1 @ReadingWindowId = AssessmentWindowID
-FROM DimAssessmentWindow WHERE AssessmentType = 'Reading' AND ActiveFlag = 1
-ORDER BY StartDate DESC, AssessmentWindowID DESC;
+-- Prefer a window whose grade range COVERS the sentinel (so the benchmark join — grade x window
+-- month x family — resolves and Expected shows); fall back to any active window of that subject.
+SELECT TOP 1 @ReadingWindowId = w.AssessmentWindowID
+FROM DimAssessmentWindow w
+JOIN DimGrade gmin ON gmin.GradeCode = w.MinGrade
+JOIN DimGrade gmax ON gmax.GradeCode = w.MaxGrade
+WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
+  AND @StudentGradeOrder BETWEEN gmin.GradeOrder AND gmax.GradeOrder
+ORDER BY w.StartDate DESC, w.AssessmentWindowID DESC;
 
-SELECT TOP 1 @WritingWindowId = AssessmentWindowID
-FROM DimAssessmentWindow WHERE AssessmentType = 'Writing' AND ActiveFlag = 1
-ORDER BY StartDate DESC, AssessmentWindowID DESC;
+IF @ReadingWindowId IS NULL
+    SELECT TOP 1 @ReadingWindowId = AssessmentWindowID
+    FROM DimAssessmentWindow WHERE AssessmentType = 'Reading' AND ActiveFlag = 1
+    ORDER BY StartDate DESC, AssessmentWindowID DESC;
+
+SELECT TOP 1 @WritingWindowId = w.AssessmentWindowID
+FROM DimAssessmentWindow w
+JOIN DimGrade gmin ON gmin.GradeCode = w.MinGrade
+JOIN DimGrade gmax ON gmax.GradeCode = w.MaxGrade
+WHERE w.AssessmentType = 'Writing' AND w.ActiveFlag = 1
+  AND @StudentGradeOrder BETWEEN gmin.GradeOrder AND gmax.GradeOrder
+ORDER BY w.StartDate DESC, w.AssessmentWindowID DESC;
+
+IF @WritingWindowId IS NULL
+    SELECT TOP 1 @WritingWindowId = AssessmentWindowID
+    FROM DimAssessmentWindow WHERE AssessmentType = 'Writing' AND ActiveFlag = 1
+    ORDER BY StartDate DESC, AssessmentWindowID DESC;
 
 IF @StaffKey IS NULL OR @EnScaleId IS NULL OR @FrScaleId IS NULL
    OR @ReadingWindowId IS NULL OR @WritingWindowId IS NULL
@@ -186,4 +220,13 @@ FROM FactAssessmentWriting faw
 JOIN DimStudent s ON s.StudentNumber = faw.StudentNumber AND s.IsCurrent = 1
 WHERE s.FirstName = 'Dualang' AND s.LastName = 'Sentinel'
 ORDER BY Fact, Lang;
+GO
+
+-- IPP gates: expect every current row IsIPP = 0 (resolved → chart-eligible). Any NULL here would
+-- re-blank Expected/Diff/Achievement in the report.
+SELECT fsi.Subject, fsi.ProgramFamily, fsi.IsIPP, fsi.IsCurrent
+FROM FactStudentIPP fsi
+JOIN DimStudent s ON s.StudentKey = fsi.StudentKey AND s.IsCurrent = 1
+WHERE s.FirstName = 'Dualang' AND s.LastName = 'Sentinel' AND fsi.IsCurrent = 1
+ORDER BY fsi.Subject, fsi.ProgramFamily;
 GO
