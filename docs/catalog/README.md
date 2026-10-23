@@ -14,4 +14,4 @@ the app. Generated views:
 
 The `.md` files are generated from [catalog.json](catalog.json) by `python scripts/catalog/catalog.py build` —
 don't edit them. Maintenance rules: [.claude/skills/catalog-maintenance.md](../../.claude/skills/catalog-maintenance.md).
-Baseline: `main` @ `e0036d7` (v1.2.0 + patches), built 2026-10-22.
+Baseline: `main` @ `e0036d7` (v1.2.0 + patches), built 2026-10-22, all entries reviewed 2026-10-23. Issues found while building it: [findings-2026-10-23.md](findings-2026-10-23.md).

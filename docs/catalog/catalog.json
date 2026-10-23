@@ -16868,9 +16868,16 @@
   },
   "sql/scripts/reset_dev_full_and_ingest.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "94226efe82a4c064c4e772c32df3e0eda1a9ac51",
    "notes": {
-    "purpose": ""
+    "purpose": "Clean-slate dev ingest test: TRUNCATEs the six roster tables AND the user-entered facts (Reading, Writing, Math, IPP, Adaptation, SubmissionAudit), runs usp_RunFullIngestCycle, then rolls expired FactEnrollment rows forward a year so rosters resolve today. Keeps cycle config (DimAssessmentWindow/DimShortCycle), reference dims and StaffAppAccess.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Wipe dev back to a fresh ingest from the Lakehouse imports files without orphaning entered results.",
+     "target": "dev",
+     "rerunSafe": true
+    },
+    "caveats": "DEV ONLY - destroys every entered result (no undo). Use this, not reset_and_run_full_ingest (which leaves entered facts orphaned on new surrogates and halts the DQ checks) and never reset_for_production (which also wipes the cycles). Fact tables added after 2026-09-22 are not in the TRUNCATE list - check before relying on it. The trailing roll-forward duplicates rollforward_enrollment_dev.sql."
    },
    "blob": "94226efe82a4c064c4e772c32df3e0eda1a9ac51",
    "auto": {
@@ -16969,13 +16976,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "A TRUE clean-slate for a from-scratch dev ingest test. Truncates the six roster tables (like reset_and_run_full_ingest) AND the user-entered fact tables, then runs the orchestrator to rebuild from the Lakehouse Files/imports/{topic}/ folders.",
     "headerScript": "reset_dev_full_and_ingest.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reset_for_production.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "786800f365279da92804ca3ea4a79c63a23b6c75",
    "notes": {
-    "purpose": ""
+    "purpose": "ONE-TIME production cutover reset: TRUNCATEs 24 tables (roster dims/facts, Reading/Writing/IPP facts, SubmissionAudit + DataQualityAudit, StaffSchoolAccess, DimAssessmentWindow, all Stg_*/Wrk_*) leaving the warehouse empty for the first real PowerSchool ingest; does NOT re-run the ingest. Preserves reference dims and StaffAppAccess.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Clear all synthetic/pilot data from the live warehouse at go-live cutover.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "Written 2026-08-27 for the live cutover (last changed 2026-09-01); live has since gone into production (1.2.0 live 2026-10-13)"
+    },
+    "caveats": "OBSOLETE and EXTREMELY DANGEROUS now that live holds real student results - re-running wipes all real assessment data, every cycle window and the analyst's access (restored only by a re-ingest), with no undo. Never run it on dev either (it wipes cycles; use reset_dev_full_and_ingest). Its table list predates FactAssessmentMath, FactStudentAdaptation and DimShortCycle. References retired RLS_* tables only to say they no longer exist."
    },
    "blob": "786800f365279da92804ca3ea4a79c63a23b6c75",
    "auto": {
@@ -17155,13 +17171,22 @@
     "lastCommit": "2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge",
     "headerPurpose": "ONE-TIME production cutover reset. Clears ALL synthetic / pilot test data from Assessment_Warehouse and leaves it EMPTY and ready to receive the first REAL PowerSchool ingest. Unlike the dev reset (reset_and_run_full_ingest.sql), this does NOT re-run the orchestrator — it leaves the warehouse clean, not re-populated.",
     "headerScript": "reset_for_production.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reset_ipp_and_assessments.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "138524dc2f27eb582a01b54f6140c79704c41030",
    "notes": {
-    "purpose": ""
+    "purpose": "Test reset for the roster IPP-confirmation flow: DELETEs ALL FactAssessmentReading rows and ALL FactStudentIPP history, then re-inserts IsIPP = NULL 'needs confirmation' rows for every current IPP=1 student per the usp_MergeStudent Step 6b rules ({Reading,Writing} x program family, FI grade 3+ also English). Optional commented-out audit-log clear.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Put every IPP student back to 'Confirm IPP' and clear entered reading results so the entry flow can be retested.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "Created 2026-06-22 for the B6 roster IPP test (MVP era)"
+    },
+    "caveats": "DESTRUCTIVE - synthetic data only; never run on live. Stale since June 2026: only clears Reading (not Writing/Math), and its hard-coded IPP rules may no longer match the current usp_MergeStudent / FactStudentAdaptation model - compare with the merge proc before use. Scope step 1 with a WHERE AssessmentWindowID = <id> if you want to keep other windows."
    },
    "blob": "138524dc2f27eb582a01b54f6140c79704c41030",
    "auto": {
@@ -17230,13 +17255,22 @@
     "lastCommit": "2026-06-22 e7e73a6 B6: roster IPP confirmation, auth redirect, + test reset",
     "headerPurpose": "TEST RESET. Returns the workflow to a blank slate so the roster entry + inline IPP-confirmation flow can be exercised end to end: (1) clears every entered reading result, and (2) rewinds FactStudentIPP to the post-merge \"unresolved\" state (IsIPP = NULL — the needs-confirmation gate), so each applicable student shows the \"Confirm IPP\" prompt again.",
     "headerScript": "reset_ipp_and_assessments.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/rollforward_enrollment_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "2431c2cd7e9d875f61120341e09899f1022f4b9d",
    "notes": {
-    "purpose": ""
+    "purpose": "Shift expired synthetic FactEnrollment rows (EndDate < today) forward one year, setting ActiveFlag = 1, so dev teachers resolve current rosters and see open cycles; then reports how many rows are current today.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Why do dev teachers see 'No cycles' / empty rosters? Roll the expired synthetic enrollments into the current school year.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-04 (unguarded original); guarded to expired rows 2026-09-18"
+    },
+    "caveats": "Dev synthetic only. Students keep their old-year GRADE (promotion is a separate DimStudent change). The same guarded UPDATE is embedded at the end of reset_dev_full_and_ingest.sql. Reversible with DATEADD(YEAR,-1,...)."
    },
    "blob": "2431c2cd7e9d875f61120341e09899f1022f4b9d",
    "auto": {
@@ -17268,13 +17302,22 @@
     "lastCommit": "2026-09-18 e11bcd8 feat(entry): course-scoped group picker (tvf_TeacherGroups rework) â€” verified on dev",
     "headerPurpose": "The synthetic FactEnrollment rows are all for the 2025-2026 school year and have expired (EndDate <= 2026-06-30), so classroom teachers resolve no roster today (2026-09-04) and see no open cycle. Shift the whole set forward one year to 2026-2027 so the September enrollments are current, which makes teachers resolve their rosters and see the open SCoR 1 cycle in Data Entry.",
     "headerScript": "rollforward_enrollment_dev.sql (DEV synthetic only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/run_math_task_ingest_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "b86a84ba944ab2444e278f673a163e1bb215c283",
    "notes": {
-    "purpose": ""
+    "purpose": "Load the 2026-27 math task bank (MathTasks_2026-27.csv, 428 rows, grades P-4) into DimMathTask on DEV via EXEC usp_LoadMathTasks pointed at the exact file in the DEV lakehouse, then count tasks per grade/month.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "(Re)load the math task bank into dev from the lakehouse CSV.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-04 (2026-27 bank)"
+    },
+    "caveats": "Prereqs in order: migrate_MathTask_add_AnswerKeyFR_live.sql on dev, deploy updated usp_LoadMathTasks, upload the CSV to the DEV lakehouse Files/imports/mathtasks/. Hard-codes the DEV lakehouse GUID - the live twin is run_math_task_ingest_live.sql (identical except the lakehouse GUID). For a new year's bank, edit the file name in @SourceUri."
    },
    "blob": "b86a84ba944ab2444e278f673a163e1bb215c283",
    "auto": {
@@ -17289,13 +17332,22 @@
     "lastCommit": "2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace",
     "headerPurpose": "Load the math task bank into DimMathTask on DEV via usp_LoadMathTasks — same as the live run, but pointed at the DEV lakehouse.",
     "headerScript": "run_math_task_ingest_dev.sql (DEV)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/run_math_task_ingest_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "2d1ebc5d462509fb669c66a73d6c93017d3269ec",
    "notes": {
-    "purpose": ""
+    "purpose": "Load the 2026-27 math task bank (MathTasks_2026-27.csv) into DimMathTask on LIVE via EXEC usp_LoadMathTasks pointed at the exact file in the LIVE lakehouse; the loader inserts/updates and retires dropped tasks only within the (GradeCode, AssessmentMonth) pairs in the batch. Ends with a per-grade/month count.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "(Re)load or refresh the math task bank on live from the lakehouse CSV.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-10-04 (2026-27 bank, 428 rows P/1/2/3/4)"
+    },
+    "caveats": "The CSV must already be uploaded to the LIVE lakehouse Files/imports/mathtasks/ in the 12-column Stg_MathTask order. Points at the exact file on purpose - only switch to MathTasks_* if the folder is known clean. Near-duplicate of run_math_task_ingest_dev.sql (only the lakehouse GUID differs) - a candidate for one template with @LakehouseGuid/@FileName."
    },
    "blob": "2d1ebc5d462509fb669c66a73d6c93017d3269ec",
    "auto": {
@@ -17310,13 +17362,22 @@
     "lastCommit": "2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace",
     "headerPurpose": "Ingest the math task bank into DimMathTask on LIVE via usp_LoadMathTasks.",
     "headerScript": "run_math_task_ingest_live.sql (LIVE)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimAchievementLevel.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7945b3833461d894868521433047980271508fbe",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the four reading achievement levels (Not Yet Meeting < -2, Approaching -2..<0, Meeting = 0, Exceeding > 0 on the benchmark differential) with operator-column bounds and solid + tint display colors. DELETEs codes 1-4 then re-INSERTs them.",
+    "script": {
+     "kind": "seed",
+     "question": "Populate/refresh the reading achievement-level thresholds and colors.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "Created 2026-05-26; colors updated 2026-06-09 (Direction B restyle)"
+    },
+    "caveats": "Requires the HexColorTint column - run migrate_DimAchievementLevel_add_tint.sql first. Re-running overwrites any hand-edited thresholds/colors for codes 1-4."
    },
    "blob": "7945b3833461d894868521433047980271508fbe",
    "auto": {
@@ -17348,13 +17409,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-06-09 8711453 Session wrap (2026-06-09): Direction B restyle â€” scrLanding + scrIPP ported",
     "headerPurpose": "Populate the four reading achievement levels with their thresholds and display colors. Bounds match the original spec text verbatim (-2 and 0 only) using operator columns; see DimAchievementLevel file header for the lookup semantics."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimAssessmentWindow_MVP.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "fe9c65a8c0a3118b2856a63bbbb476ac0acc20fe",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the two MVP pilot reading windows (EOY 2025-26 English and French Immersion, grades P-6, 2026-05-01 to 2026-06-30) into DimAssessmentWindow; WHERE NOT EXISTS on WindowName.",
+    "script": {
+     "kind": "seed",
+     "question": "Create the June 2026 MVP pilot reading windows.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-05-13 (MVP pilot)"
+    },
+    "caveats": "OBSOLETE: the old window model was replaced by Short Cycles of Response (2026-08-27) - cycles are now created via usp_UpsertShortCycle / the /cycles admin screen. The windows are expired; do not re-run."
    },
    "blob": "fe9c65a8c0a3118b2856a63bbbb476ac0acc20fe",
    "auto": {
@@ -17387,13 +17457,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-13 4278954 Session wrap (2026-05-13): Step 18 SQL prereqs DONE + Power Apps build pivot to VS Code YAML",
     "headerPurpose": "Seed the two end-of-year 2025-26 reading pilot windows: one English and one French Immersion. Both currently Open as of seeding date."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimCourseAssessment_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "831e7544af4bf2d4781c781dc6ed620cd1857187",
    "notes": {
-    "purpose": ""
+    "purpose": "DEV-only seed of the course -> assessment map (DimCourseAssessment) for dev's original SYNTHETIC course codes: FRA-1-FI / LET-K-FI / LIT-12-FI -> French Literacy, MTH-K/1/10-FI -> Math. DELETEs the whole table then re-INSERTs.",
+    "script": {
+     "kind": "seed",
+     "question": "Map dev's synthetic course codes to Literacy/Math so course-scoped entry works on dev.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-17 (course-scoped entry foundation)"
+    },
+    "caveats": "Wipes ALL DimCourseAssessment rows first - never run on live (it would replace the real course list). Superseded on dev by seed_DimCourseAssessment_dev_testset.sql once dev was re-ingested from the synthetic test set (MAT-/ELA-/FLA- codes); the two dev seeds overwrite each other, so pick the one matching dev's current DimSection codes."
    },
    "blob": "831e7544af4bf2d4781c781dc6ed620cd1857187",
    "auto": {
@@ -17421,13 +17500,22 @@
     "lastCommit": "2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)",
     "headerPurpose": "DEV-ONLY seed of DimCourseAssessment using the SYNTHETIC course codes that dev's DimSection actually carries (dev has no real PS codes and no English-LA sections). Lets course-scoped entry be exercised on dev for French literacy + Math; the English side is verified on live once the real list (seed_DimCourseAssessment_live.sql) is seeded there. Mapped dev codes (literacy/math only; homeroom/history/science excluded): FRA-1-FI, LET-K-FI, LIT-12-FI -> French literacy MTH-1-FI, MTH-K-FI, MTH-10-FI -> Math (MTH-10-FI out of P-6 range; harmless)",
     "headerScript": "seed_DimCourseAssessment_dev.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimCourseAssessment_dev_testset.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "dfa17aefeb92106b78da47bb4dc01d4f89eb207d",
    "notes": {
-    "purpose": ""
+    "purpose": "DEV-only seed of DimCourseAssessment for the synthetic ingest TEST SET (data/imports/_generate_ingest_testset.ps1): every MAT-* -> Math, ELA-* -> English Literacy, FLA-* -> French Literacy. DELETEs the whole table then re-INSERTs, then counts by Language/Kind.",
+    "script": {
+     "kind": "seed",
+     "question": "After ingesting the synthetic test set on dev, map its course codes so entry resolves courses.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev ~2026-09-22 (dev ingest tooling)"
+    },
+    "caveats": "Wipes ALL DimCourseAssessment rows first - never run on live. Supersedes seed_DimCourseAssessment_dev.sql for the test-set era. If the test-set generator adds course codes, add matching rows here."
    },
    "blob": "dfa17aefeb92106b78da47bb4dc01d4f89eb207d",
    "auto": {
@@ -17455,13 +17543,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Course-scoped entry mapping for the synthetic ingest TEST SET (generated by data/imports/_generate_ingest_testset.ps1). Every MAT-* -> Math (Language NULL); ELA-* -> English Literacy; FLA-* -> French Literacy. Idempotent: clears then re-seeds. Run on DEV after ingesting the test set so entry resolves courses.",
     "headerScript": "seed_DimCourseAssessment_dev_testset.sql (DEV ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimCourseAssessment_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "802f362b34014fe7817eb1ea13e42df627fca10f",
    "notes": {
-    "purpose": ""
+    "purpose": "LIVE seed of DimCourseAssessment from the real PowerSchool course list (docs/course-assessment-mapping.md, 2026-09-17): ELA P-12 + Immersion ELA 3-6 -> English Literacy, FLA -> French Literacy, Math P-6 -> Math. DELETEs the whole table then re-INSERTs.",
+    "script": {
+     "kind": "seed",
+     "question": "Load the real course -> assessment map so course-scoped entry knows which courses are Reading/Writing (and in which language) or Math.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "Written 2026-09-17 for live; run date not recorded in the file"
+    },
+    "caveats": "Re-running REPLACES the whole table - any course rows added/removed on live by hand since are lost; for one course, INSERT/DELETE that row instead. Verify codes against a clean PS export first (the pasted source list had dupes/typos)."
    },
    "blob": "802f362b34014fe7817eb1ea13e42df627fca10f",
    "auto": {
@@ -17489,13 +17586,22 @@
     "lastCommit": "2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)",
     "headerPurpose": "LIVE seed of DimCourseAssessment from the real PowerSchool course list (docs/course-assessment-mapping.md, provided 2026-09-17). ELA P-12 + Immersion ELA 3-6 -> English literacy FLA -> French literacy Math -> Math A Language-Arts course = Reading + Writing in its language.",
     "headerScript": "seed_DimCourseAssessment_live.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimGrade.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7dd24884bb96b979da785a99242dfb22287298ac",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the 15 grade codes (PP, P, 1-12, RG) into DimGrade with GradeOrder (-1..13), name and band (Elementary / Junior High / Senior High).",
+    "script": {
+     "kind": "seed",
+     "question": "Populate the grade reference dimension at build time.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Created 2026-05-12 (initial build)"
+    },
+    "caveats": "Plain INSERT with no delete/NOT EXISTS guard - re-running duplicates every grade (GradeOrder joins then double rows). Only for an empty table, after DimGrade.sql and before the window-applicability views."
    },
    "blob": "7dd24884bb96b979da785a99242dfb22287298ac",
    "auto": {
@@ -17519,13 +17625,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions",
     "headerPurpose": "Populate the 15 valid grade codes with their numeric ordering and band classification."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimMathComprehensionBand.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "30dc4ef9a000f20048022446d5c90e41076e8f3a",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the 4-tier math achievement scale into DimMathComprehensionBand (Emerging < 0.50, Developing < 0.75, Meeting < 0.90, In-depth >= 0.90 - thresholds live in the read view; this sets labels, colors, sort order). TRUNCATE + INSERT.",
+    "script": {
+     "kind": "seed",
+     "question": "Populate/refresh the math achievement-level band labels and colors.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "Created 2026-09-02; band labels/boundaries revised 2026-09-03"
+    },
+    "caveats": "Re-running overwrites any hand-tuned labels/colors. Changing thresholds means editing the read view, not this table (the comments here just document the ladder). Table keeps the old 'Comprehension' name although the UI says 'Achievement Level'."
    },
    "blob": "30dc4ef9a000f20048022446d5c90e41076e8f3a",
    "auto": {
@@ -17551,13 +17666,22 @@
     "lastCommit": "2026-09-03 99b4fdb Math entry: rename \"Comprehension\" -> \"Achievement Level\"; shift band boundaries",
     "headerPurpose": "Seed the 4-tier math comprehension scale. Re-runnable (TRUNCATE + INSERT). Labels/thresholds per the revised Term-1 scale; the avg -> BandCode ladder lives in the read view (see the table header).",
     "headerScript": "seed_DimMathComprehensionBand.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimReadingBenchmark_EN.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "14428c8ef620acb4173ff1abb856ba040dbc22e7",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed TCRCE's English reading expectations into DimReadingBenchmark (EN_Reading / English): Expected Min and Max level per grade P-7 per month Sept-Jun, from the assessment team's matrices. Grade 7 = the Grade-6 June carry-over.",
+    "script": {
+     "kind": "seed",
+     "question": "Load the expected English reading-level ranges that drive the benchmark delta.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Created 2026-05-12 (initial build)"
+    },
+    "caveats": "Plain INSERT with no guard - re-running duplicates every benchmark row. Only for an empty EN_Reading set, after DimReadingBenchmark.sql. Grade 8 was added later by seed_DimReadingBenchmark_grade8.sql; the 'pending batches' list in the header is out of date."
    },
    "blob": "14428c8ef620acb4173ff1abb856ba040dbc22e7",
    "auto": {
@@ -17582,13 +17706,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions",
     "headerPurpose": "TCRCE's expected reading-level ranges for English instruction."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimReadingBenchmark_FR.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "711247ae379ccc7f2b7da7b0e5d14ace6aaef13f",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed TCRCE's French Immersion reading expectations into DimReadingBenchmark (FR_Reading / French Immersion): Expected Min and Max level (TD, 1-30, 30+) per grade P-7 per month Sept-Jun. Grade 7 = Grade-6 June carry-over (30 to 30+). FSL not covered.",
+    "script": {
+     "kind": "seed",
+     "question": "Load the expected French Immersion reading-level ranges that drive the benchmark delta.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Created 2026-05-12 (initial build)"
+    },
+    "caveats": "Plain INSERT with no guard - re-running duplicates every row. Only for an empty FR_Reading set, after DimReadingBenchmark.sql. Grade 8 added later by seed_DimReadingBenchmark_grade8.sql."
    },
    "blob": "711247ae379ccc7f2b7da7b0e5d14ace6aaef13f",
    "auto": {
@@ -17613,13 +17746,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions",
     "headerPurpose": "TCRCE's expected French reading-level ranges for French Immersion students. Source: assessment team (provided 2026-05-12 as two grade × month matrices, Expected Min and Expected Max). User-verified."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimReadingBenchmark_grade8.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "e4b147c3c69c9e84fd7de71361087c5aad9ea644",
    "notes": {
-    "purpose": ""
+    "purpose": "Add Grade 8 reading benchmarks by copying the Grade 7 rows (= Grade-6 June carry-over) for every scale system, program family and month; NOT EXISTS guard skips grade-8 rows already present. Verifies grade 6/7/8 row counts.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Why do grade-8 readers show a blank Expected level / no benchmark delta? Give grade 8 the same carry-over benchmark as grade 7.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "Written 2026-09-10 for dev and live"
+    },
+    "caveats": "Copies whatever Grade 7 holds at run time - run after the EN/FR benchmark seeds. If Grade 7 benchmarks are later corrected, Grade 8 will not follow (the guard skips existing rows); fix both."
    },
    "blob": "e4b147c3c69c9e84fd7de71361087c5aad9ea644",
    "auto": {
@@ -17654,13 +17796,22 @@
     "lastCommit": "2026-09-10 e9212ed fix(benchmark): seed Grade 8 reading benchmark = Grade-6 June carry-over",
     "headerPurpose": "Grade 8 reading benchmark = the Grade-6 June carry-over (same rule as Grade 7). Grades 7 AND 8 both expect the Grade-6 end-of-year level, so this copies the existing Grade-7 rows (already = Grade-6 June) into Grade 8 for every month, scale system, and program family.",
     "headerScript": "seed_DimReadingBenchmark_grade8.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimReadingScale_EN.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "2c8db7da277065016456373aae4119565c02cc81",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the 27 English reading levels into DimReadingScale (EN_Reading): DT (pre-emergent, LevelOrder 0) plus A-Z (1-26). LevelOrder drives the ReadingDelta computed in usp_UpsertReadingAssessment.",
+    "script": {
+     "kind": "seed",
+     "question": "Populate the English reading-level dropdown/scale.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Created 2026-05-12 (initial build)"
+    },
+    "caveats": "Plain INSERT with no guard - re-running duplicates levels (and new ReadingScaleIDs that facts could bind to). Only on an empty EN_Reading scale, before any FactAssessmentReading rows exist."
    },
    "blob": "2c8db7da277065016456373aae4119565c02cc81",
    "auto": {
@@ -17684,13 +17835,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions",
     "headerPurpose": "Populate the 27 valid English-reading levels — DT (pre-emergent dictated text) plus 26 letter levels A-Z."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimReadingScale_FR.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "a18b870e0a78c1cafe8470d3573600be0e412a94",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed the 32 French reading levels into DimReadingScale (FR_Reading): TD (0), numeric 1-30, and 30+ (31, the no-upper-bound marker also used as ExpectedMaxLevel).",
+    "script": {
+     "kind": "seed",
+     "question": "Populate the French Immersion reading-level dropdown/scale.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Created 2026-05-12 (initial build)"
+    },
+    "caveats": "Plain INSERT with no guard - re-running duplicates levels. Only on an empty FR_Reading scale, before any French reading facts exist."
    },
    "blob": "a18b870e0a78c1cafe8470d3573600be0e412a94",
    "auto": {
@@ -17714,13 +17874,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions",
     "headerPurpose": "Populate the 32 valid French-reading levels — TD (Texte Dicté, pre-emergent) plus numeric levels 1-30 plus 30+ (no-upper-bound marker for strong readers)."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimSchool_TCRCE.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "9e836dda07fd4538556bffcd688a0b06ef0aa1b9",
    "notes": {
-    "purpose": ""
+    "purpose": "Seed DimSchool with all 24 TCRCE schools (SchoolID, name, abbreviation from the @tcrce.ca email prefix, community) from the NS DoE 2024-25 directory, including the two alternative high schools; then counts (expect 24).",
+    "script": {
+     "kind": "seed",
+     "question": "Populate the school reference dimension at build time.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "Initial build 2026-04-24; alt schools 1254/1255 added to the list 2026-09-01"
+    },
+    "caveats": "Plain INSERT - not re-runnable (header says TRUNCATE DimSchool first, but don't do that on a populated warehouse without checking dependants). To add a single school use an IF NOT EXISTS patch like seed_DimSchool_add_alt_schools.sql."
    },
    "blob": "9e836dda07fd4538556bffcd688a0b06ef0aa1b9",
    "auto": {
@@ -17747,13 +17916,22 @@
     "lastCommit": "2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge",
     "headerPurpose": "Seed DimSchool with all Tri-County Regional Centre for Education schools as of the 2024-2025 Directory of Public Schools.",
     "headerScript": "seed_DimSchool_TCRCE.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_DimSchool_add_alt_schools.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "f5f39298e87fa1ee6e9abea16d7103ec1a25c083",
    "notes": {
-    "purpose": ""
+    "purpose": "Patch DimSchool with the two missing alternative high schools (1254 Yarmouth Alternative HS 'YAHS', 1255 Digby Alternative HS 'DAHS'), each behind IF NOT EXISTS, so students/staff there resolve to a school name.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the alternative high schools missing from the original DimSchool seed.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "Written 2026-08-27, committed 2026-09-01; once per warehouse (DimSchool survives resets)"
+    },
+    "caveats": "Abbreviations YAHS/DAHS are a best guess - correct if the school uses another short form. Redundant on a warehouse seeded from the current seed_DimSchool_TCRCE.sql (already includes both) but harmless there."
    },
    "blob": "f5f39298e87fa1ee6e9abea16d7103ec1a25c083",
    "auto": {
@@ -17779,13 +17957,22 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge",
     "headerPurpose": "1254 Yarmouth Alternative High School and 1255 Digby Alternative High School were missing from the DimSchool seed. Add them so students/staff at those schools resolve to a school name."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_StaffAppAccess.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ff94d9ce232bc6e5b189bdec1da8da192fa1824d",
    "notes": {
-    "purpose": ""
+    "purpose": "Bootstrap StaffAppAccess with the starting sysadmin (jeffrey.raine@tcrce.ca, IsSysAdmin = 1, implying cycle management + ingest) behind IF NOT EXISTS, so the /cycles and /ingest gates don't lock everyone out and the first post-reset ingest can be run. Header documents how to add/change/remove capability rows.",
+    "script": {
+     "kind": "seed",
+     "question": "Who can manage cycles and run ingest? Grant the initial admin so the gated screens are usable.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "Written 2026-08-27 / 2026-09-01 (run once after StaffAppAccess.sql)"
+    },
+    "caveats": "Never overwrites an existing row (an existing email with different flags is left as-is - use UPDATE). Store emails lowercased. Hard-codes one admin; add other admins by INSERT, not by editing and re-running for a different email unless intended."
    },
    "blob": "ff94d9ce232bc6e5b189bdec1da8da192fa1824d",
    "auto": {
@@ -17810,13 +17997,29 @@
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-01 bb0733c Add IsSysAdmin super-user; ingest gates on StaffAppAccess (post-reset bootstrap)",
     "headerPurpose": "Grant the starting administrator sysAdmin so access isn't lost when the /cycles and /ingest gates switch to this table, and so they can run the FIRST ingest after a production reset (DimStaff empty). Adjust the list for your admins. IsSysAdmin implies every capability."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_demo_results_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7f720988bb255660d172dc3c28ce08ca709fddf5",
    "notes": {
-    "purpose": ""
+    "purpose": "Give dev's synthetic students believable result history: creates a prior-year 'June 2026' Short Cycle (DimShortCycle + Reading/Writing DimAssessmentWindow instances copied from SC1) and fills it with Reading + Writing, then fills HALF of each homeroom in the current Short Cycle 1 with Reading, Writing and Math. Values are hash-seeded bell-curve draws around the benchmark (Reading), achievement level 2 (Writing) and a 0.65 mastery rate (Math).",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Make the dev demo environment look like a real school year (prior June + partly-entered SC1) for reports and demos.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-22 (several same-day fixes)"
+    },
+    "params": {
+     "JuneCGID": "fixed CycleGroupID of the script-created June demo cycle (keeps re-runs idempotent)",
+     "JuneDate": "assessment date stamped on the June rows (2026-06-15)",
+     "ReadSpread": "bell-curve width for reading levels (3.00 ~ 1.5 levels sigma)",
+     "WriteSpread": "bell-curve width for writing trait scores (1.80 ~ 0.9 points)",
+     "MathSpread": "bell-curve width for per-student math mastery rate (0.30 ~ 0.15)"
+    },
+    "caveats": "Aborts unless DB_NAME() looks like the _Dev warehouse. SC1 is auto-picked as the earliest active Short Cycle (excluding June) and the seed StaffKey as the first current RegionalAnalyst - entries made by that same staff key in SC1 are deleted on re-run. Re-run regenerates all three subjects identically (deterministic), not per subject. Needs dev to have a Short Cycle, staff, benchmarks and the math task bank loaded."
    },
    "blob": "7f720988bb255660d172dc3c28ce08ca709fddf5",
    "auto": {
@@ -18057,13 +18260,22 @@
     "lastCommit": "2026-09-22 a4d600a fix(dev seed): fully clear June cycle each run; document deterministic all-subject re-seed",
     "headerPurpose": "Populate the synthetic DEV students with believable result history so the demo environment \"looks right\": a prior-year JUNE Short Cycle (Reading + Writing) and a partially-entered current SHORT CYCLE 1 (Reading + Writing + Math, half of each class).",
     "headerScript": "seed_demo_results_dev.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_dev_resource_teacher.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "9f63a9257c7e1cbae79d64955491cfa666d4ba90",
    "notes": {
-    "purpose": ""
+    "purpose": "Add one synthetic Resource Teacher (resource.teacher.0716@tcrce.ca, 'Quinn Larch', PS Group 45 -> SpecialistTeacher) at school 0716 on dev: one current row each in DimStaff, FactStaffAssignment and StaffSchoolAccess, all NOT EXISTS-guarded, then verifies.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Give dev a SpecialistTeacher login to impersonate (awdev-impersonation) when testing the specialist access path.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-13"
+    },
+    "caveats": "TEMPORARY: the person is not in the dev staff export, so the next staff ingest (usp_MergeStaff) closes them out and the StaffSchoolAccess rebuild drops them - re-run after each ingest, or add them to data/imports/_generate_ingest_testset.ps1 for permanence. Never run on live (hand-inserting DimStaff fights the merge). No sections are attached - they see only what SpecialistTeacher scoping grants."
    },
    "blob": "9f63a9257c7e1cbae79d64955491cfa666d4ba90",
    "auto": {
@@ -18151,13 +18363,30 @@
     "lastCommit": "2026-10-13 49bb40f sql(dev): seed one synthetic Resource Teacher (Group 45 -> SpecialistTeacher) for impersonation testing",
     "headerPurpose": "DEV ONLY (Assessment_Warehouse_Dev). Add one synthetic Resource Teacher (PS Group 45 -> RoleCode/AccessLevel 'SpecialistTeacher') at the ELEM test school 0716, so the SpecialistTeacher access path can be impersonated on awdev-impersonation (:3002). resource.teacher.0716@tcrce.ca — Quinn Larch — school 0716",
     "headerScript": "seed_dev_resource_teacher.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_primary_homeroom_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "78adee6f2722596a67fa86ba8b18707f23913d93",
    "notes": {
-    "purpose": ""
+    "purpose": "Create a 20-student synthetic Primary (grade P) homeroom at Drumlin on dev wired to a new synthetic teacher: DimStaff teacher -> DimSection 'DEVHR-<homeroom>' -> FactSectionTeachers -> 20 DimStudent rows (StudentNumbers 8000000001-020) -> FactEnrollment from @StartDate.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Give dev a larger Primary roster (and a teacher to impersonate) for viewing the Math/Reading/Writing entry pages.",
+     "target": "dev",
+     "rerunSafe": false,
+     "applied": "dev 2026-09-11"
+    },
+    "params": {
+     "Homeroom": "homeroom label, URL-safe (becomes SectionID 'DEVHR-<label>')",
+     "ProgramCode": "student program; NULL auto-picks an English program",
+     "StartDate": "enrollment start date - must fall inside the current-year cycle windows",
+     "TeacherEmail": "synthetic teacher UPN to create/impersonate (devseed.teacher@tcrce.ca)",
+     "TeacherFirst": "teacher first name",
+     "TeacherLast": "teacher last name"
+    },
+    "caveats": "DEV ONLY. THROWs if the section already exists - run the script's CLEANUP block first to re-seed (or change @Homeroom). Synthetic rows are not in the dev export, so a full re-ingest/reset removes or closes them. Needs an open Math cycle covering grade P and Primary DimMathTask rows to see math. The 'feat/math-p6-entry' build note is historical."
    },
    "blob": "78adee6f2722596a67fa86ba8b18707f23913d93",
    "auto": {
@@ -18372,13 +18601,22 @@
     "lastCommit": "2026-09-11 17133fb test(dev): seed a 20-student Primary homeroom at Drumlin + a new teacher",
     "headerPurpose": "Create a 20-student Primary (grade P) homeroom at DRUMLIN in the Dev warehouse, wired to a NEWLY GENERATED synthetic classroom teacher, so the Math (and Reading/Writing) entry pages can be viewed with a larger roster. Sets up everything the roster TVFs need: new DimStaff teacher -> DimSection (homeroom) -> FactSectionTeachers -> 20 DimStudent rows (grade P, GroupKey) -> FactEnrollment (2026-2027).",
     "headerScript": "seed_primary_homeroom_dev.sql (DEV / SYNTHETIC ONLY — never run on live)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_prior_year_baseline_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "063aefd19119d73da2cf01eb2bd551415f88989e",
    "notes": {
-    "purpose": ""
+    "purpose": "TRUNCATE PriorYearBaseline on dev and fill it with a fabricated 2025-2026 June reading level for every current English/French Immersion student (flat EN 'C' / FR '4'), so the roster 'Since June' column renders.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Give dev synthetic prior-year June reading levels for the 'Since June' roster column.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-10 (v0.4.0)"
+    },
+    "caveats": "NEVER run on live - it TRUNCATEs PriorYearBaseline, which on live holds the real prior-year baseline (PII). Prereq: sql/facts/PriorYearBaseline.sql. Every student gets the same level (header's 'a few levels below' is approximate). Separate from the June demo cycle created by seed_demo_results_dev.sql."
    },
    "blob": "063aefd19119d73da2cf01eb2bd551415f88989e",
    "auto": {
@@ -18425,13 +18663,22 @@
     "lastCommit": "2026-09-10 bc69379 chore(release): v0.4.0 â€” reading roster prior-year starting point",
     "headerPurpose": "Populate PriorYearBaseline on the DEV warehouse with synthetic June reading levels so the roster \"Since June\" column has data to render. Real baseline data is LIVE-only (PII); dev gets fabricated anchors.",
     "headerScript": "seed_prior_year_baseline_dev.sql (DEV ONLY — synthetic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/seed_split_homeroom_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ef696154fb2d07468276da05fc6eb3ead315e442",
    "notes": {
-    "purpose": ""
+    "purpose": "Turn the DEVSEED Drumlin Primary homeroom into a P/1/2 split by UPDATEing the current DimStudent Grade in place for students 8000000014-018 (-> 1) and 019-020 (-> 2), keeping the same GroupKey/Homeroom; shows the grades present per group. Has a RESET block that puts them all back to 'P'.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Does a multi-grade homeroom card show under each of its grades in the Data Entry grade filter?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-15"
+    },
+    "caveats": "DEV ONLY. THROWs unless seed_primary_homeroom_dev.sql has been run first. Deliberately bypasses SCD Type 2 (in-place Grade UPDATE) - fine for the synthetic fixture, never a pattern for real data."
    },
    "blob": "ef696154fb2d07468276da05fc6eb3ead315e442",
    "auto": {
@@ -18478,7 +18725,8 @@
     "lastCommit": "2026-09-15 b77a6b6 test(dev): seed a split (P/1/2) homeroom to exercise the grade-span filter",
     "headerPurpose": "Turn the DEVSEED Drumlin Primary homeroom (from seed_primary_homeroom_dev.sql) into a MULTI-GRADE split so the grade filter's grade-span behaviour can be tested: a homeroom card that contains more than one grade must surface under EACH of its grades. Flips a handful of the 20 grade-P students to grades 1 and 2, keeping the same GroupKey/Homeroom, giving a P / 1 / 2 split (3 grades).",
     "headerScript": "seed_split_homeroom_dev.sql (DEV / SYNTHETIC ONLY — never run on live)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/set_cycle_grade_ranges_by_subject.sql": {
    "kind": "script",
@@ -18521,9 +18769,17 @@
   },
   "sql/scripts/staff_roster_linkage_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "0b7a5cd6ea01e78278ee9324f9df3b45c8b8a9f9",
    "notes": {
-    "purpose": ""
+    "purpose": "For every current classroom teacher (AccessLevel NULL), compare sections linked via DimSection.TeacherStaffKey vs via FactSectionTeachers.TeacherEmail and count students resolvable today through FST -> DimSection -> FactEnrollment, to show where a teacher's roster chain breaks.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Why does this (dev) teacher see an empty roster / no cycle - missing section-teacher link or no current enrollments?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-04"
+    },
+    "caveats": "Read-only. Written for dev synthetic data; runs on live too but lists every teacher (staff emails, not student PII). Assumes classroom teachers have AccessLevel NULL (2026-09-04 model) - teachers given a role code (e.g. SpecialistTeacher) are excluded. Read: StaffKey>0 & FST=0 = seed gap; FST>0 & students=0 = enrollment gap (see rollforward_enrollment_dev.sql)."
    },
    "blob": "0b7a5cd6ea01e78278ee9324f9df3b45c8b8a9f9",
    "auto": {
@@ -18563,13 +18819,22 @@
     "lastCommit": "2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment ",
     "headerPurpose": "For every current classroom teacher (AccessLevel NULL), compare the",
     "headerScript": "staff_roster_linkage_dev.sql (DEV synthetic only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/test_slash_homeroom_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "b853a20bf115c10de2230b14eb6108603b12d753",
    "notes": {
-    "purpose": ""
+    "purpose": "Test fixture: set the lowest-StudentKey current P-6 synthetic student's Homeroom to '5/6' and GroupKey to '<abbr>-5-6' (slashes/spaces/backslashes -> '-') so the '/'-in-homeroom fix can be exercised end to end.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Plant a homeroom containing '/' on dev to test URL-safe GroupKey handling.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-08 (after the GroupKey migration + merge proc + TVFs)"
+    },
+    "caveats": "DEV ONLY - in-place UPDATE of a real-looking student row (no SCD). The next student ingest overwrites it back to the export value. No undo block; picks whichever student has the lowest key."
    },
    "blob": "b853a20bf115c10de2230b14eb6108603b12d753",
    "auto": {
@@ -18606,13 +18871,22 @@
     "lastCommit": "2026-09-08 ac170bc feat(enter): collapsible school filter + groupkey deploy bundles (dev)",
     "headerPurpose": "Give one current elementary (grade P-6) synthetic student a homeroom containing '/' (\"5/6\") and set its GroupKey accordingly, so the '/'-in-homeroom fix can be exercised end-to-end in awdev. Run AFTER deploying the GroupKey migration + merge proc + TVFs to dev.",
     "headerScript": "test_slash_homeroom_dev.sql (DEV synthetic only -- TEST FIXTURE)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/verify_conditional_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "f8024d601becc8264173b190315227a016985a0f",
    "notes": {
-    "purpose": ""
+    "purpose": "Read-only, counts-only pre-deploy check for two conditional 0.5.0 items on live: are Grade-8 reading benchmarks present (count in DimReadingBenchmark), and does StaffAppAccess exist and have rows?",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Do I still need to run seed_DimReadingBenchmark_grade8.sql and/or StaffAppAccess.sql + seed_StaffAppAccess.sql on this warehouse?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-21 (0.5.0 deploy prep)"
+    },
+    "caveats": "No PII; works on dev too. Result guide: Grade8Benchmarks 0 -> run the grade-8 seed; StaffAppAccess 'MISSING' -> create table then seed; 0 rows -> seed only. Tied to the 0.5.0 deploy - both items should now be present on live."
    },
    "blob": "f8024d601becc8264173b190315227a016985a0f",
    "auto": {
@@ -18625,13 +18899,22 @@
     "lastCommit": "2026-09-21 f199bb3 test(deploy): read-only check whether grade-8 benchmarks + StaffAppAccess are already on live",
     "headerPurpose": "Decide whether the two conditional 0.5.0 items are already on LIVE, so you run each ONLY if it's missing. Safe to run on Assessment_Warehouse.",
     "headerScript": "verify_conditional_live.sql (READ-ONLY — counts only, no PII)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/verify_cycle_instances.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "5ba5cdfb567f6d8c360e3d8f10aa7514fa7fe4cc",
    "notes": {
-    "purpose": ""
+    "purpose": "Read-only dump of every Short Cycle header (DimShortCycle) with its instances (DimAssessmentWindow: subject, language, ProgramScope, grade band, scale, BenchmarkMonth, active flags) and the count of Reading+Writing+Math result rows entered against each instance.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "What cycles and per-subject instances does this warehouse have, and which instances already hold entered results?",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-21 - dev to capture the canonical SCoR 1 instance set, live to reconcile against it"
+    },
+    "caveats": "Config only, no PII. ResultRows > 0 means the instance has entered data - never delete it. Use this before editing/reconciling cycle instances or grade bands rather than writing a new cycle dump."
    },
    "blob": "5ba5cdfb567f6d8c360e3d8f10aa7514fa7fe4cc",
    "auto": {
@@ -18666,13 +18949,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Dump every Short Cycle header + its instances (the Subject × Language × ProgramScope × GradeBand rows). Run on DEV to capture the CANONICAL instance set (the source of truth — dev SCoR 1 is confirmed correct), and on LIVE to see what each cycle currently has, so the migration can reconcile live to match dev without guessing values or orphaning facts.",
     "headerScript": "verify_cycle_instances.sql (READ-ONLY — cycle CONFIG only, no PII)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/verify_selfcontained_facts.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "08d3569af21a2c6b8d0f078573c20261f668ab56",
    "notes": {
-    "purpose": ""
+    "purpose": "Read-only post-migration check that the reading + writing 'as-was' backfills landed: reading rows with a ReadingDelta must carry the expected range (ExpectedMin/MaxLevelCode); writing rows that are complete must have a WritingAverage matching an SCR-aware recompute (Conventions excluded when non-numeric). Plus TOP 10 sample rows of each.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Did the self-contained fact backfills (score context on reading, stored average on writing) land correctly?",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-21, after migrate_FactAssessmentReading_add_score_context.sql and migrate_FactAssessmentWriting_add_average.sql"
+    },
+    "caveats": "PASS = every *_shouldBe0 column is 0. The TOP 10 sample rows are result rows (levels/scores by ID, no names) - fine on live but don't paste them outside. Can also be re-used as an ongoing integrity check on those two facts."
    },
    "blob": "08d3569af21a2c6b8d0f078573c20261f668ab56",
    "auto": {
@@ -18685,13 +18977,22 @@
     "lastCommit": "2026-09-21 4627002 test(facts): read-only verification for the reading+writing as-was backfills",
     "headerPurpose": "Confirm the reading + writing as-was backfills landed correctly. Run after migrate_FactAssessmentReading_add_score_context.sql and migrate_FactAssessmentWriting_add_average.sql. No writes.",
     "headerScript": "verify_selfcontained_facts.sql (READ-ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/who_sees_open_cycle_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "68234fee2e56811697b69c2a70ec018627a7dc15",
    "notes": {
-    "purpose": ""
+    "purpose": "List every current active staff member who sees an OPEN (or ClosesToday) cycle in Data Entry and for which subjects, by CROSS APPLYing the app's own tvf_UserAssessmentWindows per UPN.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which (dev) staff can I impersonate to see an open cycle, and which subjects will they get?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-04"
+    },
+    "caveats": "Read-only; uses the deployed TVF so reflects current grade bands and course scoping. Calls the TVF once per staff member - slow on live's ~200+ staff but would work (lists staff names/emails only). Header's band list (Math P-6) is dated; Math is now P-5. Anyone not listed sees no open cycle - pair with staff_roster_linkage_dev.sql to find out why."
    },
    "blob": "68234fee2e56811697b69c2a70ec018627a7dc15",
    "auto": {
@@ -18713,7 +19014,8 @@
     "lastCommit": "2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment ",
     "headerPurpose": "List which impersonable staff currently see an OPEN cycle in Data Entry, and for which subjects. Uses the same source of truth the app uses (tvf_UserAssessmentWindows per UPN), so it reflects the live per-subject grade bands (Reading P-8, Writing P-RG, Math P-6) and the current date-derived Open/ClosesToday status.",
     "headerScript": "who_sees_open_cycle_dev.sql (DEV synthetic only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/security/AppMaintenance.sql": {
    "kind": "security-table",
@@ -28389,6 +28691,6 @@
    "reviewedOn": "2026-10-23"
   }
  },
- "extractedAt": "2026-10-22",
- "extractedFrom": "71e2e1e"
+ "extractedAt": "2026-10-23",
+ "extractedFrom": "d05b74e"
 }

@@ -4,14 +4,12 @@
 
 Search here BEFORE writing a new diagnostic or fix. Reuse or extend; template it with variables if a near-duplicate exists. Kinds: diagnostic (read-only) · template (DECLARE variables) · fix/migration · seed · dev-helper. “(auto)” = classified from the SQL alone, not yet reviewed.
 
-- [deploy-helper](#deploy-helper) (14)
-- [dev-helper](#dev-helper) (7)
-- [diagnostic](#diagnostic) (24)
-- [diagnostic (auto)](#diagnostic-(auto)) (7)
-- [fix/migration](#fixmigration) (43)
-- [seed](#seed) (3)
+- [deploy-helper](#deploy-helper) (16)
+- [dev-helper](#dev-helper) (16)
+- [diagnostic](#diagnostic) (29)
+- [fix/migration](#fixmigration) (46)
+- [seed](#seed) (16)
 - [template](#template) (10)
-- [writes data (auto)](#writes-data-(auto)) (25)
 
 ## deploy-helper
 
@@ -145,6 +143,24 @@ Bring all the scoped TVFs on live back to the current source after a partial dep
 effect: **ddl** · target: live · re-run safe: no · applied: live 2026-09-24
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `SectionRosterMembership`, `StaffSchoolAccess`, `TeacherRosterMembership`, `vw_StudentReadingStartingPoint`
 
+### run_math_task_ingest_dev.sql
+
+[sql/scripts/run_math_task_ingest_dev.sql](../../sql/scripts/run_math_task_ingest_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace
+
+(Re)load the math task bank into dev from the lakehouse CSV.
+
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-10-04 (2026-27 bank)
+**Reads:** `DimMathTask`
+
+### run_math_task_ingest_live.sql
+
+[sql/scripts/run_math_task_ingest_live.sql](../../sql/scripts/run_math_task_ingest_live.sql) · reviewed 2026-10-23 · last change: 2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace
+
+(Re)load or refresh the math task bank on live from the lakehouse CSV.
+
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-10-04 (2026-27 bank, 428 rows P/1/2/3/4)
+**Reads:** `DimMathTask`
+
 ## dev-helper
 
 ### dev_build_cycles_to_match_live_2026-10-06.sql
@@ -221,6 +237,101 @@ Wipe the roster tables and rebuild them from the Lakehouse imports (pre-MVP test
 
 effect: **writes-data** · target: dev · re-run safe: no · applied: used repeatedly in pre-MVP testing (2026-05)
 **Writes:** `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactEnrollment` (truncate); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate)
+
+### reset_dev_full_and_ingest.sql
+
+[sql/scripts/reset_dev_full_and_ingest.sql](../../sql/scripts/reset_dev_full_and_ingest.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Wipe dev back to a fresh ingest from the Lakehouse imports files without orphaning entered results.
+
+effect: **writes-data** · target: dev · re-run safe: yes
+**Variables:** `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Writes:** `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactAssessmentMath` (truncate); `FactAssessmentReading` (truncate); `FactAssessmentWriting` (truncate); `FactEnrollment` (truncate/update — `EndDate`, `LastUpdated`, `StartDate`); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate); `FactStudentAdaptation` (truncate); `FactStudentIPP` (truncate); `FactSubmissionAudit` (truncate)
+
+### reset_ipp_and_assessments.sql
+
+[sql/scripts/reset_ipp_and_assessments.sql](../../sql/scripts/reset_ipp_and_assessments.sql) · reviewed 2026-10-23 · last change: 2026-06-22 e7e73a6 B6: roster IPP confirmation, auth redirect, + test reset
+
+Put every IPP student back to 'Confirm IPP' and clear entered reading results so the entry flow can be retested.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: Created 2026-06-22 for the B6 roster IPP test (MVP era)
+**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactAssessmentReading`, `FactStudentIPP`
+**Writes:** `FactAssessmentReading` (delete); `FactStudentIPP` (delete/insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
+
+### rollforward_enrollment_dev.sql
+
+[sql/scripts/rollforward_enrollment_dev.sql](../../sql/scripts/rollforward_enrollment_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-18 e11bcd8 feat(entry): course-scoped group picker (tvf_TeacherGroups rework) â€” verified on dev
+
+Why do dev teachers see 'No cycles' / empty rosters? Roll the expired synthetic enrollments into the current school year.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-04 (unguarded original); guarded to expired rows 2026-09-18
+**Variables:** `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Reads:** `FactEnrollment`
+**Writes:** `FactEnrollment` (update — `ActiveFlag`, `EndDate`, `LastUpdated`, `StartDate`)
+
+### seed_demo_results_dev.sql
+
+[sql/scripts/seed_demo_results_dev.sql](../../sql/scripts/seed_demo_results_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-22 a4d600a fix(dev seed): fully clear June cycle each run; document deterministic all-subject re-seed
+
+Make the dev demo environment look like a real school year (prior June + partly-entered SC1) for reports and demos.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-22 (several same-day fixes)
+**Variables:** `@SC1CGID`, `@JuneCGID` = `'6a11e000-2026-406e-9c17-0de100062026'`, `@SeedStaff`, `@JuneDate` = `'2026-06-15'`, `@SC1Date`, `@ReadSpread` = `3.00`, `@WriteSpread` = `1.80`, `@MathSpread` = `0.30`
+**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
+**Writes:** `DimAssessmentWindow` (insert — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`); `DimShortCycle` (insert — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`); `FactAssessmentMath` (delete/insert — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `MathTaskKey`, `Result`, `StudentKey`, `SubmissionTimestamp`); `FactAssessmentReading` (insert — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LastUpdated`, `LevelCode`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactAssessmentWriting` (insert — `AssessmentDate`, `AssessmentLanguage`, `AssessmentWindowID`, `ConventionsScore`, `EnteredByStaffKey`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `StudentKey`, `SubmissionTimestamp`, `WritingAverage`)
+
+### seed_dev_resource_teacher.sql
+
+[sql/scripts/seed_dev_resource_teacher.sql](../../sql/scripts/seed_dev_resource_teacher.sql) · reviewed 2026-10-23 · last change: 2026-10-13 49bb40f sql(dev): seed one synthetic Resource Teacher (Group 45 -> SpecialistTeacher) for impersonation testing
+
+Give dev a SpecialistTeacher login to impersonate (awdev-impersonation) when testing the specialist access path.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-10-13
+**Reads:** `DimStaff`, `FactStaffAssignment`, `StaffSchoolAccess`
+**Writes:** `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `FactStaffAssignment` (insert — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `RoleCode`, `SchoolID`, `SourceSystemID`, `StaffKey`); `StaffSchoolAccess` (insert — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`)
+
+### seed_primary_homeroom_dev.sql
+
+[sql/scripts/seed_primary_homeroom_dev.sql](../../sql/scripts/seed_primary_homeroom_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-11 17133fb test(dev): seed a 20-student Primary homeroom at Drumlin + a new teacher
+
+Give dev a larger Primary roster (and a teacher to impersonate) for viewing the Math/Reading/Writing entry pages.
+
+effect: **writes-data** · target: dev · re-run safe: no · applied: dev 2026-09-11
+**Variables:** `@Homeroom` = `N'PA'`, `@ProgramCode` = `NULL`, `@StartDate` = `'2026-09-02'`, `@TeacherEmail` = `N'devseed.teacher@tcrce.ca'`, `@TeacherFirst` = `N'Seed'`, `@TeacherLast` = `N'Teacher'`, `@Now` = `GETDATE()`, `@SchoolID`, `@Abbrev`, `@TeacherKey`, `@TermID`, `@SectionID` = `'DEVHR-' + @Homeroom`, `@GroupKey`, `@SectionKey`
+**Reads:** `DimProgram`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactEnrollment`
+**Writes:** `DimSection` (insert — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `LastUpdated`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`); `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `DimStudent` (insert — `Adap`, `DateOfBirth`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `LastUpdated`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`); `FactEnrollment` (insert — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`); `FactSectionTeachers` (insert — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`)
+
+### seed_prior_year_baseline_dev.sql
+
+[sql/scripts/seed_prior_year_baseline_dev.sql](../../sql/scripts/seed_prior_year_baseline_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-10 bc69379 chore(release): v0.4.0 â€” reading roster prior-year starting point
+
+Give dev synthetic prior-year June reading levels for the 'Since June' roster column.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-10 (v0.4.0)
+**Reads:** `DimProgram`, `DimSchool`, `DimStudent`, `PriorYearBaseline`
+**Writes:** `PriorYearBaseline` (insert/truncate — `AssessmentLanguage`, `HistGrade`, `HistHomeroom`, `HistLiteracyIPP`, `HistSchool`, `LastUpdated`, `ReadingLevel`, `SchoolYear`, `StudentNumber`)
+
+### seed_split_homeroom_dev.sql
+
+[sql/scripts/seed_split_homeroom_dev.sql](../../sql/scripts/seed_split_homeroom_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-15 b77a6b6 test(dev): seed a split (P/1/2) homeroom to exercise the grade-span filter
+
+Does a multi-grade homeroom card show under each of its grades in the Data Entry grade filter?
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-15
+**Variables:** `@Now` = `GETDATE()`
+**Reads:** `DimGrade`, `DimStudent`
+**Writes:** `DimStudent` (update — `Grade`, `LastUpdated`)
+
+### test_slash_homeroom_dev.sql
+
+[sql/scripts/test_slash_homeroom_dev.sql](../../sql/scripts/test_slash_homeroom_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-08 ac170bc feat(enter): collapsible school filter + groupkey deploy bundles (dev)
+
+Plant a homeroom containing '/' on dev to test URL-safe GroupKey handling.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-08 (after the GroupKey migration + merge proc + TVFs)
+**Reads:** `DimGrade`, `DimSchool`, `DimStudent`
+**Writes:** `DimStudent` (update — `GroupKey`, `Homeroom`, `LastUpdated`)
 
 ## diagnostic
 
@@ -444,69 +555,49 @@ Which sections at DRHS/SRHS are majority O2 students, and who teaches them?
 effect: **read-only** · target: live · re-run safe: yes · applied: written for a live request 2026-09-29
 **Reads:** `DimProgram`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactEnrollment`, `FactSectionTeachers`
 
-## diagnostic (auto)
-
-### run_math_task_ingest_dev.sql
-
-[sql/scripts/run_math_task_ingest_dev.sql](../../sql/scripts/run_math_task_ingest_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace
-
-Load the math task bank into DimMathTask on DEV via usp_LoadMathTasks — same as the live run, but pointed at the DEV lakehouse.
-
-effect: **read-only**
-**Reads:** `DimMathTask`
-
-### run_math_task_ingest_live.sql
-
-[sql/scripts/run_math_task_ingest_live.sql](../../sql/scripts/run_math_task_ingest_live.sql) · skeleton (not yet reviewed) · last change: 2026-10-04 eb83d1c Math tasks 2026-27: tracked bank + tooling; strip codes, preserve whitespace
-
-Ingest the math task bank into DimMathTask on LIVE via usp_LoadMathTasks.
-
-effect: **read-only**
-**Reads:** `DimMathTask`
-
 ### staff_roster_linkage_dev.sql
 
-[sql/scripts/staff_roster_linkage_dev.sql](../../sql/scripts/staff_roster_linkage_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
+[sql/scripts/staff_roster_linkage_dev.sql](../../sql/scripts/staff_roster_linkage_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
 
-For every current classroom teacher (AccessLevel NULL), compare the
+Why does this (dev) teacher see an empty roster / no cycle - missing section-teacher link or no current enrollments?
 
-effect: **read-only**
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-09-04
 **Reads:** `DimSection`, `DimStaff`, `FactEnrollment`, `FactSectionTeachers`
 
 ### verify_conditional_live.sql
 
-[sql/scripts/verify_conditional_live.sql](../../sql/scripts/verify_conditional_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-21 f199bb3 test(deploy): read-only check whether grade-8 benchmarks + StaffAppAccess are already on live
+[sql/scripts/verify_conditional_live.sql](../../sql/scripts/verify_conditional_live.sql) · reviewed 2026-10-23 · last change: 2026-09-21 f199bb3 test(deploy): read-only check whether grade-8 benchmarks + StaffAppAccess are already on live
 
-Decide whether the two conditional 0.5.0 items are already on LIVE, so you run each ONLY if it's missing. Safe to run on Assessment_Warehouse.
+Do I still need to run seed_DimReadingBenchmark_grade8.sql and/or StaffAppAccess.sql + seed_StaffAppAccess.sql on this warehouse?
 
-effect: **read-only**
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-09-21 (0.5.0 deploy prep)
 **Reads:** `DimReadingBenchmark`, `StaffAppAccess`
 
 ### verify_cycle_instances.sql
 
-[sql/scripts/verify_cycle_instances.sql](../../sql/scripts/verify_cycle_instances.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+[sql/scripts/verify_cycle_instances.sql](../../sql/scripts/verify_cycle_instances.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
 
-Dump every Short Cycle header + its instances (the Subject × Language × ProgramScope × GradeBand rows). Run on DEV to capture the CANONICAL instance set (the source of truth — dev SCoR 1 is confirmed correct), and on LIVE to see what each cycle currently has, so the migration can reconcile live to match dev without guessing values or orphaning facts.
+What cycles and per-subject instances does this warehouse have, and which instances already hold entered results?
 
-effect: **read-only**
+effect: **read-only** · target: dev and live · re-run safe: yes · applied: 2026-09-21 - dev to capture the canonical SCoR 1 instance set, live to reconcile against it
 **Reads:** `DimAssessmentWindow`, `DimShortCycle`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
 
 ### verify_selfcontained_facts.sql
 
-[sql/scripts/verify_selfcontained_facts.sql](../../sql/scripts/verify_selfcontained_facts.sql) · skeleton (not yet reviewed) · last change: 2026-09-21 4627002 test(facts): read-only verification for the reading+writing as-was backfills
+[sql/scripts/verify_selfcontained_facts.sql](../../sql/scripts/verify_selfcontained_facts.sql) · reviewed 2026-10-23 · last change: 2026-09-21 4627002 test(facts): read-only verification for the reading+writing as-was backfills
 
-Confirm the reading + writing as-was backfills landed correctly. Run after migrate_FactAssessmentReading_add_score_context.sql and migrate_FactAssessmentWriting_add_average.sql. No writes.
+Did the self-contained fact backfills (score context on reading, stored average on writing) land correctly?
 
-effect: **read-only**
+effect: **read-only** · target: dev and live · re-run safe: yes · applied: 2026-09-21, after migrate_FactAssessmentReading_add_score_context.sql and migrate_FactAssessmentWriting_add_average.sql
 **Reads:** `FactAssessmentReading`, `FactAssessmentWriting`
 
 ### who_sees_open_cycle_dev.sql
 
-[sql/scripts/who_sees_open_cycle_dev.sql](../../sql/scripts/who_sees_open_cycle_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
+[sql/scripts/who_sees_open_cycle_dev.sql](../../sql/scripts/who_sees_open_cycle_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
 
-List which impersonable staff currently see an OPEN cycle in Data Entry, and for which subjects. Uses the same source of truth the app uses (tvf_UserAssessmentWindows per UPN), so it reflects the live per-subject grade bands (Reading P-8, Writing P-RG, Math P-6) and the current date-derived Open/ClosesToday status.
+Which (dev) staff can I impersonate to see an open cycle, and which subjects will they get?
 
-effect: **read-only**
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-09-04
 **Reads:** `DimStaff`
 
 ## fix/migration
@@ -910,6 +1001,36 @@ effect: **writes-data** · target: dev and live · re-run safe: yes · applied: 
 **Reads:** `DimAssessmentWindow`, `DimProgram`, `DimStudent`, `FactAssessmentWriting`, `WritingTraitExclusion`
 **Writes:** `FactAssessmentWriting` (update — `ConventionsScore`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `WritingAverage`)
 
+### reset_for_production.sql
+
+[sql/scripts/reset_for_production.sql](../../sql/scripts/reset_for_production.sql) · reviewed 2026-10-23 · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
+
+Clear all synthetic/pilot data from the live warehouse at go-live cutover.
+
+effect: **writes-data** · target: live · re-run safe: no · applied: Written 2026-08-27 for the live cutover (last changed 2026-09-01); live has since gone into production (1.2.0 live 2026-10-13)
+**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGender`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimRole`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactDataQualityAudit`, `FactEnrollment`, `FactSectionTeachers`, `FactStaffAssignment`, `FactStudentIPP`, `FactSubmissionAudit`, `StaffSchoolAccess`
+**Writes:** `DimAssessmentWindow` (truncate); `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactAssessmentReading` (truncate); `FactAssessmentWriting` (truncate); `FactDataQualityAudit` (truncate); `FactEnrollment` (truncate); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate); `FactStudentIPP` (truncate); `FactSubmissionAudit` (truncate); `StaffSchoolAccess` (truncate); `Stg_CoTeacher` (truncate); `Stg_Enrollment` (truncate); `Stg_Section` (truncate); `Stg_Staff` (truncate); `Stg_Student` (truncate); `Wrk_Enrollment` (truncate); `Wrk_Section` (truncate); `Wrk_SectionTeacher` (truncate); `Wrk_StaffAssignment` (truncate); `Wrk_StaffPersons` (truncate); `Wrk_Student` (truncate)
+
+### seed_DimReadingBenchmark_grade8.sql
+
+[sql/scripts/seed_DimReadingBenchmark_grade8.sql](../../sql/scripts/seed_DimReadingBenchmark_grade8.sql) · reviewed 2026-10-23 · last change: 2026-09-10 e9212ed fix(benchmark): seed Grade 8 reading benchmark = Grade-6 June carry-over
+
+Why do grade-8 readers show a blank Expected level / no benchmark delta? Give grade 8 the same carry-over benchmark as grade 7.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: Written 2026-09-10 for dev and live
+**Reads:** `DimReadingBenchmark`
+**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
+
+### seed_DimSchool_add_alt_schools.sql
+
+[sql/scripts/seed_DimSchool_add_alt_schools.sql](../../sql/scripts/seed_DimSchool_add_alt_schools.sql) · reviewed 2026-10-23 · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
+
+Add the alternative high schools missing from the original DimSchool seed.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: Written 2026-08-27, committed 2026-09-01; once per warehouse (DimSchool survives resets)
+**Reads:** `DimSchool`
+**Writes:** `DimSchool` (insert — `Abbreviation`, `ActiveFlag`, `Community`, `LastUpdated`, `SchoolID`, `SchoolName`)
+
 ### set_cycle_grade_ranges_by_subject.sql
 
 [sql/scripts/set_cycle_grade_ranges_by_subject.sql](../../sql/scripts/set_cycle_grade_ranges_by_subject.sql) · reviewed 2026-10-22 · last change: 2026-10-09 0523706 math reports: units collapsed by default; regional staff default to Grade lens; Math scope P-5
@@ -950,6 +1071,130 @@ Wipe and rebuild the date dimension.
 effect: **writes-data** · target: either · re-run safe: no
 **Reads:** `DimCalendar`
 **Writes:** `DimCalendar` (insert/truncate — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`)
+
+### seed_DimAchievementLevel.sql
+
+[sql/scripts/seed_DimAchievementLevel.sql](../../sql/scripts/seed_DimAchievementLevel.sql) · reviewed 2026-10-23 · last change: 2026-06-09 8711453 Session wrap (2026-06-09): Direction B restyle â€” scrLanding + scrIPP ported
+
+Populate/refresh the reading achievement-level thresholds and colors.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: Created 2026-05-26; colors updated 2026-06-09 (Direction B restyle)
+**Reads:** `DimAchievementLevel`
+**Writes:** `DimAchievementLevel` (delete/insert — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `DisplayOrder`, `HexColor`, `HexColorTint`, `LastUpdated`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`)
+
+### seed_DimAssessmentWindow_MVP.sql
+
+[sql/scripts/seed_DimAssessmentWindow_MVP.sql](../../sql/scripts/seed_DimAssessmentWindow_MVP.sql) · reviewed 2026-10-23 · last change: 2026-05-13 4278954 Session wrap (2026-05-13): Step 18 SQL prereqs DONE + Power Apps build pivot to VS Code YAML
+
+Create the June 2026 MVP pilot reading windows.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: 2026-05-13 (MVP pilot)
+**Reads:** `DimAssessmentWindow`
+**Writes:** `DimAssessmentWindow` (insert — `ActiveFlag`, `AssessmentType`, `CreatedBy`, `CreatedDate`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`)
+
+### seed_DimCourseAssessment_dev.sql
+
+[sql/scripts/seed_DimCourseAssessment_dev.sql](../../sql/scripts/seed_DimCourseAssessment_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)
+
+Map dev's synthetic course codes to Literacy/Math so course-scoped entry works on dev.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-17 (course-scoped entry foundation)
+**Reads:** `DimCourseAssessment`
+**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
+
+### seed_DimCourseAssessment_dev_testset.sql
+
+[sql/scripts/seed_DimCourseAssessment_dev_testset.sql](../../sql/scripts/seed_DimCourseAssessment_dev_testset.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+After ingesting the synthetic test set on dev, map its course codes so entry resolves courses.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev ~2026-09-22 (dev ingest tooling)
+**Reads:** `DimCourseAssessment`
+**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
+
+### seed_DimCourseAssessment_live.sql
+
+[sql/scripts/seed_DimCourseAssessment_live.sql](../../sql/scripts/seed_DimCourseAssessment_live.sql) · reviewed 2026-10-23 · last change: 2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)
+
+Load the real course -> assessment map so course-scoped entry knows which courses are Reading/Writing (and in which language) or Math.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: Written 2026-09-17 for live; run date not recorded in the file
+**Reads:** `DimCourseAssessment`
+**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
+
+### seed_DimGrade.sql
+
+[sql/scripts/seed_DimGrade.sql](../../sql/scripts/seed_DimGrade.sql) · reviewed 2026-10-23 · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
+
+Populate the grade reference dimension at build time.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Created 2026-05-12 (initial build)
+**Writes:** `DimGrade` (insert — `ActiveFlag`, `GradeBand`, `GradeCode`, `GradeName`, `GradeOrder`, `LastUpdated`)
+
+### seed_DimMathComprehensionBand.sql
+
+[sql/scripts/seed_DimMathComprehensionBand.sql](../../sql/scripts/seed_DimMathComprehensionBand.sql) · reviewed 2026-10-23 · last change: 2026-09-03 99b4fdb Math entry: rename "Comprehension" -> "Achievement Level"; shift band boundaries
+
+Populate/refresh the math achievement-level band labels and colors.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: Created 2026-09-02; band labels/boundaries revised 2026-09-03
+**Writes:** `DimMathComprehensionBand` (insert/truncate — `ActiveFlag`, `BandCode`, `HexColor`, `Label`, `LastUpdated`, `SortOrder`)
+
+### seed_DimReadingBenchmark_EN.sql
+
+[sql/scripts/seed_DimReadingBenchmark_EN.sql](../../sql/scripts/seed_DimReadingBenchmark_EN.sql) · reviewed 2026-10-23 · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
+
+Load the expected English reading-level ranges that drive the benchmark delta.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Created 2026-05-12 (initial build)
+**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
+
+### seed_DimReadingBenchmark_FR.sql
+
+[sql/scripts/seed_DimReadingBenchmark_FR.sql](../../sql/scripts/seed_DimReadingBenchmark_FR.sql) · reviewed 2026-10-23 · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
+
+Load the expected French Immersion reading-level ranges that drive the benchmark delta.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Created 2026-05-12 (initial build)
+**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
+
+### seed_DimReadingScale_EN.sql
+
+[sql/scripts/seed_DimReadingScale_EN.sql](../../sql/scripts/seed_DimReadingScale_EN.sql) · reviewed 2026-10-23 · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
+
+Populate the English reading-level dropdown/scale.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Created 2026-05-12 (initial build)
+**Writes:** `DimReadingScale` (insert — `ActiveFlag`, `Description`, `LastUpdated`, `LevelCode`, `LevelOrder`, `ScaleSystem`)
+
+### seed_DimReadingScale_FR.sql
+
+[sql/scripts/seed_DimReadingScale_FR.sql](../../sql/scripts/seed_DimReadingScale_FR.sql) · reviewed 2026-10-23 · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
+
+Populate the French Immersion reading-level dropdown/scale.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Created 2026-05-12 (initial build)
+**Writes:** `DimReadingScale` (insert — `ActiveFlag`, `Description`, `LastUpdated`, `LevelCode`, `LevelOrder`, `ScaleSystem`)
+
+### seed_DimSchool_TCRCE.sql
+
+[sql/scripts/seed_DimSchool_TCRCE.sql](../../sql/scripts/seed_DimSchool_TCRCE.sql) · reviewed 2026-10-23 · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
+
+Populate the school reference dimension at build time.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: Initial build 2026-04-24; alt schools 1254/1255 added to the list 2026-09-01
+**Reads:** `DimSchool`
+**Writes:** `DimSchool` (insert — `Abbreviation`, `ActiveFlag`, `Community`, `LastUpdated`, `SchoolID`, `SchoolName`)
+
+### seed_StaffAppAccess.sql
+
+[sql/scripts/seed_StaffAppAccess.sql](../../sql/scripts/seed_StaffAppAccess.sql) · reviewed 2026-10-23 · last change: 2026-09-01 bb0733c Add IsSysAdmin super-user; ingest gates on StaffAppAccess (post-reset bootstrap)
+
+Who can manage cycles and run ingest? Grant the initial admin so the gated screens are usable.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: Written 2026-08-27 / 2026-09-01 (run once after StaffAppAccess.sql)
+**Reads:** `StaffAppAccess`
+**Writes:** `StaffAppAccess` (insert — `CanManageCycles`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`)
 
 ## template
 
@@ -1051,255 +1296,4 @@ Is this staff member in the warehouse, under what email/role/school, and does th
 effect: **read-only** · target: dev or live (staff name + work email are not PII) · re-run safe: yes
 **Variables:** `@Email` = `'<staff.email@tcrce.ca>'`, `@LastName` = `'<lastname>'`
 **Reads:** `DimStaff`, `Stg_Staff`
-
-## writes data (auto)
-
-### reset_dev_full_and_ingest.sql
-
-[sql/scripts/reset_dev_full_and_ingest.sql](../../sql/scripts/reset_dev_full_and_ingest.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-A TRUE clean-slate for a from-scratch dev ingest test. Truncates the six roster tables (like reset_and_run_full_ingest) AND the user-entered fact tables, then runs the orchestrator to rebuild from the Lakehouse Files/imports/{topic}/ folders.
-
-effect: **writes-data**
-**Variables:** `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Writes:** `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactAssessmentMath` (truncate); `FactAssessmentReading` (truncate); `FactAssessmentWriting` (truncate); `FactEnrollment` (truncate/update — `EndDate`, `LastUpdated`, `StartDate`); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate); `FactStudentAdaptation` (truncate); `FactStudentIPP` (truncate); `FactSubmissionAudit` (truncate)
-
-### reset_for_production.sql
-
-[sql/scripts/reset_for_production.sql](../../sql/scripts/reset_for_production.sql) · skeleton (not yet reviewed) · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
-
-ONE-TIME production cutover reset. Clears ALL synthetic / pilot test data from Assessment_Warehouse and leaves it EMPTY and ready to receive the first REAL PowerSchool ingest. Unlike the dev reset (reset_and_run_full_ingest.sql), this does NOT re-run the orchestrator — it leaves the warehouse clean, not re-populated.
-
-effect: **writes-data**
-**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGender`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimRole`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactDataQualityAudit`, `FactEnrollment`, `FactSectionTeachers`, `FactStaffAssignment`, `FactStudentIPP`, `FactSubmissionAudit`, `StaffSchoolAccess`
-**Writes:** `DimAssessmentWindow` (truncate); `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactAssessmentReading` (truncate); `FactAssessmentWriting` (truncate); `FactDataQualityAudit` (truncate); `FactEnrollment` (truncate); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate); `FactStudentIPP` (truncate); `FactSubmissionAudit` (truncate); `StaffSchoolAccess` (truncate); `Stg_CoTeacher` (truncate); `Stg_Enrollment` (truncate); `Stg_Section` (truncate); `Stg_Staff` (truncate); `Stg_Student` (truncate); `Wrk_Enrollment` (truncate); `Wrk_Section` (truncate); `Wrk_SectionTeacher` (truncate); `Wrk_StaffAssignment` (truncate); `Wrk_StaffPersons` (truncate); `Wrk_Student` (truncate)
-
-### reset_ipp_and_assessments.sql
-
-[sql/scripts/reset_ipp_and_assessments.sql](../../sql/scripts/reset_ipp_and_assessments.sql) · skeleton (not yet reviewed) · last change: 2026-06-22 e7e73a6 B6: roster IPP confirmation, auth redirect, + test reset
-
-TEST RESET. Returns the workflow to a blank slate so the roster entry + inline IPP-confirmation flow can be exercised end to end: (1) clears every entered reading result, and (2) rewinds FactStudentIPP to the post-merge "unresolved" state (IsIPP = NULL — the needs-confirmation gate), so each applicable student shows the "Confirm IPP" prompt again.
-
-effect: **writes-data**
-**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactAssessmentReading`, `FactStudentIPP`
-**Writes:** `FactAssessmentReading` (delete); `FactStudentIPP` (delete/insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
-
-### rollforward_enrollment_dev.sql
-
-[sql/scripts/rollforward_enrollment_dev.sql](../../sql/scripts/rollforward_enrollment_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-18 e11bcd8 feat(entry): course-scoped group picker (tvf_TeacherGroups rework) â€” verified on dev
-
-The synthetic FactEnrollment rows are all for the 2025-2026 school year and have expired (EndDate <= 2026-06-30), so classroom teachers resolve no roster today (2026-09-04) and see no open cycle. Shift the whole set forward one year to 2026-2027 so the September enrollments are current, which makes teachers resolve their rosters and see the open SCoR 1 cycle in Data Entry.
-
-effect: **writes-data**
-**Variables:** `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Reads:** `FactEnrollment`
-**Writes:** `FactEnrollment` (update — `ActiveFlag`, `EndDate`, `LastUpdated`, `StartDate`)
-
-### seed_DimAchievementLevel.sql
-
-[sql/scripts/seed_DimAchievementLevel.sql](../../sql/scripts/seed_DimAchievementLevel.sql) · skeleton (not yet reviewed) · last change: 2026-06-09 8711453 Session wrap (2026-06-09): Direction B restyle â€” scrLanding + scrIPP ported
-
-Populate the four reading achievement levels with their thresholds and display colors. Bounds match the original spec text verbatim (-2 and 0 only) using operator columns; see DimAchievementLevel file header for the lookup semantics.
-
-effect: **writes-data**
-**Reads:** `DimAchievementLevel`
-**Writes:** `DimAchievementLevel` (delete/insert — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `DisplayOrder`, `HexColor`, `HexColorTint`, `LastUpdated`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`)
-
-### seed_DimAssessmentWindow_MVP.sql
-
-[sql/scripts/seed_DimAssessmentWindow_MVP.sql](../../sql/scripts/seed_DimAssessmentWindow_MVP.sql) · skeleton (not yet reviewed) · last change: 2026-05-13 4278954 Session wrap (2026-05-13): Step 18 SQL prereqs DONE + Power Apps build pivot to VS Code YAML
-
-Seed the two end-of-year 2025-26 reading pilot windows: one English and one French Immersion. Both currently Open as of seeding date.
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`
-**Writes:** `DimAssessmentWindow` (insert — `ActiveFlag`, `AssessmentType`, `CreatedBy`, `CreatedDate`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`)
-
-### seed_DimCourseAssessment_dev.sql
-
-[sql/scripts/seed_DimCourseAssessment_dev.sql](../../sql/scripts/seed_DimCourseAssessment_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)
-
-DEV-ONLY seed of DimCourseAssessment using the SYNTHETIC course codes that dev's DimSection actually carries (dev has no real PS codes and no English-LA sections). Lets course-scoped entry be exercised on dev for French literacy + Math; the English side is verified on live once the real list (seed_DimCourseAssessment_live.sql) is seeded there. Mapped dev codes (literacy/math only; homeroom/history/science excluded): FRA-1-FI, LET-K-FI, LIT-12-FI -> French literacy MTH-1-FI, MTH-K-FI, MTH-10-FI -> Math (MTH-10-FI out of P-6 range; harmless)
-
-effect: **writes-data**
-**Reads:** `DimCourseAssessment`
-**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
-
-### seed_DimCourseAssessment_dev_testset.sql
-
-[sql/scripts/seed_DimCourseAssessment_dev_testset.sql](../../sql/scripts/seed_DimCourseAssessment_dev_testset.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Course-scoped entry mapping for the synthetic ingest TEST SET (generated by data/imports/_generate_ingest_testset.ps1). Every MAT-* -> Math (Language NULL); ELA-* -> English Literacy; FLA-* -> French Literacy. Idempotent: clears then re-seeds. Run on DEV after ingesting the test set so entry resolves courses.
-
-effect: **writes-data**
-**Reads:** `DimCourseAssessment`
-**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
-
-### seed_DimCourseAssessment_live.sql
-
-[sql/scripts/seed_DimCourseAssessment_live.sql](../../sql/scripts/seed_DimCourseAssessment_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 56c7c75 feat(entry): courseâ†’assessment map table (foundation for course-scoped entry)
-
-LIVE seed of DimCourseAssessment from the real PowerSchool course list (docs/course-assessment-mapping.md, provided 2026-09-17). ELA P-12 + Immersion ELA 3-6 -> English literacy FLA -> French literacy Math -> Math A Language-Arts course = Reading + Writing in its language.
-
-effect: **writes-data**
-**Reads:** `DimCourseAssessment`
-**Writes:** `DimCourseAssessment` (delete/insert — `ActiveFlag`, `CourseCode`, `Kind`, `Language`, `LastUpdated`, `Notes`)
-
-### seed_DimGrade.sql
-
-[sql/scripts/seed_DimGrade.sql](../../sql/scripts/seed_DimGrade.sql) · skeleton (not yet reviewed) · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
-
-Populate the 15 valid grade codes with their numeric ordering and band classification.
-
-effect: **writes-data**
-**Writes:** `DimGrade` (insert — `ActiveFlag`, `GradeBand`, `GradeCode`, `GradeName`, `GradeOrder`, `LastUpdated`)
-
-### seed_DimMathComprehensionBand.sql
-
-[sql/scripts/seed_DimMathComprehensionBand.sql](../../sql/scripts/seed_DimMathComprehensionBand.sql) · skeleton (not yet reviewed) · last change: 2026-09-03 99b4fdb Math entry: rename "Comprehension" -> "Achievement Level"; shift band boundaries
-
-Seed the 4-tier math comprehension scale. Re-runnable (TRUNCATE + INSERT). Labels/thresholds per the revised Term-1 scale; the avg -> BandCode ladder lives in the read view (see the table header).
-
-effect: **writes-data**
-**Writes:** `DimMathComprehensionBand` (insert/truncate — `ActiveFlag`, `BandCode`, `HexColor`, `Label`, `LastUpdated`, `SortOrder`)
-
-### seed_DimReadingBenchmark_EN.sql
-
-[sql/scripts/seed_DimReadingBenchmark_EN.sql](../../sql/scripts/seed_DimReadingBenchmark_EN.sql) · skeleton (not yet reviewed) · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
-
-TCRCE's expected reading-level ranges for English instruction.
-
-effect: **writes-data**
-**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
-
-### seed_DimReadingBenchmark_FR.sql
-
-[sql/scripts/seed_DimReadingBenchmark_FR.sql](../../sql/scripts/seed_DimReadingBenchmark_FR.sql) · skeleton (not yet reviewed) · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
-
-TCRCE's expected French reading-level ranges for French Immersion students. Source: assessment team (provided 2026-05-12 as two grade × month matrices, Expected Min and Expected Max). User-verified.
-
-effect: **writes-data**
-**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
-
-### seed_DimReadingBenchmark_grade8.sql
-
-[sql/scripts/seed_DimReadingBenchmark_grade8.sql](../../sql/scripts/seed_DimReadingBenchmark_grade8.sql) · skeleton (not yet reviewed) · last change: 2026-09-10 e9212ed fix(benchmark): seed Grade 8 reading benchmark = Grade-6 June carry-over
-
-Grade 8 reading benchmark = the Grade-6 June carry-over (same rule as Grade 7). Grades 7 AND 8 both expect the Grade-6 end-of-year level, so this copies the existing Grade-7 rows (already = Grade-6 June) into Grade 8 for every month, scale system, and program family.
-
-effect: **writes-data**
-**Reads:** `DimReadingBenchmark`
-**Writes:** `DimReadingBenchmark` (insert — `AssessmentMonth`, `ExpectedMaxLevel`, `ExpectedMinLevel`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `ScaleSystem`)
-
-### seed_DimReadingScale_EN.sql
-
-[sql/scripts/seed_DimReadingScale_EN.sql](../../sql/scripts/seed_DimReadingScale_EN.sql) · skeleton (not yet reviewed) · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
-
-Populate the 27 valid English-reading levels — DT (pre-emergent dictated text) plus 26 letter levels A-Z.
-
-effect: **writes-data**
-**Writes:** `DimReadingScale` (insert — `ActiveFlag`, `Description`, `LastUpdated`, `LevelCode`, `LevelOrder`, `ScaleSystem`)
-
-### seed_DimReadingScale_FR.sql
-
-[sql/scripts/seed_DimReadingScale_FR.sql](../../sql/scripts/seed_DimReadingScale_FR.sql) · skeleton (not yet reviewed) · last change: 2026-05-12 4507228 Session wrap (2026-05-12): DimGrade + reading scale + benchmark schema, EN/FR seeds, architectural decisions
-
-Populate the 32 valid French-reading levels — TD (Texte Dicté, pre-emergent) plus numeric levels 1-30 plus 30+ (no-upper-bound marker for strong readers).
-
-effect: **writes-data**
-**Writes:** `DimReadingScale` (insert — `ActiveFlag`, `Description`, `LastUpdated`, `LevelCode`, `LevelOrder`, `ScaleSystem`)
-
-### seed_DimSchool_TCRCE.sql
-
-[sql/scripts/seed_DimSchool_TCRCE.sql](../../sql/scripts/seed_DimSchool_TCRCE.sql) · skeleton (not yet reviewed) · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
-
-Seed DimSchool with all Tri-County Regional Centre for Education schools as of the 2024-2025 Directory of Public Schools.
-
-effect: **writes-data**
-**Reads:** `DimSchool`
-**Writes:** `DimSchool` (insert — `Abbreviation`, `ActiveFlag`, `Community`, `LastUpdated`, `SchoolID`, `SchoolName`)
-
-### seed_DimSchool_add_alt_schools.sql
-
-[sql/scripts/seed_DimSchool_add_alt_schools.sql](../../sql/scripts/seed_DimSchool_add_alt_schools.sql) · skeleton (not yet reviewed) · last change: 2026-09-01 e27c47b Add 2 alt high schools to DimSchool; skip 0-enrollment sections in merge
-
-1254 Yarmouth Alternative High School and 1255 Digby Alternative High School were missing from the DimSchool seed. Add them so students/staff at those schools resolve to a school name.
-
-effect: **writes-data**
-**Reads:** `DimSchool`
-**Writes:** `DimSchool` (insert — `Abbreviation`, `ActiveFlag`, `Community`, `LastUpdated`, `SchoolID`, `SchoolName`)
-
-### seed_StaffAppAccess.sql
-
-[sql/scripts/seed_StaffAppAccess.sql](../../sql/scripts/seed_StaffAppAccess.sql) · skeleton (not yet reviewed) · last change: 2026-09-01 bb0733c Add IsSysAdmin super-user; ingest gates on StaffAppAccess (post-reset bootstrap)
-
-Grant the starting administrator sysAdmin so access isn't lost when the /cycles and /ingest gates switch to this table, and so they can run the FIRST ingest after a production reset (DimStaff empty). Adjust the list for your admins. IsSysAdmin implies every capability.
-
-effect: **writes-data**
-**Reads:** `StaffAppAccess`
-**Writes:** `StaffAppAccess` (insert — `CanManageCycles`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`)
-
-### seed_demo_results_dev.sql
-
-[sql/scripts/seed_demo_results_dev.sql](../../sql/scripts/seed_demo_results_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 a4d600a fix(dev seed): fully clear June cycle each run; document deterministic all-subject re-seed
-
-Populate the synthetic DEV students with believable result history so the demo environment "looks right": a prior-year JUNE Short Cycle (Reading + Writing) and a partially-entered current SHORT CYCLE 1 (Reading + Writing + Math, half of each class).
-
-effect: **writes-data**
-**Variables:** `@SC1CGID`, `@JuneCGID` = `'6a11e000-2026-406e-9c17-0de100062026'`, `@SeedStaff`, `@JuneDate` = `'2026-06-15'`, `@SC1Date`, `@ReadSpread` = `3.00`, `@WriteSpread` = `1.80`, `@MathSpread` = `0.30`
-**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
-**Writes:** `DimAssessmentWindow` (insert — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`); `DimShortCycle` (insert — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`); `FactAssessmentMath` (delete/insert — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `MathTaskKey`, `Result`, `StudentKey`, `SubmissionTimestamp`); `FactAssessmentReading` (insert — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LastUpdated`, `LevelCode`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactAssessmentWriting` (insert — `AssessmentDate`, `AssessmentLanguage`, `AssessmentWindowID`, `ConventionsScore`, `EnteredByStaffKey`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `StudentKey`, `SubmissionTimestamp`, `WritingAverage`)
-
-### seed_dev_resource_teacher.sql
-
-[sql/scripts/seed_dev_resource_teacher.sql](../../sql/scripts/seed_dev_resource_teacher.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 49bb40f sql(dev): seed one synthetic Resource Teacher (Group 45 -> SpecialistTeacher) for impersonation testing
-
-DEV ONLY (Assessment_Warehouse_Dev). Add one synthetic Resource Teacher (PS Group 45 -> RoleCode/AccessLevel 'SpecialistTeacher') at the ELEM test school 0716, so the SpecialistTeacher access path can be impersonated on awdev-impersonation (:3002). resource.teacher.0716@tcrce.ca — Quinn Larch — school 0716
-
-effect: **writes-data**
-**Reads:** `DimStaff`, `FactStaffAssignment`, `StaffSchoolAccess`
-**Writes:** `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `FactStaffAssignment` (insert — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `RoleCode`, `SchoolID`, `SourceSystemID`, `StaffKey`); `StaffSchoolAccess` (insert — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`)
-
-### seed_primary_homeroom_dev.sql
-
-[sql/scripts/seed_primary_homeroom_dev.sql](../../sql/scripts/seed_primary_homeroom_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-11 17133fb test(dev): seed a 20-student Primary homeroom at Drumlin + a new teacher
-
-Create a 20-student Primary (grade P) homeroom at DRUMLIN in the Dev warehouse, wired to a NEWLY GENERATED synthetic classroom teacher, so the Math (and Reading/Writing) entry pages can be viewed with a larger roster. Sets up everything the roster TVFs need: new DimStaff teacher -> DimSection (homeroom) -> FactSectionTeachers -> 20 DimStudent rows (grade P, GroupKey) -> FactEnrollment (2026-2027).
-
-effect: **writes-data**
-**Variables:** `@Homeroom` = `N'PA'`, `@ProgramCode` = `NULL`, `@StartDate` = `'2026-09-02'`, `@TeacherEmail` = `N'devseed.teacher@tcrce.ca'`, `@TeacherFirst` = `N'Seed'`, `@TeacherLast` = `N'Teacher'`, `@Now` = `GETDATE()`, `@SchoolID`, `@Abbrev`, `@TeacherKey`, `@TermID`, `@SectionID` = `'DEVHR-' + @Homeroom`, `@GroupKey`, `@SectionKey`
-**Reads:** `DimProgram`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactEnrollment`
-**Writes:** `DimSection` (insert — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `LastUpdated`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`); `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `DimStudent` (insert — `Adap`, `DateOfBirth`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `LastUpdated`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`); `FactEnrollment` (insert — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`); `FactSectionTeachers` (insert — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`)
-
-### seed_prior_year_baseline_dev.sql
-
-[sql/scripts/seed_prior_year_baseline_dev.sql](../../sql/scripts/seed_prior_year_baseline_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-10 bc69379 chore(release): v0.4.0 â€” reading roster prior-year starting point
-
-Populate PriorYearBaseline on the DEV warehouse with synthetic June reading levels so the roster "Since June" column has data to render. Real baseline data is LIVE-only (PII); dev gets fabricated anchors.
-
-effect: **writes-data**
-**Reads:** `DimProgram`, `DimSchool`, `DimStudent`, `PriorYearBaseline`
-**Writes:** `PriorYearBaseline` (insert/truncate — `AssessmentLanguage`, `HistGrade`, `HistHomeroom`, `HistLiteracyIPP`, `HistSchool`, `LastUpdated`, `ReadingLevel`, `SchoolYear`, `StudentNumber`)
-
-### seed_split_homeroom_dev.sql
-
-[sql/scripts/seed_split_homeroom_dev.sql](../../sql/scripts/seed_split_homeroom_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-15 b77a6b6 test(dev): seed a split (P/1/2) homeroom to exercise the grade-span filter
-
-Turn the DEVSEED Drumlin Primary homeroom (from seed_primary_homeroom_dev.sql) into a MULTI-GRADE split so the grade filter's grade-span behaviour can be tested: a homeroom card that contains more than one grade must surface under EACH of its grades. Flips a handful of the 20 grade-P students to grades 1 and 2, keeping the same GroupKey/Homeroom, giving a P / 1 / 2 split (3 grades).
-
-effect: **writes-data**
-**Variables:** `@Now` = `GETDATE()`
-**Reads:** `DimGrade`, `DimStudent`
-**Writes:** `DimStudent` (update — `Grade`, `LastUpdated`)
-
-### test_slash_homeroom_dev.sql
-
-[sql/scripts/test_slash_homeroom_dev.sql](../../sql/scripts/test_slash_homeroom_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-08 ac170bc feat(enter): collapsible school filter + groupkey deploy bundles (dev)
-
-Give one current elementary (grade P-6) synthetic student a homeroom containing '/' ("5/6") and set its GroupKey accordingly, so the '/'-in-homeroom fix can be exercised end-to-end in awdev. Run AFTER deploying the GroupKey migration + merge proc + TVFs to dev.
-
-effect: **writes-data**
-**Reads:** `DimGrade`, `DimSchool`, `DimStudent`
-**Writes:** `DimStudent` (update — `GroupKey`, `Homeroom`, `LastUpdated`)
 

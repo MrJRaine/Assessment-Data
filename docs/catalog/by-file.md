@@ -2,7 +2,7 @@
 
 # Catalog — by file
 
-Extracted 2026-10-22 from `71e2e1e`. Scripts are in [scripts.md](scripts.md). “(auto)” = mechanically extracted, not yet verified by reading.
+Extracted 2026-10-23 from `d05b74e`. Scripts are in [scripts.md](scripts.md). “(auto)” = mechanically extracted, not yet verified by reading.
 
 - [Tables (dimensions & facts)](#tables-(dimensions-&-facts)) (31)
 - [Staging tables](#staging-tables) (13)
