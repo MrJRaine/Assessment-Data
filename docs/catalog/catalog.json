@@ -12820,9 +12820,17 @@
   },
   "sql/scripts/migrate_DimStaff_add_AccessLevel.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "4c75462369caa64e224d000d6a7c8fd21998221e",
    "notes": {
-    "purpose": ""
+    "purpose": "Add the AccessLevel VARCHAR(50) column to DimStaff: the staff member's highest school-tier role (RegionalAnalyst > Administrator > SpecialistTeacher), stored once at ingest so vw_StaffSchoolAccess no longer computes it per query. ALTER only; usp_MergeStaff fills it on the next staff ingest.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the AccessLevel column to DimStaff (one-time schema change).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-29 (pre-MVP schema work); the column is now part of the base DimStaff schema"
+    },
+    "caveats": "Obsolete: the column already exists. Running it again fails because there is no IF NOT EXISTS guard. Its follow-up was rebuilding the view with migrate_vw_StaffSchoolAccess_simplify.sql."
    },
    "blob": "4c75462369caa64e224d000d6a7c8fd21998221e",
    "auto": {
@@ -12838,13 +12846,22 @@
     },
     "scriptEffect": "ddl",
     "lastCommit": "2026-04-29 1d386b4 Session wrap (2026-04-29): role taxonomy, AccessLevel, Step 7 ingest"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStaff_add_Title.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "2e53e23ab02ef97cf7e031940590e89d68e8bc7e",
    "notes": {
-    "purpose": ""
+    "purpose": "Pre-MVP rebuild of DimStaff that adds Title VARCHAR(100) (the PowerSchool Title field) by running DROP TABLE + CREATE TABLE. The header says this was safe only because DimStaff was empty at the time.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Recreate the empty DimStaff with a Title column (pre-MVP).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, empty table)"
+    },
+    "caveats": "DANGER, never re-run. It DROPs DimStaff, which now holds every staff row, and every fact's StaffKey would be orphaned. The CREATE is also out of date: it has no AccessLevel or any later columns. Obsolete; the current definition is in the DimStaff table script."
    },
    "blob": "2e53e23ab02ef97cf7e031940590e89d68e8bc7e",
    "auto": {
@@ -12937,13 +12954,22 @@
     "lastCommit": "2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection",
     "headerPurpose": "Add Title VARCHAR(100) NULL to DimStaff. Pulled from PS Title field. Also a Type 2 SCD trigger per the all-business-fields-Type-2 policy (see DimStaff.sql header).",
     "headerScript": "migrate_DimStaff_add_Title.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStaff_v2.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "25bd8e426e60ea8ca1bb4a472a6946ccffd956af",
    "notes": {
-    "purpose": ""
+    "purpose": "Earliest pre-MVP DimStaff rebuild (DROP + CREATE). It switched the business key from StaffID INT to Email, dropped StaffID and StaffNumber, and made HomeSchoolID nullable.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Switch DimStaff's business key to Email (pre-MVP, empty table).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-24 (initial schema, empty table)"
+    },
+    "caveats": "DANGER, never re-run: it DROPs a populated DimStaff. The schema is badly out of date: HomeSchoolID INT (now VARCHAR), RoleCode on DimStaff (roles have since moved to FactStaffAssignment), and no Title, CanChangeSchool or AccessLevel. Superseded by migrate_DimStaff_add_Title.sql and then by the current DimStaff table script."
    },
    "blob": "25bd8e426e60ea8ca1bb4a472a6946ccffd956af",
    "auto": {
@@ -13031,13 +13057,22 @@
     "lastCommit": "2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills",
     "headerPurpose": "Change DimStaff business key from StaffID (INT) to Email (VARCHAR). Drops StaffID and StaffNumber columns; makes HomeSchoolID nullable. Run this against Assessment_Warehouse to apply the schema change.",
     "headerScript": "migrate_DimStaff_v2.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStudent_add_GroupKey.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "2c19162a0284e72f924ae930b78c103ed8bb4e41",
    "notes": {
-    "purpose": ""
+    "purpose": "Add the URL-safe homeroom GroupKey (school Abbreviation + '-' + homeroom, with '/', space and backslash changed to '-') to DimStudent and Wrk_Student, then backfill every DimStudent version. This stops /enter roster routes from returning 404 for homerooms with '/' in the name, and stops same-named homerooms in different schools from colliding.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add and backfill DimStudent.GroupKey so homeroom roster URLs work.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-08 hotfix (dev, then live); usp_MergeStudent computes GroupKey on every ingest from then on"
+    },
+    "caveats": "One-time backfill; the column adds are guarded with INFORMATION_SCHEMA.COLUMNS checks. The header says the key is NULL when there is no homeroom, but the UPDATE actually writes '<Abbrev>-none'. The UPDATE also bumps LastUpdated on every DimStudent row. Run the ALTER batches (GO-separated) before the UPDATE."
    },
    "blob": "2c19162a0284e72f924ae930b78c103ed8bb4e41",
    "auto": {
@@ -13077,13 +13112,22 @@
     "lastCommit": "2026-09-08 90a285e hotfix: URL-safe homeroom group key + small-group roster filter (prod)",
     "headerPurpose": "Add the URL-safe homeroom GroupKey column to DimStudent (+ Wrk_Student staging) and backfill existing rows, so homeroom names containing '/' (or spaces) stop 404-ing the /enter roster route. The key is school-qualified (Abbreviation) so same-named homerooms in different schools no longer collide.",
     "headerScript": "migrate_DimStudent_add_GroupKey.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStudent_add_demographics.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "18ae4ed11ae758cb3674f96b121acdcedd1c3dc2",
    "notes": {
-    "purpose": ""
+    "purpose": "Pre-MVP rebuild of DimStudent (DROP + CREATE) that added Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP and CurrentAdap as Type 2 fields. The header says this was safe only because DimStudent was empty at the time.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Recreate the empty DimStudent with demographic columns (pre-MVP).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, empty table)"
+    },
+    "caveats": "DANGER, never re-run. It DROPs DimStudent (real student PII on live), which orphans every fact's StudentKey. The schema is obsolete: it uses the Current* column names that were later renamed by migrate_DimStudent_strip_current_prefix.sql, and it has no GroupKey. The current definition is in sql/dimensions/DimStudent.sql."
    },
    "blob": "18ae4ed11ae758cb3674f96b121acdcedd1c3dc2",
    "auto": {
@@ -13216,13 +13260,22 @@
     "lastCommit": "2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection",
     "headerPurpose": "Add 6 fields to DimStudent — Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap. Gender NOT NULL, rest NULL. All are Type 2 SCD triggers per the policy in DimStudent.sql (every business-meaningful field triggers a new version on change, for report reproducibility). Pattern: DROP + CREATE (DimStudent has no data yet pre-MVP).",
     "headerScript": "migrate_DimStudent_add_demographics.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStudent_strip_current_prefix.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ef28e0ee3bd0a3f47da0b291eb783240feb39ce1",
    "notes": {
-    "purpose": ""
+    "purpose": "Step 1 of an 8-step pre-MVP rename that dropped the 'Current' prefix from DimStudent columns (CurrentGrade→Grade, CurrentSchoolID→SchoolID, CurrentIPP→IPP, CurrentAdap→Adap). It drops vw_TeacherStudents, vw_SchoolStudents, vw_RegionalData, usp_MergeStudent, Wrk_Student and DimStudent. The other seven steps recreate them and run a full re-ingest.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Drop DimStudent and its dependents so they can be recreated with the renamed columns (pre-MVP).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-04 (pre-MVP, before any assessment facts existed)"
+    },
+    "caveats": "DANGER, obsolete; never re-run. The header calls it 'idempotent, safe to re-run' because the data could be rebuilt from Lakehouse, but that is no longer true. Facts now reference DimStudent surrogate keys, and a re-ingest issues new StudentKeys, so every reading, writing and math fact would be orphaned. It also drops security views and a proc that the app depends on, and the 8-step order (ending in reset_and_run_full_ingest.sql) belongs to the pre-MVP era."
    },
    "blob": "ef28e0ee3bd0a3f47da0b291eb783240feb39ce1",
    "auto": {
@@ -13270,13 +13323,22 @@
     "lastCommit": "2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake",
     "headerPurpose": "Rename four DimStudent columns to drop the misleading \"Current\" prefix: CurrentGrade -> Grade CurrentSchoolID -> SchoolID CurrentIPP -> IPP CurrentAdap -> Adap The prefix was inaccurate on a Type 2 dim — every row is a point-in-time snapshot, so the row's effective dates define currency, not the column name. New names align with DimStaff and DimSection conventions (no \"Current\" prefix anywhere).",
     "headerScript": "migrate_DimStudent_strip_current_prefix.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStudent_v2.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1ea8fb51adc2b2c78648362b31c76075a5db5132",
    "notes": {
-    "purpose": ""
+    "purpose": "Earliest pre-MVP DimStudent rebuild (DROP + CREATE) that replaced the StudentID INT business key with StudentNumber BIGINT.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Switch DimStudent's business key to StudentNumber (pre-MVP, empty table).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-24 (initial schema, empty table)"
+    },
+    "caveats": "DANGER, never re-run: it DROPs a populated DimStudent and orphans all facts. The schema is badly out of date: CurrentSchoolID INT, ActiveFlag instead of EnrollStatus, and no demographic or GroupKey columns. Superseded by migrate_DimStudent_add_demographics.sql, then migrate_DimStudent_strip_current_prefix.sql, then sql/dimensions/DimStudent.sql."
    },
    "blob": "1ea8fb51adc2b2c78648362b31c76075a5db5132",
    "auto": {
@@ -13374,13 +13436,22 @@
     "lastCommit": "2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills",
     "headerPurpose": "Replace StudentID (INT) with StudentNumber (BIGINT) in DimStudent. Run this against Assessment_Warehouse to apply the schema change.",
     "headerScript": "migrate_DimStudent_v2.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactAssessmentReading_add_score_context.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "342ba077bc17ab75bb0358424b48f27b5ffcd4d2",
    "notes": {
-    "purpose": ""
+    "purpose": "Make each FactAssessmentReading row self-contained. It adds LevelCode, ExpectedMinLevelCode and ExpectedMaxLevelCode, then backfills them by resolving the benchmark the same way usp_UpsertReadingAssessment does: the row's frozen DimStudent version, then DimProgram family, then the window's dominant month, then DimReadingBenchmark.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Stamp the as-was level and expected range onto every existing reading result.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-21; live via sql/deploy/live_0.5.0/01_migrations.sql"
+    },
+    "caveats": "The header's 'ALTER errors if columns exist' is out of date: the ALTER is now guarded by sys.columns. The backfill is exact only while benchmarks are unchanged since go-live. If DimReadingBenchmark or BenchmarkMonth has since been edited, re-running rewrites the stored expected ranges with today's values, which defeats the as-was snapshot, so don't re-run it casually. Rows with no matching benchmark keep NULL expected values."
    },
    "blob": "342ba077bc17ab75bb0358424b48f27b5ffcd4d2",
    "auto": {
@@ -13445,13 +13516,22 @@
     "lastCommit": "2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live",
     "headerPurpose": "Make each FactAssessmentReading row SELF-CONTAINED — the actual level and the expected min/max range are stamped ON the row, alongside the already-stored ReadingDelta. So a PowerBI export (or any later read) shows \"scored M, expected K-L, delta +1\" WITHOUT joining dimensions whose values could have shifted, and can never disagree with itself.",
     "headerScript": "migrate_FactAssessmentReading_add_score_context.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactAssessmentWriting_add_average.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ebac1b7d648c127529195f0e0e27b4dfb84f9c82",
    "notes": {
-    "purpose": ""
+    "purpose": "Add WritingAverage DECIMAL(4,2) to FactAssessmentWriting and backfill it with the SCR-aware mean. Conventions='SCR' drops out of both the numerator and the denominator, matching usp_UpsertWritingAssessment. Ends with a verification count.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Stamp the writing average onto every existing writing result.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "dev 2026-09-21; live via sql/deploy/live_0.5.0/01_migrations.sql"
+    },
+    "caveats": "The header's 'ALTER errors if column exists' is out of date: the ALTER is now guarded. DO NOT RE-RUN. Since 1.0.0, Ideas/Organization/Language are VARCHAR (migrate_FactWriting_traits_varchar.sql) and can hold '-', so the plain '+' sum would concatenate strings or fail on '-'. remediate_writing_trait_exclusion.sql is the current way to recompute stored averages. Only complete rows (all three traits present) got an average."
    },
    "blob": "ebac1b7d648c127529195f0e0e27b4dfb84f9c82",
    "auto": {
@@ -13475,13 +13555,22 @@
     "lastCommit": "2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live",
     "headerPurpose": "Store the SCR-aware writing AVERAGE on each FactAssessmentWriting row, stamped as-was, so the \"Scribed drops from the average\" rule lives in the DATA and can't be re-derived wrong later (or disagree with a report that recomputes it). Conventions='SCR' drops from BOTH the numerator and the denominator; Ideas/Org/Language are 1-4.",
     "headerScript": "migrate_FactAssessmentWriting_add_average.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactSectionTeachers_decouple.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "96f136d08ef4f63ffe14cbe827413eda2e06c0f5",
    "notes": {
-    "purpose": ""
+    "purpose": "Pre-MVP rebuild of the FactSectionTeachers bridge (DROP + CREATE) so it references business keys (SectionID, TeacherEmail) instead of SectionKey/StaffKey. This stops the bridge churning whenever DimSection or DimStaff versions. The header says this was safe only because the table was empty.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Recreate the empty FactSectionTeachers bridge on business keys (pre-MVP).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, empty table)"
+    },
+    "caveats": "DANGER, never re-run: it DROPs the populated section-teacher bridge, which roster and access scoping depend on. Obsolete; the current definition is in the table script under sql/. The header's own pre-check (COUNT(*) should be 0) will not pass any more."
    },
    "blob": "96f136d08ef4f63ffe14cbe827413eda2e06c0f5",
    "auto": {
@@ -13554,13 +13643,22 @@
     "lastCommit": "2026-04-28 dd7fc0f Section schema refinements: fields, SCD policy, bridge decoupling",
     "headerPurpose": "Replace surrogate-key references (SectionKey, StaffKey) with business-key references (SectionID, TeacherEmail). Decouples this bridge from DimSection / DimStaff Type 2 versioning so it doesn't churn whenever those dims version for unrelated reasons (e.g. DimSection.EnrollmentCount changes, DimStaff name correction).",
     "headerScript": "migrate_FactSectionTeachers_decouple.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactWriting_add_AssessmentLanguage.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7beffcacffd8f9b1a69045a770f3d6de4bc4392d",
    "notes": {
-    "purpose": ""
+    "purpose": "Dual-language writing. It adds AssessmentLanguage VARCHAR(10) to FactAssessmentWriting so a French Immersion student can hold both an English and a French result per cycle, and backfills existing rows from the program of the row's frozen DimStudent version (French Immersion → 'French', otherwise 'English').",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add and backfill the writing result's assessment language.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-17; live via sql/deploy/live_0.5.0/01_migrations.sql"
+    },
+    "caveats": "The header says 'Run ONCE', but the ALTER is guarded and the UPDATE only touches rows WHERE AssessmentLanguage IS NULL, so a re-run is harmless. The ADD and the UPDATE must stay in separate GO batches (Fabric Msg 207). After this, usp_UpsertWritingAssessment always supplies the language."
    },
    "blob": "7beffcacffd8f9b1a69045a770f3d6de4bc4392d",
    "auto": {
@@ -13596,13 +13694,22 @@
     "lastCommit": "2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)",
     "headerPurpose": "Dual-language writing. Add AssessmentLanguage to FactAssessmentWriting so a French-Immersion grade-3+ student can hold BOTH an English and a French writing result per cycle. Grain becomes (StudentKey, AssessmentWindowID, AssessmentLanguage, AssessmentDate).",
     "headerScript": "migrate_FactWriting_add_AssessmentLanguage.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactWriting_conventions_varchar.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1af2601cbe8a572c6b7df79c80d713ee49664ae4",
    "notes": {
-    "purpose": ""
+    "purpose": "Convert FactAssessmentWriting.ConventionsScore from INT to VARCHAR(10) so it can hold 'SCR' (Scribed). It does this with a guarded multi-batch column swap (temp column → drop INT → re-add VARCHAR under the same name → copy back), which keeps the existing data.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Change ConventionsScore to text so it can hold SCR.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-17; live via sql/deploy/live_0.5.0/01_migrations.sql"
+    },
+    "caveats": "Every batch is guarded on system_type_id (56=int, 167=varchar), so it no-ops once the column is converted. If a run stops partway, re-run it: the guards resume from the temp column. The swap moves ConventionsScore to the end of the column list and leaves it nullable. Sibling of migrate_FactWriting_traits_varchar.sql."
    },
    "blob": "1af2601cbe8a572c6b7df79c80d713ee49664ae4",
    "auto": {
@@ -13627,13 +13734,22 @@
     "lastCommit": "2026-09-21 922ed6b fix(deploy): defer SCR-swap UPDATEs via EXEC so they don't parse-fail on an already-converted warehouse",
     "headerPurpose": "Change FactAssessmentWriting.ConventionsScore from INT to VARCHAR(10) so it can hold the \"SCR\" (Scribed) code alongside '1'-'4'. Fabric has no ALTER COLUMN (type change) and we avoid a full table rebuild, so this does a multi-step column swap that PRESERVES existing data and the column NAME: add temp VARCHAR -> copy INT->VARCHAR -> drop INT col -> re-add VARCHAR under the original name -> copy back -> drop temp. Each step is its own batch (GO) so the parser only sees existing columns (see the fabric-warehouse-sql skill: catalog-check-in-same-batch gotcha). SCR = Scribed on Conventions only (so",
     "headerScript": "migrate_FactWriting_conventions_varchar.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_FactWriting_traits_varchar.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "e34ff2a37a114c6ed24cb9fff4795234fde61bd5",
    "notes": {
-    "purpose": ""
+    "purpose": "Convert FactAssessmentWriting IdeasScore, OrganizationScore and LanguageScore from INT to VARCHAR(10) so a trait can hold '-' (deliberately not assessed this cycle, as opposed to NULL = never recorded). It uses the same guarded temp-column swap as the ConventionsScore migration and keeps the existing data.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Change the three numeric writing traits to text so they can hold '-'.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-02; live as step 1/9 of sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql"
+    },
+    "caveats": "Every batch is guarded on the column type, so it no-ops once converted. It does not write any '-' values: remediate_writing_trait_exclusion.sql (existing rows) and usp_UpsertWritingAssessment (new entries) do that. It breaks the numeric '+' backfill in migrate_FactAssessmentWriting_add_average.sql, so never re-run that script after this one. Sibling of migrate_FactWriting_conventions_varchar.sql."
    },
    "blob": "e34ff2a37a114c6ed24cb9fff4795234fde61bd5",
    "auto": {
@@ -13661,13 +13777,22 @@
     "lastCommit": "2026-10-02 329bace feat(writing): record excluded trait as '-' (not NULL); VARCHAR traits",
     "headerPurpose": "Change FactAssessmentWriting.IdeasScore / OrganizationScore / LanguageScore from INT to VARCHAR(10), so a trait can hold the intentional \"-\" (NOT assessed this cycle — a DELIBERATE recording, distinct from NULL = never recorded) alongside '1'-'4'. This mirrors the earlier ConventionsScore INT->VARCHAR swap (which added 'SCR'). After this, all four writing traits are VARCHAR(10) and carry: '1'-'4' | 'SCR' (Conventions only) | '-' (excluded) | NULL (never recorded).",
     "headerScript": "migrate_FactWriting_traits_varchar.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "420c6ea9b926e26d7c660113d3f2bebc81b649fa",
    "notes": {
-    "purpose": ""
+    "purpose": "Live-only rebuild (DROP + CREATE) of DimMathTask and Stg_MathTask. It widens AnswerKey to VARCHAR(500), adds AnswerKeyFR, and puts the new staging column in the position the seed CSV expects for COPY INTO. It starts with a pre-check that DimMathTask is empty.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the French math answer key to the empty live task-bank tables before the first math task load.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "live at release 0.6.0 (2026-09-22), before the first live math task load"
+    },
+    "caveats": "DANGER now: live DimMathTask has been loaded since then, and DROP TABLE would wipe the task bank and orphan math facts' MathTaskKey. The pre-check SELECT does not stop the script; you must read it and halt yourself if it is > 0. Its run order afterwards: usp_LoadMathTasks.sql, then upload MathTasks_*.csv, then run_math_task_ingest_live.sql. Obsolete."
    },
    "blob": "420c6ea9b926e26d7c660113d3f2bebc81b649fa",
    "auto": {
@@ -13839,13 +13964,22 @@
     "lastCommit": "2026-09-22 46a6098 release 0.6.0: The SCoR Hub rename + French math answer key (dev -> main)",
     "headerPurpose": "Add a French answer key to the math task bank and widen the English one: - DimMathTask: AnswerKey VARCHAR(200) -> VARCHAR(500) (real keys reach 241 chars) and NEW AnswerKeyFR VARCHAR(500). - Stg_MathTask: NEW AnswerKeyFR VARCHAR(500), positioned so the seed CSV's column order (…, AnswerKey, AnswerKeyFR, ActiveFlag) maps by position.",
     "headerScript": "migrate_MathTask_add_AnswerKeyFR_live.sql (LIVE)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_SchoolID_to_VARCHAR.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ca1faca214fb152f4056adfc0b72a7705cc82136",
    "notes": {
-    "purpose": ""
+    "purpose": "Pre-MVP bulk rebuild (DROP + CREATE) of DimStudent, DimStaff, DimSection and StaffSchoolAccess. It moved the business keys to StudentNumber and Email, changed SchoolID from INT to VARCHAR(10) everywhere, and made HomeSchoolID nullable. DimSchool was left as it was.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Move the early dimensions to VARCHAR SchoolID and the new business keys (pre-MVP, empty tables).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-24 to 2026-05-04 (pre-MVP, empty tables)"
+    },
+    "caveats": "DANGER, never re-run: it DROPs four populated core tables (student PII, staff, sections, the access table) with no IF EXISTS. The schemas it creates are long obsolete (Current* column names, RoleCode on DimStaff, ActiveFlag). Superseded by the table scripts under sql/dimensions and sql/security."
    },
    "blob": "ca1faca214fb152f4056adfc0b72a7705cc82136",
    "auto": {
@@ -14117,13 +14251,22 @@
     "lastCommit": "2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills",
     "headerPurpose": "Bring DimStudent, DimStaff, DimSection, and StaffSchoolAccess into alignment with the updated schema: - StudentID (INT) → StudentNumber (BIGINT) business key on DimStudent - StaffID (INT) → Email (VARCHAR) business key on DimStaff - SchoolID INT → VARCHAR(10) everywhere - HomeSchoolID made nullable (for itinerant staff)",
     "headerScript": "migrate_SchoolID_to_VARCHAR.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_StaffSchoolAccess_materialize.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "665d6407cf13e5d1a32851d2c5f000cd5c378646",
    "notes": {
-    "purpose": ""
+    "purpose": "Step 1 of a 5-step 2026-05-04 change that replaced the vw_StaffSchoolAccess view with a materialized StaffSchoolAccess table, needed for Direct Lake on OneLake RLS. It drops vw_SchoolStudents, vw_StaffSchoolAccess, usp_MergeStaff and StaffSchoolAccess, then recreates the empty table.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Swap the staff school-access view for a table that usp_MergeStaff rebuilds.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-04 (pre-MVP)"
+    },
+    "caveats": "The header says 'idempotent' but it is not safe today. It drops usp_MergeStaff and vw_SchoolStudents, which are live dependencies, and empties StaffSchoolAccess. Until steps 2–4 run (recreate the view and proc, then a full ingest), every staff member loses school access. Obsolete; the current definitions are sql/security/StaffSchoolAccess.sql and usp_MergeStaff.sql."
    },
    "blob": "665d6407cf13e5d1a32851d2c5f000cd5c378646",
    "auto": {
@@ -14199,13 +14342,22 @@
     "lastCommit": "2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake",
     "headerPurpose": "Replace the dynamic vw_StaffSchoolAccess view with a materialized StaffSchoolAccess table. Rebuilt on every usp_MergeStaff run. See sql/security/StaffSchoolAccess.sql for the full rationale.",
     "headerScript": "migrate_StaffSchoolAccess_materialize.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_add_LastUpdated_step1_schema.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "86fa4d740f8ecbda4b8b9b92d8c4f6f608e2e207",
    "notes": {
-    "purpose": ""
+    "purpose": "Step 1 of 2 (schema only) of the pre-MVP change that added LastUpdated. It DROPs and CREATEs DimAssessmentWindow, DimReadingScale, DimCalendar, FactAssessmentReading, FactAssessmentWriting, FactSubmissionAudit and FactEnrollment, which were all empty except DimCalendar.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Rebuild seven early tables with a LastUpdated column (pre-MVP).",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, tables empty)"
+    },
+    "caveats": "EXTREME DANGER, never re-run. It DROPs FactAssessmentReading, FactAssessmentWriting, FactSubmissionAudit, DimAssessmentWindow (cycle configuration) and DimReadingScale, all of which now hold real data. There are no IF EXISTS guards or backups. The CREATE statements are long obsolete (none of the later fact columns: LevelCode, WritingAverage, AssessmentLanguage, VARCHAR traits). It must be followed by migrate_add_LastUpdated_step2_seed_DimCalendar.sql. Obsolete."
    },
    "blob": "86fa4d740f8ecbda4b8b9b92d8c4f6f608e2e207",
    "auto": {
@@ -14665,13 +14817,22 @@
     "lastCommit": "2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID",
     "headerPurpose": "Add LastUpdated DATETIME2(0) NOT NULL to 7 tables that were created before the project standard was enforced. STEP 1 OF 2 — schema only.",
     "headerScript": "migrate_add_LastUpdated_step1_schema.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_add_LastUpdated_step2_seed_DimCalendar.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7568522560f740368b9c248c210c9220b5f854bb",
    "notes": {
-    "purpose": ""
+    "purpose": "Step 2 of 2: reseed DimCalendar (2020-01-01 to 2035-12-31, about 5844 rows, school year starting in August) after step 1 recreated it with LastUpdated.",
+    "script": {
+     "kind": "seed",
+     "question": "Refill DimCalendar after the LastUpdated schema rebuild.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, straight after step 1)"
+    },
+    "caveats": "A plain INSERT with no DELETE or existence guard, so running it on a populated DimCalendar duplicates every date. Only valid straight after step 1. This is the only calendar generator in the repo with the correct column list (it includes LastUpdated). repopulate_DimCalendar.sql omits LastUpdated and would fail after truncating. Obsolete."
    },
    "blob": "7568522560f740368b9c248c210c9220b5f854bb",
    "auto": {
@@ -14702,13 +14863,22 @@
     "lastCommit": "2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID",
     "headerPurpose": "Re-seed DimCalendar after the schema rebuild in step 1. STEP 2 OF 2. Populates 2020-01-01 through 2035-12-31 (~5844 rows).",
     "headerScript": "migrate_add_LastUpdated_step2_seed_DimCalendar.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_mislocated_immersion_reading.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ae721b3959ab13a396e64c04482b24ac50bd278a",
    "notes": {
-    "purpose": ""
+    "purpose": "Live one-off repoint of 14 Early Immersion reading results. They were scored on the French scale (FR_Reading) but entered against the generic Reading·English·English window, and this moves them to the same cycle's Reading·French·Early Immersion window. It changes only AssessmentWindowID; scores and ReadingScaleID are untouched. Pre-check, UPDATE and post-check steps.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Move French-scale immersion reading results off the English window onto the matching French immersion window.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-22 (evidence from diag_mislocated_immersion_reading.sql; expected 14 rows)"
+    },
+    "caveats": "Idempotent: moved rows no longer match the source filter. Run STEP 1 and check the count before STEP 2. The target is matched by CycleGroupID + Reading/French/Early Immersion + ActiveFlag=1. Since per-instance cycle scoping, a cycle can have more than one matching French window, and then the UPDATE target is ambiguous; check that the target is unique before any re-use. Its diagnostic is diag_mislocated_immersion_reading.sql."
    },
    "blob": "ae721b3959ab13a396e64c04482b24ac50bd278a",
    "auto": {
@@ -14758,13 +14928,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Repoint the immersion reading results that were entered against the old generic reading window (now Reading·English·English) BEFORE the French·Early-Immersion reading instance existed, onto that French instance where they belong.",
     "headerScript": "migrate_mislocated_immersion_reading.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_scrRosterGrid_prereqs.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "f436fa3a06b3a4ada60fe12a66672a1b646ef1a3",
    "notes": {
-    "purpose": ""
+    "purpose": "2026-05-21 Power Apps-era prerequisites. It creates vw_DimReadingScale (ReadingScaleID cast to VARCHAR(20) for Power Fx BIGINT precision) and recreates usp_UpsertReadingAssessment with VARCHAR(20) window and scale parameters.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Create the reading-scale view and the string-keyed reading upsert proc for the Power Apps roster grid.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-21 (Power Apps scrRosterGrid build)"
+    },
+    "caveats": "DANGER, obsolete. Re-running DROPs and recreates usp_UpsertReadingAssessment with the May 2026 body, which silently reverts all later proc logic (score-context stamping, scoping, guards). The current proc lives in sql/procedures/usp_UpsertReadingAssessment.sql. The Power Apps entry path it served was later replaced (SharePoint pivot, then The SCoR Hub)."
    },
    "blob": "f436fa3a06b3a4ada60fe12a66672a1b646ef1a3",
    "auto": {
@@ -15060,13 +15239,22 @@
     ],
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "86a57d11b40013d19272532f16ee8e5298dcda00",
    "notes": {
-    "purpose": ""
+    "purpose": "2026-05-21 Power Apps-era change. It recreates vw_UserAssessmentWindows, vw_TeacherGroups and vw_TeacherRoster with the BIGINT surrogate keys (AssessmentWindowID, StudentKey, existing reading IDs) cast to VARCHAR(20), so Power Fx doubles don't round them and break equality filters.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Recreate the three Power Apps-facing views with string-cast surrogate keys.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-21 (Power Apps build)"
+    },
+    "caveats": "DANGER, obsolete. Re-running DROPs and recreates three security views with their May 2026 bodies, which reverts every later change: ScaleSystem, AchievementContext, RLS/analyst scoping and cycle-instance scoping. The current definitions are in sql/security/vw_UserAssessmentWindows.sql, vw_TeacherGroups.sql and vw_TeacherRoster.sql. Superseded by migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql and migrate_vw_TeacherRoster_add_AchievementContext.sql, and then by those security files."
    },
    "blob": "86a57d11b40013d19272532f16ee8e5298dcda00",
    "auto": {
@@ -15203,13 +15391,22 @@
     },
     "scriptEffect": "ddl",
     "lastCommit": "2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_vw_TeacherRoster_add_AchievementContext.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "f47361604ec92af234a3731756ade7386be645cf",
    "notes": {
-    "purpose": ""
+    "purpose": "2026-05-27 Power Apps-era rebuild of vw_TeacherRoster. It adds ExistingDelta, the expected min/max level and order (from DimReadingBenchmark using the dominant-month rule), and Reading IPP status and needs-confirmation flags from FactStudentIPP.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Recreate vw_TeacherRoster with the reading benchmark and IPP context columns.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-27 (Power Apps scrRosterGrid/scrStudentData work)"
+    },
+    "caveats": "DANGER, obsolete. Re-running DROPs and recreates vw_TeacherRoster with its May 2026 body and reverts later scoping and security changes. The current definition is in sql/security/vw_TeacherRoster.sql. Its note about Power Apps re-adding the data source is irrelevant now that entry goes through The SCoR Hub."
    },
    "blob": "f47361604ec92af234a3731756ade7386be645cf",
    "auto": {
@@ -15346,13 +15543,22 @@
     "scriptEffect": "ddl",
     "lastCommit": "2026-05-27 1bb706f Session wrap (2026-05-27): scrStudentData cohort scaffold + 2 new SQL views",
     "headerPurpose": "scrRosterGrid needs expected level range (for display), expected min/max LevelOrder (for client-side delta computation against the pending dropdown selection), ExistingDelta from the stored assessment, and ReadingIPP context (Subject='Reading' x window's ProgramFamily)."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "d5f0fca50a12d5a3f9fdf83eebe5d11c8f9135db",
    "notes": {
-    "purpose": ""
+    "purpose": "2026-05-21 rebuild of vw_UserAssessmentWindows that exposes DimAssessmentWindow.ScaleSystem, so the Power Apps level dropdown could filter DimReadingScale by the selected window's scale.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Recreate vw_UserAssessmentWindows with ScaleSystem exposed.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-21 (Power Apps build)"
+    },
+    "caveats": "DANGER, obsolete. Re-running DROPs and recreates the view with its May 2026 body (CURRENT_USER caller lookup, pre-scoping logic) and reverts every later change. The current definition is in sql/security/vw_UserAssessmentWindows.sql."
    },
    "blob": "d5f0fca50a12d5a3f9fdf83eebe5d11c8f9135db",
    "auto": {
@@ -15447,13 +15653,22 @@
     },
     "scriptEffect": "ddl",
     "lastCommit": "2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reconcile_cycle_instances.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "4241afee62d021677067609e50707a6836739a01",
    "notes": {
-    "purpose": ""
+    "purpose": "Live structural fix that brings every Short Cycle up to the canonical 8 instances (Subject × Language × ProgramScope × GradeBand) copied from dev. Step A re-scopes the 3 generic NULL-scoped windows to their English/English form (Math to all buckets) in place, keeping their IDs and results. Step B INSERTs the 5 missing French and immersion instances per active header. Ends with an instances-per-cycle count.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Give every live Short Cycle the canonical 8 subject/language/program instances without moving entered results.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "dev (as a no-op proof) then live, 2026-09-21/22"
+    },
+    "caveats": "Step A is idempotent (it only matches NULL-scoped rows). Step B's NOT EXISTS keys on MinGrade/MaxGrade, so once anyone edits an instance's grade band on /cycles (or runs set_cycle_grade_ranges_by_subject.sql), a re-run INSERTs a duplicate instance with the old band. Today's cycles are created with their instances by the app, so don't re-run this. Check the result with verify_cycle_instances.sql. Follow-up data cleanup: migrate_mislocated_immersion_reading.sql."
    },
    "blob": "4241afee62d021677067609e50707a6836739a01",
    "auto": {
@@ -15508,13 +15723,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Bring every Short Cycle on live up to the CANONICAL 8-instance set (Subject × Language × ProgramScope × GradeBand), matching dev SCoR 1 exactly (values copied verbatim from the 2026-09-21 dev dump — NOT guessed). Live cycles currently have only 3 generic instances each (Math/Reading/ Writing, ProgramScope = NULL, no language), which is why early-immersion students had no French reading instance and fell into the one scope-less English reading window.",
     "headerScript": "reconcile_cycle_instances.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reconcile_scoped_tvfs_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "a820883c46903dac2faed4605d1d3081355f339f",
    "notes": {
-    "purpose": ""
+    "purpose": "One-time live reconcile bundle (about 2100 lines, generated from HEAD 311a2ff on 2026-09-24). It redeploys every @UPN-scoped security TVF (tvf_StudentIPP, tvf_StudentAdaptation, tvf_ProgrammingRoster, tvf_ProgrammingGroups, tvf_StudentCohort, and others) with DROP IF EXISTS + CREATE + GRANT. It fixed the partial 2026-09-22 analyst-scoping deploy, which had left Reports and Programming empty for RegionalAnalysts on live.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Bring all the scoped TVFs on live back to the current source after a partial deploy.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "live 2026-09-24"
+    },
+    "caveats": "DANGER, stale snapshot: its TVF bodies are frozen at 311a2ff. Re-running today would revert every later TVF change, including the 1.2.0 StudentNumber durable-fix reads (deploy_studentnumber_durable_fix_2026-10-13.sql) and the SpecialistTeacher scoping. Never re-run as-is. For a future drift, regenerate a bundle from current sql/functions sources (the header itself says 'Regenerate if any TVF changes')."
    },
    "blob": "a820883c46903dac2faed4605d1d3081355f339f",
    "auto": {
@@ -16136,13 +16360,22 @@
     "lastCommit": "2026-09-24 4d1e555 sql(fix): one-time live reconcile bundle for the 14 @UPN-scoped TVFs (partial 2026-09-22 analyst-scoping deploy left several stale on live ->",
     "headerPurpose": "@UPN-parameterized equivalent of vw_StudentIPP for the web app (Phase 3b) -- the bulk IPP-management screen (/ipp, mirrors the Power App scrIPP). One row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row, in the signed-in user's scope. The SP can't use CURRENT_USER RLS, so this runs the SAME OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher) with CURRENT_USER -> LOWER(@UPN).",
     "headerFunction": "tvf_StudentIPP (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/relink_stranded_assessment_studentkeys.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "dfcc4454a10b948841d09cada5b3cc7d93e15fe9",
    "notes": {
-    "purpose": ""
+    "purpose": "Live recovery for 'stranded' assessment entries. When a student re-versions (new SCD2 StudentKey), it re-points FactAssessmentMath, FactAssessmentReading and FactAssessmentWriting rows from the old StudentKey to the student's current StudentKey, matched by StudentNumber. It skips departed students (no current row) and any row that would collide with an existing row at the same grain. Pre-check, three UPDATEs and a post-verify.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Re-attach assessment results entered under a student's old StudentKey to their current key.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-10-13, as the one-time catch-up before the 1.2.0 durable fix (sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql)"
+    },
+    "caveats": "Superseded: the durable fix stores StudentNumber on the facts and reads match on it, so stranding can no longer happen and this should not be needed again. It deliberately breaks the frozen-SCD-version rule: relinked rows now resolve the CURRENT grade and program, which affects as-was joins such as remediate_writing_trait_exclusion.sql and the reading score-context backfill. Compare the pre-check with the stranded diagnostic before running the UPDATEs."
    },
    "blob": "dfcc4454a10b948841d09cada5b3cc7d93e15fe9",
    "auto": {
@@ -16185,13 +16418,22 @@
     "lastCommit": "2026-10-13 45e19f9 sql(recovery): re-link stranded assessment entries to current StudentKey (by StudentNumber)",
     "headerPurpose": "RECOVERY for stranded assessment entries. When a student re-versions (SCD Type 2 -> NEW StudentKey), rows entered under the OLD key stop matching the roster/report reads (which join the CURRENT StudentKey), so the data reads as missing (0 progress, blank in reports/entry). This re-points those stranded rows to the student's CURRENT StudentKey, matched by the stable StudentNumber.",
     "headerScript": "relink_stranded_assessment_studentkeys.sql (LIVE recovery — WRITES)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/remediate_J020_reading_english_only.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8f5f863da8d9225581363ba06d08bc6aaaa8bad2",
    "notes": {
-    "purpose": ""
+    "purpose": "One-time SCD close (IsCurrent=0, EffectiveEndDate=yesterday) of current (Reading, 'French Immersion') rows in FactStudentIPP and FactStudentAdaptation for J020 (Late French Immersion) students. Late immersion reads only in English, so the rows the old usp_MergeStudent Step 6 seeded were wrong. Ends with a verify that expects 0.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Close the wrong French-reading IPP and adaptation rows for Late Immersion (J020) students.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-17 (J020 rule); live with the matching release"
+    },
+    "caveats": "Idempotent: once closed, nothing matches. Once the updated usp_MergeStudent is deployed, the next normal ingest closes these rows anyway; this script only makes the fix immediate. It only matches IPP and adaptation rows keyed to the student's CURRENT StudentKey."
    },
    "blob": "8f5f863da8d9225581363ba06d08bc6aaaa8bad2",
    "auto": {
@@ -16248,13 +16490,22 @@
     "lastCommit": "2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)",
     "headerPurpose": "One-time remediation for the \"J020 (Late French Immersion) reads in ENGLISH only\" rule. Before this rule, usp_MergeStudent Step 6 seeded every French-Immersion student a (Reading,'French Immersion') IPP and Adaptation row -- including J020. Late immersion has no French reading benchmarks, so those rows are wrong. This closes the stale J020 (Reading,'French Immersion') rows in FactStudentIPP + FactStudentAdaptation.",
     "headerScript": "remediate_J020_reading_english_only.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/remediate_writing_trait_exclusion.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "040c60b2f9c2d330da3f7ca29c26584c80c7b65b",
    "notes": {
-    "purpose": ""
+    "purpose": "Reconcile existing FactAssessmentWriting rows with the active WritingTraitExclusion rules (grade × program family × benchmark month, resolved from the row's frozen DimStudent version and its window). It sets the excluded trait to '-' and recomputes the stored WritingAverage over the scored traits only.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Mark excluded writing traits as '-' on already-entered results and fix their stored averages.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-02; live as step 9/9 of sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql"
+    },
+    "caveats": "Meant to be re-run: after first deploying WritingTraitExclusion, and again whenever an exclusion rule is added or activated for a grade/program/month that already has entries. It requires the VARCHAR traits from migrate_FactWriting_traits_varchar.sql first. It also turns a matching NULL ('never recorded') into '-'. Rows re-pointed by relink_stranded_assessment_studentkeys.sql resolve their CURRENT grade and program, not the as-was one. This is the current way to recompute WritingAverage; don't use migrate_FactAssessmentWriting_add_average.sql."
    },
    "blob": "040c60b2f9c2d330da3f7ca29c26584c80c7b65b",
    "auto": {
@@ -16312,13 +16563,21 @@
     "lastCommit": "2026-10-02 0f0d379 fix(writing): Fabric TRY_CAST('-' AS INT)=0 miscounted excluded trait in averages",
     "headerPurpose": "Reconcile EXISTING FactAssessmentWriting rows to the WritingTraitExclusion config. For any stored row whose (grade x program family x cycle benchmark month) matches an active exclusion rule, record the excluded trait as the intentional '-' (deliberately NOT assessed — distinct from NULL = never recorded) and recompute the stored WritingAverage over the scored traits.",
     "headerScript": "remediate_writing_trait_exclusion"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/repopulate_DimCalendar.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "119b925363295c5dbd3b2c077b8cce5821c75bd0",
    "notes": {
-    "purpose": ""
+    "purpose": "TRUNCATE DimCalendar and regenerate it for 2020-01-01 to 2035-12-31 (about 5844 rows, school year starting in August) when the calendar has bad or partial data.",
+    "script": {
+     "kind": "seed",
+     "question": "Wipe and rebuild the date dimension.",
+     "target": "either",
+     "rerunSafe": false
+    },
+    "caveats": "BROKEN and dangerous as written: its INSERT column list has no LastUpdated, which has been NOT NULL with no default since migrate_add_LastUpdated_step1_schema.sql (2026-04-28). The TRUNCATE runs and then the INSERT fails, which leaves DimCalendar EMPTY. Every dominant-month benchmark lookup depends on DimCalendar. Before any use, add LastUpdated (GETDATE()) to the INSERT, matching migrate_add_LastUpdated_step2_seed_DimCalendar.sql, and test on dev first."
    },
    "blob": "119b925363295c5dbd3b2c077b8cce5821c75bd0",
    "auto": {
@@ -16351,13 +16610,22 @@
     "lastCommit": "2026-04-28 1a3d724 Number formatting: ban comma as thousands separator",
     "headerPurpose": "Clear DimCalendar and repopulate with correct 5844-row date range",
     "headerScript": "repopulate_DimCalendar.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/report_o2_sections_shelburne_digby.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "b95d1c084533364430fdcca3ff4e5ac6ec5fd8a3",
    "notes": {
-    "purpose": ""
+    "purpose": "Read-only report of current sections at Digby Regional High (SchoolID 0709) and Shelburne Regional High (0716) where O2 (Options & Opportunities) students are at least 50% of active enrollment. It shows the school, course name and number, section, semester, teacher(s), total and O2 enrollment, and O2 %.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which sections at DRHS/SRHS are majority O2 students, and who teaches them?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "written for a live request 2026-09-29"
+    },
+    "caveats": "The schools (0709, 0716), the program (DimProgram.SpecialtyType='O2') and the 50% threshold are hard-coded. It could become a template with DECLARE @SchoolIDs / @SpecialtyType / @MinPercent. Output includes teacher names (not student PII). 'Enrolled' means a current section, a current student with EnrollStatus IN (0,-1), and FactEnrollment.ActiveFlag=1."
    },
    "blob": "b95d1c084533364430fdcca3ff4e5ac6ec5fd8a3",
    "auto": {
@@ -16411,13 +16679,22 @@
     },
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-29 70b611e report(o2 sections): add Semester (DimTerm.TermName), ordered by term"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reseed_programming_rows_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "bc00ba29ac68d32f0c1fe14461b314fb2cbf0a61",
    "notes": {
-    "purpose": ""
+    "purpose": "Dev-only standalone copy of usp_MergeStudent Steps 6a–6d. It closes and creates FactStudentIPP (including Math) and FactStudentAdaptation NULL-gate rows from the current DimStudent IPP and Adap flags, without a full ingest that would deactivate the directly-inserted DEVSEED (Drumlin) students. Prints closed and created counters.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Rebuild the IPP and adaptation gate rows on dev from the current student flags without running an ingest.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-11"
+    },
+    "caveats": "STALE copy of the proc logic as of 2026-09-11. It still uses Math P–6 (Math is now P–5) and does not have the J020 'Late Immersion reads English only' rule (2026-09-17), so a run would re-create the French-reading J020 rows that remediate_J020_reading_english_only.sql closed. Sync it with the current usp_MergeStudent Step 6 before use. Run as ONE batch (no GO before the verify). The commented-out optional block flips DEVSEED students to IPP=1 or Adap=1. Never run on live."
    },
    "blob": "bc00ba29ac68d32f0c1fe14461b314fb2cbf0a61",
    "auto": {
@@ -16520,13 +16797,22 @@
     "lastCommit": "2026-09-11 e2ec948 test(dev): standalone Step 6 reconciliation (reseed programming rows)",
     "headerPurpose": "Reseed FactStudentIPP (incl. Math) + FactStudentAdaptation NULL-gate rows from the CURRENT DimStudent state (IsCurrent=1, IPP=1 / Adap=1), WITHOUT a full ingest. Identical logic to usp_MergeStudent Steps 6a-6d, extracted so it runs standalone.",
     "headerScript": "reseed_programming_rows_dev.sql (DEV / SYNTHETIC ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reset_and_run_full_ingest.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "3d2d9bbcbe261689261580a11af85cd2118ca386",
    "notes": {
-    "purpose": ""
+    "purpose": "Pre-MVP test-time full reset. It TRUNCATEs FactEnrollment, FactSectionTeachers, FactStaffAssignment, DimSection, DimStaff and DimStudent, then runs EXEC usp_RunFullIngestCycle to rebuild them from the Lakehouse import files.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Wipe the roster tables and rebuild them from the Lakehouse imports (pre-MVP test reset).",
+     "target": "dev",
+     "rerunSafe": false,
+     "applied": "used repeatedly in pre-MVP testing (2026-05)"
+    },
+    "caveats": "EXTREME DANGER. Never run on live, and not on today's dev either without a plan. TRUNCATE resets the IDENTITY seeds, so every StudentKey and StaffKey referenced by the assessment facts, FactStudentIPP, FactStudentAdaptation and StaffSchoolAccess would be orphaned or point at the wrong person. SCD history is lost. Dev's directly-inserted DEVSEED and synthetic staff rows would also be wiped. Obsolete since assessment data exists. Referenced as the last step of several pre-MVP migrations (strip_current_prefix, StaffSchoolAccess_materialize)."
    },
    "blob": "3d2d9bbcbe261689261580a11af85cd2118ca386",
    "auto": {
@@ -16577,7 +16863,8 @@
     "lastCommit": "2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake",
     "headerPurpose": "TEST-time full reset — truncates the 6 tables touched by usp_RunFullIngestCycle, then re-runs the orchestrator to rebuild warehouse state from whatever currently sits in the Lakehouse Files/imports/{topic}/ folders.",
     "headerScript": "reset_and_run_full_ingest.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/reset_dev_full_and_ingest.sql": {
    "kind": "script",

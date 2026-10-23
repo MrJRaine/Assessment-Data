@@ -4,139 +4,14 @@
 
 Search here BEFORE writing a new diagnostic or fix. Reuse or extend; template it with variables if a near-duplicate exists. Kinds: diagnostic (read-only) · template (DECLARE variables) · fix/migration · seed · dev-helper. “(auto)” = classified from the SQL alone, not yet reviewed.
 
-- [DDL / object changes (auto)](#ddl--object-changes-(auto)) (15)
-- [deploy-helper](#deploy-helper) (9)
-- [dev-helper](#dev-helper) (5)
-- [diagnostic](#diagnostic) (23)
-- [diagnostic (auto)](#diagnostic-(auto)) (8)
-- [fix/migration](#fixmigration) (21)
-- [seed](#seed) (1)
+- [deploy-helper](#deploy-helper) (14)
+- [dev-helper](#dev-helper) (7)
+- [diagnostic](#diagnostic) (24)
+- [diagnostic (auto)](#diagnostic-(auto)) (7)
+- [fix/migration](#fixmigration) (43)
+- [seed](#seed) (3)
 - [template](#template) (10)
-- [writes data (auto)](#writes-data-(auto)) (41)
-
-## DDL / object changes (auto)
-
-### migrate_DimStaff_add_AccessLevel.sql
-
-[sql/scripts/migrate_DimStaff_add_AccessLevel.sql](../../sql/scripts/migrate_DimStaff_add_AccessLevel.sql) · skeleton (not yet reviewed) · last change: 2026-04-29 1d386b4 Session wrap (2026-04-29): role taxonomy, AccessLevel, Step 7 ingest
-
-effect: **ddl**
-**Writes:** `DimStaff` (alter)
-
-### migrate_DimStaff_add_Title.sql
-
-[sql/scripts/migrate_DimStaff_add_Title.sql](../../sql/scripts/migrate_DimStaff_add_Title.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection
-
-Add Title VARCHAR(100) NULL to DimStaff. Pulled from PS Title field. Also a Type 2 SCD trigger per the all-business-fields-Type-2 policy (see DimStaff.sql header).
-
-effect: **ddl**
-
-### migrate_DimStaff_v2.sql
-
-[sql/scripts/migrate_DimStaff_v2.sql](../../sql/scripts/migrate_DimStaff_v2.sql) · skeleton (not yet reviewed) · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
-
-Change DimStaff business key from StaffID (INT) to Email (VARCHAR). Drops StaffID and StaffNumber columns; makes HomeSchoolID nullable. Run this against Assessment_Warehouse to apply the schema change.
-
-effect: **ddl**
-
-### migrate_DimStudent_add_demographics.sql
-
-[sql/scripts/migrate_DimStudent_add_demographics.sql](../../sql/scripts/migrate_DimStudent_add_demographics.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection
-
-Add 6 fields to DimStudent — Homeroom, Gender, SelfIDAfrican, SelfIDIndigenous, CurrentIPP, CurrentAdap. Gender NOT NULL, rest NULL. All are Type 2 SCD triggers per the policy in DimStudent.sql (every business-meaningful field triggers a new version on change, for report reproducibility). Pattern: DROP + CREATE (DimStudent has no data yet pre-MVP).
-
-effect: **ddl**
-
-### migrate_DimStudent_strip_current_prefix.sql
-
-[sql/scripts/migrate_DimStudent_strip_current_prefix.sql](../../sql/scripts/migrate_DimStudent_strip_current_prefix.sql) · skeleton (not yet reviewed) · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
-
-Rename four DimStudent columns to drop the misleading "Current" prefix: CurrentGrade -> Grade CurrentSchoolID -> SchoolID CurrentIPP -> IPP CurrentAdap -> Adap The prefix was inaccurate on a Type 2 dim — every row is a point-in-time snapshot, so the row's effective dates define currency, not the column name. New names align with DimStaff and DimSection conventions (no "Current" prefix anywhere).
-
-effect: **ddl**
-**Writes:** `DimStudent` (drop); `Wrk_Student` (drop); `usp_MergeStudent` (drop); `vw_RegionalData` (drop); `vw_SchoolStudents` (drop); `vw_TeacherStudents` (drop)
-
-### migrate_DimStudent_v2.sql
-
-[sql/scripts/migrate_DimStudent_v2.sql](../../sql/scripts/migrate_DimStudent_v2.sql) · skeleton (not yet reviewed) · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
-
-Replace StudentID (INT) with StudentNumber (BIGINT) in DimStudent. Run this against Assessment_Warehouse to apply the schema change.
-
-effect: **ddl**
-
-### migrate_FactSectionTeachers_decouple.sql
-
-[sql/scripts/migrate_FactSectionTeachers_decouple.sql](../../sql/scripts/migrate_FactSectionTeachers_decouple.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 dd7fc0f Section schema refinements: fields, SCD policy, bridge decoupling
-
-Replace surrogate-key references (SectionKey, StaffKey) with business-key references (SectionID, TeacherEmail). Decouples this bridge from DimSection / DimStaff Type 2 versioning so it doesn't churn whenever those dims version for unrelated reasons (e.g. DimSection.EnrollmentCount changes, DimStaff name correction).
-
-effect: **ddl**
-
-### migrate_MathTask_add_AnswerKeyFR_live.sql
-
-[sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql](../../sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 46a6098 release 0.6.0: The SCoR Hub rename + French math answer key (dev -> main)
-
-Add a French answer key to the math task bank and widen the English one: - DimMathTask: AnswerKey VARCHAR(200) -> VARCHAR(500) (real keys reach 241 chars) and NEW AnswerKeyFR VARCHAR(500). - Stg_MathTask: NEW AnswerKeyFR VARCHAR(500), positioned so the seed CSV's column order (…, AnswerKey, AnswerKeyFR, ActiveFlag) maps by position.
-
-effect: **ddl**
-**Reads:** `DimMathTask`
-
-### migrate_SchoolID_to_VARCHAR.sql
-
-[sql/scripts/migrate_SchoolID_to_VARCHAR.sql](../../sql/scripts/migrate_SchoolID_to_VARCHAR.sql) · skeleton (not yet reviewed) · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
-
-Bring DimStudent, DimStaff, DimSection, and StaffSchoolAccess into alignment with the updated schema: - StudentID (INT) → StudentNumber (BIGINT) business key on DimStudent - StaffID (INT) → Email (VARCHAR) business key on DimStaff - SchoolID INT → VARCHAR(10) everywhere - HomeSchoolID made nullable (for itinerant staff)
-
-effect: **ddl**
-
-### migrate_StaffSchoolAccess_materialize.sql
-
-[sql/scripts/migrate_StaffSchoolAccess_materialize.sql](../../sql/scripts/migrate_StaffSchoolAccess_materialize.sql) · skeleton (not yet reviewed) · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
-
-Replace the dynamic vw_StaffSchoolAccess view with a materialized StaffSchoolAccess table. Rebuilt on every usp_MergeStaff run. See sql/security/StaffSchoolAccess.sql for the full rationale.
-
-effect: **ddl**
-**Writes:** `usp_MergeStaff` (drop); `vw_SchoolStudents` (drop); `vw_StaffSchoolAccess` (drop)
-
-### migrate_add_LastUpdated_step1_schema.sql
-
-[sql/scripts/migrate_add_LastUpdated_step1_schema.sql](../../sql/scripts/migrate_add_LastUpdated_step1_schema.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID
-
-Add LastUpdated DATETIME2(0) NOT NULL to 7 tables that were created before the project standard was enforced. STEP 1 OF 2 — schema only.
-
-effect: **ddl**
-
-### migrate_views_AssessmentWindowID_VARCHAR.sql
-
-[sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql](../../sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql) · skeleton (not yet reviewed) · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
-
-effect: **ddl**
-**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
-
-### migrate_vw_TeacherRoster_add_AchievementContext.sql
-
-[sql/scripts/migrate_vw_TeacherRoster_add_AchievementContext.sql](../../sql/scripts/migrate_vw_TeacherRoster_add_AchievementContext.sql) · skeleton (not yet reviewed) · last change: 2026-05-27 1bb706f Session wrap (2026-05-27): scrStudentData cohort scaffold + 2 new SQL views
-
-scrRosterGrid needs expected level range (for display), expected min/max LevelOrder (for client-side delta computation against the pending dropdown selection), ExistingDelta from the stored assessment, and ReadingIPP context (Subject='Reading' x window's ProgramFamily).
-
-effect: **ddl**
-**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
-
-### migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql
-
-[sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql](../../sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql) · skeleton (not yet reviewed) · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
-
-effect: **ddl**
-**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
-
-### reconcile_scoped_tvfs_live.sql
-
-[sql/scripts/reconcile_scoped_tvfs_live.sql](../../sql/scripts/reconcile_scoped_tvfs_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-24 4d1e555 sql(fix): one-time live reconcile bundle for the 14 @UPN-scoped TVFs (partial 2026-09-22 analyst-scoping deploy left several stale on live ->
-
-@UPN-parameterized equivalent of vw_StudentIPP for the web app (Phase 3b) -- the bulk IPP-management screen (/ipp, mirrors the Power App scrIPP). One row per (Student, Subject, ProgramFamily) with a current FactStudentIPP row, in the signed-in user's scope. The SP can't use CURRENT_USER RLS, so this runs the SAME OR-across-EXISTS role branches (RegionalAnalyst / Administrator+SpecialistTeacher / Teacher) with CURRENT_USER -> LOWER(@UPN).
-
-effect: **ddl**
-**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `SectionRosterMembership`, `StaffSchoolAccess`, `TeacherRosterMembership`, `vw_StudentReadingStartingPoint`
+- [writes data (auto)](#writes-data-(auto)) (25)
 
 ## deploy-helper
 
@@ -223,6 +98,53 @@ effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-1
 **Variables:** `@AtlanticToday` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
 **Writes:** `usp_MergeEnrollment` (drop); `usp_MergeSection` (drop); `usp_MergeSectionTeachers` (drop); `usp_MergeStaff` (drop); `usp_MergeStudent` (drop); `usp_YearEndCloseOut` (drop); `vw_TeacherStudents` (drop)
 
+### migrate_scrRosterGrid_prereqs.sql
+
+[sql/scripts/migrate_scrRosterGrid_prereqs.sql](../../sql/scripts/migrate_scrRosterGrid_prereqs.sql) · reviewed 2026-10-23 · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
+
+Create the reading-scale view and the string-keyed reading upsert proc for the Power Apps roster grid.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: 2026-05-21 (Power Apps scrRosterGrid build)
+**Variables:** `@Now` = `GETDATE()`, `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@CallerEmail` = `LOWER(CURRENT_USER)`, `@CallerStaffKey`, `@CallerAccessLevel`, `@AssessmentWindowID_BI`, `@ReadingScaleID_BI`, `@WindowStartDate`, `@WindowEndDate`, `@WindowMinGrade`, `@WindowMaxGrade`, `@WindowProgramFamily`, `@WindowScaleSystem`, `@WindowAssessmentType`, `@WindowStatus`, `@StudentKey`, `@StudentGrade`, `@StudentProgramCode`, `@StudentProgramFamily`, `@StudentGradeOrder`, `@MinGradeOrder`, `@MaxGradeOrder`, `@ScaleSystem`, `@StudentLevelOrder`, `@DominantMonth`, `@ExpectedMinLevel`, `@ExpectedMaxLevel`, `@ExpectedMinOrder`, `@ExpectedMaxOrder`, `@ReadingDelta` = `NULL`, `@AuditWarning` = `NULL`, `@ExistingAssessmentID`
+**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimStaff`, `DimStudent`, `FactAssessmentReading`
+**Writes:** `FactAssessmentReading` (insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
+
+### migrate_views_AssessmentWindowID_VARCHAR.sql
+
+[sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql](../../sql/scripts/migrate_views_AssessmentWindowID_VARCHAR.sql) · reviewed 2026-10-23 · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
+
+Recreate the three Power Apps-facing views with string-cast surrogate keys.
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-21 (Power Apps build)
+**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
+
+### migrate_vw_TeacherRoster_add_AchievementContext.sql
+
+[sql/scripts/migrate_vw_TeacherRoster_add_AchievementContext.sql](../../sql/scripts/migrate_vw_TeacherRoster_add_AchievementContext.sql) · reviewed 2026-10-23 · last change: 2026-05-27 1bb706f Session wrap (2026-05-27): scrStudentData cohort scaffold + 2 new SQL views
+
+Recreate vw_TeacherRoster with the reading benchmark and IPP context columns.
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-27 (Power Apps scrRosterGrid/scrStudentData work)
+**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
+
+### migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql
+
+[sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql](../../sql/scripts/migrate_vw_UserAssessmentWindows_add_ScaleSystem.sql) · reviewed 2026-10-23 · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
+
+Recreate vw_UserAssessmentWindows with ScaleSystem exposed.
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-21 (Power Apps build)
+**Reads:** `DimAssessmentWindow`, `DimGrade`, `DimProgram`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
+
+### reconcile_scoped_tvfs_live.sql
+
+[sql/scripts/reconcile_scoped_tvfs_live.sql](../../sql/scripts/reconcile_scoped_tvfs_live.sql) · reviewed 2026-10-23 · last change: 2026-09-24 4d1e555 sql(fix): one-time live reconcile bundle for the 14 @UPN-scoped TVFs (partial 2026-09-22 analyst-scoping deploy left several stale on live ->
+
+Bring all the scoped TVFs on live back to the current source after a partial deploy.
+
+effect: **ddl** · target: live · re-run safe: no · applied: live 2026-09-24
+**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `SectionRosterMembership`, `StaffSchoolAccess`, `TeacherRosterMembership`, `vw_StudentReadingStartingPoint`
+
 ## dev-helper
 
 ### dev_build_cycles_to_match_live_2026-10-06.sql
@@ -279,6 +201,26 @@ effect: **writes-data** · target: dev · re-run safe: yes
 **Variables:** `@Email` = `'jeffrey.raine@tcrce.ca'`
 **Reads:** `DimSchool`, `DimStaff`, `StaffAppAccess`, `StaffSchoolAccess`
 **Writes:** `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `StaffAppAccess` (delete/insert — `CanManageCycles`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`); `StaffSchoolAccess` (delete/insert — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`)
+
+### reseed_programming_rows_dev.sql
+
+[sql/scripts/reseed_programming_rows_dev.sql](../../sql/scripts/reseed_programming_rows_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-11 e2ec948 test(dev): standalone Step 6 reconciliation (reseed programming rows)
+
+Rebuild the IPP and adaptation gate rows on dev from the current student flags without running an ingest.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-09-11
+**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@IPPRowsClosed` = `0`, `@IPPRowsCreated` = `0`, `@AdapRowsClosed` = `0`, `@AdapRowsCreated` = `0`
+**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`
+**Writes:** `FactStudentAdaptation` (insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`); `FactStudentIPP` (insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
+
+### reset_and_run_full_ingest.sql
+
+[sql/scripts/reset_and_run_full_ingest.sql](../../sql/scripts/reset_and_run_full_ingest.sql) · reviewed 2026-10-23 · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
+
+Wipe the roster tables and rebuild them from the Lakehouse imports (pre-MVP test reset).
+
+effect: **writes-data** · target: dev · re-run safe: no · applied: used repeatedly in pre-MVP testing (2026-05)
+**Writes:** `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactEnrollment` (truncate); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate)
 
 ## diagnostic
 
@@ -493,14 +435,16 @@ effect: **read-only** · target: dev (synthetic data; also harmless on live as i
 **Variables:** `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
 **Reads:** `FactEnrollment`
 
-## diagnostic (auto)
-
 ### report_o2_sections_shelburne_digby.sql
 
-[sql/scripts/report_o2_sections_shelburne_digby.sql](../../sql/scripts/report_o2_sections_shelburne_digby.sql) · skeleton (not yet reviewed) · last change: 2026-09-29 70b611e report(o2 sections): add Semester (DimTerm.TermName), ordered by term
+[sql/scripts/report_o2_sections_shelburne_digby.sql](../../sql/scripts/report_o2_sections_shelburne_digby.sql) · reviewed 2026-10-23 · last change: 2026-09-29 70b611e report(o2 sections): add Semester (DimTerm.TermName), ordered by term
 
-effect: **read-only**
+Which sections at DRHS/SRHS are majority O2 students, and who teaches them?
+
+effect: **read-only** · target: live · re-run safe: yes · applied: written for a live request 2026-09-29
 **Reads:** `DimProgram`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactEnrollment`, `FactSectionTeachers`
+
+## diagnostic (auto)
 
 ### run_math_task_ingest_dev.sql
 
@@ -763,6 +707,209 @@ Add the section display/size fields to DimSection (pre-MVP schema change).
 
 effect: **ddl** · target: dev and live (pre-MVP, empty table) · re-run safe: no · applied: 2026-04-28 (pre-MVP, table empty)
 
+### migrate_DimStaff_add_AccessLevel.sql
+
+[sql/scripts/migrate_DimStaff_add_AccessLevel.sql](../../sql/scripts/migrate_DimStaff_add_AccessLevel.sql) · reviewed 2026-10-23 · last change: 2026-04-29 1d386b4 Session wrap (2026-04-29): role taxonomy, AccessLevel, Step 7 ingest
+
+Add the AccessLevel column to DimStaff (one-time schema change).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-29 (pre-MVP schema work); the column is now part of the base DimStaff schema
+**Writes:** `DimStaff` (alter)
+
+### migrate_DimStaff_add_Title.sql
+
+[sql/scripts/migrate_DimStaff_add_Title.sql](../../sql/scripts/migrate_DimStaff_add_Title.sql) · reviewed 2026-10-23 · last change: 2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection
+
+Recreate the empty DimStaff with a Title column (pre-MVP).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-28 (pre-MVP, empty table)
+
+### migrate_DimStaff_v2.sql
+
+[sql/scripts/migrate_DimStaff_v2.sql](../../sql/scripts/migrate_DimStaff_v2.sql) · reviewed 2026-10-23 · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
+
+Switch DimStaff's business key to Email (pre-MVP, empty table).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-24 (initial schema, empty table)
+
+### migrate_DimStudent_add_GroupKey.sql
+
+[sql/scripts/migrate_DimStudent_add_GroupKey.sql](../../sql/scripts/migrate_DimStudent_add_GroupKey.sql) · reviewed 2026-10-23 · last change: 2026-09-08 90a285e hotfix: URL-safe homeroom group key + small-group roster filter (prod)
+
+Add and backfill DimStudent.GroupKey so homeroom roster URLs work.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: 2026-09-08 hotfix (dev, then live); usp_MergeStudent computes GroupKey on every ingest from then on
+**Reads:** `DimSchool`, `DimStudent`, `INFORMATION_SCHEMA.COLUMNS`
+**Writes:** `DimStudent` (alter/update — `GroupKey`, `LastUpdated`); `Wrk_Student` (alter)
+
+### migrate_DimStudent_add_demographics.sql
+
+[sql/scripts/migrate_DimStudent_add_demographics.sql](../../sql/scripts/migrate_DimStudent_add_demographics.sql) · reviewed 2026-10-23 · last change: 2026-04-28 03eedc1 Schema refinements: SCD policy, demographics, collision detection
+
+Recreate the empty DimStudent with demographic columns (pre-MVP).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-28 (pre-MVP, empty table)
+
+### migrate_DimStudent_strip_current_prefix.sql
+
+[sql/scripts/migrate_DimStudent_strip_current_prefix.sql](../../sql/scripts/migrate_DimStudent_strip_current_prefix.sql) · reviewed 2026-10-23 · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
+
+Drop DimStudent and its dependents so they can be recreated with the renamed columns (pre-MVP).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-04 (pre-MVP, before any assessment facts existed)
+**Writes:** `DimStudent` (drop); `Wrk_Student` (drop); `usp_MergeStudent` (drop); `vw_RegionalData` (drop); `vw_SchoolStudents` (drop); `vw_TeacherStudents` (drop)
+
+### migrate_DimStudent_v2.sql
+
+[sql/scripts/migrate_DimStudent_v2.sql](../../sql/scripts/migrate_DimStudent_v2.sql) · reviewed 2026-10-23 · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
+
+Switch DimStudent's business key to StudentNumber (pre-MVP, empty table).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-24 (initial schema, empty table)
+
+### migrate_FactAssessmentReading_add_score_context.sql
+
+[sql/scripts/migrate_FactAssessmentReading_add_score_context.sql](../../sql/scripts/migrate_FactAssessmentReading_add_score_context.sql) · reviewed 2026-10-23 · last change: 2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live
+
+Stamp the as-was level and expected range onto every existing reading result.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-09-21; live via sql/deploy/live_0.5.0/01_migrations.sql
+**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`, `sys.columns`
+**Writes:** `FactAssessmentReading` (alter/update — `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LevelCode`)
+
+### migrate_FactAssessmentWriting_add_average.sql
+
+[sql/scripts/migrate_FactAssessmentWriting_add_average.sql](../../sql/scripts/migrate_FactAssessmentWriting_add_average.sql) · reviewed 2026-10-23 · last change: 2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live
+
+Stamp the writing average onto every existing writing result.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: dev 2026-09-21; live via sql/deploy/live_0.5.0/01_migrations.sql
+**Reads:** `FactAssessmentWriting`, `sys.columns`
+**Writes:** `FactAssessmentWriting` (alter/update — `WritingAverage`)
+
+### migrate_FactSectionTeachers_decouple.sql
+
+[sql/scripts/migrate_FactSectionTeachers_decouple.sql](../../sql/scripts/migrate_FactSectionTeachers_decouple.sql) · reviewed 2026-10-23 · last change: 2026-04-28 dd7fc0f Section schema refinements: fields, SCD policy, bridge decoupling
+
+Recreate the empty FactSectionTeachers bridge on business keys (pre-MVP).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-28 (pre-MVP, empty table)
+
+### migrate_FactWriting_add_AssessmentLanguage.sql
+
+[sql/scripts/migrate_FactWriting_add_AssessmentLanguage.sql](../../sql/scripts/migrate_FactWriting_add_AssessmentLanguage.sql) · reviewed 2026-10-23 · last change: 2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)
+
+Add and backfill the writing result's assessment language.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-09-17; live via sql/deploy/live_0.5.0/01_migrations.sql
+**Reads:** `DimProgram`, `DimStudent`, `FactAssessmentWriting`, `sys.columns`
+**Writes:** `FactAssessmentWriting` (alter/update — `AssessmentLanguage`, `ProgramFamily`)
+
+### migrate_FactWriting_conventions_varchar.sql
+
+[sql/scripts/migrate_FactWriting_conventions_varchar.sql](../../sql/scripts/migrate_FactWriting_conventions_varchar.sql) · reviewed 2026-10-23 · last change: 2026-09-21 922ed6b fix(deploy): defer SCR-swap UPDATEs via EXEC so they don't parse-fail on an already-converted warehouse
+
+Change ConventionsScore to text so it can hold SCR.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-09-17; live via sql/deploy/live_0.5.0/01_migrations.sql
+**Reads:** `FactAssessmentWriting`, `sys.columns`
+**Writes:** `FactAssessmentWriting` (alter/update — `ConventionsScore`, `ConventionsScoreTmp`)
+
+### migrate_FactWriting_traits_varchar.sql
+
+[sql/scripts/migrate_FactWriting_traits_varchar.sql](../../sql/scripts/migrate_FactWriting_traits_varchar.sql) · reviewed 2026-10-23 · last change: 2026-10-02 329bace feat(writing): record excluded trait as '-' (not NULL); VARCHAR traits
+
+Change the three numeric writing traits to text so they can hold '-'.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-10-02; live as step 1/9 of sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql
+**Reads:** `sys.columns`
+**Writes:** `FactAssessmentWriting` (alter/update — `IdeasScore`, `IdeasScoreTmp`, `LanguageScore`, `LanguageScoreTmp`, `OrganizationScore`, `OrganizationScoreTmp`)
+
+### migrate_MathTask_add_AnswerKeyFR_live.sql
+
+[sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql](../../sql/scripts/migrate_MathTask_add_AnswerKeyFR_live.sql) · reviewed 2026-10-23 · last change: 2026-09-22 46a6098 release 0.6.0: The SCoR Hub rename + French math answer key (dev -> main)
+
+Add the French math answer key to the empty live task-bank tables before the first math task load.
+
+effect: **ddl** · target: live · re-run safe: no · applied: live at release 0.6.0 (2026-09-22), before the first live math task load
+**Reads:** `DimMathTask`
+
+### migrate_SchoolID_to_VARCHAR.sql
+
+[sql/scripts/migrate_SchoolID_to_VARCHAR.sql](../../sql/scripts/migrate_SchoolID_to_VARCHAR.sql) · reviewed 2026-10-23 · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
+
+Move the early dimensions to VARCHAR SchoolID and the new business keys (pre-MVP, empty tables).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-24 to 2026-05-04 (pre-MVP, empty tables)
+
+### migrate_StaffSchoolAccess_materialize.sql
+
+[sql/scripts/migrate_StaffSchoolAccess_materialize.sql](../../sql/scripts/migrate_StaffSchoolAccess_materialize.sql) · reviewed 2026-10-23 · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
+
+Swap the staff school-access view for a table that usp_MergeStaff rebuilds.
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-04 (pre-MVP)
+**Writes:** `usp_MergeStaff` (drop); `vw_SchoolStudents` (drop); `vw_StaffSchoolAccess` (drop)
+
+### migrate_add_LastUpdated_step1_schema.sql
+
+[sql/scripts/migrate_add_LastUpdated_step1_schema.sql](../../sql/scripts/migrate_add_LastUpdated_step1_schema.sql) · reviewed 2026-10-23 · last change: 2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID
+
+Rebuild seven early tables with a LastUpdated column (pre-MVP).
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-04-28 (pre-MVP, tables empty)
+
+### migrate_mislocated_immersion_reading.sql
+
+[sql/scripts/migrate_mislocated_immersion_reading.sql](../../sql/scripts/migrate_mislocated_immersion_reading.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Move French-scale immersion reading results off the English window onto the matching French immersion window.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: live 2026-09-22 (evidence from diag_mislocated_immersion_reading.sql; expected 14 rows)
+**Reads:** `DimAssessmentWindow`, `DimProgram`, `DimReadingScale`, `DimShortCycle`, `DimStudent`, `FactAssessmentReading`
+**Writes:** `FactAssessmentReading` (update — `AssessmentWindowID`)
+
+### reconcile_cycle_instances.sql
+
+[sql/scripts/reconcile_cycle_instances.sql](../../sql/scripts/reconcile_cycle_instances.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Give every live Short Cycle the canonical 8 subject/language/program instances without moving entered results.
+
+effect: **writes-data** · target: live · re-run safe: no · applied: dev (as a no-op proof) then live, 2026-09-21/22
+**Reads:** `DimAssessmentWindow`, `DimShortCycle`
+**Writes:** `DimAssessmentWindow` (insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`)
+
+### relink_stranded_assessment_studentkeys.sql
+
+[sql/scripts/relink_stranded_assessment_studentkeys.sql](../../sql/scripts/relink_stranded_assessment_studentkeys.sql) · reviewed 2026-10-23 · last change: 2026-10-13 45e19f9 sql(recovery): re-link stranded assessment entries to current StudentKey (by StudentNumber)
+
+Re-attach assessment results entered under a student's old StudentKey to their current key.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: live 2026-10-13, as the one-time catch-up before the 1.2.0 durable fix (sql/deploy/live_1.2.0/deploy_studentnumber_durable_fix_2026-10-13.sql)
+**Reads:** `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
+**Writes:** `FactAssessmentWriting` (update — `LastUpdated`, `StudentKey`)
+
+### remediate_J020_reading_english_only.sql
+
+[sql/scripts/remediate_J020_reading_english_only.sql](../../sql/scripts/remediate_J020_reading_english_only.sql) · reviewed 2026-10-23 · last change: 2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)
+
+Close the wrong French-reading IPP and adaptation rows for Late Immersion (J020) students.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-09-17 (J020 rule); live with the matching release
+**Variables:** `@Today` = `CAST(GETDATE() AS DATE)`
+**Reads:** `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`
+**Writes:** `FactStudentAdaptation` (update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`); `FactStudentIPP` (update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`)
+
+### remediate_writing_trait_exclusion.sql
+
+[sql/scripts/remediate_writing_trait_exclusion.sql](../../sql/scripts/remediate_writing_trait_exclusion.sql) · reviewed 2026-10-23 · last change: 2026-10-02 0f0d379 fix(writing): Fabric TRY_CAST('-' AS INT)=0 miscounted excluded trait in averages
+
+Mark excluded writing traits as '-' on already-entered results and fix their stored averages.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: dev 2026-10-02; live as step 9/9 of sql/deploy/live_1.0.0/deploy_live_0.7.0_to_1.0.0.sql
+**Reads:** `DimAssessmentWindow`, `DimProgram`, `DimStudent`, `FactAssessmentWriting`, `WritingTraitExclusion`
+**Writes:** `FactAssessmentWriting` (update — `ConventionsScore`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `WritingAverage`)
+
 ### set_cycle_grade_ranges_by_subject.sql
 
 [sql/scripts/set_cycle_grade_ranges_by_subject.sql](../../sql/scripts/set_cycle_grade_ranges_by_subject.sql) · reviewed 2026-10-22 · last change: 2026-10-09 0523706 math reports: units collapsed by default; regional staff default to Grade lens; Math scope P-5
@@ -784,6 +931,25 @@ Load (or reload) last year's June reading/writing baseline.
 effect: **writes-data** · target: live (abfss paths use the LIVE workspace/lakehouse GUIDs); dev only after swapping in the _Dev lakehouse GUID · re-run safe: yes · applied: live 2026-09-09
 **Reads:** `DimStudent`, `PriorYearBaseline`, `Stg_PriorReading`, `Stg_PriorWriting`
 **Writes:** `PriorYearBaseline` (insert/truncate — `AssessmentLanguage`, `HistCurrentAdaptations`, `HistCurrentIPP`, `HistGender`, `HistGrade`, `HistHomeroom`, `HistLiteracyIPP`, `HistSchool`, `HistSelfIDAfrican`, `HistSelfIDIndigenous`, `LastUpdated`, `ReadingLevel`, `SchoolYear`, `StudentNumber`, `WritingConventions`, `WritingIdeas`, `WritingLanguage`, `WritingOrganization`); `Stg_PriorReading` (copy-into/truncate/update — `AssessmentLanguage`); `Stg_PriorWriting` (copy-into/truncate/update — `AssessmentLanguage`)
+
+### migrate_add_LastUpdated_step2_seed_DimCalendar.sql
+
+[sql/scripts/migrate_add_LastUpdated_step2_seed_DimCalendar.sql](../../sql/scripts/migrate_add_LastUpdated_step2_seed_DimCalendar.sql) · reviewed 2026-10-23 · last change: 2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID
+
+Refill DimCalendar after the LastUpdated schema rebuild.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: 2026-04-28 (pre-MVP, straight after step 1)
+**Writes:** `DimCalendar` (insert — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `LastUpdated`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`)
+
+### repopulate_DimCalendar.sql
+
+[sql/scripts/repopulate_DimCalendar.sql](../../sql/scripts/repopulate_DimCalendar.sql) · reviewed 2026-10-23 · last change: 2026-04-28 1a3d724 Number formatting: ban comma as thousands separator
+
+Wipe and rebuild the date dimension.
+
+effect: **writes-data** · target: either · re-run safe: no
+**Reads:** `DimCalendar`
+**Writes:** `DimCalendar` (insert/truncate — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`)
 
 ## template
 
@@ -887,165 +1053,6 @@ effect: **read-only** · target: dev or live (staff name + work email are not PI
 **Reads:** `DimStaff`, `Stg_Staff`
 
 ## writes data (auto)
-
-### migrate_DimStudent_add_GroupKey.sql
-
-[sql/scripts/migrate_DimStudent_add_GroupKey.sql](../../sql/scripts/migrate_DimStudent_add_GroupKey.sql) · skeleton (not yet reviewed) · last change: 2026-09-08 90a285e hotfix: URL-safe homeroom group key + small-group roster filter (prod)
-
-Add the URL-safe homeroom GroupKey column to DimStudent (+ Wrk_Student staging) and backfill existing rows, so homeroom names containing '/' (or spaces) stop 404-ing the /enter roster route. The key is school-qualified (Abbreviation) so same-named homerooms in different schools no longer collide.
-
-effect: **writes-data**
-**Reads:** `DimSchool`, `DimStudent`, `INFORMATION_SCHEMA.COLUMNS`
-**Writes:** `DimStudent` (alter/update — `GroupKey`, `LastUpdated`); `Wrk_Student` (alter)
-
-### migrate_FactAssessmentReading_add_score_context.sql
-
-[sql/scripts/migrate_FactAssessmentReading_add_score_context.sql](../../sql/scripts/migrate_FactAssessmentReading_add_score_context.sql) · skeleton (not yet reviewed) · last change: 2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live
-
-Make each FactAssessmentReading row SELF-CONTAINED — the actual level and the expected min/max range are stamped ON the row, alongside the already-stored ReadingDelta. So a PowerBI export (or any later read) shows "scored M, expected K-L, delta +1" WITHOUT joining dimensions whose values could have shifted, and can never disagree with itself.
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`, `sys.columns`
-**Writes:** `FactAssessmentReading` (alter/update — `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LevelCode`)
-
-### migrate_FactAssessmentWriting_add_average.sql
-
-[sql/scripts/migrate_FactAssessmentWriting_add_average.sql](../../sql/scripts/migrate_FactAssessmentWriting_add_average.sql) · skeleton (not yet reviewed) · last change: 2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live
-
-Store the SCR-aware writing AVERAGE on each FactAssessmentWriting row, stamped as-was, so the "Scribed drops from the average" rule lives in the DATA and can't be re-derived wrong later (or disagree with a report that recomputes it). Conventions='SCR' drops from BOTH the numerator and the denominator; Ideas/Org/Language are 1-4.
-
-effect: **writes-data**
-**Reads:** `FactAssessmentWriting`, `sys.columns`
-**Writes:** `FactAssessmentWriting` (alter/update — `WritingAverage`)
-
-### migrate_FactWriting_add_AssessmentLanguage.sql
-
-[sql/scripts/migrate_FactWriting_add_AssessmentLanguage.sql](../../sql/scripts/migrate_FactWriting_add_AssessmentLanguage.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)
-
-Dual-language writing. Add AssessmentLanguage to FactAssessmentWriting so a French-Immersion grade-3+ student can hold BOTH an English and a French writing result per cycle. Grain becomes (StudentKey, AssessmentWindowID, AssessmentLanguage, AssessmentDate).
-
-effect: **writes-data**
-**Reads:** `DimProgram`, `DimStudent`, `FactAssessmentWriting`, `sys.columns`
-**Writes:** `FactAssessmentWriting` (alter/update — `AssessmentLanguage`, `ProgramFamily`)
-
-### migrate_FactWriting_conventions_varchar.sql
-
-[sql/scripts/migrate_FactWriting_conventions_varchar.sql](../../sql/scripts/migrate_FactWriting_conventions_varchar.sql) · skeleton (not yet reviewed) · last change: 2026-09-21 922ed6b fix(deploy): defer SCR-swap UPDATEs via EXEC so they don't parse-fail on an already-converted warehouse
-
-Change FactAssessmentWriting.ConventionsScore from INT to VARCHAR(10) so it can hold the "SCR" (Scribed) code alongside '1'-'4'. Fabric has no ALTER COLUMN (type change) and we avoid a full table rebuild, so this does a multi-step column swap that PRESERVES existing data and the column NAME: add temp VARCHAR -> copy INT->VARCHAR -> drop INT col -> re-add VARCHAR under the original name -> copy back -> drop temp. Each step is its own batch (GO) so the parser only sees existing columns (see the fabric-warehouse-sql skill: catalog-check-in-same-batch gotcha). SCR = Scribed on Conventions only (so
-
-effect: **writes-data**
-**Reads:** `FactAssessmentWriting`, `sys.columns`
-**Writes:** `FactAssessmentWriting` (alter/update — `ConventionsScore`, `ConventionsScoreTmp`)
-
-### migrate_FactWriting_traits_varchar.sql
-
-[sql/scripts/migrate_FactWriting_traits_varchar.sql](../../sql/scripts/migrate_FactWriting_traits_varchar.sql) · skeleton (not yet reviewed) · last change: 2026-10-02 329bace feat(writing): record excluded trait as '-' (not NULL); VARCHAR traits
-
-Change FactAssessmentWriting.IdeasScore / OrganizationScore / LanguageScore from INT to VARCHAR(10), so a trait can hold the intentional "-" (NOT assessed this cycle — a DELIBERATE recording, distinct from NULL = never recorded) alongside '1'-'4'. This mirrors the earlier ConventionsScore INT->VARCHAR swap (which added 'SCR'). After this, all four writing traits are VARCHAR(10) and carry: '1'-'4' | 'SCR' (Conventions only) | '-' (excluded) | NULL (never recorded).
-
-effect: **writes-data**
-**Reads:** `sys.columns`
-**Writes:** `FactAssessmentWriting` (alter/update — `IdeasScore`, `IdeasScoreTmp`, `LanguageScore`, `LanguageScoreTmp`, `OrganizationScore`, `OrganizationScoreTmp`)
-
-### migrate_add_LastUpdated_step2_seed_DimCalendar.sql
-
-[sql/scripts/migrate_add_LastUpdated_step2_seed_DimCalendar.sql](../../sql/scripts/migrate_add_LastUpdated_step2_seed_DimCalendar.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 fea6d6c Add LastUpdated to 7 tables + FactEnrollment.SourceSystemID
-
-Re-seed DimCalendar after the schema rebuild in step 1. STEP 2 OF 2. Populates 2020-01-01 through 2035-12-31 (~5844 rows).
-
-effect: **writes-data**
-**Writes:** `DimCalendar` (insert — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `LastUpdated`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`)
-
-### migrate_mislocated_immersion_reading.sql
-
-[sql/scripts/migrate_mislocated_immersion_reading.sql](../../sql/scripts/migrate_mislocated_immersion_reading.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Repoint the immersion reading results that were entered against the old generic reading window (now Reading·English·English) BEFORE the French·Early-Immersion reading instance existed, onto that French instance where they belong.
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimProgram`, `DimReadingScale`, `DimShortCycle`, `DimStudent`, `FactAssessmentReading`
-**Writes:** `FactAssessmentReading` (update — `AssessmentWindowID`)
-
-### migrate_scrRosterGrid_prereqs.sql
-
-[sql/scripts/migrate_scrRosterGrid_prereqs.sql](../../sql/scripts/migrate_scrRosterGrid_prereqs.sql) · skeleton (not yet reviewed) · last change: 2026-05-21 47fdb19 Session wrap (2026-05-21): all 5 screens built; BIGINT precision casts deployed; scrRosterGrid Save pending debug
-
-effect: **writes-data**
-**Variables:** `@Now` = `GETDATE()`, `@Today` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@CallerEmail` = `LOWER(CURRENT_USER)`, `@CallerStaffKey`, `@CallerAccessLevel`, `@AssessmentWindowID_BI`, `@ReadingScaleID_BI`, `@WindowStartDate`, `@WindowEndDate`, `@WindowMinGrade`, `@WindowMaxGrade`, `@WindowProgramFamily`, `@WindowScaleSystem`, `@WindowAssessmentType`, `@WindowStatus`, `@StudentKey`, `@StudentGrade`, `@StudentProgramCode`, `@StudentProgramFamily`, `@StudentGradeOrder`, `@MinGradeOrder`, `@MaxGradeOrder`, `@ScaleSystem`, `@StudentLevelOrder`, `@DominantMonth`, `@ExpectedMinLevel`, `@ExpectedMaxLevel`, `@ExpectedMinOrder`, `@ExpectedMaxOrder`, `@ReadingDelta` = `NULL`, `@AuditWarning` = `NULL`, `@ExistingAssessmentID`
-**Reads:** `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimStaff`, `DimStudent`, `FactAssessmentReading`
-**Writes:** `FactAssessmentReading` (insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `SubmissionTimestamp`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
-
-### reconcile_cycle_instances.sql
-
-[sql/scripts/reconcile_cycle_instances.sql](../../sql/scripts/reconcile_cycle_instances.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Bring every Short Cycle on live up to the CANONICAL 8-instance set (Subject × Language × ProgramScope × GradeBand), matching dev SCoR 1 exactly (values copied verbatim from the 2026-09-21 dev dump — NOT guessed). Live cycles currently have only 3 generic instances each (Math/Reading/ Writing, ProgramScope = NULL, no language), which is why early-immersion students had no French reading instance and fell into the one scope-less English reading window.
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimShortCycle`
-**Writes:** `DimAssessmentWindow` (insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`)
-
-### relink_stranded_assessment_studentkeys.sql
-
-[sql/scripts/relink_stranded_assessment_studentkeys.sql](../../sql/scripts/relink_stranded_assessment_studentkeys.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 45e19f9 sql(recovery): re-link stranded assessment entries to current StudentKey (by StudentNumber)
-
-RECOVERY for stranded assessment entries. When a student re-versions (SCD Type 2 -> NEW StudentKey), rows entered under the OLD key stop matching the roster/report reads (which join the CURRENT StudentKey), so the data reads as missing (0 progress, blank in reports/entry). This re-points those stranded rows to the student's CURRENT StudentKey, matched by the stable StudentNumber.
-
-effect: **writes-data**
-**Reads:** `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
-**Writes:** `FactAssessmentWriting` (update — `LastUpdated`, `StudentKey`)
-
-### remediate_J020_reading_english_only.sql
-
-[sql/scripts/remediate_J020_reading_english_only.sql](../../sql/scripts/remediate_J020_reading_english_only.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 1fbc2d3 feat(assessment): J020 reads English + dual-language writing (SQL layer)
-
-One-time remediation for the "J020 (Late French Immersion) reads in ENGLISH only" rule. Before this rule, usp_MergeStudent Step 6 seeded every French-Immersion student a (Reading,'French Immersion') IPP and Adaptation row -- including J020. Late immersion has no French reading benchmarks, so those rows are wrong. This closes the stale J020 (Reading,'French Immersion') rows in FactStudentIPP + FactStudentAdaptation.
-
-effect: **writes-data**
-**Variables:** `@Today` = `CAST(GETDATE() AS DATE)`
-**Reads:** `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`
-**Writes:** `FactStudentAdaptation` (update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`); `FactStudentIPP` (update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`)
-
-### remediate_writing_trait_exclusion.sql
-
-[sql/scripts/remediate_writing_trait_exclusion.sql](../../sql/scripts/remediate_writing_trait_exclusion.sql) · skeleton (not yet reviewed) · last change: 2026-10-02 0f0d379 fix(writing): Fabric TRY_CAST('-' AS INT)=0 miscounted excluded trait in averages
-
-Reconcile EXISTING FactAssessmentWriting rows to the WritingTraitExclusion config. For any stored row whose (grade x program family x cycle benchmark month) matches an active exclusion rule, record the excluded trait as the intentional '-' (deliberately NOT assessed — distinct from NULL = never recorded) and recompute the stored WritingAverage over the scored traits.
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimProgram`, `DimStudent`, `FactAssessmentWriting`, `WritingTraitExclusion`
-**Writes:** `FactAssessmentWriting` (update — `ConventionsScore`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `WritingAverage`)
-
-### repopulate_DimCalendar.sql
-
-[sql/scripts/repopulate_DimCalendar.sql](../../sql/scripts/repopulate_DimCalendar.sql) · skeleton (not yet reviewed) · last change: 2026-04-28 1a3d724 Number formatting: ban comma as thousands separator
-
-Clear DimCalendar and repopulate with correct 5844-row date range
-
-effect: **writes-data**
-**Reads:** `DimCalendar`
-**Writes:** `DimCalendar` (insert/truncate — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`)
-
-### reseed_programming_rows_dev.sql
-
-[sql/scripts/reseed_programming_rows_dev.sql](../../sql/scripts/reseed_programming_rows_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-11 e2ec948 test(dev): standalone Step 6 reconciliation (reseed programming rows)
-
-Reseed FactStudentIPP (incl. Math) + FactStudentAdaptation NULL-gate rows from the CURRENT DimStudent state (IsCurrent=1, IPP=1 / Adap=1), WITHOUT a full ingest. Identical logic to usp_MergeStudent Steps 6a-6d, extracted so it runs standalone.
-
-effect: **writes-data**
-**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`, `@IPPRowsClosed` = `0`, `@IPPRowsCreated` = `0`, `@AdapRowsClosed` = `0`, `@AdapRowsCreated` = `0`
-**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`
-**Writes:** `FactStudentAdaptation` (insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`); `FactStudentIPP` (insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
-
-### reset_and_run_full_ingest.sql
-
-[sql/scripts/reset_and_run_full_ingest.sql](../../sql/scripts/reset_and_run_full_ingest.sql) · skeleton (not yet reviewed) · last change: 2026-05-04 6c487ac Session wrap (2026-05-04): Steps 11-13 done, semantic model deployed in Direct Lake on OneLake
-
-TEST-time full reset — truncates the 6 tables touched by usp_RunFullIngestCycle, then re-runs the orchestrator to rebuild warehouse state from whatever currently sits in the Lakehouse Files/imports/{topic}/ folders.
-
-effect: **writes-data**
-**Writes:** `DimSection` (truncate); `DimStaff` (truncate); `DimStudent` (truncate); `FactEnrollment` (truncate); `FactSectionTeachers` (truncate); `FactStaffAssignment` (truncate)
 
 ### reset_dev_full_and_ingest.sql
 
