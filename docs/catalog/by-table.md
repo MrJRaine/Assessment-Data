@@ -57,18 +57,18 @@ Each table: its fields (and where their data comes from, where recorded), every 
 
 ## AppMaintenance
 
-Defined in [sql/security/AppMaintenance.sql](../../sql/security/AppMaintenance.sql) · skeleton (not yet reviewed)
+Defined in [sql/security/AppMaintenance.sql](../../sql/security/AppMaintenance.sql) · reviewed 2026-10-23
 
-SINGLE-ROW store for the app maintenance window, so a sysadmin can schedule a graceful entry lockout ahead of an emergency container swap WITHOUT a rebuild. The running container reads it (via /api/status, server-side cached) and every client poller keys its staged banner / entry-lock / auto-save off the returned window + server clock.
+Single-row (Id = 1) store of the scheduled app maintenance window that drives the staged banner / entry lock in the web app via /api/status. Guarded create + seed of the empty row; SELECT granted to the app SP.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Id` | INT | no |  |
-| `MaintenanceAt` | DATETIME2(0) | yes |  |
-| `Message` | VARCHAR(500) | yes |  |
-| `SetByEmail` | VARCHAR(255) | yes |  |
-| `SetAt` | DATETIME2(0) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `Id` | INT | no | always 1 - seeded in this file / usp_SetMaintenanceWindow insert fallback |
+| `MaintenanceAt` | DATETIME2(0) | yes | app sysadmin: usp_SetMaintenanceWindow @MaintenanceAt (UTC, converted by the app from Atlantic); NULL from usp_ClearMaintenanceWindow |
+| `Message` | VARCHAR(500) | yes | usp_SetMaintenanceWindow @Message; NULL on clear |
+| `SetByEmail` | VARCHAR(255) | yes | lowercased caller UPN (usp_SetMaintenanceWindow / usp_ClearMaintenanceWindow) |
+| `SetAt` | DATETIME2(0) | yes | GETDATE() (UTC) on set/clear |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on seed/set/clear |
 
 **Written by:**
 - [sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) — update: `MaintenanceAt (NULL)`, `Message (NULL)`, `SetByEmail`, `SetAt`, `LastUpdated`; delete: never - only row Id=1 is updated; a no-op if that row does not exist
@@ -86,23 +86,23 @@ SINGLE-ROW store for the app maintenance window, so a sysadmin can schedule a gr
 
 ## DimAchievementLevel
 
-Defined in [sql/dimensions/DimAchievementLevel.sql](../../sql/dimensions/DimAchievementLevel.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimAchievementLevel.sql](../../sql/dimensions/DimAchievementLevel.sql) · reviewed 2026-10-23
 
-Reference table mapping a differential (actual minus expected, in LevelOrder units for reading or rubric units for writing) to a named achievement level + display color. Drives the color-coded cells on scrRosterGrid + scrStudentData. Externalized so thresholds and colors are adjustable without code changes.
+Reference lookup mapping a reading differential (actual minus expected LevelOrder; or a decimal average) to a named achievement level + colours. One row per level (4 rows), natural key AchievementLevelCode 1-4. No SCD (static; ActiveFlag retires).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `AchievementLevelCode` | INT | no |  |
-| `AchievementLevelName` | VARCHAR(50) | no |  |
-| `LowerBound` | DECIMAL(5,2) | yes |  |
-| `LowerOp` | VARCHAR(2) | yes |  |
-| `UpperBound` | DECIMAL(5,2) | yes |  |
-| `UpperOp` | VARCHAR(2) | yes |  |
-| `HexColor` | VARCHAR(7) | no |  |
-| `HexColorTint` | VARCHAR(7) | yes |  |
-| `DisplayOrder` | INT | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `AchievementLevelCode` | INT | no | seeded by sql/scripts/seed_DimAchievementLevel.sql (1 Not Yet Meeting, 2 Approaching, 3 Meeting, 4 Exceeding) |
+| `AchievementLevelName` | VARCHAR(50) | no | seeded by seed_DimAchievementLevel.sql |
+| `LowerBound` | DECIMAL(5,2) | yes | seeded by seed_DimAchievementLevel.sql (NULL = no lower bound) |
+| `LowerOp` | VARCHAR(2) | yes | seeded by seed_DimAchievementLevel.sql ('>=', '>', '=' or NULL) |
+| `UpperBound` | DECIMAL(5,2) | yes | seeded by seed_DimAchievementLevel.sql (NULL = no upper bound) |
+| `UpperOp` | VARCHAR(2) | yes | seeded by seed_DimAchievementLevel.sql ('<', '=' or NULL) |
+| `HexColor` | VARCHAR(7) | no | seeded by seed_DimAchievementLevel.sql (solid chart colour, 2026-06-09 palette) |
+| `HexColorTint` | VARCHAR(7) | yes | column added by sql/scripts/migrate_DimAchievementLevel_add_tint.sql; values from seed_DimAchievementLevel.sql |
+| `DisplayOrder` | INT | no | seeded by seed_DimAchievementLevel.sql (= code, worst to best) |
+| `ActiveFlag` | BIT | no | seeded 1 by seed_DimAchievementLevel.sql |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed time |
 
 **Read by:**
 - [sql/security/bridge_views.sql](../../sql/security/bridge_views.sql) — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
@@ -125,30 +125,30 @@ Reference table mapping a differential (actual minus expected, in LevelOrder uni
 
 ## DimAssessmentWindow
 
-Defined in [sql/dimensions/DimAssessmentWindow.sql](../../sql/dimensions/DimAssessmentWindow.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimAssessmentWindow.sql](../../sql/dimensions/DimAssessmentWindow.sql) · reviewed 2026-10-23
 
-Defines when assessments are collected, for which grades, programs, and (for reading windows) which scale system.
+One row per assessment instance (window): a subject (Reading/Writing/Math) x date range x grade band x program/language scope. Modern rows are the per-subject instances of a Short Cycle, tied to their DimShortCycle header by CycleGroupID; legacy rows are monthly or MVP windows. Surrogate AssessmentWindowID (IDENTITY); no SCD - rows are edited in place.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `AssessmentWindowID` | BIGINT IDENTITY | no |  |
-| `WindowName` | VARCHAR(100) | no |  |
-| `AssessmentType` | VARCHAR(20) | no |  |
-| `SchoolYear` | VARCHAR(9) | no |  |
-| `StartDate` | DATE | no |  |
-| `EndDate` | DATE | no |  |
-| `MinGrade` | VARCHAR(10) | no |  |
-| `MaxGrade` | VARCHAR(10) | no |  |
-| `ProgramFamily` | VARCHAR(50) | yes |  |
-| `ScaleSystem` | VARCHAR(20) | yes |  |
-| `AssessmentLanguage` | VARCHAR(10) | yes |  |
-| `ProgramScope` | VARCHAR(100) | yes |  |
-| `BenchmarkMonth` | INT | yes |  |
-| `CycleGroupID` | VARCHAR(36) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `CreatedDate` | DATETIME2(0) | no |  |
-| `CreatedBy` | VARCHAR(100) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `AssessmentWindowID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `WindowName` | VARCHAR(100) | no | app /cycles: usp_UpsertShortCycle @CycleName; kept in sync with the header DisplayName by usp_UpsertShortCycleHeader; legacy: usp_GenerateMonthlyWindows ('Sep 2026 Reading - English Elementary') / seed_DimAssessmentWindow_MVP.sql |
+| `AssessmentType` | VARCHAR(20) | no | usp_UpsertShortCycle @AssessmentType ('Reading'|'Writing'|'Math'); legacy: usp_GenerateMonthlyWindows scope catalog |
+| `SchoolYear` | VARCHAR(9) | no | derived from StartDate (Sep-Aug) in usp_UpsertShortCycle / usp_UpsertShortCycleHeader; usp_GenerateMonthlyWindows @SchoolYear |
+| `StartDate` | DATE | no | usp_UpsertShortCycle @StartDate, overwritten from the header by usp_UpsertShortCycleHeader; legacy: month start in usp_GenerateMonthlyWindows |
+| `EndDate` | DATE | no | usp_UpsertShortCycle @EndDate, overwritten from the header by usp_UpsertShortCycleHeader; legacy: month end in usp_GenerateMonthlyWindows |
+| `MinGrade` | VARCHAR(10) | no | usp_UpsertShortCycle @MinGrade (default 'PP'); bulk-reset by sql/scripts/set_cycle_grade_ranges_by_subject.sql; legacy 'P' |
+| `MaxGrade` | VARCHAR(10) | no | usp_UpsertShortCycle @MaxGrade (default '12'); bulk-reset by set_cycle_grade_ranges_by_subject.sql; legacy '6' |
+| `ProgramFamily` | VARCHAR(50) | yes | legacy only: usp_GenerateMonthlyWindows / MVP seed ('English'|'French Immersion'); usp_UpsertShortCycle always writes NULL |
+| `ScaleSystem` | VARCHAR(20) | yes | derived in usp_UpsertShortCycle: Reading+English -> 'EN_Reading', Reading+French -> 'FR_Reading', else NULL; legacy: usp_GenerateMonthlyWindows |
+| `AssessmentLanguage` | VARCHAR(10) | yes | usp_UpsertShortCycle @AssessmentLanguage ('English'|'French'|NULL=Both); forced NULL for Math. Column added by migrate_DimAssessmentWindow_add_AssessmentLanguage.sql |
+| `ProgramScope` | VARCHAR(100) | yes | usp_UpsertShortCycle @ProgramScope (comma list of DimProgram.ScopeBucket values; '' -> NULL = all) |
+| `BenchmarkMonth` | INT | yes | usp_UpsertShortCycle @BenchmarkMonth (1-12; forced NULL for Writing). Column added by migrate_DimAssessmentWindow_add_BenchmarkMonth.sql; corrected by fix_math_cycle_months_and_task_miscoding*.sql |
+| `CycleGroupID` | VARCHAR(36) | yes | usp_UpsertShortCycle @CycleGroupID (app-generated GUID = DimShortCycle.CycleGroupID). Column added by migrate_DimAssessmentWindow_add_CycleGroupID.sql |
+| `ActiveFlag` | BIT | no | usp_UpsertShortCycle @ActiveFlag (default 1); usp_GenerateMonthlyWindows 1 |
+| `CreatedDate` | DATETIME2(0) | no | GETDATE() at insert (usp_UpsertShortCycle / usp_GenerateMonthlyWindows) |
+| `CreatedBy` | VARCHAR(100) | yes | usp_UpsertShortCycle @CallerUPN on create (not updated on edit); 'usp_GenerateMonthlyWindows' for generated rows |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on every insert/edit (incl. header sync) |
 
 **Written by:**
 - [sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) — insert: `WindowName`, `AssessmentType`, `SchoolYear`, `StartDate`, `EndDate`, `MinGrade`, `MaxGrade`, `ProgramFamily`, `ScaleSystem`, `ActiveFlag`, `CreatedDate`, `CreatedBy='usp_GenerateMonthlyWindows'`, `LastUpdated`
@@ -210,24 +210,24 @@ Defines when assessments are collected, for which grades, programs, and (for rea
 
 ## DimCalendar
 
-Defined in [sql/dimensions/DimCalendar.sql](../../sql/dimensions/DimCalendar.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimCalendar.sql](../../sql/dimensions/DimCalendar.sql) · reviewed 2026-10-23
 
-Standard date dimension for time-based analysis
+Date dimension, one row per calendar day 2020-01-01..2035-12-31 (~5844 rows), key DateKey = YYYYMMDD. Static; this file both creates and populates it. Used for dominant-month benchmark resolution in the upsert procs.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `DateKey` | INT | no |  |
-| `Date` | DATE | no |  |
-| `SchoolYear` | VARCHAR(9) | no |  |
-| `Month` | INT | no |  |
-| `MonthName` | VARCHAR(20) | no |  |
-| `Quarter` | INT | no |  |
-| `Week` | INT | no |  |
-| `DayOfWeek` | INT | no |  |
-| `DayName` | VARCHAR(20) | no |  |
-| `IsWeekend` | BIT | no |  |
-| `IsSchoolDay` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `DateKey` | INT | no | computed in this file: YEAR*10000 + MONTH*100 + DAY |
+| `Date` | DATE | no | generated by the digits CTE in this file |
+| `SchoolYear` | VARCHAR(9) | no | computed in this file: Aug-Jul ('2025-2026' for 2025-08-01..2026-07-31) |
+| `Month` | INT | no | MONTH(d) |
+| `MonthName` | VARCHAR(20) | no | DATENAME(MONTH, d) |
+| `Quarter` | INT | no | DATEPART(QUARTER, d) (calendar quarter) |
+| `Week` | INT | no | DATEPART(WEEK, d) |
+| `DayOfWeek` | INT | no | DATEPART(WEEKDAY, d) (1=Sunday under default DATEFIRST) |
+| `DayName` | VARCHAR(20) | no | DATENAME(WEEKDAY, d) |
+| `IsWeekend` | BIT | no | 1 when weekday is 1 or 7 |
+| `IsSchoolDay` | BIT | no | hard-coded 0 - never updated by any script |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at population |
 
 **Written by:**
 - [sql/dimensions/DimCalendar.sql](../../sql/dimensions/DimCalendar.sql) — insert — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `LastUpdated`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`
@@ -260,18 +260,18 @@ Standard date dimension for time-based analysis
 
 ## DimCourseAssessment
 
-Defined in [sql/dimensions/DimCourseAssessment.sql](../../sql/dimensions/DimCourseAssessment.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimCourseAssessment.sql](../../sql/dimensions/DimCourseAssessment.sql) · reviewed 2026-10-23
 
-Maps a PowerSchool course code (DimSection.CourseCode) to the assessment it lets a teacher enter -- the LANGUAGE and KIND. Drives course-scoped entry: a teacher only enters for sections whose course is in this table, and the course supplies the language (so no EN/FR toggle).
+Config map from a PowerSchool course code to the assessment its section teacher enters: Kind 'Literacy' (Reading + Writing in Language) or 'Math'. One row per CourseCode (natural key). Drives which sections appear for entry and the section's writing language; data-driven, no SCD.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `CourseCode` | VARCHAR(50) | no |  |
-| `Language` | VARCHAR(10) | yes |  |
-| `Kind` | VARCHAR(20) | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `Notes` | VARCHAR(200) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `CourseCode` | VARCHAR(50) | no | seeded: live = sql/scripts/seed_DimCourseAssessment_live.sql (real PS course list, docs/course-assessment-mapping.md); dev = seed_DimCourseAssessment_dev.sql / _dev_testset.sql (synthetic codes). Matches DimSection.CourseCode (PS Course_Number) |
+| `Language` | VARCHAR(10) | yes | seed scripts: 'English' | 'French' for Literacy, NULL for Math |
+| `Kind` | VARCHAR(20) | no | seed scripts: 'Literacy' | 'Math' |
+| `ActiveFlag` | BIT | no | seed scripts (1) |
+| `Notes` | VARCHAR(200) | yes | seed scripts: bucket label ('ELA P-12', 'FLA', 'Immersion ELA 3-6', 'Math P-6') |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Read by:**
 - [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — `ActiveFlag`, `CourseCode`, `Kind`, `Language`
@@ -291,17 +291,17 @@ Maps a PowerSchool course code (DimSection.CourseCode) to the assessment it lets
 
 ## DimGender
 
-Defined in [sql/dimensions/DimGender.sql](../../sql/dimensions/DimGender.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimGender.sql](../../sql/dimensions/DimGender.sql) · reviewed 2026-10-23
 
-Reference dimension for gender values used by DimStudent.Gender (and potentially DimStaff in future). PS emits one of M, F, X. This table lets reports and Power Apps join to a friendly description rather than hardcoding the codes.
+Reference lookup for DimStudent.Gender codes (F, M, X) -> description and display order. One row per GenderCode (natural key); this file creates and seeds it.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `GenderCode` | VARCHAR(10) | no |  |
-| `GenderDescription` | VARCHAR(100) | no |  |
-| `DisplayOrder` | INT | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `GenderCode` | VARCHAR(10) | no | seeded in this file ('F','M','X') |
+| `GenderDescription` | VARCHAR(100) | no | seeded in this file |
+| `DisplayOrder` | INT | no | seeded in this file |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Written by:**
 - [sql/dimensions/DimGender.sql](../../sql/dimensions/DimGender.sql) — insert — `ActiveFlag`, `DisplayOrder`, `GenderCode`, `GenderDescription`, `LastUpdated`
@@ -313,18 +313,18 @@ Reference dimension for gender values used by DimStudent.Gender (and potentially
 
 ## DimGrade
 
-Defined in [sql/dimensions/DimGrade.sql](../../sql/dimensions/DimGrade.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimGrade.sql](../../sql/dimensions/DimGrade.sql) · reviewed 2026-10-23
 
-Static reference dimension for grade codes used in DimStudent.Grade, DimAssessmentWindow.MinGrade/MaxGrade, DimReadingBenchmark.GradeCode, and any other grade-keyed table. Provides GradeOrder for arithmetic ordering — solves the lexicographic-ordering bug on bare VARCHAR grade comparisons (e.g. 'P' > '12' as strings).
+Reference list of grade codes (PP, P, 1-12, RG) with numeric GradeOrder for range arithmetic and a band. One row per GradeCode (natural key); static.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `GradeCode` | VARCHAR(10) | no |  |
-| `GradeOrder` | INT | no |  |
-| `GradeName` | VARCHAR(50) | no |  |
-| `GradeBand` | VARCHAR(20) | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `GradeCode` | VARCHAR(10) | no | seeded by sql/scripts/seed_DimGrade.sql |
+| `GradeOrder` | INT | no | seeded by seed_DimGrade.sql (PP=-1, P=0, 1-12, RG=13) |
+| `GradeName` | VARCHAR(50) | no | seeded by seed_DimGrade.sql |
+| `GradeBand` | VARCHAR(20) | no | seeded by seed_DimGrade.sql ('Elementary' PP-6, 'Junior High' 7-9, 'Senior High' 10-RG) |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Read by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — `GradeCode`, `GradeOrder`
@@ -360,45 +360,45 @@ Static reference dimension for grade codes used in DimStudent.Grade, DimAssessme
 
 ## DimMathComprehensionBand
 
-Defined in [sql/dimensions/DimMathComprehensionBand.sql](../../sql/dimensions/DimMathComprehensionBand.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimMathComprehensionBand.sql](../../sql/dimensions/DimMathComprehensionBand.sql) · reviewed 2026-10-23
 
-The 4-tier math achievement-level scale (shown in the UI as "Achievement Level") — the code -> (label, colour) lookup for a student's per-unit level, derived from the average of their 0/1 across the unit's tasks. Four rows, one per tier. (Table name kept as DimMathComprehensionBand; the UI label is "Achievement Level".)
+The 4-tier math achievement-level scale (UI 'Achievement Level'): BandCode -> label + colour for a student's per-unit average of 0/1 task results. One row per tier; the average->BandCode ladder lives in the read views, not here.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `MathBandKey` | BIGINT IDENTITY | no |  |
-| `BandCode` | INT | no |  |
-| `Label` | VARCHAR(50) | no |  |
-| `HexColor` | VARCHAR(7) | yes |  |
-| `SortOrder` | INT | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `MathBandKey` | BIGINT IDENTITY | no | IDENTITY surrogate (regenerated on every reseed) |
+| `BandCode` | INT | no | seeded by sql/scripts/seed_DimMathComprehensionBand.sql (1 Emerging .. 4 In-depth) |
+| `Label` | VARCHAR(50) | no | seeded by seed_DimMathComprehensionBand.sql |
+| `HexColor` | VARCHAR(7) | yes | seeded by seed_DimMathComprehensionBand.sql |
+| `SortOrder` | INT | no | seeded (= BandCode) |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Changed by scripts (fixes / migrations / seeds):**
 - [sql/scripts/seed_DimMathComprehensionBand.sql](../../sql/scripts/seed_DimMathComprehensionBand.sql) — insert/truncate — `ActiveFlag`, `BandCode`, `HexColor`, `Label`, `LastUpdated`, `SortOrder`
 
 ## DimMathTask
 
-Defined in [sql/dimensions/DimMathTask.sql](../../sql/dimensions/DimMathTask.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimMathTask.sql](../../sql/dimensions/DimMathTask.sql) · reviewed 2026-10-23
 
-The bank of P-6 math assessment TASKS. Each task is one outcome-based item a student is scored on as can-do (1) / cannot (0) in FactAssessmentMath. Bilingual: one key, an English and a French description, so a task renders in the teacher's program language but rolls up on a single key for school/regional summaries.
+Bank of P-6 math tasks, one row per (GradeCode, AssessmentMonth, UnitName, QuestionNumber) natural key, surrogate MathTaskKey. Bilingual task text and answer keys; SCD Type 1 with ActiveFlag soft-retire so historic FactAssessmentMath rows keep a valid key.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `MathTaskKey` | BIGINT IDENTITY | no |  |
-| `GradeCode` | VARCHAR(10) | no |  |
-| `AssessmentMonth` | INT | no |  |
-| `UnitName` | VARCHAR(100) | yes |  |
-| `UnitOrder` | INT | yes |  |
-| `QuestionNumber` | VARCHAR(10) | no |  |
-| `DisplayOrder` | INT | no |  |
-| `OutcomeCode` | VARCHAR(20) | yes |  |
-| `TaskDescriptionEN` | VARCHAR(500) | no |  |
-| `TaskDescriptionFR` | VARCHAR(500) | yes |  |
-| `AnswerKey` | VARCHAR(500) | yes |  |
-| `AnswerKeyFR` | VARCHAR(500) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `MathTaskKey` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `GradeCode` | VARCHAR(10) | no | task-bank CSV column GradeCode -> Stg_MathTask -> usp_LoadMathTasks (verbatim, not trimmed) |
+| `AssessmentMonth` | INT | no | CSV AssessmentMonth -> Stg_MathTask -> usp_LoadMathTasks TRY_CAST INT; corrected by fix_math_task_month_10_to_9.sql / fix_math_cycle_months_and_task_miscoding*.sql |
+| `UnitName` | VARCHAR(100) | yes | CSV UnitName -> usp_LoadMathTasks (trimmed, '' -> NULL) |
+| `UnitOrder` | INT | yes | CSV UnitOrder -> usp_LoadMathTasks TRY_CAST INT |
+| `QuestionNumber` | VARCHAR(10) | no | CSV QuestionNumber -> usp_LoadMathTasks (verbatim) |
+| `DisplayOrder` | INT | no | CSV DisplayOrder -> usp_LoadMathTasks TRY_CAST INT |
+| `OutcomeCode` | VARCHAR(20) | yes | CSV OutcomeCode -> usp_LoadMathTasks (trimmed, '' -> NULL) |
+| `TaskDescriptionEN` | VARCHAR(500) | no | CSV TaskDescriptionEN -> usp_LoadMathTasks |
+| `TaskDescriptionFR` | VARCHAR(500) | yes | CSV TaskDescriptionFR -> usp_LoadMathTasks ('' -> NULL) |
+| `AnswerKey` | VARCHAR(500) | yes | CSV AnswerKey -> usp_LoadMathTasks ('' -> NULL) |
+| `AnswerKeyFR` | VARCHAR(500) | yes | CSV AnswerKeyFR -> usp_LoadMathTasks ('' -> NULL); column added by migrate_MathTask_add_AnswerKeyFR_live.sql |
+| `ActiveFlag` | BIT | no | CSV ActiveFlag (blank -> 1) via usp_LoadMathTasks; set 0 by usp_LoadMathTasks step 2c for tasks missing from a reloaded (Grade, Month) batch |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/overwrite/retire |
 
 **Written by:**
 - [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — insert: `GradeCode`, `AssessmentMonth`, `UnitName`, `UnitOrder`, `QuestionNumber`, `DisplayOrder`, `OutcomeCode`, `TaskDescriptionEN`, `TaskDescriptionFR`, `AnswerKey`, `AnswerKeyFR`, `ActiveFlag`, `LastUpdated`; update: `all non-key columns (Type 1 overwrite on natural-key match)`, `ActiveFlag=0 for tasks of a loaded grade+month that are absent from the sheet`
@@ -427,21 +427,21 @@ The bank of P-6 math assessment TASKS. Each task is one outcome-based item a stu
 
 ## DimProgram
 
-Defined in [sql/dimensions/DimProgram.sql](../../sql/dimensions/DimProgram.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimProgram.sql](../../sql/dimensions/DimProgram.sql) · reviewed 2026-10-23
 
-Reference dimension for PowerSchool program codes. Categorizes each code into grade band, program family, and specialty overlay.
+Reference list of PowerSchool program codes (e.g. E015) classified by grade band, ProgramFamily, immersion flag, specialty overlay and cycle-scope bucket. One row per ProgramCode (natural key); this file creates and seeds it.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `ProgramCode` | VARCHAR(10) | no |  |
-| `ProgramName` | VARCHAR(200) | no |  |
-| `GradeBand` | VARCHAR(50) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `IsImmersion` | BIT | no |  |
-| `SpecialtyType` | VARCHAR(50) | yes |  |
-| `ScopeBucket` | VARCHAR(20) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `ProgramCode` | VARCHAR(10) | no | seeded in this file (PS NS_Program values) |
+| `ProgramName` | VARCHAR(200) | no | seeded in this file |
+| `GradeBand` | VARCHAR(50) | no | seeded in this file |
+| `ProgramFamily` | VARCHAR(50) | no | seeded in this file ('English' | 'French Immersion' | 'French Second Language') |
+| `IsImmersion` | BIT | no | seeded in this file |
+| `SpecialtyType` | VARCHAR(50) | yes | seeded in this file ('O2' | 'IB' | NULL) |
+| `ScopeBucket` | VARCHAR(20) | yes | derived by the UPDATE in this file (and migrate_DimProgram_add_ScopeBucket.sql): IsImmersion=0 -> 'English'; ProgramName LIKE '%Late%' -> 'Late Immersion'; else 'Early Immersion' |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Written by:**
 - [sql/dimensions/DimProgram.sql](../../sql/dimensions/DimProgram.sql) — insert/update — `ActiveFlag`, `GradeBand`, `IsImmersion`, `LastUpdated`, `ProgramCode`, `ProgramFamily`, `ProgramName`, `ScopeBucket`, `SpecialtyType`
@@ -483,20 +483,20 @@ Reference dimension for PowerSchool program codes. Categorizes each code into gr
 
 ## DimReadingBenchmark
 
-Defined in [sql/dimensions/DimReadingBenchmark.sql](../../sql/dimensions/DimReadingBenchmark.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimReadingBenchmark.sql](../../sql/dimensions/DimReadingBenchmark.sql) · reviewed 2026-10-23
 
-Reading-level expectations (Min and Max) by (ScaleSystem, ProgramFamily, Grade, Month). Used by usp_UpsertReadingAssessment to compute FactAssessmentReading.ReadingDelta — the student's LevelOrder relative to the expected range at the time the assessment was given. Long-format: one row per (Grade × Month × Subject) cell.
+Expected reading-level range (min/max LevelCode) per (ScaleSystem, ProgramFamily, GradeCode, AssessmentMonth). Used by usp_UpsertReadingAssessment to compute ReadingDelta and stamp the as-was expected levels. Surrogate ReadingBenchmarkID; static.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `ReadingBenchmarkID` | BIGINT IDENTITY | no |  |
-| `ScaleSystem` | VARCHAR(20) | no |  |
-| `ProgramFamily` | VARCHAR(50) | yes |  |
-| `GradeCode` | VARCHAR(10) | no |  |
-| `AssessmentMonth` | INT | no |  |
-| `ExpectedMinLevel` | VARCHAR(10) | no |  |
-| `ExpectedMaxLevel` | VARCHAR(10) | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `ReadingBenchmarkID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `ScaleSystem` | VARCHAR(20) | no | seeded: seed_DimReadingBenchmark_EN.sql ('EN_Reading'), seed_DimReadingBenchmark_FR.sql ('FR_Reading'); grade 8 copied from grade 7 by seed_DimReadingBenchmark_grade8.sql |
+| `ProgramFamily` | VARCHAR(50) | yes | seeded: 'English' (EN seed) / 'French Immersion' (FR seed) - no NULL rows exist |
+| `GradeCode` | VARCHAR(10) | no | seeded: P-7 (EN/FR seeds), 8 (grade8 script = grade-6 June carry-over) |
+| `AssessmentMonth` | INT | no | seeded: calendar months 9-12, 1-6 |
+| `ExpectedMinLevel` | VARCHAR(10) | no | seeded (assessment-team matrices, 2026-05-12) |
+| `ExpectedMaxLevel` | VARCHAR(10) | no | seeded; FR '30+' means no upper bound |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Read by:**
 - [sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) — *(columns not resolved)*
@@ -519,19 +519,19 @@ Reading-level expectations (Min and Max) by (ScaleSystem, ProgramFamily, Grade, 
 
 ## DimReadingScale
 
-Defined in [sql/dimensions/DimReadingScale.sql](../../sql/dimensions/DimReadingScale.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimReadingScale.sql](../../sql/dimensions/DimReadingScale.sql) · reviewed 2026-10-23
 
-Valid reading-level codes for assessment entry. Source of valid values for FactAssessmentReading.ReadingScaleID and (indirectly, via vw_DimReadingScale) for the Power Apps reading-level dropdown (scrRosterGrid cmbNewLevel). Benchmark expectations live separately in DimReadingBenchmark, keyed by (ScaleSystem, ProgramFamily, GradeCode, AssessmentMonth).
+Valid reading levels per scale system: one row per (ScaleSystem, LevelCode) with an ordinal LevelOrder used for ReadingDelta. EN_Reading = DT + A-Z; FR_Reading = TD + 1-30 + 30+. Surrogate ReadingScaleID (FactAssessmentReading FK); static.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `ReadingScaleID` | BIGINT IDENTITY | no |  |
-| `LevelCode` | VARCHAR(10) | no |  |
-| `LevelOrder` | INT | no |  |
-| `ScaleSystem` | VARCHAR(20) | no |  |
-| `Description` | VARCHAR(200) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `ReadingScaleID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `LevelCode` | VARCHAR(10) | no | seeded: sql/scripts/seed_DimReadingScale_EN.sql (DT, A-Z), seed_DimReadingScale_FR.sql (TD, 1-30, 30+) |
+| `LevelOrder` | INT | no | seeded (DT/TD = 0, A-Z = 1-26, FR 1-30 = level number, 30+ = 31) |
+| `ScaleSystem` | VARCHAR(20) | no | seeded ('EN_Reading' | 'FR_Reading') |
+| `Description` | VARCHAR(200) | yes | seeded |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Read by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — *(columns not resolved)*
@@ -561,17 +561,17 @@ Valid reading-level codes for assessment entry. Source of valid values for FactA
 
 ## DimRole
 
-Defined in [sql/dimensions/DimRole.sql](../../sql/dimensions/DimRole.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimRole.sql](../../sql/dimensions/DimRole.sql) · reviewed 2026-10-23
 
-Reference dimension for PowerSchool staff role codes (the "Group" field in the Staff export). Maps each PS RoleNumber (1-50) to a warehouse RoleCode used by FactStaffAssignment for RLS and reporting.
+Reference map from PowerSchool staff 'Group' number (RoleNumber 1-50) to the warehouse RoleCode used by FactStaffAssignment and DimStaff.AccessLevel. One row per RoleNumber (natural key); this file creates and seeds it.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `RoleNumber` | INT | no |  |
-| `RoleName` | VARCHAR(200) | no |  |
-| `RoleCode` | VARCHAR(50) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `RoleNumber` | INT | no | seeded in this file (PS Group value) |
+| `RoleName` | VARCHAR(200) | no | seeded in this file (PS-side label) |
+| `RoleCode` | VARCHAR(50) | yes | seeded in this file ('Teacher','SpecialistTeacher','Administrator','RegionalAnalyst','ProvincialAnalyst','SupportStaff', NULL for unused slots); 22 and 32 reclassified to Teacher by migrate_DimRole_22_32_to_Teacher.sql |
+| `ActiveFlag` | BIT | no | seeded in this file (0 for unused/NA slots, except 50 = 1) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Written by:**
 - [sql/dimensions/DimRole.sql](../../sql/dimensions/DimRole.sql) — insert — `ActiveFlag`, `LastUpdated`, `RoleCode`, `RoleName`, `RoleNumber`
@@ -589,18 +589,18 @@ Reference dimension for PowerSchool staff role codes (the "Group" field in the S
 
 ## DimSchool
 
-Defined in [sql/dimensions/DimSchool.sql](../../sql/dimensions/DimSchool.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimSchool.sql](../../sql/dimensions/DimSchool.sql) · reviewed 2026-10-23
 
-School reference data
+School reference data: one row per 4-digit provincial SchoolID (zero-padded VARCHAR natural key) with name, abbreviation and community. SCD Type 1. ActiveFlag gates which schools staff assignments and school access may point at.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `SchoolID` | VARCHAR(10) | no |  |
-| `SchoolName` | VARCHAR(200) | no |  |
-| `Abbreviation` | VARCHAR(10) | yes |  |
-| `Community` | VARCHAR(100) | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `SchoolID` | VARCHAR(10) | no | seeded by sql/scripts/seed_DimSchool_TCRCE.sql (2024-2025 NS Directory of Public Schools); 1254/1255 also by seed_DimSchool_add_alt_schools.sql |
+| `SchoolName` | VARCHAR(200) | no | seeded by seed_DimSchool_TCRCE.sql / seed_DimSchool_add_alt_schools.sql |
+| `Abbreviation` | VARCHAR(10) | yes | seeded (school email prefix); back-filled for older warehouses by add_Abbreviation_to_DimSchool.sql |
+| `Community` | VARCHAR(100) | yes | seeded |
+| `ActiveFlag` | BIT | no | seeded 1 (no script sets 0) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Read by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — `ActiveFlag`, `SchoolID`
@@ -634,27 +634,27 @@ School reference data
 
 ## DimSection
 
-Defined in [sql/dimensions/DimSection.sql](../../sql/dimensions/DimSection.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimSection.sql](../../sql/dimensions/DimSection.sql) · reviewed 2026-10-23
 
-Instructional sections and their teacher-of-record assignments over time
+Instructional sections from PowerSchool with their primary teacher of record. SCD Type 2: one row per version, business key SectionID, surrogate SectionKey; every business attribute (incl. EnrollmentCount) triggers a new version.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `SectionKey` | BIGINT IDENTITY | no |  |
-| `SectionID` | VARCHAR(50) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `TermID` | INT | no |  |
-| `CourseCode` | VARCHAR(50) | yes |  |
-| `SectionNumber` | VARCHAR(20) | yes |  |
-| `CourseName` | VARCHAR(200) | yes |  |
-| `EnrollmentCount` | INT | yes |  |
-| `MaxEnrollment` | INT | yes |  |
-| `TeacherStaffKey` | BIGINT | no |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `SectionKey` | BIGINT IDENTITY | no | IDENTITY surrogate (new per version) |
+| `SectionID` | VARCHAR(50) | no | PS Sections export ID -> Stg_Section.ID -> Wrk_Section -> usp_MergeSection |
+| `SchoolID` | VARCHAR(10) | no | PS Sections SchoolID -> Stg_Section.SchoolID -> zero-padded to 4 in usp_MergeSection |
+| `TermID` | INT | no | PS Sections TermID -> Stg_Section.TermID -> CAST INT in usp_MergeSection |
+| `CourseCode` | VARCHAR(50) | yes | PS Sections Course_Number -> Stg_Section.Course_Number ('' -> NULL) -> usp_MergeSection |
+| `SectionNumber` | VARCHAR(20) | yes | PS Sections Section_Number -> Stg_Section.Section_Number ('' -> NULL) -> usp_MergeSection |
+| `CourseName` | VARCHAR(200) | yes | PS Sections [2]course_name -> Stg_Section.course_name ('' -> NULL) -> usp_MergeSection; mojibake repaired by fix_DimSection_coursename_mojibake.sql |
+| `EnrollmentCount` | INT | yes | PS Sections No_of_students -> Stg_Section.No_of_students (CAST INT) -> usp_MergeSection |
+| `MaxEnrollment` | INT | yes | PS Sections MaxEnrollment -> Stg_Section.MaxEnrollment (CAST INT) -> usp_MergeSection |
+| `TeacherStaffKey` | BIGINT | no | derived in usp_MergeSection: LOWER(Stg_Section.Email_Addr) resolved to the current, ActiveFlag=1 DimStaff.StaffKey |
+| `EffectiveStartDate` | DATE | no | usp_MergeSection @EffectiveDate (Atlantic today) |
+| `EffectiveEndDate` | DATE | yes | usp_MergeSection: @EffectiveDate-1 on version close / missing-from-import close (same-day guarded); usp_YearEndCloseOut: @EffectiveDate-1 for closing-year terms |
+| `IsCurrent` | BIT | no | usp_MergeSection (1 on insert/revival, 0 on close); usp_YearEndCloseOut sets 0 |
+| `SourceSystemID` | VARCHAR(50) | yes | = Stg_Section.ID (PS section ID) via usp_MergeSection |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on every insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — update: `close changed (any of SchoolID, TermID, CourseCode, SectionNumber, CourseName, EnrollmentCount, MaxEnrollment, TeacherStaffKey differs; started before today)`, `same-day in-place correction`, `same-day revive of a 0-day closed row`, `touch unchanged`, `close every current row whose SectionID is not in Wrk (EndDate guarded; no replacement)`; insert: `new version for each Wrk section without a current row`
@@ -706,22 +706,22 @@ Instructional sections and their teacher-of-record assignments over time
 
 ## DimShortCycle
 
-Defined in [sql/dimensions/DimShortCycle.sql](../../sql/dimensions/DimShortCycle.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimShortCycle.sql](../../sql/dimensions/DimShortCycle.sql) · reviewed 2026-10-23
 
-HEADER for a Short Cycle of Response (SCoR). One row per cycle, identified by a distinct key (CycleGroupID, an app-generated GUID). Holds the display name + date range ONCE; the per-(subject x language x program-scope x grade) assessment instances are DimAssessmentWindow rows that tie back via CycleGroupID and inherit these dates.
+Header for a Short Cycle of Response: one row per cycle, key CycleGroupID (app-generated GUID), holding the display name, date range and grace period once. The per-subject/scope instances are DimAssessmentWindow rows sharing the CycleGroupID. No SCD (edited in place).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `CycleGroupID` | VARCHAR(36) | no |  |
-| `DisplayName` | VARCHAR(100) | no |  |
-| `StartDate` | DATE | no |  |
-| `EndDate` | DATE | no |  |
-| `SchoolYear` | VARCHAR(9) | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `GraceHours` | INT | yes |  |
-| `CreatedDate` | DATETIME2(0) | no |  |
-| `CreatedBy` | VARCHAR(100) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `CycleGroupID` | VARCHAR(36) | no | app /cycles: usp_UpsertShortCycleHeader @CycleGroupID (GUID generated by the web app) |
+| `DisplayName` | VARCHAR(100) | no | usp_UpsertShortCycleHeader @DisplayName |
+| `StartDate` | DATE | no | usp_UpsertShortCycleHeader @StartDate |
+| `EndDate` | DATE | no | usp_UpsertShortCycleHeader @EndDate |
+| `SchoolYear` | VARCHAR(9) | no | derived from StartDate (Sep-Aug) in usp_UpsertShortCycleHeader |
+| `ActiveFlag` | BIT | no | usp_UpsertShortCycleHeader @ActiveFlag (default 1) |
+| `GraceHours` | INT | yes | usp_UpsertShortCycleHeader @GraceHours; insert COALESCE(@GraceHours,168), update COALESCE(@GraceHours, existing, 168). Column added by migrate_0.7.0_grace_and_overrides.sql |
+| `CreatedDate` | DATETIME2(0) | no | GETDATE() on insert |
+| `CreatedBy` | VARCHAR(100) | yes | usp_UpsertShortCycleHeader @CallerUPN on insert |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update |
 
 **Written by:**
 - [sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) — insert: `CycleGroupID`, `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours (default 168)`, `CreatedDate`, `CreatedBy`, `LastUpdated`; update: `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours`, `LastUpdated`
@@ -749,26 +749,26 @@ HEADER for a Short Cycle of Response (SCoR). One row per cycle, identified by a 
 
 ## DimStaff
 
-Defined in [sql/dimensions/DimStaff.sql](../../sql/dimensions/DimStaff.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimStaff.sql](../../sql/dimensions/DimStaff.sql) · reviewed 2026-10-23
 
-Person-level staff identity. One row per unique staff email, versioned by SCD Type 2 on active/inactive transitions only.
+Person-level staff identity from the PowerSchool staff export: one row per version per email (business key Email, lowercased; surrogate StaffKey). SCD Type 2 on all business fields incl. ActiveFlag, except AccessLevel (Type 1). Absence from the import inserts an ActiveFlag=0 deactivation version.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StaffKey` | BIGINT IDENTITY | no |  |
-| `Email` | VARCHAR(255) | no |  |
-| `FirstName` | VARCHAR(100) | no |  |
-| `LastName` | VARCHAR(100) | no |  |
-| `Title` | VARCHAR(100) | yes |  |
-| `HomeSchoolID` | VARCHAR(10) | yes |  |
-| `CanChangeSchool` | VARCHAR(255) | yes |  |
-| `IsDistrictLevel` | BIT | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `AccessLevel` | VARCHAR(50) | yes |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StaffKey` | BIGINT IDENTITY | no | IDENTITY surrogate (new per version) |
+| `Email` | VARCHAR(255) | no | PS Staff Email_Addr -> Stg_Staff.Email_Addr -> LOWER() in Wrk_StaffPersons -> usp_MergeStaff (not trimmed) |
+| `FirstName` | VARCHAR(100) | no | PS Staff First_Name -> Stg_Staff -> Wrk_StaffPersons (canonical row = lowest PS ID per email) -> usp_MergeStaff |
+| `LastName` | VARCHAR(100) | no | PS Staff Last_Name -> Stg_Staff -> Wrk_StaffPersons (lowest PS ID row) -> usp_MergeStaff |
+| `Title` | VARCHAR(100) | yes | PS Staff Title -> Stg_Staff -> Wrk_StaffPersons -> usp_MergeStaff |
+| `HomeSchoolID` | VARCHAR(10) | yes | PS Staff HomeSchoolID -> Stg_Staff -> Wrk_StaffPersons: blank or all-zero -> NULL, else zero-padded to 4 -> usp_MergeStaff |
+| `CanChangeSchool` | VARCHAR(255) | yes | PS Staff CanChangeSchool (raw ';' list) -> Stg_Staff ('' -> NULL) -> Wrk_StaffPersons -> usp_MergeStaff |
+| `IsDistrictLevel` | BIT | no | derived in usp_MergeStaff (Wrk_StaffPersons): 1 when '0' is an entry of CanChangeSchool |
+| `ActiveFlag` | BIT | no | derived by usp_MergeStaff reconciliation: 1 when present in the import, 0 on the deactivation version inserted when absent |
+| `AccessLevel` | VARCHAR(50) | yes | derived in usp_MergeStaff from Wrk_StaffAssignment (PS Group -> DimRole.RoleCode across ALL the person's rows): highest of RegionalAnalyst > Administrator > SpecialistTeacher, else NULL; overwritten Type 1 (step 4f); NULL on deactivation rows |
+| `EffectiveStartDate` | DATE | no | usp_MergeStaff @EffectiveDate (Atlantic today) |
+| `EffectiveEndDate` | DATE | yes | usp_MergeStaff: @EffectiveDate-1 on version close / deactivation / return-marker close (same-day guarded) |
+| `IsCurrent` | BIT | no | usp_MergeStaff (1 current version incl. an inactive marker; 0 closed) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on every insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — update: `close changed active rows (FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel differ; started before today)`, `same-day in-place correction`, `close active rows missing from the import (EndDate guarded)`, `same-day revive of a 0-day closed row`, `close a prior-day ActiveFlag=0 marker when the person returns`, `touch LastUpdated`, `AccessLevel Type-1 refresh on current active rows`; insert: `deactivation marker (ActiveFlag=0, AccessLevel=NULL) for emails closed as missing yesterday-dated with no current row`, `active version for every Wrk email without a current active row (new/changed/returning)`
@@ -823,34 +823,34 @@ Person-level staff identity. One row per unique staff email, versioned by SCD Ty
 
 ## DimStudent
 
-Defined in [sql/dimensions/DimStudent.sql](../../sql/dimensions/DimStudent.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimStudent.sql](../../sql/dimensions/DimStudent.sql) · reviewed 2026-10-23
 
-Student profile over time — tracks grade, school, and program changes
+Student profile over time from the PowerSchool students export: one row per version per student (business key StudentNumber = provincial 10-digit number; surrogate StudentKey). SCD Type 2 on 14 business attributes; absence from the import closes the current row with no replacement.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentKey` | BIGINT IDENTITY | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `FirstName` | VARCHAR(100) | no |  |
-| `MiddleName` | VARCHAR(100) | yes |  |
-| `LastName` | VARCHAR(100) | no |  |
-| `DateOfBirth` | DATE | yes |  |
-| `Grade` | VARCHAR(10) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `ProgramCode` | VARCHAR(10) | no |  |
-| `EnrollStatus` | INT | no |  |
-| `Homeroom` | VARCHAR(50) | yes |  |
-| `Gender` | VARCHAR(10) | no |  |
-| `SelfIDAfrican` | BIT | yes |  |
-| `SelfIDIndigenous` | BIT | yes |  |
-| `IPP` | BIT | yes |  |
-| `Adap` | BIT | yes |  |
-| `GroupKey` | VARCHAR(70) | yes |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StudentKey` | BIGINT IDENTITY | no | IDENTITY surrogate (new per version) |
+| `StudentNumber` | BIGINT | no | PS Students Student_Number -> Stg_Student.Student_Number -> CAST BIGINT in Wrk_Student -> usp_MergeStudent |
+| `FirstName` | VARCHAR(100) | no | PS Students First_Name -> Stg_Student -> Wrk_Student -> usp_MergeStudent |
+| `MiddleName` | VARCHAR(100) | yes | PS Students Middle_Name ('' -> NULL) -> Wrk_Student -> usp_MergeStudent |
+| `LastName` | VARCHAR(100) | no | PS Students Last_Name -> Wrk_Student -> usp_MergeStudent |
+| `DateOfBirth` | DATE | yes | PS Students DOB (MM/DD/YYYY, CONVERT style 101; '' -> NULL) -> Wrk_Student -> usp_MergeStudent |
+| `Grade` | VARCHAR(10) | no | PS Students Grade_Level -> Wrk_Student: '0' -> 'P', '-1' -> 'PP', '13' -> 'RG', else verbatim -> usp_MergeStudent |
+| `SchoolID` | VARCHAR(10) | no | PS Students SchoolID -> zero-padded to 4 in Wrk_Student -> usp_MergeStudent |
+| `ProgramCode` | VARCHAR(10) | no | PS Students NS_Program -> Wrk_Student -> usp_MergeStudent (blank-code rows removed by fix_blank_programcode.sql) |
+| `EnrollStatus` | INT | no | PS Students Enroll_Status -> CAST INT in Wrk_Student -> usp_MergeStudent (export filtered to 0 Active / -1 Pre-Enrolled) |
+| `Homeroom` | VARCHAR(50) | yes | PS Students Home_Room ('' -> NULL) -> Wrk_Student -> usp_MergeStudent |
+| `Gender` | VARCHAR(10) | no | PS Students Gender (verbatim M/F/X) -> Wrk_Student -> usp_MergeStudent |
+| `SelfIDAfrican` | BIT | yes | PS Students NS_AssigndIdentity_African: 'Yes' -> 1, anything else -> NULL (Wrk_Student) -> usp_MergeStudent |
+| `SelfIDIndigenous` | BIT | yes | PS Students NS_aboriginal: '1' -> 1, '2' -> 0, else NULL (Wrk_Student) -> usp_MergeStudent |
+| `IPP` | BIT | yes | PS Students CurrentIPP: 'Y' -> 1, 'N' -> 0, else NULL (Wrk_Student) -> usp_MergeStudent |
+| `Adap` | BIT | yes | PS Students CurrentAdap: 'Y' -> 1, 'N' -> 0, else NULL (Wrk_Student) -> usp_MergeStudent |
+| `GroupKey` | VARCHAR(70) | yes | derived in usp_MergeStudent (Wrk_Student): COALESCE(DimSchool.Abbreviation, padded SchoolID) + '-' + Home_Room with '/', ' ', '\' -> '-' ('none' when no homeroom); column added/back-filled by migrate_DimStudent_add_GroupKey.sql |
+| `EffectiveStartDate` | DATE | no | usp_MergeStudent @EffectiveDate (Atlantic today) |
+| `EffectiveEndDate` | DATE | yes | usp_MergeStudent: @EffectiveDate-1 on version close / missing-from-import close (same-day guarded) |
+| `IsCurrent` | BIT | no | usp_MergeStudent (1 current; 0 closed - including students absent from the import) |
+| `SourceSystemID` | VARCHAR(50) | yes | PS Students ID (DCID) -> Stg_Student.ID -> usp_MergeStudent (reference only, never matched on) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on every insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `close changed: EffectiveEndDate=@EffectiveDate-1, IsCurrent=0 when any of the 14 Type-2 fields differ (EXCEPT, NULL-safe) and the row started before today`, `same-day in-place: all attributes + GroupKey when the current row started today`, `same-day revive: re-open a 0-day [today,today] closed row with no current sibling`, `touch LastUpdated on unchanged current rows`, `close missing: IsCurrent=0, EffectiveEndDate=max(start, @EffectiveDate-1) for current rows absent from the import (no replacement row)`; insert: `new current version for every Wrk student without a current row (new + just-closed changed), EffectiveStartDate=@EffectiveDate`
@@ -914,19 +914,19 @@ Student profile over time — tracks grade, school, and program changes
 
 ## DimTerm
 
-Defined in [sql/dimensions/DimTerm.sql](../../sql/dimensions/DimTerm.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/DimTerm.sql](../../sql/dimensions/DimTerm.sql) · reviewed 2026-10-23
 
-Reference dimension for PowerSchool TermID values. Decodes each TermID into its school year and academic term (Year Long / S1 / S2).
+Decodes PowerSchool TermID (YYTT: YY = start year - 1990, TT = 00 Year Long / 01 S1 / 02 S2) into school year and term. One row per TermID (natural key); this file creates and seeds 2015-2016 through 2035-2036 (63 rows).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `TermID` | INT | no |  |
-| `SchoolYear` | VARCHAR(9) | no |  |
-| `SchoolYearStart` | INT | no |  |
-| `SchoolYearEnd` | INT | no |  |
-| `TermCode` | INT | no |  |
-| `TermName` | VARCHAR(20) | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `TermID` | INT | no | computed in this file: (StartYear - 1990) * 100 + TermCode |
+| `SchoolYear` | VARCHAR(9) | no | computed in this file ('YYYY-YYYY+1') |
+| `SchoolYearStart` | INT | no | computed in this file |
+| `SchoolYearEnd` | INT | no | computed in this file |
+| `TermCode` | INT | no | seeded 0/1/2 |
+| `TermName` | VARCHAR(20) | no | seeded 'Year Long' / 'Semester 1' / 'Semester 2' |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Written by:**
 - [sql/dimensions/DimTerm.sql](../../sql/dimensions/DimTerm.sql) — insert — `LastUpdated`, `SchoolYear`, `SchoolYearEnd`, `SchoolYearStart`, `TermCode`, `TermID`, `TermName`
@@ -944,22 +944,22 @@ Reference dimension for PowerSchool TermID values. Decodes each TermID into its 
 
 ## FactAssessmentMath
 
-Defined in [sql/facts/FactAssessmentMath.sql](../../sql/facts/FactAssessmentMath.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactAssessmentMath.sql](../../sql/facts/FactAssessmentMath.sql) · reviewed 2026-10-23
 
-Per-task math results entered by teachers — one bit per student per task per cycle: 1 = can do the task, 0 = cannot. Everything the reports need (grade, term, unit, outcome, task text) derives through MathTaskKey -> DimMathTask; the fact stays a thin (who, which task, got-it?) grain.
+Per-task math results: one row per (StudentKey, AssessmentWindowID, MathTaskKey, AssessmentDate), Result 1 = can do / 0 = cannot. Keeps history across dates; a same-date re-entry updates in place. Surrogate MathAssessmentID.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `MathAssessmentID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `AssessmentWindowID` | BIGINT | no |  |
-| `MathTaskKey` | BIGINT | no |  |
-| `Result` | BIT | no |  |
-| `AssessmentDate` | DATE | no |  |
-| `EnteredByStaffKey` | BIGINT | no |  |
-| `SubmissionTimestamp` | DATETIME2(0) | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `MathAssessmentID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_UpsertMathAssessment: DimStudent version effective at @AssessmentDate for @StudentNumber |
+| `StudentNumber` | BIGINT | no | app: usp_UpsertMathAssessment @StudentNumber |
+| `AssessmentWindowID` | BIGINT | no | app: usp_UpsertMathAssessment @AssessmentWindowID (CAST BIGINT; must be an active Math window) |
+| `MathTaskKey` | BIGINT | no | app: usp_UpsertMathAssessment @MathTaskKey (active DimMathTask matching student grade + cycle month) |
+| `Result` | BIT | no | app: usp_UpsertMathAssessment @Result '1'/'0' (NULL/'' deletes the same-date row) |
+| `AssessmentDate` | DATE | no | app: usp_UpsertMathAssessment @AssessmentDate (validated within [StartDate, MIN(today, EndDate)]) |
+| `EnteredByStaffKey` | BIGINT | no | usp_UpsertMathAssessment: caller's current DimStaff.StaffKey (from @CallerUPN) |
+| `SubmissionTimestamp` | DATETIME2(0) | no | GETDATE() (UTC) in usp_UpsertMathAssessment |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update |
 
 **Written by:**
 - [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `MathTaskKey`, `Result`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `Result`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - same (StudentKey, window, task, date)`; delete: the row for exactly (StudentKey, window, task, AssessmentDate) when Result is NULL/blank; earlier dates untouched
@@ -987,25 +987,25 @@ Per-task math results entered by teachers — one bit per student per task per c
 
 ## FactAssessmentReading
 
-Defined in [sql/facts/FactAssessmentReading.sql](../../sql/facts/FactAssessmentReading.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactAssessmentReading.sql](../../sql/facts/FactAssessmentReading.sql) · reviewed 2026-10-23
 
-Reading assessment results entered by teachers
+Reading results: one row per (StudentKey, AssessmentWindowID, AssessmentDate) holding the entered level and its delta from the grade-month benchmark, plus as-was level/benchmark codes. Multiple dates per window are kept; a same-date re-save updates in place. Surrogate ReadingAssessmentID.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `ReadingAssessmentID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `AssessmentWindowID` | BIGINT | no |  |
-| `ReadingScaleID` | BIGINT | no |  |
-| `ReadingDelta` | INT | yes |  |
-| `LevelCode` | VARCHAR(10) | yes |  |
-| `ExpectedMinLevelCode` | VARCHAR(10) | yes |  |
-| `ExpectedMaxLevelCode` | VARCHAR(10) | yes |  |
-| `AssessmentDate` | DATE | no |  |
-| `EnteredByStaffKey` | BIGINT | no |  |
-| `SubmissionTimestamp` | DATETIME2(0) | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `ReadingAssessmentID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_UpsertReadingAssessment: DimStudent version effective at @AssessmentDate for @StudentNumber |
+| `StudentNumber` | BIGINT | no | app: usp_UpsertReadingAssessment @StudentNumber (insert only); back-filled by relink_stranded_assessment_studentkeys.sql |
+| `AssessmentWindowID` | BIGINT | no | app: usp_UpsertReadingAssessment @AssessmentWindowID (CAST BIGINT; active Reading window) |
+| `ReadingScaleID` | BIGINT | no | app: usp_UpsertReadingAssessment @ReadingScaleID (active DimReadingScale row whose ScaleSystem matches the window's, else the student's family) |
+| `ReadingDelta` | INT | yes | computed in usp_UpsertReadingAssessment: 0 inside [ExpectedMin, ExpectedMax] LevelOrder, else signed distance to the nearer bound; NULL when no DimReadingBenchmark row |
+| `LevelCode` | VARCHAR(10) | yes | DimReadingScale.LevelCode of @ReadingScaleID, stamped by usp_UpsertReadingAssessment; back-filled by migrate_FactAssessmentReading_add_score_context.sql |
+| `ExpectedMinLevelCode` | VARCHAR(10) | yes | DimReadingBenchmark.ExpectedMinLevel for (entered ScaleSystem, student ProgramFamily, Grade, window BenchmarkMonth or dominant month), stamped by usp_UpsertReadingAssessment |
+| `ExpectedMaxLevelCode` | VARCHAR(10) | yes | DimReadingBenchmark.ExpectedMaxLevel, same lookup |
+| `AssessmentDate` | DATE | no | app: usp_UpsertReadingAssessment @AssessmentDate (within [StartDate, MIN(today, EndDate)]) |
+| `EnteredByStaffKey` | BIGINT | no | usp_UpsertReadingAssessment: caller's current DimStaff.StaffKey (from @CallerUPN) |
+| `SubmissionTimestamp` | DATETIME2(0) | no | GETDATE() (UTC) in usp_UpsertReadingAssessment |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update |
 
 **Written by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — delete: ONE arbitrary row (TOP 1, no ORDER BY) for the student number + window
@@ -1050,26 +1050,26 @@ Reading assessment results entered by teachers
 
 ## FactAssessmentWriting
 
-Defined in [sql/facts/FactAssessmentWriting.sql](../../sql/facts/FactAssessmentWriting.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactAssessmentWriting.sql](../../sql/facts/FactAssessmentWriting.sql) · reviewed 2026-10-23
 
-Writing assessment rubric scores entered by teachers
+Writing rubric results: one row per (StudentKey, AssessmentWindowID, AssessmentLanguage, AssessmentDate) with four trait scores stored as text and an as-was average. FI grade 3+ students can hold an English and a French row per cycle. Surrogate WritingAssessmentID.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `WritingAssessmentID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `AssessmentWindowID` | BIGINT | no |  |
-| `AssessmentLanguage` | VARCHAR(10) | yes |  |
-| `IdeasScore` | VARCHAR(10) | yes |  |
-| `OrganizationScore` | VARCHAR(10) | yes |  |
-| `LanguageScore` | VARCHAR(10) | yes |  |
-| `ConventionsScore` | VARCHAR(10) | yes |  |
-| `WritingAverage` | DECIMAL(4,2) | yes |  |
-| `AssessmentDate` | DATE | no |  |
-| `EnteredByStaffKey` | BIGINT | no |  |
-| `SubmissionTimestamp` | DATETIME2(0) | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `WritingAssessmentID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_UpsertWritingAssessment: DimStudent version effective at @AssessmentDate; re-pointed by relink_stranded_assessment_studentkeys.sql |
+| `StudentNumber` | BIGINT | no | app: usp_UpsertWritingAssessment @StudentNumber (insert only) |
+| `AssessmentWindowID` | BIGINT | no | app: usp_UpsertWritingAssessment @AssessmentWindowID (active Writing window) |
+| `AssessmentLanguage` | VARCHAR(10) | yes | app: usp_UpsertWritingAssessment @AssessmentLanguage, default from student ProgramFamily (FI -> 'French', else 'English'); legacy rows back-filled by migrate_FactWriting_add_AssessmentLanguage.sql |
+| `IdeasScore` | VARCHAR(10) | yes | app: usp_UpsertWritingAssessment @IdeasScore (INT 1-4 cast to text) or '-' when excluded by WritingTraitExclusion |
+| `OrganizationScore` | VARCHAR(10) | yes | app: @OrganizationScore (1-4 as text) or '-' when excluded |
+| `LanguageScore` | VARCHAR(10) | yes | app: @LanguageScore (1-4 as text) or '-' when excluded |
+| `ConventionsScore` | VARCHAR(10) | yes | app: @ConventionsScore ('1'-'4' | 'SCR') or '-' when excluded |
+| `WritingAverage` | DECIMAL(4,2) | yes | computed in usp_UpsertWritingAssessment: mean of the traits whose stored value is '1'-'4' ('-', 'SCR', NULL drop from both sides); back-filled by migrate_FactAssessmentWriting_add_average.sql |
+| `AssessmentDate` | DATE | no | app: @AssessmentDate (within [StartDate, MIN(today, EndDate)]) |
+| `EnteredByStaffKey` | BIGINT | no | usp_UpsertWritingAssessment: caller's current DimStaff.StaffKey |
+| `SubmissionTimestamp` | DATETIME2(0) | no | GETDATE() (UTC) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update |
 
 **Written by:**
 - [sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `AssessmentLanguage`, `IdeasScore`, `OrganizationScore`, `LanguageScore`, `ConventionsScore`, `WritingAverage`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `the four trait columns`, `WritingAverage`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - when a row exists for the same (StudentKey, window, AssessmentLanguage, AssessmentDate)`
@@ -1105,21 +1105,21 @@ Writing assessment rubric scores entered by teachers
 
 ## FactDataQualityAudit
 
-Defined in [sql/facts/FactDataQualityAudit.sql](../../sql/facts/FactDataQualityAudit.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactDataQualityAudit.sql](../../sql/facts/FactDataQualityAudit.sql) · reviewed 2026-10-23
 
-Append-only audit log for data quality check runs against the Assessment_Warehouse. Written by usp_RunDataQualityChecks. One row per violation per run; one PASS sentinel row when a run finds zero violations (so the table itself is the run history).
+Append-only log of data-quality runs: one row per violation per run of usp_RunDataQualityChecks (52 checks: Orphan / IsCurrent / Date / Reference / Consistency), or a single PASS row when clean. Surrogate DataQualityAuditID; RunTimestamp groups a run.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `DataQualityAuditID` | BIGINT IDENTITY | no |  |
-| `RunTimestamp` | DATETIME2(0) | no |  |
-| `CheckCategory` | VARCHAR(20) | no |  |
-| `CheckName` | VARCHAR(150) | no |  |
-| `TableName` | VARCHAR(50) | yes |  |
-| `KeyColumn` | VARCHAR(50) | yes |  |
-| `KeyValue` | VARCHAR(150) | yes |  |
-| `Detail` | VARCHAR(500) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `DataQualityAuditID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `RunTimestamp` | DATETIME2(0) | no | usp_RunDataQualityChecks: GETDATE() captured once per run |
+| `CheckCategory` | VARCHAR(20) | no | usp_RunDataQualityChecks: 'Orphan'|'IsCurrent'|'Date'|'Reference'|'Consistency', or 'PASS' |
+| `CheckName` | VARCHAR(150) | no | usp_RunDataQualityChecks: rule description ('All checks passed' on PASS) |
+| `TableName` | VARCHAR(50) | yes | usp_RunDataQualityChecks: offending table (NULL on PASS) |
+| `KeyColumn` | VARCHAR(50) | yes | usp_RunDataQualityChecks: identifying column (NULL on PASS) |
+| `KeyValue` | VARCHAR(150) | yes | usp_RunDataQualityChecks: identifying value / composite (NULL on PASS) |
+| `Detail` | VARCHAR(500) | yes | usp_RunDataQualityChecks: what was wrong (run summary on PASS) |
+| `LastUpdated` | DATETIME2(0) | no | = RunTimestamp |
 
 **Written by:**
 - [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — insert: `one row per violation (CheckCategory, CheckName, TableName, KeyColumn, KeyValue, Detail)`, `or one PASS sentinel row`
@@ -1135,20 +1135,20 @@ Append-only audit log for data quality check runs against the Assessment_Warehou
 
 ## FactEnrollment
 
-Defined in [sql/facts/FactEnrollment.sql](../../sql/facts/FactEnrollment.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactEnrollment.sql](../../sql/facts/FactEnrollment.sql) · reviewed 2026-10-23
 
-Student membership in sections over time
+Student membership in sections from the PowerSchool enrollments export: one row per PS enrollment record (matching key SourceSystemID = PS CC.ID), with surrogate StudentKey/SectionKey, dates and ActiveFlag. Not versioned - rows are updated in place.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `EnrollmentID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `SectionKey` | BIGINT | no |  |
-| `StartDate` | DATE | no |  |
-| `EndDate` | DATE | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `EnrollmentID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_MergeEnrollment: Stg_Enrollment.Student_Number -> current DimStudent.StudentKey (re-pointed to the current version while either old or new ActiveFlag is 1, frozen once closed) |
+| `SectionKey` | BIGINT | no | usp_MergeEnrollment: Stg_Enrollment.SectionID -> current DimSection.SectionKey (same re-point/freeze rule) |
+| `StartDate` | DATE | no | PS Enrollments DateEnrolled (MM/DD/YYYY) -> Stg_Enrollment -> Wrk_Enrollment -> usp_MergeEnrollment |
+| `EndDate` | DATE | yes | PS Enrollments DateLeft ('' -> NULL) -> Wrk_Enrollment -> usp_MergeEnrollment; usp_YearEndCloseOut fills NULLs with the canonical term end |
+| `ActiveFlag` | BIT | no | computed in usp_MergeEnrollment: 1 if DateLeft empty or >= ingest date, else 0; set 0 when the record is absent from the import (step 5) and by usp_YearEndCloseOut |
+| `SourceSystemID` | VARCHAR(50) | yes | PS Enrollments ID (CC.ID) -> Stg_Enrollment.ID -> usp_MergeEnrollment (the merge match key) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — update: `StartDate, EndDate, ActiveFlag (+ StudentKey/SectionKey re-pointed to current versions unless the row was and stays inactive) when any differs`, `touch LastUpdated on matched unchanged rows`, `ActiveFlag=0 for every active row whose SourceSystemID is absent from Wrk`; insert: `rows with a SourceSystemID not yet in the fact`
@@ -1199,21 +1199,21 @@ Student membership in sections over time
 
 ## FactSectionTeachers
 
-Defined in [sql/facts/FactSectionTeachers.sql](../../sql/facts/FactSectionTeachers.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactSectionTeachers.sql](../../sql/facts/FactSectionTeachers.sql) · reviewed 2026-10-23
 
-Many-to-many bridge of teacher-to-section assignments, supporting co-teaching and secondary teacher arrangements.
+Teacher-to-section bridge (primary + co-teachers), the authority for section-level access. One row per version of a (SectionID, TeacherEmail, TeacherRole) triple, keyed by business keys (not surrogates); EffectiveStart/End + IsCurrent; rows never deleted.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `SectionTeacherID` | BIGINT IDENTITY | no |  |
-| `SectionID` | VARCHAR(50) | no |  |
-| `TeacherEmail` | VARCHAR(255) | no |  |
-| `TeacherRole` | VARCHAR(50) | no |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `SectionTeacherID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `SectionID` | VARCHAR(50) | no | PS Sections ID (primary rows) or PS Co-Teachers SectionID -> Wrk_SectionTeacher -> usp_MergeSectionTeachers |
+| `TeacherEmail` | VARCHAR(255) | no | LOWER(TRIM()) of PS Sections [5]Email_Addr (Primary) or PS Co-Teachers Email -> Wrk_SectionTeacher -> usp_MergeSectionTeachers |
+| `TeacherRole` | VARCHAR(50) | no | 'Primary' for Stg_Section rows; Stg_CoTeacher.Role normalised in usp_MergeSectionTeachers ('co-teacher'/'coteacher' -> 'CoTeacher', 'support' -> 'Support', 'substitute' -> 'Substitute', 'primary' -> 'Primary', else trimmed verbatim) |
+| `EffectiveStartDate` | DATE | no | usp_MergeSectionTeachers @EffectiveDate |
+| `EffectiveEndDate` | DATE | yes | usp_MergeSectionTeachers: @EffectiveDate-1 when the triple is missing (same-day guarded); usp_YearEndCloseOut: @EffectiveDate-1 for closing-year sections |
+| `IsCurrent` | BIT | no | usp_MergeSectionTeachers / usp_YearEndCloseOut |
+| `SourceSystemID` | VARCHAR(50) | yes | PS section ID for Primary rows; NULL for co-teacher rows |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — update: `close (IsCurrent=0, EndDate guarded) current triples absent from Wrk`, `touch unchanged`; insert: `triples with no current row, EffectiveStartDate=@EffectiveDate`
@@ -1265,21 +1265,21 @@ Many-to-many bridge of teacher-to-section assignments, supporting co-teaching an
 
 ## FactStaffAssignment
 
-Defined in [sql/facts/FactStaffAssignment.sql](../../sql/facts/FactStaffAssignment.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactStaffAssignment.sql](../../sql/facts/FactStaffAssignment.sql) · reviewed 2026-10-23
 
-Bridge of staff-to-school-to-role assignments. One row per distinct (StaffKey, SchoolID, RoleCode) combination, versioned by effective dates so the history of someone's role changes is preserved.
+Staff x school x role bridge from the PowerSchool staff export: one row per version of a (StaffKey, SchoolID, RoleCode) triple, with the PS staff record ID; EffectiveStart/End + IsCurrent. History of who held what role where.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StaffAssignmentID` | BIGINT IDENTITY | no |  |
-| `StaffKey` | BIGINT | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `RoleCode` | VARCHAR(50) | no |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StaffAssignmentID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StaffKey` | BIGINT | no | usp_MergeStaff step 5c: current DimStaff.StaffKey for LOWER(Stg_Staff.Email_Addr) |
+| `SchoolID` | VARCHAR(10) | no | PS Staff SchoolID -> Stg_Staff -> Wrk_StaffAssignment ('0' -> '0000', else zero-padded) -> usp_MergeStaff (only ActiveFlag=1 DimSchool schools land) |
+| `RoleCode` | VARCHAR(50) | no | PS Staff Group -> DimRole.RoleCode (RoleNumber match, ActiveFlag=1) in Wrk_StaffAssignment -> usp_MergeStaff |
+| `EffectiveStartDate` | DATE | no | usp_MergeStaff @EffectiveDate |
+| `EffectiveEndDate` | DATE | yes | usp_MergeStaff: @EffectiveDate-1 (same-day guarded) on SourceSystemID collision, missing triple, school no longer active, or StaffKey re-version |
+| `IsCurrent` | BIT | no | usp_MergeStaff |
+| `SourceSystemID` | VARCHAR(50) | yes | PS Staff ID -> Stg_Staff.ID -> MIN(ID) per (email, school, role) in Wrk_StaffAssignment -> usp_MergeStaff |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — update: `close on SourceSystemID collision (same triple, different PS ID)`, `close triples missing from the import or at a now-inactive school`, `touch unchanged`; insert: `new triples at ACTIVE DimSchool schools only (district '0000' and closed schools dropped)`
@@ -1300,22 +1300,22 @@ Bridge of staff-to-school-to-role assignments. One row per distinct (StaffKey, S
 
 ## FactStudentAdaptation
 
-Defined in [sql/facts/FactStudentAdaptation.sql](../../sql/facts/FactStudentAdaptation.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactStudentAdaptation.sql](../../sql/facts/FactStudentAdaptation.sql) · reviewed 2026-10-23
 
-Tracks per-student, per-subject, per-program-family ADAPTATION status with SCD Type 2 versioning. Structural MIRROR of FactStudentIPP, keyed on the PowerSchool "has adaptations" flag (DimStudent.Adap) instead of DimStudent.IPP. PowerSchool records only ONE global "has adaptations" yes/no per student; this table breaks that out by SUBJECT so teachers can record which subjects a student's adaptation applies to (Reading / Writing / Math) -- the "Adaptations" half of the Programming section. No adaptation-type/focus detail is stored: the grain is simply (student, subject) yes/no.
+Per-student, per-subject, per-program-family adaptation status (record-only; not used in computations yet). SCD Type 2 rows keyed by (StudentKey, Subject, ProgramFamily); HasAdaptation NULL = unresolved, 1/0 = teacher-confirmed. Structural mirror of FactStudentIPP keyed on DimStudent.Adap.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentAdaptationID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `Subject` | VARCHAR(20) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `HasAdaptation` | BIT | yes |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `ChangedBy` | VARCHAR(255) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StudentAdaptationID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_MergeStudent step 6d: current DimStudent.StudentKey where Adap = 1; usp_UpsertStudentAdaptation @StudentKey (re-insert on change) |
+| `Subject` | VARCHAR(20) | no | usp_MergeStudent applicability rules ('Reading','Writing','Math'); usp_UpsertStudentAdaptation @Subject |
+| `ProgramFamily` | VARCHAR(50) | no | usp_MergeStudent rules (English; French Immersion; English also for FI grade>=3; Math = own family); usp_UpsertStudentAdaptation @ProgramFamily |
+| `HasAdaptation` | BIT | yes | NULL from usp_MergeStudent auto-create; app (/programming Save): usp_UpsertStudentAdaptation @HasAdaptation |
+| `EffectiveStartDate` | DATE | no | @EffectiveDate (usp_MergeStudent) / Atlantic today (usp_UpsertStudentAdaptation) |
+| `EffectiveEndDate` | DATE | yes | @EffectiveDate-1 on close (usp_MergeStudent 6c; usp_UpsertStudentAdaptation on change) |
+| `IsCurrent` | BIT | no | usp_MergeStudent / usp_UpsertStudentAdaptation |
+| `ChangedBy` | VARCHAR(255) | yes | 'system' (usp_MergeStudent) or lowercased caller UPN (usp_UpsertStudentAdaptation) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `same close rule keyed on Adap`; insert: `HasAdaptation=NULL, ChangedBy='system' placeholders`
@@ -1342,22 +1342,22 @@ Tracks per-student, per-subject, per-program-family ADAPTATION status with SCD T
 
 ## FactStudentIPP
 
-Defined in [sql/facts/FactStudentIPP.sql](../../sql/facts/FactStudentIPP.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactStudentIPP.sql](../../sql/facts/FactStudentIPP.sql) · reviewed 2026-10-23
 
-Tracks per-student, per-subject, per-program-family IPP status with SCD Type 2 versioning. Replaces the predecessor Excel's single school-wide "Literacy IPP" column with teacher-managed fine-grained tracking: a student can have a Reading IPP but no Writing IPP, or a French Reading IPP but no English Reading IPP (the latter applicable only to French Immersion students grade 3+).
+Per-student, per-subject, per-program-family IPP status, SCD Type 2 keyed by (StudentKey, Subject, ProgramFamily). IsIPP NULL = unresolved gate (blocks achievement colouring/aggregates), 1 = has IPP (excluded from comparisons), 0 = no IPP.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentIPPID` | BIGINT IDENTITY | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `Subject` | VARCHAR(20) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `IsIPP` | BIT | yes |  |
-| `EffectiveStartDate` | DATE | no |  |
-| `EffectiveEndDate` | DATE | yes |  |
-| `IsCurrent` | BIT | no |  |
-| `ChangedBy` | VARCHAR(255) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StudentIPPID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `StudentKey` | BIGINT | no | usp_MergeStudent step 6b: current DimStudent.StudentKey where IPP = 1; usp_UpsertStudentIPP @StudentKey |
+| `Subject` | VARCHAR(20) | no | usp_MergeStudent applicability rules ('Reading','Writing','Math'); usp_UpsertStudentIPP @Subject |
+| `ProgramFamily` | VARCHAR(50) | no | usp_MergeStudent rules; usp_UpsertStudentIPP @ProgramFamily ('English'|'French Immersion') |
+| `IsIPP` | BIT | yes | NULL from usp_MergeStudent auto-create; app: usp_UpsertStudentIPP @IsIPP |
+| `EffectiveStartDate` | DATE | no | @EffectiveDate (usp_MergeStudent) / Atlantic today (usp_UpsertStudentIPP) |
+| `EffectiveEndDate` | DATE | yes | @EffectiveDate-1 on close (usp_MergeStudent 6a; usp_UpsertStudentIPP on change) |
+| `IsCurrent` | BIT | no | usp_MergeStudent / usp_UpsertStudentIPP |
+| `ChangedBy` | VARCHAR(255) | yes | 'system' (usp_MergeStudent) or lowercased caller UPN (usp_UpsertStudentIPP) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/close/touch |
 
 **Written by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `close (IsCurrent=0, EffectiveEndDate=@EffectiveDate-1) current rows whose (StudentKey, Subject, ProgramFamily) is no longer expected`; insert: `IsIPP=NULL, ChangedBy='system' for each expected triple lacking a current row`
@@ -1401,21 +1401,21 @@ Tracks per-student, per-subject, per-program-family IPP status with SCD Type 2 v
 
 ## FactSubmissionAudit
 
-Defined in [sql/facts/FactSubmissionAudit.sql](../../sql/facts/FactSubmissionAudit.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/FactSubmissionAudit.sql](../../sql/facts/FactSubmissionAudit.sql) · reviewed 2026-10-23
 
-Audit log for all data ingestion and teacher submission activity
+Append-only audit log of ingest merges and app submissions: one row per merge-proc run, per app save/delete, per cycle outcome. Surrogate AuditID.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `AuditID` | BIGINT IDENTITY | no |  |
-| `RecordType` | VARCHAR(50) | no |  |
-| `Source` | VARCHAR(50) | no |  |
-| `SubmittedBy` | VARCHAR(255) | no |  |
-| `SubmissionTimestamp` | DATETIME2(0) | no |  |
-| `Status` | VARCHAR(50) | no |  |
-| `Message` | VARCHAR(MAX) | yes |  |
-| `RecordCount` | INT | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `AuditID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `RecordType` | VARCHAR(50) | no | set by the writing proc: 'CSVImport' (usp_Merge*), 'ReadingAssessment' (usp_UpsertReadingAssessment / usp_DeleteReadingAssessment), 'WritingAssessment', 'MathAssessment', 'StudentIPPStatus', 'StudentAdaptationStatus', 'StaffAppAccess', 'WindowGen', 'IngestCycle', 'YearEndCloseOut'; usp_InsertSubmissionAudit @RecordType |
+| `Source` | VARCHAR(50) | no | 'PowerSchool' (merges), 'WebApp' when @CallerUPN supplied else 'PowerApps' (app procs), 'system' (cycle/window/year-end); usp_InsertSubmissionAudit @Source |
+| `SubmittedBy` | VARCHAR(255) | no | 'system' for ingest; lowercased caller UPN for app procs |
+| `SubmissionTimestamp` | DATETIME2(0) | no | @RunStart / @CycleStart (merges, ingest) or GETDATE() (app procs) |
+| `Status` | VARCHAR(50) | no | 'Accepted' | 'AcceptedWithWarnings' | 'Rejected' (DQ gate fail); usp_InsertSubmissionAudit allows 'Test' |
+| `Message` | VARCHAR(MAX) | yes | proc-built summary (counts, warnings, StudentNumber/window/values, GRACE-OVERRIDE marker) |
+| `RecordCount` | INT | yes | staged row count (merges), 1 (app saves), violations/closed counts (cycle, year-end) |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert |
 
 **Written by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — insert: `RecordType='ReadingAssessment', Message 'DELETE | Prior...'`
@@ -1447,21 +1447,23 @@ Audit log for all data ingestion and teacher submission activity
 
 ## IngestRunLog
 
-Defined in [sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · reviewed 2026-10-23
+
+Append-only run log of ingest cycles: per cycle a 'Started' row, one 'Loaded' row per staging file with its row count, and a terminal 'Completed' or 'Failed' (DQ gate). Surrogate IngestRunLogID; CycleStart groups a run. Guarded create (never drops).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `IngestRunLogID` | BIGINT IDENTITY | yes |  |
-| `CycleStart` | DATETIME2(0) | no |  |
-| `LoggedAt` | DATETIME2(0) | no |  |
-| `CallerUPN` | VARCHAR(255) | yes |  |
-| `Source` | VARCHAR(20) | no |  |
-| `Phase` | VARCHAR(20) | no |  |
-| `Topic` | VARCHAR(30) | yes |  |
-| `RowsLoaded` | INT | yes |  |
-| `Status` | VARCHAR(20) | no |  |
-| `Message` | VARCHAR(4000) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `IngestRunLogID` | BIGINT IDENTITY | yes | IDENTITY surrogate |
+| `CycleStart` | DATETIME2(0) | no | usp_RunFullIngestCycle: GETDATE() captured once at start |
+| `LoggedAt` | DATETIME2(0) | no | GETDATE() when each row is written |
+| `CallerUPN` | VARCHAR(255) | yes | usp_RunFullIngestCycle: LOWER(COALESCE(@CallerUPN, CURRENT_USER)) - app passes the signed-in UPN via usp_TriggerIngestCycle |
+| `Source` | VARCHAR(20) | no | usp_RunFullIngestCycle @Source: 'App' (from usp_TriggerIngestCycle) or default 'FabricSQL' |
+| `Phase` | VARCHAR(20) | no | 'Cycle' (Started/Completed/Failed) or 'Load' |
+| `Topic` | VARCHAR(30) | yes | 'students'|'staff'|'sections'|'enrollments'|'section-teachers' on Load rows; NULL on Cycle rows |
+| `RowsLoaded` | INT | yes | COUNT(*) of the just-loaded Stg_* table |
+| `Status` | VARCHAR(20) | no | 'Started'|'Loaded'|'Completed'|'Failed' |
+| `Message` | VARCHAR(4000) | yes | 'ingest started', DQ failure summary, or 'cycle complete | duration Ns' |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert |
 
 **Written by:**
 - [sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) — insert: `'Cycle' Started row`, `one 'Load' row per topic (students, staff, sections, enrollments, section-teachers) with RowsLoaded = staging COUNT(*)`, `'Cycle' Completed or Failed row`
@@ -1470,30 +1472,30 @@ Defined in [sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · ske
 
 ## PriorYearBaseline
 
-Defined in [sql/facts/PriorYearBaseline.sql](../../sql/facts/PriorYearBaseline.sql) · skeleton (not yet reviewed)
+Defined in [sql/facts/PriorYearBaseline.sql](../../sql/facts/PriorYearBaseline.sql) · reviewed 2026-10-23
 
-DENORMALIZED prior-year (2025-2026) end-of-June reading + writing baseline, so teachers can see where their new students started. One wide row per student, keyed by provincial StudentNumber (stable across years); the display read joins it to the CURRENT roster by StudentNumber. This is the lightweight "option B" — NOT integrated into the star schema (no historical DimStudent versions / facts); full historical integration ("option A") is deferred.
+Denormalized 2025-2026 end-of-June reading + writing baseline, outside the star schema: one wide row per (StudentNumber, AssessmentLanguage), joined to the current roster by StudentNumber. Static one-time load; this file DROPs and recreates the table.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentNumber` | BIGINT | no |  |
-| `SchoolYear` | VARCHAR(9) | no |  |
-| `AssessmentLanguage` | VARCHAR(10) | no |  |
-| `HistGrade` | VARCHAR(2) | yes |  |
-| `HistHomeroom` | VARCHAR(50) | yes |  |
-| `HistSchool` | VARCHAR(100) | yes |  |
-| `HistGender` | VARCHAR(3) | yes |  |
-| `HistSelfIDAfrican` | VARCHAR(10) | yes |  |
-| `HistSelfIDIndigenous` | VARCHAR(10) | yes |  |
-| `HistCurrentIPP` | VARCHAR(3) | yes |  |
-| `HistCurrentAdaptations` | VARCHAR(3) | yes |  |
-| `HistLiteracyIPP` | VARCHAR(3) | yes |  |
-| `ReadingLevel` | VARCHAR(10) | yes |  |
-| `WritingConventions` | VARCHAR(10) | yes |  |
-| `WritingOrganization` | VARCHAR(10) | yes |  |
-| `WritingIdeas` | VARCHAR(10) | yes |  |
-| `WritingLanguage` | VARCHAR(10) | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `StudentNumber` | BIGINT | no | baseline CSV 'Student Number' (ELA/FLA Reading + Writing) -> Stg_PriorReading/Stg_PriorWriting -> TRY_CAST BIGINT in load_prior_year_baseline.sql (reading/writing FULL OUTER JOINed) |
+| `SchoolYear` | VARCHAR(9) | no | hard-coded '2025-2026' in load_prior_year_baseline.sql |
+| `AssessmentLanguage` | VARCHAR(10) | no | implied by the source file: 'English' (ELA sheets) / 'French' (FLA sheets), set by UPDATE in load_prior_year_baseline.sql |
+| `HistGrade` | VARCHAR(2) | yes | CSV Grade (reading row, else writing row) |
+| `HistHomeroom` | VARCHAR(50) | yes | CSV HomeRoom (reading, else writing) |
+| `HistSchool` | VARCHAR(100) | yes | CSV School (a school NAME, not SchoolID) |
+| `HistGender` | VARCHAR(3) | yes | CSV Gender |
+| `HistSelfIDAfrican` | VARCHAR(10) | yes | CSV Self-ID African (verbatim text) |
+| `HistSelfIDIndigenous` | VARCHAR(10) | yes | CSV Self-ID Indigenous (verbatim text) |
+| `HistCurrentIPP` | VARCHAR(3) | yes | CSV Current IPP |
+| `HistCurrentAdaptations` | VARCHAR(3) | yes | CSV Current Adaptations |
+| `HistLiteracyIPP` | VARCHAR(3) | yes | CSV Literacy IPP |
+| `ReadingLevel` | VARCHAR(10) | yes | CSV Instructional Reading Level (ELA/FLA Reading) - level or ABS/INS/EAL code |
+| `WritingConventions` | VARCHAR(10) | yes | CSV Conventions (ELA/FLA Writing) |
+| `WritingOrganization` | VARCHAR(10) | yes | CSV Organization |
+| `WritingIdeas` | VARCHAR(10) | yes | CSV Ideas |
+| `WritingLanguage` | VARCHAR(10) | yes | CSV Language Use |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at load |
 
 **Read by:**
 - [sql/security/vw_StudentReadingStartingPoint.sql](../../sql/security/vw_StudentReadingStartingPoint.sql) — `AssessmentLanguage`, `ReadingLevel`, `SchoolYear`, `StudentNumber`
@@ -1506,29 +1508,29 @@ DENORMALIZED prior-year (2025-2026) end-of-June reading + writing baseline, so t
 
 ## SectionRosterMembership
 
-Defined in [sql/security/SectionRosterMembership.sql](../../sql/security/SectionRosterMembership.sql) · skeleton (not yet reviewed)
+Defined in [sql/security/SectionRosterMembership.sql](../../sql/security/SectionRosterMembership.sql) · reviewed 2026-10-23
 
-Pre-joins the expensive, ingest-STABLE half of the entry roster — which students sit in which subject-mapped section for each active window, plus their static display attributes. Rebuilt every ingest by usp_RebuildRosterMembership. The roster TVFs read this instead of re-deriving the DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram join at query time (which measured ~2s for a 20-student roster on 2026-09-23).
+Materialized, viewer-independent roster skeleton: one row per (AssessmentWindowID, SectionID, StudentKey) for every ActiveFlag=1 window, limited to sections whose course maps to the window's subject/language in DimCourseAssessment, with static display attributes. TRUNCATE + rebuild each ingest; the roster TVFs read it (oversight path) and apply access live.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `AssessmentWindowID` | BIGINT | no |  |
-| `SectionKey` | BIGINT | no |  |
-| `SectionID` | VARCHAR(50) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `GroupKey` | VARCHAR(70) | no |  |
-| `SectionLanguage` | VARCHAR(10) | yes |  |
-| `WindowEffectiveDate` | DATE | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `FirstName` | VARCHAR(100) | no |  |
-| `LastName` | VARCHAR(100) | no |  |
-| `Grade` | VARCHAR(10) | no |  |
-| `Homeroom` | VARCHAR(50) | yes |  |
-| `SchoolName` | VARCHAR(200) | yes |  |
-| `ProgramCode` | VARCHAR(10) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `LastRebuiltAt` | DATETIME2(0) | no |  |
+| `AssessmentWindowID` | BIGINT | no | usp_RebuildRosterMembership: DimAssessmentWindow (ActiveFlag=1) |
+| `SectionKey` | BIGINT | no | usp_RebuildRosterMembership: the section's CURRENT DimSection.SectionKey |
+| `SectionID` | VARCHAR(50) | no | DimSection.SectionID (current version) |
+| `SchoolID` | VARCHAR(10) | no | DimSection.SchoolID (current version) |
+| `GroupKey` | VARCHAR(70) | no | 'SEC:' + SectionID |
+| `SectionLanguage` | VARCHAR(10) | yes | DimCourseAssessment.Language for the section's CourseCode |
+| `WindowEffectiveDate` | DATE | no | MIN(rebuild day Atlantic, window EndDate) |
+| `StudentKey` | BIGINT | no | the student's CURRENT DimStudent.StudentKey, resolved by StudentNumber from FactEnrollment rows overlapping the window dates |
+| `StudentNumber` | BIGINT | no | DimStudent.StudentNumber |
+| `FirstName` | VARCHAR(100) | no | current DimStudent.FirstName |
+| `LastName` | VARCHAR(100) | no | current DimStudent.LastName |
+| `Grade` | VARCHAR(10) | no | current DimStudent.Grade |
+| `Homeroom` | VARCHAR(50) | yes | current DimStudent.Homeroom |
+| `SchoolName` | VARCHAR(200) | yes | DimSchool.SchoolName of the student's current SchoolID |
+| `ProgramCode` | VARCHAR(10) | no | current DimStudent.ProgramCode |
+| `ProgramFamily` | VARCHAR(50) | no | DimProgram.ProgramFamily of that ProgramCode |
+| `LastRebuiltAt` | DATETIME2(0) | no | GETDATE() of the rebuild |
 
 **Written by:**
 - [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert: `TRUNCATE + rebuild: sections at their CURRENT version mapped via DimCourseAssessment (Literacy -> Reading/Writing, Math -> Math, language match), enrolment matched by stable SectionID across all section versions overlapping the window dates (no ActiveFlag filter), student at current version by StudentNumber, filtered by window grade band, ProgramFamily, ProgramScope bucket and language; WindowEffectiveDate = MIN(today Atlantic, EndDate)`
@@ -1547,19 +1549,19 @@ Pre-joins the expensive, ingest-STABLE half of the entry roster — which studen
 
 ## StaffAppAccess
 
-Defined in [sql/security/StaffAppAccess.sql](../../sql/security/StaffAppAccess.sql) · skeleton (not yet reviewed)
+Defined in [sql/security/StaffAppAccess.sql](../../sql/security/StaffAppAccess.sql) · reviewed 2026-10-23
 
-Per-staff APP-LEVEL capability allowlist for restricted admin features, keyed by staff email. ONE COLUMN PER CAPABILITY — each is an independent list, so (e.g.) cycle managers and ingest operators can be different people. Deliberately narrower than the RegionalAnalyst role: a curated set, not "every analyst."
+Manually curated allowlist of app-admin capabilities per staff email (one row per email): SysAdmin, cycle management, ingest, grace-lock overrides. Governs who may configure the tool, not which students a user sees; survives the production reset.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Email` | VARCHAR(255) | no |  |
-| `IsSysAdmin` | BIT | no |  |
-| `CanManageCycles` | BIT | no |  |
-| `CanRunIngest` | BIT | no |  |
-| `CanOverrideMath` | BIT | yes |  |
-| `CanOverrideLiteracy` | BIT | yes |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `Email` | VARCHAR(255) | no | app /admin/staff-access: usp_SetStaffAppAccess @TargetEmail (lowercased, trimmed); initial row from sql/scripts/seed_StaffAppAccess.sql |
+| `IsSysAdmin` | BIT | no | usp_SetStaffAppAccess @IsSysAdmin; seed_StaffAppAccess.sql |
+| `CanManageCycles` | BIT | no | usp_SetStaffAppAccess @CanManageCycles |
+| `CanRunIngest` | BIT | no | usp_SetStaffAppAccess @CanRunIngest |
+| `CanOverrideMath` | BIT | yes | usp_SetStaffAppAccess @CanOverrideMath; column added by migrate_0.7.0_grace_and_overrides.sql (NULL on older rows = 0) |
+| `CanOverrideLiteracy` | BIT | yes | usp_SetStaffAppAccess @CanOverrideLiteracy; same migration |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() on insert/update |
 
 **Written by:**
 - [sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) — insert: `Email`, `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; update: `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; delete: LOWER(Email) = target, when all five flags are 0
@@ -1587,18 +1589,18 @@ Per-staff APP-LEVEL capability allowlist for restricted admin features, keyed by
 
 ## StaffSchoolAccess
 
-Defined in [sql/security/StaffSchoolAccess.sql](../../sql/security/StaffSchoolAccess.sql) · skeleton (not yet reviewed)
+Defined in [sql/security/StaffSchoolAccess.sql](../../sql/security/StaffSchoolAccess.sql) · reviewed 2026-10-23
 
-Materialized RLS-oracle for school-tier staff access. Replaces the prior vw_StaffSchoolAccess view (2026-04-29 design — pure DimStaff unpacking) with a TABLE rebuilt on every staff merge. Same data shape, same derivation logic, same staleness; the only difference is materialization.
+Materialized school-access oracle: one row per (current active staff with a non-NULL AccessLevel, school they may see), from HomeSchoolID plus each CanChangeSchool entry. Fully rebuilt (TRUNCATE + INSERT) by every usp_MergeStaff run; no history.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StaffSchoolAccessID` | BIGINT IDENTITY | no |  |
-| `StaffKey` | BIGINT | no |  |
-| `Email` | VARCHAR(255) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `AccessLevel` | VARCHAR(50) | no |  |
-| `LastRebuilt` | DATETIME2(0) | no |  |
+| `StaffSchoolAccessID` | BIGINT IDENTITY | no | IDENTITY surrogate (regenerated each rebuild) |
+| `StaffKey` | BIGINT | no | usp_MergeStaff step 6: current DimStaff.StaffKey (IsCurrent=1, ActiveFlag=1, AccessLevel NOT NULL) |
+| `Email` | VARCHAR(255) | no | DimStaff.Email |
+| `SchoolID` | VARCHAR(10) | no | DimStaff.HomeSchoolID (padded) UNION each STRING_SPLIT(CanChangeSchool, ';') entry ('0' -> '0000', 999999 dropped, else padded); kept only if an ActiveFlag=1 DimSchool row exists |
+| `AccessLevel` | VARCHAR(50) | no | DimStaff.AccessLevel ('RegionalAnalyst'|'Administrator'|'SpecialistTeacher') |
+| `LastRebuilt` | DATETIME2(0) | no | GETDATE() of the rebuild |
 
 **Written by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + rebuild for current active staff with AccessLevel NOT NULL, active schools only`
@@ -1646,20 +1648,20 @@ Materialized RLS-oracle for school-tier staff access. Replaces the prior vw_Staf
 
 ## Stg_CoTeacher
 
-Defined in [sql/staging/Stg_CoTeacher.sql](../../sql/staging/Stg_CoTeacher.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_CoTeacher.sql](../../sql/staging/Stg_CoTeacher.sql) · reviewed 2026-10-23
 
-Landing zone for the PowerSchool Co-Teachers sqlReport export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeSectionTeachers. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Co-Teachers sqlReport (one row per extra teacher on a section). TRUNCATE + COPY INTO each ingest by usp_LoadCoTeacherStaging; read by usp_MergeSectionTeachers.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `School` | VARCHAR(100) | yes |  |
-| `TermID` | VARCHAR(10) | yes |  |
-| `Course` | VARCHAR(50) | yes |  |
-| `Section` | VARCHAR(20) | yes |  |
-| `Teacher` | VARCHAR(200) | yes |  |
-| `Email` | VARCHAR(255) | yes |  |
-| `Role` | VARCHAR(50) | yes |  |
-| `SectionID` | VARCHAR(50) | yes |  |
+| `School` | VARCHAR(100) | yes | Co-Teachers CSV col 1 'School' (Files/imports/section-teachers/Co-Teachers*), COPY INTO by position - display only |
+| `TermID` | VARCHAR(10) | yes | CSV col 2 'TermID' - display only |
+| `Course` | VARCHAR(50) | yes | CSV col 3 'Course' - display only |
+| `Section` | VARCHAR(20) | yes | CSV col 4 'Section' - display only |
+| `Teacher` | VARCHAR(200) | yes | CSV col 5 'Teacher' ('Last, First', quoted) - display only |
+| `Email` | VARCHAR(255) | yes | CSV col 6 'Email' -> TRIM+LOWER as FactSectionTeachers.TeacherEmail |
+| `Role` | VARCHAR(50) | yes | CSV col 7 'Role' -> normalised TeacherRole in usp_MergeSectionTeachers |
+| `SectionID` | VARCHAR(50) | yes | CSV col 8 'SectionID' -> FactSectionTeachers.SectionID |
 
 **Written by:**
 - [sql/procedures/usp_LoadCoTeacherStaging.sql](../../sql/procedures/usp_LoadCoTeacherStaging.sql) — copy-into/truncate
@@ -1678,17 +1680,17 @@ Landing zone for the PowerSchool Co-Teachers sqlReport export. All columns are V
 
 ## Stg_Enrollment
 
-Defined in [sql/staging/Stg_Enrollment.sql](../../sql/staging/Stg_Enrollment.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_Enrollment.sql](../../sql/staging/Stg_Enrollment.sql) · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Enrollments export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeEnrollment. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Enrollments export (current enrollments plus those closed since the last pull). TRUNCATE + COPY INTO by usp_LoadEnrollmentStaging; read by usp_MergeEnrollment.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Student_Number` | VARCHAR(50) | yes |  |
-| `SectionID` | VARCHAR(50) | yes |  |
-| `DateEnrolled` | VARCHAR(20) | yes |  |
-| `DateLeft` | VARCHAR(20) | yes |  |
-| `ID` | VARCHAR(50) | yes |  |
+| `Student_Number` | VARCHAR(50) | yes | Enrollments CSV col 1 '[1]Student_Number' (Files/imports/enrollments/Enrollments*), COPY INTO by position |
+| `SectionID` | VARCHAR(50) | yes | CSV col 2 'SectionID' |
+| `DateEnrolled` | VARCHAR(20) | yes | CSV col 3 'DateEnrolled' (MM/DD/YYYY) |
+| `DateLeft` | VARCHAR(20) | yes | CSV col 4 'DateLeft' (MM/DD/YYYY; PS auto-fills the term end; may be empty) |
+| `ID` | VARCHAR(50) | yes | CSV col 5 'ID' (PS CC.ID) -> FactEnrollment.SourceSystemID (merge key) |
 
 **Written by:**
 - [sql/procedures/usp_LoadEnrollmentStaging.sql](../../sql/procedures/usp_LoadEnrollmentStaging.sql) — copy-into/truncate
@@ -1709,33 +1711,33 @@ Landing zone for raw PowerSchool Enrollments export. All columns are VARCHAR —
 
 ## Stg_MathTask
 
-Defined in [sql/staging/Stg_MathTask.sql](../../sql/staging/Stg_MathTask.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_MathTask.sql](../../sql/staging/Stg_MathTask.sql) · reviewed 2026-10-23
 
-All-VARCHAR landing table for the math task-bank seed CSV (one file per grade, authored to mirror DimMathTask's columns). COPY INTO loads text here; usp_LoadMathTasks validates / casts and upserts into DimMathTask. "Load as text, convert in the merge" — the standard staging pattern, so a single malformed cell can't fail the COPY.
+All-VARCHAR landing table for one math task-bank CSV (authored to mirror DimMathTask). TRUNCATEd and loaded by usp_LoadMathTasks, which validates/casts and upserts into DimMathTask.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `GradeCode` | VARCHAR(50) | yes |  |
-| `AssessmentMonth` | VARCHAR(50) | yes |  |
-| `UnitName` | VARCHAR(200) | yes |  |
-| `UnitOrder` | VARCHAR(50) | yes |  |
-| `QuestionNumber` | VARCHAR(50) | yes |  |
-| `DisplayOrder` | VARCHAR(50) | yes |  |
-| `OutcomeCode` | VARCHAR(50) | yes |  |
-| `TaskDescriptionEN` | VARCHAR(1000) | yes |  |
-| `TaskDescriptionFR` | VARCHAR(1000) | yes |  |
-| `AnswerKey` | VARCHAR(500) | yes |  |
-| `AnswerKeyFR` | VARCHAR(500) | yes |  |
-| `ActiveFlag` | VARCHAR(50) | yes |  |
+| `GradeCode` | VARCHAR(50) | yes | task CSV col 1 'GradeCode' (file at usp_LoadMathTasks @SourceUri), COPY INTO by position |
+| `AssessmentMonth` | VARCHAR(50) | yes | CSV col 2 'AssessmentMonth' |
+| `UnitName` | VARCHAR(200) | yes | CSV col 3 'UnitName' |
+| `UnitOrder` | VARCHAR(50) | yes | CSV col 4 'UnitOrder' |
+| `QuestionNumber` | VARCHAR(50) | yes | CSV col 5 'QuestionNumber' |
+| `DisplayOrder` | VARCHAR(50) | yes | CSV col 6 'DisplayOrder' |
+| `OutcomeCode` | VARCHAR(50) | yes | CSV col 7 'OutcomeCode' |
+| `TaskDescriptionEN` | VARCHAR(1000) | yes | CSV col 8 'TaskDescriptionEN' |
+| `TaskDescriptionFR` | VARCHAR(1000) | yes | CSV col 9 'TaskDescriptionFR' |
+| `AnswerKey` | VARCHAR(500) | yes | CSV col 10 'AnswerKey' |
+| `AnswerKeyFR` | VARCHAR(500) | yes | CSV col 11 'AnswerKeyFR' (column added by migrate_MathTask_add_AnswerKeyFR_live.sql) |
+| `ActiveFlag` | VARCHAR(50) | yes | CSV col 12 'ActiveFlag' (blank -> 1 in the merge) |
 
 **Read by:**
 - [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
 
 ## Stg_PriorReading
 
-Defined in [sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · reviewed 2026-10-23
 
-All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the ELA/FLA Reading & Writing workbooks). Columns are in the CSV column order so COPY INTO maps positionally. AssessmentLanguage is the last column, left out of COPY INTO and set by an UPDATE after each program's file loads (the file has no program column — it's implied by the sheet).
+Defines two all-VARCHAR landing tables for the prior-year baseline CSVs: Stg_PriorReading (ELA/FLA Reading) and Stg_PriorWriting (ELA/FLA Writing). Loaded and merged into PriorYearBaseline by sql/scripts/load_prior_year_baseline.sql. This file DROPs and recreates both.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
@@ -1758,9 +1760,9 @@ All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the 
 
 ## Stg_PriorWriting
 
-Defined in [sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · reviewed 2026-10-23
 
-All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the ELA/FLA Reading & Writing workbooks). Columns are in the CSV column order so COPY INTO maps positionally. AssessmentLanguage is the last column, left out of COPY INTO and set by an UPDATE after each program's file loads (the file has no program column — it's implied by the sheet).
+Defines two all-VARCHAR landing tables for the prior-year baseline CSVs: Stg_PriorReading (ELA/FLA Reading) and Stg_PriorWriting (ELA/FLA Writing). Loaded and merged into PriorYearBaseline by sql/scripts/load_prior_year_baseline.sql. This file DROPs and recreates both.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
@@ -1786,21 +1788,21 @@ All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the 
 
 ## Stg_Section
 
-Defined in [sql/staging/Stg_Section.sql](../../sql/staging/Stg_Section.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_Section.sql](../../sql/staging/Stg_Section.sql) · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Sections export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeSection. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Sections export (current school year only). TRUNCATE + COPY INTO by usp_LoadSectionStaging; read by usp_MergeSection (DimSection) and usp_MergeSectionTeachers (primary teacher rows).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `ID` | VARCHAR(50) | yes |  |
-| `SchoolID` | VARCHAR(10) | yes |  |
-| `TermID` | VARCHAR(10) | yes |  |
-| `Course_Number` | VARCHAR(50) | yes |  |
-| `Section_Number` | VARCHAR(20) | yes |  |
-| `course_name` | VARCHAR(200) | yes |  |
-| `No_of_students` | VARCHAR(20) | yes |  |
-| `MaxEnrollment` | VARCHAR(20) | yes |  |
-| `Email_Addr` | VARCHAR(255) | yes |  |
+| `ID` | VARCHAR(50) | yes | Sections CSV col 1 'ID' (Files/imports/sections/Sections*), COPY INTO by position -> DimSection.SectionID/SourceSystemID |
+| `SchoolID` | VARCHAR(10) | yes | CSV col 2 'SchoolID' (leading zeros may be stripped; padded in the merge) |
+| `TermID` | VARCHAR(10) | yes | CSV col 3 'TermID' |
+| `Course_Number` | VARCHAR(50) | yes | CSV col 4 'Course_Number' -> DimSection.CourseCode |
+| `Section_Number` | VARCHAR(20) | yes | CSV col 5 'Section_Number' |
+| `course_name` | VARCHAR(200) | yes | CSV col 6 '[2]course_name' |
+| `No_of_students` | VARCHAR(20) | yes | CSV col 7 'No_of_students' -> EnrollmentCount |
+| `MaxEnrollment` | VARCHAR(20) | yes | CSV col 8 'MaxEnrollment' |
+| `Email_Addr` | VARCHAR(255) | yes | CSV col 9 '[5]Email_Addr' (primary teacher) -> TeacherStaffKey and the 'Primary' FactSectionTeachers row |
 
 **Written by:**
 - [sql/procedures/usp_LoadSectionStaging.sql](../../sql/procedures/usp_LoadSectionStaging.sql) — copy-into/truncate
@@ -1822,21 +1824,21 @@ Landing zone for raw PowerSchool Sections export. All columns are VARCHAR — lo
 
 ## Stg_Staff
 
-Defined in [sql/staging/Stg_Staff.sql](../../sql/staging/Stg_Staff.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_Staff.sql](../../sql/staging/Stg_Staff.sql) · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Staff export. All columns VARCHAR — load-as-text, validate/translate downstream in usp_MergeStaff.
+All-VARCHAR landing table for the PowerSchool Staff export; one row per staff x school x role record (same email may repeat). TRUNCATE + COPY INTO by usp_LoadStaffStaging; read by usp_MergeStaff.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Email_Addr` | VARCHAR(255) | yes |  |
-| `First_Name` | VARCHAR(100) | yes |  |
-| `Last_Name` | VARCHAR(100) | yes |  |
-| `Title` | VARCHAR(100) | yes |  |
-| `HomeSchoolID` | VARCHAR(10) | yes |  |
-| `SchoolID` | VARCHAR(10) | yes |  |
-| `CanChangeSchool` | VARCHAR(255) | yes |  |
-| `Group` | VARCHAR(10) | yes |  |
-| `ID` | VARCHAR(50) | yes |  |
+| `Email_Addr` | VARCHAR(255) | yes | Staff CSV col 1 'Email_Addr' (Files/imports/staff/Staff*), COPY INTO by position -> lowercased DimStaff.Email |
+| `First_Name` | VARCHAR(100) | yes | CSV col 2 'First_Name' |
+| `Last_Name` | VARCHAR(100) | yes | CSV col 3 'Last_Name' |
+| `Title` | VARCHAR(100) | yes | CSV col 4 'Title' |
+| `HomeSchoolID` | VARCHAR(10) | yes | CSV col 5 'HomeSchoolID' (blank/all-zero -> NULL in the merge) |
+| `SchoolID` | VARCHAR(10) | yes | CSV col 6 'SchoolID' (per-row assignment; '0' -> '0000') |
+| `CanChangeSchool` | VARCHAR(255) | yes | CSV col 7 'CanChangeSchool' (raw ';' list) |
+| `Group` | VARCHAR(10) | yes | CSV col 8 'Group' (PS RoleNumber -> DimRole) |
+| `ID` | VARCHAR(50) | yes | CSV col 9 'ID' (PS staff record ID) -> FactStaffAssignment.SourceSystemID; lowest ID picks the canonical person row |
 
 **Written by:**
 - [sql/procedures/usp_LoadStaffStaging.sql](../../sql/procedures/usp_LoadStaffStaging.sql) — copy-into/truncate
@@ -1857,28 +1859,28 @@ Landing zone for raw PowerSchool Staff export. All columns VARCHAR — load-as-t
 
 ## Stg_Student
 
-Defined in [sql/staging/Stg_Student.sql](../../sql/staging/Stg_Student.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Stg_Student.sql](../../sql/staging/Stg_Student.sql) · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Students export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeStudent. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Students export (filtered upstream to Enroll_Status 0/-1). TRUNCATE + COPY INTO by usp_LoadStudentsStaging; read by usp_MergeStudent.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Student_Number` | VARCHAR(50) | yes |  |
-| `ID` | VARCHAR(50) | yes |  |
-| `First_Name` | VARCHAR(100) | yes |  |
-| `Middle_Name` | VARCHAR(100) | yes |  |
-| `Last_Name` | VARCHAR(100) | yes |  |
-| `SchoolID` | VARCHAR(10) | yes |  |
-| `Grade_Level` | VARCHAR(10) | yes |  |
-| `NS_Program` | VARCHAR(10) | yes |  |
-| `Home_Room` | VARCHAR(50) | yes |  |
-| `Gender` | VARCHAR(10) | yes |  |
-| `DOB` | VARCHAR(20) | yes |  |
-| `NS_AssigndIdentity_African` | VARCHAR(10) | yes |  |
-| `NS_aboriginal` | VARCHAR(10) | yes |  |
-| `CurrentIPP` | VARCHAR(10) | yes |  |
-| `CurrentAdap` | VARCHAR(10) | yes |  |
-| `Enroll_Status` | VARCHAR(10) | yes |  |
+| `Student_Number` | VARCHAR(50) | yes | Students CSV col 1 'Student_Number' (Files/imports/students/Students*), COPY INTO by position |
+| `ID` | VARCHAR(50) | yes | CSV col 2 'ID' (PS DCID) -> DimStudent.SourceSystemID |
+| `First_Name` | VARCHAR(100) | yes | CSV col 3 'First_Name' |
+| `Middle_Name` | VARCHAR(100) | yes | CSV col 4 'Middle_Name' |
+| `Last_Name` | VARCHAR(100) | yes | CSV col 5 'Last_Name' |
+| `SchoolID` | VARCHAR(10) | yes | CSV col 6 'SchoolID' |
+| `Grade_Level` | VARCHAR(10) | yes | CSV col 7 'Grade_Level' (0 = P, -1 = PP, 13 = RG) |
+| `NS_Program` | VARCHAR(10) | yes | CSV col 8 'NS_Program' -> ProgramCode |
+| `Home_Room` | VARCHAR(50) | yes | CSV col 9 'Home_Room' |
+| `Gender` | VARCHAR(10) | yes | CSV col 10 'Gender' |
+| `DOB` | VARCHAR(20) | yes | CSV col 11 'DOB' (MM/DD/YYYY) |
+| `NS_AssigndIdentity_African` | VARCHAR(10) | yes | CSV col 12 'NS_AssigndIdentity_African' (literal PS spelling) |
+| `NS_aboriginal` | VARCHAR(10) | yes | CSV col 13 'NS_aboriginal' |
+| `CurrentIPP` | VARCHAR(10) | yes | CSV col 14 'CurrentIPP' (Y/N/blank) |
+| `CurrentAdap` | VARCHAR(10) | yes | CSV col 15 'CurrentAdap' (Y/N/blank) |
+| `Enroll_Status` | VARCHAR(10) | yes | CSV col 16 'Enroll_Status' |
 
 **Written by:**
 - [sql/procedures/usp_LoadStudentsStaging.sql](../../sql/procedures/usp_LoadStudentsStaging.sql) — copy-into/truncate
@@ -1899,28 +1901,28 @@ Landing zone for raw PowerSchool Students export. All columns are VARCHAR — lo
 
 ## TeacherRosterMembership
 
-Defined in [sql/security/TeacherRosterMembership.sql](../../sql/security/TeacherRosterMembership.sql) · skeleton (not yet reviewed)
+Defined in [sql/security/TeacherRosterMembership.sql](../../sql/security/TeacherRosterMembership.sql) · reviewed 2026-10-23
 
-The Taught-scope projection of SectionRosterMembership — one row per (TeacherEmail, AssessmentWindowID, SectionID, StudentKey) = base ⨝ the teacher's own sections (FactSectionTeachers). Carries the same static attributes as the base so a teacher's roster is a SINGLE-TABLE, JOIN-FREE, access-check-free read keyed by (TeacherEmail, GroupKey) — the hot path for the ~200 classroom teachers who open rosters constantly.
+Materialized fast path for classroom teachers: SectionRosterMembership joined to each teacher's own sections (FactSectionTeachers), one row per (TeacherEmail, AssessmentWindowID, SectionID, StudentKey). Single-table, access-check-free read keyed by (TeacherEmail, GroupKey); TRUNCATE + rebuild each ingest.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `TeacherEmail` | VARCHAR(255) | no |  |
-| `AssessmentWindowID` | BIGINT | no |  |
-| `SectionID` | VARCHAR(50) | no |  |
-| `GroupKey` | VARCHAR(70) | no |  |
-| `SectionLanguage` | VARCHAR(10) | yes |  |
-| `StudentKey` | BIGINT | no |  |
-| `StudentNumber` | BIGINT | no |  |
-| `FirstName` | VARCHAR(100) | no |  |
-| `LastName` | VARCHAR(100) | no |  |
-| `Grade` | VARCHAR(10) | no |  |
-| `Homeroom` | VARCHAR(50) | yes |  |
-| `SchoolName` | VARCHAR(200) | yes |  |
-| `ProgramCode` | VARCHAR(10) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `LastRebuiltAt` | DATETIME2(0) | no |  |
+| `TeacherEmail` | VARCHAR(255) | no | usp_RebuildRosterMembership: LOWER(FactSectionTeachers.TeacherEmail) whose effective range covers the row's WindowEffectiveDate |
+| `AssessmentWindowID` | BIGINT | no | copied from SectionRosterMembership |
+| `SectionID` | VARCHAR(50) | no | copied from SectionRosterMembership |
+| `GroupKey` | VARCHAR(70) | no | copied from SectionRosterMembership ('SEC:' + SectionID) |
+| `SectionLanguage` | VARCHAR(10) | yes | copied from SectionRosterMembership (DimCourseAssessment.Language) |
+| `StudentKey` | BIGINT | no | copied from SectionRosterMembership (current version) |
+| `StudentNumber` | BIGINT | no | copied from SectionRosterMembership |
+| `FirstName` | VARCHAR(100) | no | copied from SectionRosterMembership |
+| `LastName` | VARCHAR(100) | no | copied from SectionRosterMembership |
+| `Grade` | VARCHAR(10) | no | copied from SectionRosterMembership |
+| `Homeroom` | VARCHAR(50) | yes | copied from SectionRosterMembership |
+| `SchoolName` | VARCHAR(200) | yes | copied from SectionRosterMembership |
+| `ProgramCode` | VARCHAR(10) | no | copied from SectionRosterMembership |
+| `ProgramFamily` | VARCHAR(50) | no | copied from SectionRosterMembership |
+| `SchoolID` | VARCHAR(10) | no | copied from SectionRosterMembership |
+| `LastRebuiltAt` | DATETIME2(0) | no | GETDATE() of the rebuild |
 
 **Written by:**
 - [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert: `TRUNCATE + base rows x FactSectionTeachers where WindowEffectiveDate is within the teacher row's effective range`
@@ -1934,19 +1936,19 @@ The Taught-scope projection of SectionRosterMembership — one row per (TeacherE
 
 ## WritingTraitExclusion
 
-Defined in [sql/dimensions/WritingTraitExclusion.sql](../../sql/dimensions/WritingTraitExclusion.sql) · skeleton (not yet reviewed)
+Defined in [sql/dimensions/WritingTraitExclusion.sql](../../sql/dimensions/WritingTraitExclusion.sql) · reviewed 2026-10-23
 
-Data-driven config for which writing TRAIT(s) are NOT assessed for a given (Grade x ProgramFamily x cycle benchmark month) — so the entry grid doesn't show that trait's dropdown and the average/reports drop it (same effect as a Conventions 'SCR'). Grain: one row per excluded trait. NEVER hardcode this rule in app/proc logic — add/remove rows here.
+Config: which writing trait is NOT assessed for a (GradeCode x ProgramFamily x cycle benchmark month). One row per excluded trait; surrogate WritingTraitExclusionID. Idempotent guarded create + NOT-EXISTS seed (FI Primary, Organization, Sep/Oct/Nov).
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `WritingTraitExclusionID` | BIGINT IDENTITY | no |  |
-| `GradeCode` | VARCHAR(10) | no |  |
-| `ProgramFamily` | VARCHAR(50) | no |  |
-| `BenchmarkMonth` | INT | no |  |
-| `Trait` | VARCHAR(20) | no |  |
-| `ActiveFlag` | BIT | no |  |
-| `LastUpdated` | DATETIME2(0) | no |  |
+| `WritingTraitExclusionID` | BIGINT IDENTITY | no | IDENTITY surrogate |
+| `GradeCode` | VARCHAR(10) | no | seeded in this file ('P'); further rows admin-added by hand |
+| `ProgramFamily` | VARCHAR(50) | no | seeded in this file ('French Immersion') |
+| `BenchmarkMonth` | INT | no | seeded in this file (9, 10, 11) |
+| `Trait` | VARCHAR(20) | no | seeded in this file ('Organization'); one of Ideas|Organization|Language|Conventions |
+| `ActiveFlag` | BIT | no | seeded 1 |
+| `LastUpdated` | DATETIME2(0) | no | GETDATE() at seed |
 
 **Written by:**
 - [sql/dimensions/WritingTraitExclusion.sql](../../sql/dimensions/WritingTraitExclusion.sql) — insert — `ActiveFlag`, `BenchmarkMonth`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `Trait`
@@ -1962,20 +1964,20 @@ Data-driven config for which writing TRAIT(s) are NOT assessed for a given (Grad
 
 ## Wrk_Enrollment
 
-Defined in [sql/staging/Wrk_Enrollment.sql](../../sql/staging/Wrk_Enrollment.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_Enrollment.sql](../../sql/staging/Wrk_Enrollment.sql) · reviewed 2026-10-23
 
-Typed working set for enrollment merge. Populated by usp_MergeEnrollment from Stg_Enrollment INNER-JOINed against DimStudent / DimSection / DimTerm with all source-value translations applied: - Student_Number cast to BIGINT - DateEnrolled MM/DD/YYYY -> DATE - DateLeft MM/DD/YYYY -> DATE (empty -> NULL) - StudentKey resolved via JOIN DimStudent on StudentNumber + IsCurrent=1. Rows that fail resolution are EXCLUDED from this Wrk and counted as a warning by usp_MergeEnrollment. - SectionKey resolved via JOIN DimSection on SectionID + IsCurrent=1. Same exclusion semantics on failure. - ActiveFlag 
+Typed working set for the FactEnrollment merge: Stg_Enrollment rows with StudentKey/SectionKey resolved to current dim versions and dates parsed. TRUNCATE + INSERT inside usp_MergeEnrollment.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentNumber` | BIGINT | no |  |
-| `SectionID` | VARCHAR(50) | no |  |
-| `StudentKey` | BIGINT | no |  |
-| `SectionKey` | BIGINT | no |  |
-| `StartDate` | DATE | no |  |
-| `EndDate` | DATE | yes |  |
-| `ActiveFlag` | BIT | no |  |
-| `SourceSystemID` | VARCHAR(50) | no |  |
+| `StudentNumber` | BIGINT | no | Stg_Enrollment.Student_Number CAST BIGINT |
+| `SectionID` | VARCHAR(50) | no | Stg_Enrollment.SectionID |
+| `StudentKey` | BIGINT | no | current DimStudent.StudentKey for StudentNumber (unresolved rows excluded) |
+| `SectionKey` | BIGINT | no | current DimSection.SectionKey for SectionID (unresolved rows excluded) |
+| `StartDate` | DATE | no | Stg_Enrollment.DateEnrolled CONVERT style 101 |
+| `EndDate` | DATE | yes | Stg_Enrollment.DateLeft ('' -> NULL) CONVERT style 101 |
+| `ActiveFlag` | BIT | no | computed in usp_MergeEnrollment: 1 if DateLeft empty or >= @EffectiveDate, else 0 |
+| `SourceSystemID` | VARCHAR(50) | no | Stg_Enrollment.ID (PS CC.ID) |
 
 **Written by:**
 - [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert: `TRUNCATE + rows that resolve to a current student AND current section AND a DimTerm row`
@@ -1990,23 +1992,23 @@ Typed working set for enrollment merge. Populated by usp_MergeEnrollment from St
 
 ## Wrk_Section
 
-Defined in [sql/staging/Wrk_Section.sql](../../sql/staging/Wrk_Section.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_Section.sql](../../sql/staging/Wrk_Section.sql) · reviewed 2026-10-23
 
-Typed working set for section merge. Populated by usp_MergeSection from Stg_Section JOIN DimStaff with all source-value translations applied: - SchoolID zero-padded to 4 chars - TermID cast to INT - No_of_students / MaxEnrollment cast to INT (empty -> NULL) - Email_Addr lowercased (matches DimStaff business key) - TeacherStaffKey resolved via JOIN DimStaff on Email + IsCurrent=1 + ActiveFlag=1. Sections whose teacher email cannot be resolved are EXCLUDED from this Wrk and counted as a warning by usp_MergeSection. (DimSection.TeacherStaffKey is BIGINT NOT NULL, so we cannot land a section witho
+Typed working set for the DimSection merge: Stg_Section rows padded/cast with the primary teacher resolved to a StaffKey. TRUNCATE + INSERT inside usp_MergeSection.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `SectionID` | VARCHAR(50) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `TermID` | INT | no |  |
-| `CourseCode` | VARCHAR(50) | yes |  |
-| `SectionNumber` | VARCHAR(20) | yes |  |
-| `CourseName` | VARCHAR(200) | yes |  |
-| `EnrollmentCount` | INT | yes |  |
-| `MaxEnrollment` | INT | yes |  |
-| `TeacherEmail` | VARCHAR(255) | no |  |
-| `TeacherStaffKey` | BIGINT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
+| `SectionID` | VARCHAR(50) | no | Stg_Section.ID |
+| `SchoolID` | VARCHAR(10) | no | Stg_Section.SchoolID zero-padded to 4 |
+| `TermID` | INT | no | Stg_Section.TermID CAST INT |
+| `CourseCode` | VARCHAR(50) | yes | Stg_Section.Course_Number ('' -> NULL) |
+| `SectionNumber` | VARCHAR(20) | yes | Stg_Section.Section_Number ('' -> NULL) |
+| `CourseName` | VARCHAR(200) | yes | Stg_Section.course_name ('' -> NULL) |
+| `EnrollmentCount` | INT | yes | Stg_Section.No_of_students CAST INT |
+| `MaxEnrollment` | INT | yes | Stg_Section.MaxEnrollment CAST INT ('' -> NULL) |
+| `TeacherEmail` | VARCHAR(255) | no | LOWER(Stg_Section.Email_Addr) |
+| `TeacherStaffKey` | BIGINT | no | current ActiveFlag=1 DimStaff.StaffKey for that email (unresolved rows excluded) |
+| `SourceSystemID` | VARCHAR(50) | yes | Stg_Section.ID |
 
 **Written by:**
 - [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert: `TRUNCATE + filtered/translated rows`
@@ -2021,16 +2023,16 @@ Typed working set for section merge. Populated by usp_MergeSection from Stg_Sect
 
 ## Wrk_SectionTeacher
 
-Defined in [sql/staging/Wrk_SectionTeacher.sql](../../sql/staging/Wrk_SectionTeacher.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_SectionTeacher.sql](../../sql/staging/Wrk_SectionTeacher.sql) · reviewed 2026-10-23
 
-Typed working set for the FactSectionTeachers merge. Populated by usp_MergeSectionTeachers from the UNION of: (a) Stg_Section primary teacher rows -> TeacherRole = 'Primary' (b) Stg_CoTeacher rows -> TeacherRole normalized
+Typed working set for the FactSectionTeachers merge: DISTINCT (SectionID, TeacherEmail, TeacherRole) from Stg_Section primaries UNION Stg_CoTeacher rows. TRUNCATE + INSERT inside usp_MergeSectionTeachers.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `SectionID` | VARCHAR(50) | no |  |
-| `TeacherEmail` | VARCHAR(255) | no |  |
-| `TeacherRole` | VARCHAR(50) | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
+| `SectionID` | VARCHAR(50) | no | Stg_Section.ID (Primary) / Stg_CoTeacher.SectionID |
+| `TeacherEmail` | VARCHAR(255) | no | LOWER(TRIM(Stg_Section.Email_Addr)) / LOWER(TRIM(Stg_CoTeacher.Email)) |
+| `TeacherRole` | VARCHAR(50) | no | 'Primary' for Stg_Section rows; normalised Stg_CoTeacher.Role |
+| `SourceSystemID` | VARCHAR(50) | yes | Stg_Section.ID for Primary rows; NULL for co-teachers |
 
 **Written by:**
 - [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert: `TRUNCATE + DISTINCT triples whose SectionID has a current DimSection row AND whose email has a current active DimStaff row`
@@ -2045,16 +2047,16 @@ Typed working set for the FactSectionTeachers merge. Populated by usp_MergeSecti
 
 ## Wrk_StaffAssignment
 
-Defined in [sql/staging/Wrk_StaffAssignment.sql](../../sql/staging/Wrk_StaffAssignment.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_StaffAssignment.sql](../../sql/staging/Wrk_StaffAssignment.sql) · reviewed 2026-10-23
 
-Per-import-row working set for FactStaffAssignment merge. ONE row per Stg_Staff row (so itinerant staff with N school assignments contribute N rows). Populated by usp_MergeStaff from Stg_Staff with: - Email lowercased (matches Wrk_StaffPersons / DimStaff) - SchoolID '0' -> '0000' (district-tier aggregate marker) - SchoolID otherwise zero-padded to 4 chars - RoleCode resolved via JOIN DimRole on PS Group number (rows with no DimRole match are excluded from this Wrk and logged as a warning by usp_MergeStaff) - SourceSystemID (PS staff ID) carried verbatim
+Working set for the FactStaffAssignment merge and the AccessLevel computation: one row per (Email, SchoolID, RoleCode) from Stg_Staff with the PS Group resolved via DimRole. TRUNCATE + INSERT inside usp_MergeStaff.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Email` | VARCHAR(255) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `RoleCode` | VARCHAR(50) | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
+| `Email` | VARCHAR(255) | no | LOWER(Stg_Staff.Email_Addr) |
+| `SchoolID` | VARCHAR(10) | no | Stg_Staff.SchoolID: '0' -> '0000', else zero-padded to 4 |
+| `RoleCode` | VARCHAR(50) | no | DimRole.RoleCode for CAST(Stg_Staff.Group AS INT) (ActiveFlag=1, RoleCode not NULL) |
+| `SourceSystemID` | VARCHAR(50) | yes | MIN(Stg_Staff.ID) per (Email, SchoolID, RoleCode) |
 
 **Written by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + one row per (Email, SchoolID, RoleCode) from Stg_Staff joined to active DimRole (MIN PS ID)`
@@ -2069,20 +2071,20 @@ Per-import-row working set for FactStaffAssignment merge. ONE row per Stg_Staff 
 
 ## Wrk_StaffPersons
 
-Defined in [sql/staging/Wrk_StaffPersons.sql](../../sql/staging/Wrk_StaffPersons.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_StaffPersons.sql](../../sql/staging/Wrk_StaffPersons.sql) · reviewed 2026-10-23
 
-Person-grain working set for DimStaff merge. ONE row per unique Email after dedup. Populated by usp_MergeStaff from Stg_Staff with translations applied: - Email lowercased - HomeSchoolID '0' or '' -> NULL - IsDistrictLevel = 1 if '0' present in CanChangeSchool list - AccessLevel computed per person from highest-priority school-tier RoleCode across all import rows for that email (RegionalAnalyst > Administrator > SpecialistTeacher; NULL otherwise) - For multi-row same-email staff: take canonical row by lowest PS ID (warning logged separately if any per-person field differs)
+Person-grain working set for the DimStaff merge: one row per lowercased email (canonical row = lowest PS ID) with derived IsDistrictLevel and AccessLevel. TRUNCATE + INSERT inside usp_MergeStaff.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `Email` | VARCHAR(255) | no |  |
-| `FirstName` | VARCHAR(100) | yes |  |
-| `LastName` | VARCHAR(100) | yes |  |
-| `Title` | VARCHAR(100) | yes |  |
-| `HomeSchoolID` | VARCHAR(10) | yes |  |
-| `CanChangeSchool` | VARCHAR(255) | yes |  |
-| `IsDistrictLevel` | BIT | no |  |
-| `AccessLevel` | VARCHAR(50) | yes |  |
+| `Email` | VARCHAR(255) | no | LOWER(Stg_Staff.Email_Addr) (blank emails dropped) |
+| `FirstName` | VARCHAR(100) | yes | Stg_Staff.First_Name of the lowest-ID row |
+| `LastName` | VARCHAR(100) | yes | Stg_Staff.Last_Name of the lowest-ID row |
+| `Title` | VARCHAR(100) | yes | Stg_Staff.Title of the lowest-ID row |
+| `HomeSchoolID` | VARCHAR(10) | yes | Stg_Staff.HomeSchoolID: blank or all-zero -> NULL, else zero-padded to 4 |
+| `CanChangeSchool` | VARCHAR(255) | yes | Stg_Staff.CanChangeSchool ('' -> NULL) |
+| `IsDistrictLevel` | BIT | no | 1 when CanChangeSchool contains a '0' entry, else 0 |
+| `AccessLevel` | VARCHAR(50) | yes | highest-priority RoleCode across the email's Wrk_StaffAssignment rows: RegionalAnalyst > Administrator > SpecialistTeacher, else NULL |
 
 **Written by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + canonical row per email (lowest PS ID); all-zero HomeSchoolID -> NULL; IsDistrictLevel when CanChangeSchool lists 0`
@@ -2097,29 +2099,29 @@ Person-grain working set for DimStaff merge. ONE row per unique Email after dedu
 
 ## Wrk_Student
 
-Defined in [sql/staging/Wrk_Student.sql](../../sql/staging/Wrk_Student.sql) · skeleton (not yet reviewed)
+Defined in [sql/staging/Wrk_Student.sql](../../sql/staging/Wrk_Student.sql) · reviewed 2026-10-23
 
-Typed working set for student merge. Populated by usp_MergeStudent from Stg_Student with all source-value translations applied: - Grade_Level '0' -> 'P', '-1' -> 'PP', '13' -> 'RG', else verbatim - SchoolID zero-padded to 4 chars - DOB MM/DD/YYYY -> DATE - NS_AssigndIdentity_African: 'Yes' -> 1, '' -> NULL - NS_aboriginal: '1' -> 1, '2' -> 0, '' -> NULL - CurrentIPP / CurrentAdap: 'Y' -> 1, 'N' -> 0, '' -> NULL - Numerics cast to BIGINT / INT
+Typed working set for the DimStudent merge: Stg_Student rows with grade, school, date, flag and numeric translations applied plus the derived GroupKey. TRUNCATE + INSERT inside usp_MergeStudent.
 
 | Field | Type | Null | Data comes from |
 |---|---|---|---|
-| `StudentNumber` | BIGINT | no |  |
-| `SourceSystemID` | VARCHAR(50) | yes |  |
-| `FirstName` | VARCHAR(100) | no |  |
-| `MiddleName` | VARCHAR(100) | yes |  |
-| `LastName` | VARCHAR(100) | no |  |
-| `DateOfBirth` | DATE | yes |  |
-| `Grade` | VARCHAR(10) | no |  |
-| `SchoolID` | VARCHAR(10) | no |  |
-| `ProgramCode` | VARCHAR(10) | no |  |
-| `EnrollStatus` | INT | no |  |
-| `Homeroom` | VARCHAR(50) | yes |  |
-| `Gender` | VARCHAR(10) | no |  |
-| `SelfIDAfrican` | BIT | yes |  |
-| `SelfIDIndigenous` | BIT | yes |  |
-| `IPP` | BIT | yes |  |
-| `Adap` | BIT | yes |  |
-| `GroupKey` | VARCHAR(70) | yes |  |
+| `StudentNumber` | BIGINT | no | Stg_Student.Student_Number CAST BIGINT (blank rows dropped) |
+| `SourceSystemID` | VARCHAR(50) | yes | Stg_Student.ID (PS DCID) |
+| `FirstName` | VARCHAR(100) | no | Stg_Student.First_Name |
+| `MiddleName` | VARCHAR(100) | yes | Stg_Student.Middle_Name ('' -> NULL) |
+| `LastName` | VARCHAR(100) | no | Stg_Student.Last_Name |
+| `DateOfBirth` | DATE | yes | Stg_Student.DOB CONVERT style 101 ('' -> NULL) |
+| `Grade` | VARCHAR(10) | no | Stg_Student.Grade_Level: '0' -> 'P', '-1' -> 'PP', '13' -> 'RG', else verbatim |
+| `SchoolID` | VARCHAR(10) | no | Stg_Student.SchoolID zero-padded to 4 |
+| `ProgramCode` | VARCHAR(10) | no | Stg_Student.NS_Program |
+| `EnrollStatus` | INT | no | Stg_Student.Enroll_Status CAST INT |
+| `Homeroom` | VARCHAR(50) | yes | Stg_Student.Home_Room ('' -> NULL) |
+| `Gender` | VARCHAR(10) | no | Stg_Student.Gender |
+| `SelfIDAfrican` | BIT | yes | NS_AssigndIdentity_African: 'Yes' -> 1, else NULL |
+| `SelfIDIndigenous` | BIT | yes | NS_aboriginal: '1' -> 1, '2' -> 0, else NULL |
+| `IPP` | BIT | yes | CurrentIPP: 'Y' -> 1, 'N' -> 0, else NULL |
+| `Adap` | BIT | yes | CurrentAdap: 'Y' -> 1, 'N' -> 0, else NULL |
+| `GroupKey` | VARCHAR(70) | yes | COALESCE(DimSchool.Abbreviation, padded SchoolID) + '-' + Home_Room with '/', ' ', '\' -> '-' ('none' when blank) |
 
 **Written by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert: `TRUNCATE + rebuild from Stg_Student (blank Student_Number rows dropped)`

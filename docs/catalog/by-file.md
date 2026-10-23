@@ -23,180 +23,198 @@ Extracted 2026-10-22 from `71e2e1e`. Scripts are in [scripts.md](scripts.md). �
 
 ### sql/dimensions/DimAchievementLevel.sql
 
-[sql/dimensions/DimAchievementLevel.sql](../../sql/dimensions/DimAchievementLevel.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimAchievementLevel.sql](../../sql/dimensions/DimAchievementLevel.sql) · **table** · reviewed 2026-10-23
 
-Reference table mapping a differential (actual minus expected, in LevelOrder units for reading or rubric units for writing) to a named achievement level + display color. Drives the color-coded cells on scrRosterGrid + scrStudentData. Externalized so thresholds and colors are adjustable without code changes.
+Reference lookup mapping a reading differential (actual minus expected LevelOrder; or a decimal average) to a named achievement level + colours. One row per level (4 rows), natural key AchievementLevelCode 1-4. No SCD (static; ActiveFlag retires).
 
 **Defines:** table `DimAchievementLevel`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** A level matches when BOTH bound checks pass (operator columns, not inclusive ranges) so decimal averages near -2/0 classify correctly; readers must apply LowerOp/UpperOp, not BETWEEN. Students with a current IPP for the subject must be excluded BEFORE colouring (FactStudentIPP gate). Seed is DELETE+INSERT of codes 1-4 (re-run safe); re-run it after the tint migration.
 
 ### sql/dimensions/DimAssessmentWindow.sql
 
-[sql/dimensions/DimAssessmentWindow.sql](../../sql/dimensions/DimAssessmentWindow.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimAssessmentWindow.sql](../../sql/dimensions/DimAssessmentWindow.sql) · **table** · reviewed 2026-10-23
 
-Defines when assessments are collected, for which grades, programs, and (for reading windows) which scale system.
+One row per assessment instance (window): a subject (Reading/Writing/Math) x date range x grade band x program/language scope. Modern rows are the per-subject instances of a Short Cycle, tied to their DimShortCycle header by CycleGroupID; legacy rows are monthly or MVP windows. Surrogate AssessmentWindowID (IDENTITY); no SCD - rows are edited in place.
 
 **Defines:** table `DimAssessmentWindow`
 **Used on routes (auto):** `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Header comment 'rows are inserted per pull, not updated' is stale: usp_UpsertShortCycle edits rows in place and usp_UpsertShortCycleHeader rewrites name/dates/SchoolYear of every instance sharing the CycleGroupID. No FK check that CycleGroupID exists in DimShortCycle. MinGrade/MaxGrade compare via DimGrade.GradeOrder, never as strings. BenchmarkMonth NULL falls back to the dominant calendar month of [StartDate, EndDate] (reading benchmark + math task month). SchoolYear here is Sep-Aug while DimCalendar.SchoolYear is Aug-Jul. Re-running set_cycle_grade_ranges_by_subject.sql overwrites per-instance grade bands.
 
 ### sql/dimensions/DimCalendar.sql
 
-[sql/dimensions/DimCalendar.sql](../../sql/dimensions/DimCalendar.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimCalendar.sql](../../sql/dimensions/DimCalendar.sql) · **table** · reviewed 2026-10-23
 
-Standard date dimension for time-based analysis
+Date dimension, one row per calendar day 2020-01-01..2035-12-31 (~5844 rows), key DateKey = YYYYMMDD. Static; this file both creates and populates it. Used for dominant-month benchmark resolution in the upsert procs.
 
 **Defines:** table `DimCalendar`
 **Writes:**
 - `DimCalendar` — insert — `Date`, `DateKey`, `DayName`, `DayOfWeek`, `IsSchoolDay`, `IsWeekend`, `LastUpdated`, `Month`, `MonthName`, `Quarter`, `SchoolYear`, `Week`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** IsSchoolDay is always 0 (no district calendar applied) - do not filter on it. SchoolYear boundary is August, unlike the Sep-Aug derivation in usp_UpsertShortCycle(/Header). Re-population scripts: repopulate_DimCalendar.sql (its INSERT column list omits LastUpdated, which is NOT NULL - check before reuse) and migrate_add_LastUpdated_step2_seed_DimCalendar.sql. Week/DayOfWeek depend on the session DATEFIRST.
 
 ### sql/dimensions/DimCourseAssessment.sql
 
-[sql/dimensions/DimCourseAssessment.sql](../../sql/dimensions/DimCourseAssessment.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimCourseAssessment.sql](../../sql/dimensions/DimCourseAssessment.sql) · **table** · reviewed 2026-10-23
 
-Maps a PowerSchool course code (DimSection.CourseCode) to the assessment it lets a teacher enter -- the LANGUAGE and KIND. Drives course-scoped entry: a teacher only enters for sections whose course is in this table, and the course supplies the language (so no EN/FR toggle).
+Config map from a PowerSchool course code to the assessment its section teacher enters: Kind 'Literacy' (Reading + Writing in Language) or 'Math'. One row per CourseCode (natural key). Drives which sections appear for entry and the section's writing language; data-driven, no SCD.
 
 **Defines:** table `DimCourseAssessment`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`
+**Caveats:** Every seed is DELETE-all + INSERT: never run the dev seed on live (it replaces the real course list). A section whose CourseCode is missing here never reaches SectionRosterMembership/TeacherRosterMembership (no entry roster). Changes only take effect in the materialized rosters after usp_RebuildRosterMembership (next ingest). Live seed source list had dupes/typos - verify codes against a clean PS export.
 
 ### sql/dimensions/DimGender.sql
 
-[sql/dimensions/DimGender.sql](../../sql/dimensions/DimGender.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimGender.sql](../../sql/dimensions/DimGender.sql) · **table** · reviewed 2026-10-23
 
-Reference dimension for gender values used by DimStudent.Gender (and potentially DimStaff in future). PS emits one of M, F, X. This table lets reports and Power Apps join to a friendly description rather than hardcoding the codes.
+Reference lookup for DimStudent.Gender codes (F, M, X) -> description and display order. One row per GenderCode (natural key); this file creates and seeds it.
 
 **Defines:** table `DimGender`
 **Writes:**
 - `DimGender` — insert — `ActiveFlag`, `DisplayOrder`, `GenderCode`, `GenderDescription`, `LastUpdated`
+**Caveats:** Descriptive join only - DimStudent.Gender stores the PS code verbatim; an unseen code fails DQ check 42 (DimStudent.Gender -> DimGender) and halts the ingest gate.
 
 ### sql/dimensions/DimGrade.sql
 
-[sql/dimensions/DimGrade.sql](../../sql/dimensions/DimGrade.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimGrade.sql](../../sql/dimensions/DimGrade.sql) · **table** · reviewed 2026-10-23
 
-Static reference dimension for grade codes used in DimStudent.Grade, DimAssessmentWindow.MinGrade/MaxGrade, DimReadingBenchmark.GradeCode, and any other grade-keyed table. Provides GradeOrder for arithmetic ordering — solves the lexicographic-ordering bug on bare VARCHAR grade comparisons (e.g. 'P' > '12' as strings).
+Reference list of grade codes (PP, P, 1-12, RG) with numeric GradeOrder for range arithmetic and a band. One row per GradeCode (natural key); static.
 
 **Defines:** table `DimGrade`
 **Used on routes (auto):** `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/reports`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Always compare grades through GradeOrder (string compare puts 'P' > '12'). Many procs/TVFs INNER JOIN DimGrade on the student's grade, so a grade code missing here silently drops the student (e.g. from IPP/adaptation reconciliation and rosters). The seed is a plain INSERT - not re-run safe.
 
 ### sql/dimensions/DimMathComprehensionBand.sql
 
-[sql/dimensions/DimMathComprehensionBand.sql](../../sql/dimensions/DimMathComprehensionBand.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimMathComprehensionBand.sql](../../sql/dimensions/DimMathComprehensionBand.sql) · **table** · reviewed 2026-10-23
 
-The 4-tier math achievement-level scale (shown in the UI as "Achievement Level") — the code -> (label, colour) lookup for a student's per-unit level, derived from the average of their 0/1 across the unit's tasks. Four rows, one per tier. (Table name kept as DimMathComprehensionBand; the UI label is "Achievement Level".)
+The 4-tier math achievement-level scale (UI 'Achievement Level'): BandCode -> label + colour for a student's per-unit average of 0/1 task results. One row per tier; the average->BandCode ladder lives in the read views, not here.
 
 **Defines:** table `DimMathComprehensionBand`
+**Caveats:** Join on BandCode, never MathBandKey - the seed TRUNCATEs and re-inserts, so the IDENTITY key changes each reseed. Thresholds (0.50/0.75/0.90, 'Incomplete' under 80% scored) are in the read view; changing the ladder means editing the view, not this table.
 
 ### sql/dimensions/DimMathTask.sql
 
-[sql/dimensions/DimMathTask.sql](../../sql/dimensions/DimMathTask.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimMathTask.sql](../../sql/dimensions/DimMathTask.sql) · **table** · reviewed 2026-10-23
 
-The bank of P-6 math assessment TASKS. Each task is one outcome-based item a student is scored on as can-do (1) / cannot (0) in FactAssessmentMath. Bilingual: one key, an English and a French description, so a task renders in the teacher's program language but rolls up on a single key for school/regional summaries.
+Bank of P-6 math tasks, one row per (GradeCode, AssessmentMonth, UnitName, QuestionNumber) natural key, surrogate MathTaskKey. Bilingual task text and answer keys; SCD Type 1 with ActiveFlag soft-retire so historic FactAssessmentMath rows keep a valid key.
 
 **Defines:** table `DimMathTask`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** QuestionNumber is not unique alone ('2a' recurs per unit); UnitName is part of the key and compared NULL-safely (ISNULL(...,'~')). A reload retires every active task of each (Grade, Month) in the batch that is absent from the file - load a complete grade-month sheet, never a partial one. AssessmentMonth must equal the cycle's BenchmarkMonth (or dominant month) or the roster shows no tasks and usp_UpsertMathAssessment throws 51018.
 
 ### sql/dimensions/DimProgram.sql
 
-[sql/dimensions/DimProgram.sql](../../sql/dimensions/DimProgram.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimProgram.sql](../../sql/dimensions/DimProgram.sql) · **table** · reviewed 2026-10-23
 
-Reference dimension for PowerSchool program codes. Categorizes each code into grade band, program family, and specialty overlay.
+Reference list of PowerSchool program codes (e.g. E015) classified by grade band, ProgramFamily, immersion flag, specialty overlay and cycle-scope bucket. One row per ProgramCode (natural key); this file creates and seeds it.
 
 **Defines:** table `DimProgram`
 **Writes:**
 - `DimProgram` — insert/update — `ActiveFlag`, `GradeBand`, `IsImmersion`, `LastUpdated`, `ProgramCode`, `ProgramFamily`, `ProgramName`, `ScopeBucket`, `SpecialtyType`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** CSAP, adult high school, vocational and TAP codes are deliberately absent: students on them fail DQ check 41 (DimStudent.ProgramCode -> DimProgram) and drop out of every INNER JOIN on DimProgram (rosters, IPP/adaptation reconciliation). ScopeBucket is name-derived (LIKE '%Late%') - a renamed program can change bucket. 'French Second Language' (Core/Intensive/Integrated French) is not assessed: no IPP/adaptation rows, no reading scale.
 
 ### sql/dimensions/DimReadingBenchmark.sql
 
-[sql/dimensions/DimReadingBenchmark.sql](../../sql/dimensions/DimReadingBenchmark.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimReadingBenchmark.sql](../../sql/dimensions/DimReadingBenchmark.sql) · **table** · reviewed 2026-10-23
 
-Reading-level expectations (Min and Max) by (ScaleSystem, ProgramFamily, Grade, Month). Used by usp_UpsertReadingAssessment to compute FactAssessmentReading.ReadingDelta — the student's LevelOrder relative to the expected range at the time the assessment was given. Long-format: one row per (Grade × Month × Subject) cell.
+Expected reading-level range (min/max LevelCode) per (ScaleSystem, ProgramFamily, GradeCode, AssessmentMonth). Used by usp_UpsertReadingAssessment to compute ReadingDelta and stamp the as-was expected levels. Surrogate ReadingBenchmarkID; static.
 
 **Defines:** table `DimReadingBenchmark`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
+**Caveats:** The header says ProgramFamily NULL = 'all programs', but usp_UpsertReadingAssessment matches ProgramFamily = the student's family by equality, so a NULL row would never match. The lookup also uses the ENTERED scale + the STUDENT's ProgramFamily: there are no ('EN_Reading','French Immersion') rows, so English reading entered for an immersion student (FI grade 3+, J020) stores ReadingDelta NULL with an AcceptedWithWarnings audit. Months 7-8 and grades 9+ have no rows (NULL delta). ExpectedMin/Max are LevelCodes; resolve with ScaleSystem to get LevelOrder.
 
 ### sql/dimensions/DimReadingScale.sql
 
-[sql/dimensions/DimReadingScale.sql](../../sql/dimensions/DimReadingScale.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimReadingScale.sql](../../sql/dimensions/DimReadingScale.sql) · **table** · reviewed 2026-10-23
 
-Valid reading-level codes for assessment entry. Source of valid values for FactAssessmentReading.ReadingScaleID and (indirectly, via vw_DimReadingScale) for the Power Apps reading-level dropdown (scrRosterGrid cmbNewLevel). Benchmark expectations live separately in DimReadingBenchmark, keyed by (ScaleSystem, ProgramFamily, GradeCode, AssessmentMonth).
+Valid reading levels per scale system: one row per (ScaleSystem, LevelCode) with an ordinal LevelOrder used for ReadingDelta. EN_Reading = DT + A-Z; FR_Reading = TD + 1-30 + 30+. Surrogate ReadingScaleID (FactAssessmentReading FK); static.
 
 **Defines:** table `DimReadingScale`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
+**Caveats:** LevelCode is only unique within a ScaleSystem - always join on (LevelCode, ScaleSystem). The header still calls FR_Reading 'TBD - pending data'; it has been seeded. The app reads it through vw_DimReadingScale (BIGINT key cast to VARCHAR). Re-running a seed duplicates rows (plain INSERT).
 
 ### sql/dimensions/DimRole.sql
 
-[sql/dimensions/DimRole.sql](../../sql/dimensions/DimRole.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimRole.sql](../../sql/dimensions/DimRole.sql) · **table** · reviewed 2026-10-23
 
-Reference dimension for PowerSchool staff role codes (the "Group" field in the Staff export). Maps each PS RoleNumber (1-50) to a warehouse RoleCode used by FactStaffAssignment for RLS and reporting.
+Reference map from PowerSchool staff 'Group' number (RoleNumber 1-50) to the warehouse RoleCode used by FactStaffAssignment and DimStaff.AccessLevel. One row per RoleNumber (natural key); this file creates and seeds it.
 
 **Defines:** table `DimRole`
 **Access signals (auto):** roles: Administrator, ProvincialAnalyst, RegionalAnalyst, SpecialistTeacher, SupportStaff, Teacher
 **Writes:**
 - `DimRole` — insert — `ActiveFlag`, `LastUpdated`, `RoleCode`, `RoleName`, `RoleNumber`
 **Used on routes (auto):** `/ingest`
+**Caveats:** usp_MergeStaff joins CAST(Stg_Staff.Group AS INT) = RoleNumber with ActiveFlag=1 AND RoleCode NOT NULL; an unmapped group gets no FactStaffAssignment row and no AccessLevel (warned in the audit message). RoleCode drives AccessLevel priority RegionalAnalyst > Administrator > SpecialistTeacher; Teacher/ProvincialAnalyst/SupportStaff yield NULL AccessLevel (no StaffSchoolAccess).
 
 ### sql/dimensions/DimSchool.sql
 
-[sql/dimensions/DimSchool.sql](../../sql/dimensions/DimSchool.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimSchool.sql](../../sql/dimensions/DimSchool.sql) · **table** · reviewed 2026-10-23
 
-School reference data
+School reference data: one row per 4-digit provincial SchoolID (zero-padded VARCHAR natural key) with name, abbreviation and community. SCD Type 1. ActiveFlag gates which schools staff assignments and school access may point at.
 
 **Defines:** table `DimSchool`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Not populated by the PowerSchool ingest - a new school must be seeded by hand. Abbreviation feeds DimStudent.GroupKey (usp_MergeStudent falls back to the padded SchoolID when NULL) and changing it does not re-key existing current students. usp_MergeStaff only lands FactStaffAssignment / StaffSchoolAccess rows for ActiveFlag=1 schools, so district '0000' and closed schools are dropped. seed_DimSchool_TCRCE.sql is not re-run safe (plain INSERT; header says TRUNCATE first).
 
 ### sql/dimensions/DimSection.sql
 
-[sql/dimensions/DimSection.sql](../../sql/dimensions/DimSection.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimSection.sql](../../sql/dimensions/DimSection.sql) · **table** · reviewed 2026-10-23
 
-Instructional sections and their teacher-of-record assignments over time
+Instructional sections from PowerSchool with their primary teacher of record. SCD Type 2: one row per version, business key SectionID, surrogate SectionKey; every business attribute (incl. EnrollmentCount) triggers a new version.
 
 **Defines:** table `DimSection`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Sections are DROPPED before the merge (never land, or close as missing) when the primary teacher email does not resolve to a current active DimStaff row, when No_of_students is blank/0, or SectionID is blank. EnrollmentCount churn re-versions often, so SectionKey changes frequently: use SectionID as the stable identity (FactSectionTeachers and the roster tables do). TeacherStaffKey is a reporting snapshot only - access comes from FactSectionTeachers. dev-only rows inserted by seed_primary_homeroom_dev.sql are closed by the next ingest if absent from the export.
 
 ### sql/dimensions/DimShortCycle.sql
 
-[sql/dimensions/DimShortCycle.sql](../../sql/dimensions/DimShortCycle.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimShortCycle.sql](../../sql/dimensions/DimShortCycle.sql) · **table** · reviewed 2026-10-23
 
-HEADER for a Short Cycle of Response (SCoR). One row per cycle, identified by a distinct key (CycleGroupID, an app-generated GUID). Holds the display name + date range ONCE; the per-(subject x language x program-scope x grade) assessment instances are DimAssessmentWindow rows that tie back via CycleGroupID and inherit these dates.
+Header for a Short Cycle of Response: one row per cycle, key CycleGroupID (app-generated GUID), holding the display name, date range and grace period once. The per-subject/scope instances are DimAssessmentWindow rows sharing the CycleGroupID. No SCD (edited in place).
 
 **Defines:** table `DimShortCycle`
 **Used on routes (auto):** `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`
+**Caveats:** DisplayName is deliberately not unique ('SCoR 1' every year) - always key on CycleGroupID. Header ActiveFlag is NOT propagated to the instance windows (only name/dates/SchoolYear are synced). GraceHours NULL is treated as 168h by the readers and the write procs (lock boundary = midnight after EndDate + GraceHours, Atlantic). Legacy headers were back-filled by backfill_DimShortCycle_headers.sql.
 
 ### sql/dimensions/DimStaff.sql
 
-[sql/dimensions/DimStaff.sql](../../sql/dimensions/DimStaff.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimStaff.sql](../../sql/dimensions/DimStaff.sql) · **table** · reviewed 2026-10-23
 
-Person-level staff identity. One row per unique staff email, versioned by SCD Type 2 on active/inactive transitions only.
+Person-level staff identity from the PowerSchool staff export: one row per version per email (business key Email, lowercased; surrogate StaffKey). SCD Type 2 on all business fields incl. ActiveFlag, except AccessLevel (Type 1). Absence from the import inserts an ActiveFlag=0 deactivation version.
 
 **Defines:** table `DimStaff`
 **Used on routes (auto):** `(every page — layout)`, `/`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports/math`
+**Caveats:** IsCurrent=1 does NOT mean active - a deactivated person has a current ActiveFlag=0 marker; filter IsCurrent=1 AND ActiveFlag=1 for active staff. The write procs (usp_Upsert*) resolve the caller by IsCurrent=1 only, so a deactivated person still resolves. Hand-inserted rows (grant_dev_projectlead_access.sql, seed_dev_resource_teacher.sql, seed_primary_homeroom_dev.sql) are closed by the next ingest if the email is not in the export. Same-email rows with differing per-person fields keep only the lowest-PS-ID row (warned). Email is LOWER()ed but not trimmed in usp_MergeStaff, while usp_MergeSectionTeachers trims - stray whitespace splits identities. The header's claim that IsDistrictLevel surfaces a '0000' StaffSchoolAccess row is stale: '0000' is filtered out (not an active DimSchool).
 
 ### sql/dimensions/DimStudent.sql
 
-[sql/dimensions/DimStudent.sql](../../sql/dimensions/DimStudent.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimStudent.sql](../../sql/dimensions/DimStudent.sql) · **table** · reviewed 2026-10-23
 
-Student profile over time — tracks grade, school, and program changes
+Student profile over time from the PowerSchool students export: one row per version per student (business key StudentNumber = provincial 10-digit number; surrogate StudentKey). SCD Type 2 on 14 business attributes; absence from the import closes the current row with no replacement.
 
 **Defines:** table `DimStudent`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** StudentKey changes on every attribute change (homeroom, IPP flag, name...): match facts and rosters on StudentNumber for current state; FactAssessment* carry StudentNumber for exactly this reason. GroupKey is NOT a change-detection field - it is only refreshed when another attribute versions the row (or same-day in place), so an Abbreviation change leaves stale keys. The column comment says GroupKey is NULL when no homeroom and only for grades <=9; the code always computes it and uses '<abbr>-none'. A student absent from the import is closed with no replacement row, so 'no current row' covers inactive, graduated and transferred-out. Hand edits (seed_split_homeroom_dev.sql, test_slash_homeroom_dev.sql) are overwritten by the next merge.
 
 ### sql/dimensions/DimTerm.sql
 
-[sql/dimensions/DimTerm.sql](../../sql/dimensions/DimTerm.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/DimTerm.sql](../../sql/dimensions/DimTerm.sql) · **table** · reviewed 2026-10-23
 
-Reference dimension for PowerSchool TermID values. Decodes each TermID into its school year and academic term (Year Long / S1 / S2).
+Decodes PowerSchool TermID (YYTT: YY = start year - 1990, TT = 00 Year Long / 01 S1 / 02 S2) into school year and term. One row per TermID (natural key); this file creates and seeds 2015-2016 through 2035-2036 (63 rows).
 
 **Defines:** table `DimTerm`
 **Writes:**
 - `DimTerm` — insert — `LastUpdated`, `SchoolYear`, `SchoolYearEnd`, `SchoolYearStart`, `TermCode`, `TermID`, `TermName`
 **Used on routes (auto):** `/ingest`
+**Caveats:** usp_MergeEnrollment INNER JOINs DimTerm on the section's TermID, so an enrollment in a section whose TermID is outside the seeded range silently drops; DQ check 12 flags DimSection.TermID not in DimTerm. Extend the Years CTE before 2036. usp_YearEndCloseOut uses SchoolYearEnd/TermCode to pick what to close.
 
 ### sql/dimensions/WritingTraitExclusion.sql
 
-[sql/dimensions/WritingTraitExclusion.sql](../../sql/dimensions/WritingTraitExclusion.sql) · **table** · skeleton (not yet reviewed)
+[sql/dimensions/WritingTraitExclusion.sql](../../sql/dimensions/WritingTraitExclusion.sql) · **table** · reviewed 2026-10-23
 
-Data-driven config for which writing TRAIT(s) are NOT assessed for a given (Grade x ProgramFamily x cycle benchmark month) — so the entry grid doesn't show that trait's dropdown and the average/reports drop it (same effect as a Conventions 'SCR'). Grain: one row per excluded trait. NEVER hardcode this rule in app/proc logic — add/remove rows here.
+Config: which writing trait is NOT assessed for a (GradeCode x ProgramFamily x cycle benchmark month). One row per excluded trait; surrogate WritingTraitExclusionID. Idempotent guarded create + NOT-EXISTS seed (FI Primary, Organization, Sep/Oct/Nov).
 
 **Defines:** table `WritingTraitExclusion`
 **Grants:** SELECT on `WritingTraitExclusion` → StudentDataAssessment
@@ -205,237 +223,265 @@ Data-driven config for which writing TRAIT(s) are NOT assessed for a given (Grad
 **Writes:**
 - `WritingTraitExclusion` — insert — `ActiveFlag`, `BenchmarkMonth`, `GradeCode`, `LastUpdated`, `ProgramFamily`, `Trait`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Caveats:** Matched by usp_UpsertWritingAssessment against the student's Grade, ProgramFamily (equality) and COALESCE(window BenchmarkMonth, MONTH(window StartDate)) - the header says 'else its dominant calendar month', which differs for multi-month cycles. An excluded trait is stored as '-' (forced, overriding any sent score). Existing results are not re-scored when rows change (see remediate_writing_trait_exclusion.sql). Never hard-code the rule in app/proc logic.
 
 ### sql/facts/FactAssessmentMath.sql
 
-[sql/facts/FactAssessmentMath.sql](../../sql/facts/FactAssessmentMath.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactAssessmentMath.sql](../../sql/facts/FactAssessmentMath.sql) · **table** · reviewed 2026-10-23
 
-Per-task math results entered by teachers — one bit per student per task per cycle: 1 = can do the task, 0 = cannot. Everything the reports need (grade, term, unit, outcome, task text) derives through MathTaskKey -> DimMathTask; the fact stays a thin (who, which task, got-it?) grain.
+Per-task math results: one row per (StudentKey, AssessmentWindowID, MathTaskKey, AssessmentDate), Result 1 = can do / 0 = cannot. Keeps history across dates; a same-date re-entry updates in place. Surrogate MathAssessmentID.
 
 **Defines:** table `FactAssessmentMath`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Reads MUST take the latest row per (student, window, task) (ROW_NUMBER by AssessmentDate DESC, MathAssessmentID DESC) or results fan out. Clearing a cell deletes only the same-date row - an earlier-dated result for that task then becomes the 'latest' again. Current-state reads match on StudentNumber, not StudentKey (StudentKey is the version at entry). Not covered by usp_RunDataQualityChecks orphan checks. Dev demo rows from seed_demo_results_dev.sql.
 
 ### sql/facts/FactAssessmentReading.sql
 
-[sql/facts/FactAssessmentReading.sql](../../sql/facts/FactAssessmentReading.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactAssessmentReading.sql](../../sql/facts/FactAssessmentReading.sql) · **table** · reviewed 2026-10-23
 
-Reading assessment results entered by teachers
+Reading results: one row per (StudentKey, AssessmentWindowID, AssessmentDate) holding the entered level and its delta from the grade-month benchmark, plus as-was level/benchmark codes. Multiple dates per window are kept; a same-date re-save updates in place. Surrogate ReadingAssessmentID.
 
 **Defines:** table `FactAssessmentReading`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Header 'immutable fact rows - corrections create new rows' is stale: a same-date re-save UPDATEs in place and usp_DeleteReadingAssessment hard-DELETEs. Reads must take the latest AssessmentDate per student/window. usp_DeleteReadingAssessment picks TOP 1 without ORDER BY among the student's rows for the window, so with several dated rows it deletes an arbitrary one. Current-state reads match on StudentNumber (durable fix 2026-10-13). English reading entered for an immersion student usually stores ReadingDelta NULL (no EN_Reading x French Immersion benchmarks).
 
 ### sql/facts/FactAssessmentWriting.sql
 
-[sql/facts/FactAssessmentWriting.sql](../../sql/facts/FactAssessmentWriting.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactAssessmentWriting.sql](../../sql/facts/FactAssessmentWriting.sql) · **table** · reviewed 2026-10-23
 
-Writing assessment rubric scores entered by teachers
+Writing rubric results: one row per (StudentKey, AssessmentWindowID, AssessmentLanguage, AssessmentDate) with four trait scores stored as text and an as-was average. FI grade 3+ students can hold an English and a French row per cycle. Surrogate WritingAssessmentID.
 
 **Defines:** table `FactAssessmentWriting`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Traits are VARCHAR: '-' = deliberately not assessed, NULL = never recorded, 'SCR' = scribed (Conventions only). Never average with TRY_CAST alone - in Fabric TRY_CAST('-' AS INT) returns 0; gate on the '1'-'4' allow-list. AssessmentLanguage is part of the grain (column is nullable only for legacy rows). Reads take the latest date per (student, window, language) and match on StudentNumber. Changing WritingTraitExclusion does not re-score stored rows (remediate_writing_trait_exclusion.sql).
 
 ### sql/facts/FactDataQualityAudit.sql
 
-[sql/facts/FactDataQualityAudit.sql](../../sql/facts/FactDataQualityAudit.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactDataQualityAudit.sql](../../sql/facts/FactDataQualityAudit.sql) · **table** · reviewed 2026-10-23
 
-Append-only audit log for data quality check runs against the Assessment_Warehouse. Written by usp_RunDataQualityChecks. One row per violation per run; one PASS sentinel row when a run finds zero violations (so the table itself is the run history).
+Append-only log of data-quality runs: one row per violation per run of usp_RunDataQualityChecks (52 checks: Orphan / IsCurrent / Date / Reference / Consistency), or a single PASS row when clean. Surrogate DataQualityAuditID; RunTimestamp groups a run.
 
 **Defines:** table `FactDataQualityAudit`
+**Caveats:** Called as the ingest gate by usp_RunFullIngestCycle: a non-zero count THROWs 51000 AFTER the five merges have already committed (no transaction), so the dims are changed but the roster tables are not rebuilt. Find the latest run with MAX(RunTimestamp). No pruning. deploy_step14_data_quality.sql also inserted rows at deploy time.
 
 ### sql/facts/FactEnrollment.sql
 
-[sql/facts/FactEnrollment.sql](../../sql/facts/FactEnrollment.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactEnrollment.sql](../../sql/facts/FactEnrollment.sql) · **table** · reviewed 2026-10-23
 
-Student membership in sections over time
+Student membership in sections from the PowerSchool enrollments export: one row per PS enrollment record (matching key SourceSystemID = PS CC.ID), with surrogate StudentKey/SectionKey, dates and ActiveFlag. Not versioned - rows are updated in place.
 
 **Defines:** table `FactEnrollment`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** The header ('EndDate = NULL if still enrolled') is wrong in practice: PS auto-fills DateLeft with the term end, so active rows usually carry a future EndDate - use ActiveFlag. Rows whose student or section does not resolve to a CURRENT dim row are skipped (warned). Closing for absence sets ActiveFlag=0 but leaves EndDate unchanged. Never hand-insert: rows without a matching CC.ID are deactivated by the next merge (seed_primary_homeroom_dev.sql rows). The roster rebuild deliberately ignores ActiveFlag (date-overlap only) so departed students stay on past windows.
 
 ### sql/facts/FactSectionTeachers.sql
 
-[sql/facts/FactSectionTeachers.sql](../../sql/facts/FactSectionTeachers.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactSectionTeachers.sql](../../sql/facts/FactSectionTeachers.sql) · **table** · reviewed 2026-10-23
 
-Many-to-many bridge of teacher-to-section assignments, supporting co-teaching and secondary teacher arrangements.
+Teacher-to-section bridge (primary + co-teachers), the authority for section-level access. One row per version of a (SectionID, TeacherEmail, TeacherRole) triple, keyed by business keys (not surrogates); EffectiveStart/End + IsCurrent; rows never deleted.
 
 **Defines:** table `FactSectionTeachers`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** A triple only lands if its SectionID has a current DimSection row AND the email matches a current ActiveFlag=1 DimStaff row, so a teacher going inactive (or a dropped section) closes their access. A role change is a new triple, not an update. Emails are trimmed+lowercased here but only lowercased in DimStaff. dev rows from seed_primary_homeroom_dev.sql are closed by the next ingest unless in the export. TeacherRosterMembership derives from this table at rebuild time - changes reach the fast roster only after usp_RebuildRosterMembership.
 
 ### sql/facts/FactStaffAssignment.sql
 
-[sql/facts/FactStaffAssignment.sql](../../sql/facts/FactStaffAssignment.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactStaffAssignment.sql](../../sql/facts/FactStaffAssignment.sql) · **table** · reviewed 2026-10-23
 
-Bridge of staff-to-school-to-role assignments. One row per distinct (StaffKey, SchoolID, RoleCode) combination, versioned by effective dates so the history of someone's role changes is preserved.
+Staff x school x role bridge from the PowerSchool staff export: one row per version of a (StaffKey, SchoolID, RoleCode) triple, with the PS staff record ID; EffectiveStart/End + IsCurrent. History of who held what role where.
 
 **Defines:** table `FactStaffAssignment`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Keyed by StaffKey, so every DimStaff re-version closes all the person's triples and re-inserts them under the new key. District ('0000') and closed-school assignments never land here (they still count toward DimStaff.AccessLevel). A different PS ID for an existing triple is treated as possible email reuse (close + reopen, AcceptedWithWarnings). Header taxonomy is partly stale: RoleNumbers 22/32 are Teacher (not SpecialistTeacher), and StaffSchoolAccess is rebuilt from DimStaff only, not from this table. seed_dev_resource_teacher.sql rows are closed by the next ingest.
 
 ### sql/facts/FactStudentAdaptation.sql
 
-[sql/facts/FactStudentAdaptation.sql](../../sql/facts/FactStudentAdaptation.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactStudentAdaptation.sql](../../sql/facts/FactStudentAdaptation.sql) · **table** · reviewed 2026-10-23
 
-Tracks per-student, per-subject, per-program-family ADAPTATION status with SCD Type 2 versioning. Structural MIRROR of FactStudentIPP, keyed on the PowerSchool "has adaptations" flag (DimStudent.Adap) instead of DimStudent.IPP. PowerSchool records only ONE global "has adaptations" yes/no per student; this table breaks that out by SUBJECT so teachers can record which subjects a student's adaptation applies to (Reading / Writing / Math) -- the "Adaptations" half of the Programming section. No adaptation-type/focus detail is stored: the grain is simply (student, subject) yes/no.
+Per-student, per-subject, per-program-family adaptation status (record-only; not used in computations yet). SCD Type 2 rows keyed by (StudentKey, Subject, ProgramFamily); HasAdaptation NULL = unresolved, 1/0 = teacher-confirmed. Structural mirror of FactStudentIPP keyed on DimStudent.Adap.
 
 **Defines:** table `FactStudentAdaptation`
 **Used on routes (auto):** `/ingest`, `/programming`, `/programming/[groupKey]`
+**Caveats:** Keyed by StudentKey: whenever DimStudent re-versions (any attribute change, e.g. homeroom), usp_MergeStudent closes the old-key rows and inserts fresh NULL rows for the new key, so a teacher's confirmed 1/0 reverts to unresolved - looks like a bug, confirm intended. Applicability bands: Reading P-8, Writing P-RG, Math P-6, PP excluded, J020 has no (Reading, French Immersion) row, FSL none. Closes use EffectiveDate-1 with no same-day guard (a same-day toggle leaves End < Start); not covered by the DQ checks. Live back-fill: backfill_adaptation_facts_live.sql; dev: reseed_programming_rows_dev.sql.
 
 ### sql/facts/FactStudentIPP.sql
 
-[sql/facts/FactStudentIPP.sql](../../sql/facts/FactStudentIPP.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactStudentIPP.sql](../../sql/facts/FactStudentIPP.sql) · **table** · reviewed 2026-10-23
 
-Tracks per-student, per-subject, per-program-family IPP status with SCD Type 2 versioning. Replaces the predecessor Excel's single school-wide "Literacy IPP" column with teacher-managed fine-grained tracking: a student can have a Reading IPP but no Writing IPP, or a French Reading IPP but no English Reading IPP (the latter applicable only to French Immersion students grade 3+).
+Per-student, per-subject, per-program-family IPP status, SCD Type 2 keyed by (StudentKey, Subject, ProgramFamily). IsIPP NULL = unresolved gate (blocks achievement colouring/aggregates), 1 = has IPP (excluded from comparisons), 0 = no IPP.
 
 **Defines:** table `FactStudentIPP`
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Same StudentKey trap as FactStudentAdaptation: any DimStudent re-version closes the resolved rows and re-creates them as NULL (unresolved) under the new key - confirm intended. Header applicability rules are stale: Math (P-6, own family), per-subject grade bands (Reading P-8, Writing P-RG, PP excluded) and the J020 no-French-Reading exception are in usp_MergeStudent but not described here. Same-day toggle via usp_UpsertStudentIPP leaves EffectiveEndDate < EffectiveStartDate (no guard). Live back-fill: backfill_ipp_facts_live.sql; remediated by remediate_J020_reading_english_only.sql.
 
 ### sql/facts/FactSubmissionAudit.sql
 
-[sql/facts/FactSubmissionAudit.sql](../../sql/facts/FactSubmissionAudit.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/FactSubmissionAudit.sql](../../sql/facts/FactSubmissionAudit.sql) · **table** · reviewed 2026-10-23
 
-Audit log for all data ingestion and teacher submission activity
+Append-only audit log of ingest merges and app submissions: one row per merge-proc run, per app save/delete, per cycle outcome. Surrogate AuditID.
 
 **Defines:** table `FactSubmissionAudit`
 **Used on routes (auto):** `/admin/staff-access`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+**Caveats:** Header value lists are stale ('Corrected' is never written; many RecordTypes and Source 'WebApp' are not listed). usp_InsertSubmissionAudit's allow-lists reject 'WebApp' and the newer RecordTypes, so only the in-proc direct INSERTs produce them. Holds StudentNumbers in Message text (PII-adjacent) - aggregate when diagnosing.
 
 ### sql/facts/IngestRunLog.sql
 
-[sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · **table** · reviewed 2026-10-23
+
+Append-only run log of ingest cycles: per cycle a 'Started' row, one 'Loaded' row per staging file with its row count, and a terminal 'Completed' or 'Failed' (DQ gate). Surrogate IngestRunLogID; CycleStart groups a run. Guarded create (never drops).
 
 **Defines:** table `IngestRunLog`
 **Used on routes (auto):** `/ingest`
+**Caveats:** No TRY/CATCH in Fabric: a COPY INTO or merge failure leaves a Started row (+ the Load rows that finished) and NO terminal row - absence of Completed/Failed means it died, after the last Load topic. Failed is only written for the DQ gate. RowsLoaded is staging row count (incl. header-less blank lines), not rows merged.
 
 ### sql/facts/PriorYearBaseline.sql
 
-[sql/facts/PriorYearBaseline.sql](../../sql/facts/PriorYearBaseline.sql) · **table** · skeleton (not yet reviewed)
+[sql/facts/PriorYearBaseline.sql](../../sql/facts/PriorYearBaseline.sql) · **table** · reviewed 2026-10-23
 
-DENORMALIZED prior-year (2025-2026) end-of-June reading + writing baseline, so teachers can see where their new students started. One wide row per student, keyed by provincial StudentNumber (stable across years); the display read joins it to the CURRENT roster by StudentNumber. This is the lightweight "option B" — NOT integrated into the star schema (no historical DimStudent versions / facts); full historical integration ("option A") is deferred.
+Denormalized 2025-2026 end-of-June reading + writing baseline, outside the star schema: one wide row per (StudentNumber, AssessmentLanguage), joined to the current roster by StudentNumber. Static one-time load; this file DROPs and recreates the table.
 
 **Defines:** table `PriorYearBaseline`
 **Grants:** SELECT on `PriorYearBaseline` → StudentDataAssessment
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
+**Caveats:** Re-running this DDL file DROPS the table and all loaded rows (then re-run load_prior_year_baseline.sql; dev uses seed_prior_year_baseline_dev.sql). Scores are VARCHAR and may hold codes (ABS/INS/EAL/SCR) - average only numeric values. Hist* columns are as of last June, not current. Staging Grade/Gender/IPP columns are wider than the targets (VARCHAR(4) -> HistGrade VARCHAR(2), etc.), so an unexpected long value fails the load.
 
 ## Staging tables
 
 ### sql/staging/Stg_CoTeacher.sql
 
-[sql/staging/Stg_CoTeacher.sql](../../sql/staging/Stg_CoTeacher.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_CoTeacher.sql](../../sql/staging/Stg_CoTeacher.sql) · **staging-table** · reviewed 2026-10-23
 
-Landing zone for the PowerSchool Co-Teachers sqlReport export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeSectionTeachers. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Co-Teachers sqlReport (one row per extra teacher on a section). TRUNCATE + COPY INTO each ingest by usp_LoadCoTeacherStaging; read by usp_MergeSectionTeachers.
 
 **Defines:** table `Stg_CoTeacher`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Positional COPY INTO (FIRSTROW=2): the CSV column order must match exactly. usp_RunFullIngestCycle always loads it; COPY INTO errors when no file matches, so drop a header-only file if PS has no co-teachers. Rows whose section or email does not resolve to current DimSection / active DimStaff are silently dropped.
 
 ### sql/staging/Stg_Enrollment.sql
 
-[sql/staging/Stg_Enrollment.sql](../../sql/staging/Stg_Enrollment.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_Enrollment.sql](../../sql/staging/Stg_Enrollment.sql) · **staging-table** · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Enrollments export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeEnrollment. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Enrollments export (current enrollments plus those closed since the last pull). TRUNCATE + COPY INTO by usp_LoadEnrollmentStaging; read by usp_MergeEnrollment.
 
 **Defines:** table `Stg_Enrollment`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Header says the merge compares DateLeft with the term end via DimTerm - stale: usp_MergeEnrollment now marks active when DateLeft is empty or >= ingest date. Column comment 'empty = still enrolled (no auto-fill)' conflicts with the header's auto-fill note. Not a full history: enrollments absent from the file are deactivated in FactEnrollment. A non-numeric Student_Number or bad date fails the CAST/CONVERT and aborts the merge.
 
 ### sql/staging/Stg_MathTask.sql
 
-[sql/staging/Stg_MathTask.sql](../../sql/staging/Stg_MathTask.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_MathTask.sql](../../sql/staging/Stg_MathTask.sql) · **staging-table** · reviewed 2026-10-23
 
-All-VARCHAR landing table for the math task-bank seed CSV (one file per grade, authored to mirror DimMathTask's columns). COPY INTO loads text here; usp_LoadMathTasks validates / casts and upserts into DimMathTask. "Load as text, convert in the merge" — the standard staging pattern, so a single malformed cell can't fail the COPY.
+All-VARCHAR landing table for one math task-bank CSV (authored to mirror DimMathTask). TRUNCATEd and loaded by usp_LoadMathTasks, which validates/casts and upserts into DimMathTask.
 
 **Defines:** table `Stg_MathTask`
+**Caveats:** Auto shows only a TRUNCATE: the COPY INTO is dynamic SQL (sp_executesql) inside usp_LoadMathTasks. That COPY INTO has no CREDENTIAL = Workspace Identity clause, unlike the PS loaders after the #1119 workaround - may fail when run as the app SP. Rows with blank GradeCode/QuestionNumber or non-numeric AssessmentMonth are skipped silently.
 
 ### sql/staging/Stg_PriorYearBaseline.sql
 
-[sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_PriorYearBaseline.sql](../../sql/staging/Stg_PriorYearBaseline.sql) · **staging-table** · reviewed 2026-10-23
 
-All-VARCHAR landing tables for the prior-year baseline CSVs (converted from the ELA/FLA Reading & Writing workbooks). Columns are in the CSV column order so COPY INTO maps positionally. AssessmentLanguage is the last column, left out of COPY INTO and set by an UPDATE after each program's file loads (the file has no program column — it's implied by the sheet).
+Defines two all-VARCHAR landing tables for the prior-year baseline CSVs: Stg_PriorReading (ELA/FLA Reading) and Stg_PriorWriting (ELA/FLA Writing). Loaded and merged into PriorYearBaseline by sql/scripts/load_prior_year_baseline.sql. This file DROPs and recreates both.
 
 **Defines:** table `Stg_PriorReading`, table `Stg_PriorWriting`
+**Caveats:** Holds student names (PII) until truncated - it is not cleared after the load. Reading and Writing CSVs have different column orders (Literacy IPP position differs); COPY INTO uses explicit column lists, so keep them in step with the files. The AssessmentLanguage UPDATE tags rows WHERE AssessmentLanguage IS NULL, so ELA must load before FLA in each table.
 
 ### sql/staging/Stg_Section.sql
 
-[sql/staging/Stg_Section.sql](../../sql/staging/Stg_Section.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_Section.sql](../../sql/staging/Stg_Section.sql) · **staging-table** · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Sections export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeSection. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Sections export (current school year only). TRUNCATE + COPY INTO by usp_LoadSectionStaging; read by usp_MergeSection (DimSection) and usp_MergeSectionTeachers (primary teacher rows).
 
 **Defines:** table `Stg_Section`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Rows with blank ID, blank/0 No_of_students, or a teacher email not matching a current active DimStaff row never reach DimSection (and, being absent, an existing section is closed). Bracket-prefixed headers ([2], [5]) are matched by position only.
 
 ### sql/staging/Stg_Staff.sql
 
-[sql/staging/Stg_Staff.sql](../../sql/staging/Stg_Staff.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_Staff.sql](../../sql/staging/Stg_Staff.sql) · **staging-table** · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Staff export. All columns VARCHAR — load-as-text, validate/translate downstream in usp_MergeStaff.
+All-VARCHAR landing table for the PowerSchool Staff export; one row per staff x school x role record (same email may repeat). TRUNCATE + COPY INTO by usp_LoadStaffStaging; read by usp_MergeStaff.
 
 **Defines:** table `Stg_Staff`
 **Used on routes (auto):** `/ingest`
+**Caveats:** usp_MergeStaff CASTs Group and ID to INT - a non-numeric value aborts the merge. Header says HomeSchoolID '0' or '' -> NULL; the merge now treats any all-zero form as NULL. Only the lowest-ID row's name/title/home school is kept per email (inconsistencies are only counted as a warning).
 
 ### sql/staging/Stg_Student.sql
 
-[sql/staging/Stg_Student.sql](../../sql/staging/Stg_Student.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Stg_Student.sql](../../sql/staging/Stg_Student.sql) · **staging-table** · reviewed 2026-10-23
 
-Landing zone for raw PowerSchool Students export. All columns are VARCHAR — load-as-text, then validate/translate downstream in usp_MergeStudent. This is the COPY INTO target.
+All-VARCHAR landing table for the PowerSchool Students export (filtered upstream to Enroll_Status 0/-1). TRUNCATE + COPY INTO by usp_LoadStudentsStaging; read by usp_MergeStudent.
 
 **Defines:** table `Stg_Student`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Rows with blank Student_Number are skipped; any other unparsable Student_Number, Enroll_Status or DOB aborts usp_MergeStudent (hard CAST/CONVERT). Only one file should sit in the folder - the wildcard unions all matches and duplicates students.
 
 ### sql/staging/Wrk_Enrollment.sql
 
-[sql/staging/Wrk_Enrollment.sql](../../sql/staging/Wrk_Enrollment.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_Enrollment.sql](../../sql/staging/Wrk_Enrollment.sql) · **staging-table** · reviewed 2026-10-23
 
-Typed working set for enrollment merge. Populated by usp_MergeEnrollment from Stg_Enrollment INNER-JOINed against DimStudent / DimSection / DimTerm with all source-value translations applied: - Student_Number cast to BIGINT - DateEnrolled MM/DD/YYYY -> DATE - DateLeft MM/DD/YYYY -> DATE (empty -> NULL) - StudentKey resolved via JOIN DimStudent on StudentNumber + IsCurrent=1. Rows that fail resolution are EXCLUDED from this Wrk and counted as a warning by usp_MergeEnrollment. - SectionKey resolved via JOIN DimSection on SectionID + IsCurrent=1. Same exclusion semantics on failure. - ActiveFlag 
+Typed working set for the FactEnrollment merge: Stg_Enrollment rows with StudentKey/SectionKey resolved to current dim versions and dates parsed. TRUNCATE + INSERT inside usp_MergeEnrollment.
 
 **Defines:** table `Wrk_Enrollment`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Header's ActiveFlag rule (term-end month matching via DimTerm) is stale - the code compares DateLeft to the ingest date. DimTerm is still INNER JOINed (unused) so a section with an unknown TermID drops its enrollments. Transient; contents reflect only the last merge.
 
 ### sql/staging/Wrk_Section.sql
 
-[sql/staging/Wrk_Section.sql](../../sql/staging/Wrk_Section.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_Section.sql](../../sql/staging/Wrk_Section.sql) · **staging-table** · reviewed 2026-10-23
 
-Typed working set for section merge. Populated by usp_MergeSection from Stg_Section JOIN DimStaff with all source-value translations applied: - SchoolID zero-padded to 4 chars - TermID cast to INT - No_of_students / MaxEnrollment cast to INT (empty -> NULL) - Email_Addr lowercased (matches DimStaff business key) - TeacherStaffKey resolved via JOIN DimStaff on Email + IsCurrent=1 + ActiveFlag=1. Sections whose teacher email cannot be resolved are EXCLUDED from this Wrk and counted as a warning by usp_MergeSection. (DimSection.TeacherStaffKey is BIGINT NOT NULL, so we cannot land a section witho
+Typed working set for the DimSection merge: Stg_Section rows padded/cast with the primary teacher resolved to a StaffKey. TRUNCATE + INSERT inside usp_MergeSection.
 
 **Defines:** table `Wrk_Section`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Also excludes rows with blank ID or blank/0 No_of_students (not mentioned in the header). Transient; reflects the last merge only.
 
 ### sql/staging/Wrk_SectionTeacher.sql
 
-[sql/staging/Wrk_SectionTeacher.sql](../../sql/staging/Wrk_SectionTeacher.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_SectionTeacher.sql](../../sql/staging/Wrk_SectionTeacher.sql) · **staging-table** · reviewed 2026-10-23
 
-Typed working set for the FactSectionTeachers merge. Populated by usp_MergeSectionTeachers from the UNION of: (a) Stg_Section primary teacher rows -> TeacherRole = 'Primary' (b) Stg_CoTeacher rows -> TeacherRole normalized
+Typed working set for the FactSectionTeachers merge: DISTINCT (SectionID, TeacherEmail, TeacherRole) from Stg_Section primaries UNION Stg_CoTeacher rows. TRUNCATE + INSERT inside usp_MergeSectionTeachers.
 
 **Defines:** table `Wrk_SectionTeacher`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Beyond the header's empty-email exclusion, the code keeps only triples whose SectionID has a current DimSection row and whose email has a current ActiveFlag=1 DimStaff row. Transient.
 
 ### sql/staging/Wrk_StaffAssignment.sql
 
-[sql/staging/Wrk_StaffAssignment.sql](../../sql/staging/Wrk_StaffAssignment.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_StaffAssignment.sql](../../sql/staging/Wrk_StaffAssignment.sql) · **staging-table** · reviewed 2026-10-23
 
-Per-import-row working set for FactStaffAssignment merge. ONE row per Stg_Staff row (so itinerant staff with N school assignments contribute N rows). Populated by usp_MergeStaff from Stg_Staff with: - Email lowercased (matches Wrk_StaffPersons / DimStaff) - SchoolID '0' -> '0000' (district-tier aggregate marker) - SchoolID otherwise zero-padded to 4 chars - RoleCode resolved via JOIN DimRole on PS Group number (rows with no DimRole match are excluded from this Wrk and logged as a warning by usp_MergeStaff) - SourceSystemID (PS staff ID) carried verbatim
+Working set for the FactStaffAssignment merge and the AccessLevel computation: one row per (Email, SchoolID, RoleCode) from Stg_Staff with the PS Group resolved via DimRole. TRUNCATE + INSERT inside usp_MergeStaff.
 
 **Defines:** table `Wrk_StaffAssignment`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Header says ONE row per Stg_Staff row; the code GROUPs BY (Email, SchoolID, RoleCode) so two PS groups mapping to the same RoleCode collapse to one row with the lowest ID. Deliberately NOT filtered to active schools (district '0000' rows must count toward AccessLevel); the active-school filter is applied only when landing FactStaffAssignment.
 
 ### sql/staging/Wrk_StaffPersons.sql
 
-[sql/staging/Wrk_StaffPersons.sql](../../sql/staging/Wrk_StaffPersons.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_StaffPersons.sql](../../sql/staging/Wrk_StaffPersons.sql) · **staging-table** · reviewed 2026-10-23
 
-Person-grain working set for DimStaff merge. ONE row per unique Email after dedup. Populated by usp_MergeStaff from Stg_Staff with translations applied: - Email lowercased - HomeSchoolID '0' or '' -> NULL - IsDistrictLevel = 1 if '0' present in CanChangeSchool list - AccessLevel computed per person from highest-priority school-tier RoleCode across all import rows for that email (RegionalAnalyst > Administrator > SpecialistTeacher; NULL otherwise) - For multi-row same-email staff: take canonical row by lowest PS ID (warning logged separately if any per-person field differs)
+Person-grain working set for the DimStaff merge: one row per lowercased email (canonical row = lowest PS ID) with derived IsDistrictLevel and AccessLevel. TRUNCATE + INSERT inside usp_MergeStaff.
 
 **Defines:** table `Wrk_StaffPersons`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Header says HomeSchoolID '0' or '' -> NULL; code also nulls '00', '000', '0000'. Transient.
 
 ### sql/staging/Wrk_Student.sql
 
-[sql/staging/Wrk_Student.sql](../../sql/staging/Wrk_Student.sql) · **staging-table** · skeleton (not yet reviewed)
+[sql/staging/Wrk_Student.sql](../../sql/staging/Wrk_Student.sql) · **staging-table** · reviewed 2026-10-23
 
-Typed working set for student merge. Populated by usp_MergeStudent from Stg_Student with all source-value translations applied: - Grade_Level '0' -> 'P', '-1' -> 'PP', '13' -> 'RG', else verbatim - SchoolID zero-padded to 4 chars - DOB MM/DD/YYYY -> DATE - NS_AssigndIdentity_African: 'Yes' -> 1, '' -> NULL - NS_aboriginal: '1' -> 1, '2' -> 0, '' -> NULL - CurrentIPP / CurrentAdap: 'Y' -> 1, 'N' -> 0, '' -> NULL - Numerics cast to BIGINT / INT
+Typed working set for the DimStudent merge: Stg_Student rows with grade, school, date, flag and numeric translations applied plus the derived GroupKey. TRUNCATE + INSERT inside usp_MergeStudent.
 
 **Defines:** table `Wrk_Student`
 **Used on routes (auto):** `/ingest`
+**Caveats:** Header translation list omits GroupKey (added later by migrate_DimStudent_add_GroupKey.sql). Transient; reflects the last merge only.
 
 ## Security tables
 
 ### sql/security/AppMaintenance.sql
 
-[sql/security/AppMaintenance.sql](../../sql/security/AppMaintenance.sql) · **security-table** · skeleton (not yet reviewed)
+[sql/security/AppMaintenance.sql](../../sql/security/AppMaintenance.sql) · **security-table** · reviewed 2026-10-23
 
-SINGLE-ROW store for the app maintenance window, so a sysadmin can schedule a graceful entry lockout ahead of an emergency container swap WITHOUT a rebuild. The running container reads it (via /api/status, server-side cached) and every client poller keys its staged banner / entry-lock / auto-save off the returned window + server clock.
+Single-row (Id = 1) store of the scheduled app maintenance window that drives the staged banner / entry lock in the web app via /api/status. Guarded create + seed of the empty row; SELECT granted to the app SP.
 
 **Defines:** table `AppMaintenance`
 **Grants:** SELECT on `AppMaintenance` → StudentDataAssessment
@@ -444,45 +490,50 @@ SINGLE-ROW store for the app maintenance window, so a sysadmin can schedule a gr
 **Writes:**
 - `AppMaintenance` — insert — `Id`, `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
 **Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/admin/staff-access`, `/api/status [API]`, `/cycles`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+**Caveats:** Both writer procs require the caller to be IsSysAdmin in StaffAppAccess (THROW 51040). Survives container restarts by design; a forgotten window is ignored by /api/status auto-expiry, not cleared in the table. Keep exactly one row.
 
 ### sql/security/SectionRosterMembership.sql
 
-[sql/security/SectionRosterMembership.sql](../../sql/security/SectionRosterMembership.sql) · **security-table** · skeleton (not yet reviewed)
+[sql/security/SectionRosterMembership.sql](../../sql/security/SectionRosterMembership.sql) · **security-table** · reviewed 2026-10-23
 
-Pre-joins the expensive, ingest-STABLE half of the entry roster — which students sit in which subject-mapped section for each active window, plus their static display attributes. Rebuilt every ingest by usp_RebuildRosterMembership. The roster TVFs read this instead of re-deriving the DimStudent/FactEnrollment/DimSection/DimGrade/DimProgram join at query time (which measured ~2s for a 20-student roster on 2026-09-23).
+Materialized, viewer-independent roster skeleton: one row per (AssessmentWindowID, SectionID, StudentKey) for every ActiveFlag=1 window, limited to sections whose course maps to the window's subject/language in DimCourseAssessment, with static display attributes. TRUNCATE + rebuild each ingest; the roster TVFs read it (oversight path) and apply access live.
 
 **Defines:** table `SectionRosterMembership`
 **Grants:** SELECT on `SectionRosterMembership` → StudentDataAssessment
 **Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`
+**Caveats:** Column comments on SectionKey ('version valid on WindowEffectiveDate') and StudentKey ('the version FactEnrollment points at') are stale since the 2026-10-13 fix: both are now the CURRENT version. Enrollment ActiveFlag is ignored (date overlap only), so departed students stay on past windows by design. Only refreshed by usp_RebuildRosterMembership - which usp_RunFullIngestCycle skips when the DQ gate fails, and which a cycle created/edited on /cycles does not trigger. Membership rules must stay in lockstep with tvf_TeacherGroups / tvf_TeacherRoster. This file DROPs the table.
 
 ### sql/security/StaffAppAccess.sql
 
-[sql/security/StaffAppAccess.sql](../../sql/security/StaffAppAccess.sql) · **security-table** · skeleton (not yet reviewed)
+[sql/security/StaffAppAccess.sql](../../sql/security/StaffAppAccess.sql) · **security-table** · reviewed 2026-10-23
 
-Per-staff APP-LEVEL capability allowlist for restricted admin features, keyed by staff email. ONE COLUMN PER CAPABILITY — each is an independent list, so (e.g.) cycle managers and ingest operators can be different people. Deliberately narrower than the RegionalAnalyst role: a curated set, not "every analyst."
+Manually curated allowlist of app-admin capabilities per staff email (one row per email): SysAdmin, cycle management, ingest, grace-lock overrides. Governs who may configure the tool, not which students a user sees; survives the production reset.
 
 **Defines:** table `StaffAppAccess`
 **Grants:** SELECT on `StaffAppAccess` → StudentDataAssessment
 **Used on routes (auto):** `(every page — layout)`, `/`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+**Caveats:** IsSysAdmin implies every capability; readers treat NULL override flags as 0. usp_SetStaffAppAccess is the sole app writer: caller must already be SysAdmin (51050), cannot demote the last SysAdmin (51051), and clearing every flag DELETES the row. Matching is LOWER(Email) - store lowercased. Dev helpers grant_dev_projectlead_access.sql / fix_dev_projectlead_analyst_active.sql also write here.
 
 ### sql/security/StaffSchoolAccess.sql
 
-[sql/security/StaffSchoolAccess.sql](../../sql/security/StaffSchoolAccess.sql) · **security-table** · skeleton (not yet reviewed)
+[sql/security/StaffSchoolAccess.sql](../../sql/security/StaffSchoolAccess.sql) · **security-table** · reviewed 2026-10-23
 
-Materialized RLS-oracle for school-tier staff access. Replaces the prior vw_StaffSchoolAccess view (2026-04-29 design — pure DimStaff unpacking) with a TABLE rebuilt on every staff merge. Same data shape, same derivation logic, same staleness; the only difference is materialization.
+Materialized school-access oracle: one row per (current active staff with a non-NULL AccessLevel, school they may see), from HomeSchoolID plus each CanChangeSchool entry. Fully rebuilt (TRUNCATE + INSERT) by every usp_MergeStaff run; no history.
 
 **Defines:** table `StaffSchoolAccess`
 **Used on routes (auto):** `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+**Caveats:** Never hand-insert: the next usp_MergeStaff TRUNCATEs it (dev seeds grant_dev_projectlead_access.sql / seed_dev_resource_teacher.sql vanish). Derived from DimStaff only, NOT FactStaffAssignment (contrary to the FactStaffAssignment header). The '0000' district row is computed but always filtered out (no DimSchool row) - region-wide reach is not represented here; an analyst sees only the schools listed. No GRANT in this file although SectionRosterMembership.sql says it is granted the same way - check the deploy bundle.
 
 ### sql/security/TeacherRosterMembership.sql
 
-[sql/security/TeacherRosterMembership.sql](../../sql/security/TeacherRosterMembership.sql) · **security-table** · skeleton (not yet reviewed)
+[sql/security/TeacherRosterMembership.sql](../../sql/security/TeacherRosterMembership.sql) · **security-table** · reviewed 2026-10-23
 
-The Taught-scope projection of SectionRosterMembership — one row per (TeacherEmail, AssessmentWindowID, SectionID, StudentKey) = base ⨝ the teacher's own sections (FactSectionTeachers). Carries the same static attributes as the base so a teacher's roster is a SINGLE-TABLE, JOIN-FREE, access-check-free read keyed by (TeacherEmail, GroupKey) — the hot path for the ~200 classroom teachers who open rosters constantly.
+Materialized fast path for classroom teachers: SectionRosterMembership joined to each teacher's own sections (FactSectionTeachers), one row per (TeacherEmail, AssessmentWindowID, SectionID, StudentKey). Single-table, access-check-free read keyed by (TeacherEmail, GroupKey); TRUNCATE + rebuild each ingest.
 
 **Defines:** table `TeacherRosterMembership`
 **Grants:** SELECT on `TeacherRosterMembership` → StudentDataAssessment
 **Used on routes (auto):** `/ingest`
+**Caveats:** Rebuilt in the same proc right after SectionRosterMembership, so the two cannot drift - but both go stale between ingests (a new co-teacher or a cycle created on /cycles appears only after the next rebuild). Teacher match is by section-assignment dates vs WindowEffectiveDate, so past windows keep the teacher who held the section then. Taught scope only; oversight roles read the base table. This file DROPs the table.
 
 ## Stored procedures (usp_*)
 
@@ -1957,632 +2008,1111 @@ Least-privilege grants for the web app's service principal [StudentDataAssessmen
 
 ### webapp/src/app/admin/maintenance/page.tsx
 
-[webapp/src/app/admin/maintenance/page.tsx](../../webapp/src/app/admin/maintenance/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/admin/maintenance/page.tsx](../../webapp/src/app/admin/maintenance/page.tsx) · **page** · reviewed 2026-10-23
 
+Sysadmin screen for the maintenance window: shows the current scheduled window/message and the MaintenanceControl form.
+
+**Access / row scope:** Server-enforced: signed-in (middleware + getCurrentUpn) and IsSysAdmin re-checked fresh; anyone else is redirected to '/'. Nav entry is hidden for non-sysadmins too (cosmetic).
 **App gates (auto):** capability:isSysAdmin, fresh-recheck, redirect, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`, `getMaintenanceWindow`
-**Used on routes (auto):** `/admin/maintenance`
+**Used in the app:**
+- `/admin/maintenance` — page load: getCallerCapabilities(fresh) + getMaintenanceWindow
+**Caveats:** force-dynamic. If AppMaintenance read fails the page shows 'none' instead of erroring.
 
 ### webapp/src/app/admin/staff-access/page.tsx
 
-[webapp/src/app/admin/staff-access/page.tsx](../../webapp/src/app/admin/staff-access/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/admin/staff-access/page.tsx](../../webapp/src/app/admin/staff-access/page.tsx) · **page** · reviewed 2026-10-23
 
+Sysadmin screen listing everyone on the StaffAppAccess allowlist with their capability flags, editable via StaffAccessManager.
+
+**Access / row scope:** Server-enforced: signed-in + IsSysAdmin re-checked fresh; the list is only fetched when allowed, otherwise an 'Access restricted' empty state renders (no redirect). Nav entry hidden for non-sysadmins (cosmetic).
 **App gates (auto):** capability:isSysAdmin, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`, `getStaffAppAccessList`
-**Used on routes (auto):** `/admin/staff-access`
+**Errors raised:**
+-  “Access restricted — Managing staff access is restricted to system administrators.” — caller is not a sysadmin
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — capability or list query threw (ErrorNote logs the real message server-side and shows this generic text)
+**Used in the app:**
+- `/admin/staff-access` — page load: getCallerCapabilities(fresh) + getStaffAppAccessList
+**Caveats:** force-dynamic.
 
 ### webapp/src/app/cycles/page.tsx
 
-[webapp/src/app/cycles/page.tsx](../../webapp/src/app/cycles/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/cycles/page.tsx](../../webapp/src/app/cycles/page.tsx) · **page** · reviewed 2026-10-23
 
+Short Cycles of Response admin screen: lists every cycle header with its instances and status for create/edit.
+
+**Access / row scope:** Server-enforced: signed-in + CanManageCycles (or SysAdmin) re-checked fresh; data only fetched when allowed, otherwise 'Access restricted'. Nav item hidden without the capability (cosmetic).
 **App gates (auto):** capability:canManageCycles, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`, `getShortCycles`
-**Used on routes (auto):** `/cycles`
+**Errors raised:**
+-  “Access restricted — Managing assessment cycles is restricted to designated staff.” — caller lacks CanManageCycles
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — capability or cycles query threw (ErrorNote logs the real message server-side)
+**Used in the app:**
+- `/cycles` — page load: getCallerCapabilities(fresh) + getShortCycles
+**Caveats:** force-dynamic.
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/page.tsx) · **page** · reviewed 2026-10-23
 
+Data Entry step 3: the roster grid(s) for one or more comma-joined group keys in a cycle + subject. Resolves which instance window(s) the class falls under, loads the reading, writing or math roster per window (plus scale levels and achievement bands for reading), works out grace-lock and override, and renders RosterEntry / WritingRosterEntry / MathRosterEntry — one grid per instance when a class straddles several. Streams via Suspense.
+
+**Access / row scope:** Server-enforced: signed-in; every roster comes from an @UPN TVF (tvf_TeacherRoster / tvf_TeacherRosterWriting / tvf_TeacherRosterMath) which checks section access in SQL. On the slow path getTeacherGroups authorises each requested key (keys the caller cannot see are dropped and reported). Lock/override decides only whether the grid renders editable — uses cached getTeacherWindows + getCallerCapabilities (NOT fresh); the write procs re-enforce the grace lock.
 **App gates (auto):** capability:canOverrideMath, signed-in (UPN)
 **data.ts calls:** `getAchievementLevels`, `getCallerCapabilities`, `getMathRoster`, `getScaleLevels`, `getShortCycles`, `getTeacherGroups`, `getTeacherRoster`, `getTeacherRosterWriting`, `getTeacherWindows`
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — any roster/group/window query threw
+-  “One class you opened / N classes you opened could not be shown.” — slow path: a requested group key is not among the caller's groups for this cycle
+-  “Part of this cycle has no students in this class.” — one of several instances resolved to zero students
+-  “This class isn't in this cycle” — no requested key resolved to a group
+-  “No students to enter for <group>” — the group resolved but every instance roster is empty
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — clicking a section card (or 'enter selected' combined link) on the picker; loads getTeacherGroups (slow path only), getTeacherWindows, getCallerCapabilities, getShortCycles (multi-instance only), then getTeacherRoster+getScaleLevels+getAchievementLevels / getTeacherRosterWriting / getMathRoster
+**Caveats:** force-dynamic. FAST PATH: a single-key URL with ?w= trusts the URL's window IDs, label, language and school and skips getTeacherGroups — the roster TVF still re-checks access, but this contradicts the lib/groupCache comment that deliberately kept window IDs out of the URL; a hand-edited ?w could also change which windows the lock check looks at (the proc still enforces the lock). Writing language is derived from the course (?lang / group.language), defaulting to English.
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/page.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/page.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/page.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/page.tsx) · **page** · reviewed 2026-10-23
 
+Data Entry step 2: the caller's mapped-course sections (ELA / FLA / Math) for one cycle + subject, rendered by GroupCards in 'course' mode (grouped by course language, with optional multi-select of same-language sections into one combined roster).
+
+**Access / row scope:** Server-enforced: signed-in; group list scoped in SQL by tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType) — 'Taught' sections for everyone plus 'Oversight' groups for admin/specialist/analyst roles per the TVF.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getTeacherGroups`
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — getTeacherGroups threw
+-  “No classes for this cycle — You teach no <subject> course section with students in this cycle's grade and program scope.” — TVF returned no groups
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]` — clicking a cycle card on /enter; page load runs getTeacherGroups (30s groupCache)
+**Caveats:** force-dynamic. cycleGroupId and subject come from the URL and are passed as TVF parameters (scoping is still in SQL).
 
 ### webapp/src/app/enter/page.tsx
 
-[webapp/src/app/enter/page.tsx](../../webapp/src/app/enter/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/enter/page.tsx](../../webapp/src/app/enter/page.tsx) · **page** · reviewed 2026-10-23
 
+Data Entry step 1: one card per (Short Cycle × subject) the signed-in user has a roster in, grouped under Reading / Writing / Math, with open cycles shown and past cycles in a 'Past … cycles' accordion (late entry in grace, then view-only). Instance windows are collapsed into their cycle header; counts are summed across instances.
+
+**Access / row scope:** Server-enforced: signed-in (middleware + getCurrentUpn). Which cycles appear is scoped in SQL by tvf_UserAssessmentWindows(@UPN) (teacher / admin / analyst branches). No capability gate.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getTeacherWindows`
-**Used on routes (auto):** `/enter`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — getTeacherWindows threw (ErrorNote)
+-  “No cycles for you right now” — no windows returned for this user
+-  “N assessment window(s) not attached to a Short Cycle and can't be opened here…” — a window has no CycleGroupID (orphan instance)
+**Used in the app:**
+- `/enter` — page load: getTeacherWindows (30s groupCache)
+**Caveats:** force-dynamic. Card status = most-open status across the cycle's instances; grace countdown = latest GraceEndsAt. Math cards show 'started · done' counts.
 
 ### webapp/src/app/ingest/page.tsx
 
-[webapp/src/app/ingest/page.tsx](../../webapp/src/app/ingest/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/ingest/page.tsx](../../webapp/src/app/ingest/page.tsx) · **page** · reviewed 2026-10-23
 
+Ingest admin screen: renders IngestPanel for uploading the five PowerSchool exports, scheduling pre-ingest maintenance, and running the ingest cycle.
+
+**Access / row scope:** Server-enforced: signed-in + CanRunIngest (or SysAdmin) re-checked fresh; others get 'Access restricted'. Nav item hidden without the capability (cosmetic). Exempt from the maintenance overlay by path.
 **App gates (auto):** capability:canRunIngest, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
-**Used on routes (auto):** `/ingest`
+**Errors raised:**
+-  “Access restricted — Ingesting PowerSchool data is restricted to designated staff.” — caller lacks CanRunIngest
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — capability lookup threw
+**Used in the app:**
+- `/ingest` — page load: getCallerCapabilities(fresh)
+**Caveats:** force-dynamic.
 
 ### webapp/src/app/ipp/page.tsx
 
-[webapp/src/app/ipp/page.tsx](../../webapp/src/app/ipp/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/ipp/page.tsx](../../webapp/src/app/ipp/page.tsx) · **page** · reviewed 2026-10-23
 
+Legacy route: redirects /ipp to /programming (the IPP screen became Programming in 0.5.0).
+
+**Access / row scope:** Signed-in via middleware matcher; no data read.
 **App gates (auto):** redirect
-**Used on routes (auto):** `/ipp`
+**Used in the app:**
+- `/ipp` — old bookmarks/links
 
 ### webapp/src/app/login/page.tsx
 
-[webapp/src/app/login/page.tsx](../../webapp/src/app/login/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/login/page.tsx](../../webapp/src/app/login/page.tsx) · **page** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/login`
+Thin redirect page the middleware sends unauthenticated users to: immediately starts Entra sign-in and returns to ?callbackUrl.
+
+**Access / row scope:** Public.
+**Used in the app:**
+- `/login` — middleware redirect from any protected route
 
 ### webapp/src/app/page.tsx
 
-[webapp/src/app/page.tsx](../../webapp/src/app/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/page.tsx](../../webapp/src/app/page.tsx) · **page** · reviewed 2026-10-23
 
+Home landing: welcome line (first name derived from the UPN), cards for Data Entry, Reports and Programming, and an 'Admin Tools' section with Short Cycles / Ingest / Maintenance / Staff Access cards for callers holding those capabilities.
+
+**Access / row scope:** Public route (not in the middleware matcher); an anonymous visitor just gets no welcome line and no admin cards. Admin-card hiding uses the cached getCallerCapabilities and is COSMETIC — the target pages enforce.
 **App gates (auto):** capability:canManageCycles, capability:canRunIngest, capability:isSysAdmin, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
-**Used on routes (auto):** `/`
+**Used in the app:**
+- `/` — page load: getCurrentUpn (optional) + getCallerCapabilities (cached)
+**Caveats:** force-dynamic. Card copy says 'Regional analysts only' for Cycles/Ingest, but the real gate is the StaffAppAccess capability, not the analyst role.
 
 ### webapp/src/app/programming/[groupKey]/page.tsx
 
-[webapp/src/app/programming/[groupKey]/page.tsx](../../webapp/src/app/programming/[groupKey]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/programming/[groupKey]/page.tsx](../../webapp/src/app/programming/[groupKey]/page.tsx) · **page** · reviewed 2026-10-23
 
+Programming roster for one group: every (student, subject, program family) IPP / Adaptation row, rendered by ProgrammingRosterGrid.
+
+**Access / row scope:** Server-enforced: signed-in; rows scoped in SQL by tvf_ProgrammingRoster(@UPN, @GroupKey) — a key outside scope returns nothing.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getProgrammingRoster`
-**Used on routes (auto):** `/programming/[groupKey]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — getProgrammingRoster threw
+-  “No IPP or Adaptation records in this group” — TVF returned no rows (empty or out-of-scope key)
+**Used in the app:**
+- `/programming/[groupKey]` — clicking a group card (or auto-redirect); page load: getProgrammingRoster
+**Caveats:** force-dynamic. Header label derived from the key prefix (GRADE: / SEC:) or the first row's homeroom.
 
 ### webapp/src/app/programming/page.tsx
 
-[webapp/src/app/programming/page.tsx](../../webapp/src/app/programming/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/programming/page.tsx](../../webapp/src/app/programming/page.tsx) · **page** · reviewed 2026-10-23
 
+Programming landing: progress chips (IPPs / Adaptations confirmed, student-level) and the GroupCards picker over groups containing students flagged for an IPP or Adaptation; a caller with exactly one group is redirected straight to it.
+
+**Access / row scope:** Server-enforced: signed-in; groups scoped in SQL by tvf_ProgrammingGroups(@UPN); summary by tvf_StudentIPP / tvf_StudentAdaptation(@UPN). No capability gate.
 **App gates (auto):** redirect, signed-in (UPN)
 **data.ts calls:** `getProgrammingGroups`, `getProgrammingSummary`
-**Used on routes (auto):** `/programming`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — getProgrammingGroups threw
+-  “No IPP or Adaptation records in your scope” — no flagged students in the caller's scope
+**Used in the app:**
+- `/programming` — page load: getProgrammingGroups + getProgrammingSummary (summary failure just hides the chips)
+**Caveats:** force-dynamic. The single-group redirect does not URL-encode the group key (other pages do).
 
 ### webapp/src/app/reports/[studentKey]/page.tsx
 
-[webapp/src/app/reports/[studentKey]/page.tsx](../../webapp/src/app/reports/[studentKey]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/[studentKey]/page.tsx](../../webapp/src/app/reports/[studentKey]/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports student detail (Reading, or Writing with ?subject=writing): loads the caller's ordered student nav list and this student's assessment history, then renders StudentDetailView with prev/next paging.
+
+**Access / row scope:** Server-enforced: signed-in; history from tvf_StudentAssessmentHistory / tvf_StudentAssessmentHistoryWriting(@UPN, @StudentKey) (scoped in SQL); the page additionally shows 'Student not in your scope' unless the key is in the caller's cohort nav list.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getStudentHistory`, `getStudentHistoryWriting`, `getStudentNavList`
-**Used on routes (auto):** `/reports/[studentKey]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — nav list or history read threw
+-  “Student not in your scope” — studentKey not in the caller's cohort list
+**Used in the app:**
+- `/reports/[studentKey]` — clicking a student in the cohort table; page load: getStudentNavList + getStudentHistory|getStudentHistoryWriting
+**Caveats:** force-dynamic. Passes the server actions loadStudentHistory / loadStudentHistoryWriting into the client view for paging.
 
 ### webapp/src/app/reports/math/[groupKey]/page.tsx
 
-[webapp/src/app/reports/math/[groupKey]/page.tsx](../../webapp/src/app/reports/math/[groupKey]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/[groupKey]/page.tsx](../../webapp/src/app/reports/math/[groupKey]/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports > Math > one group: read-only results matrix (MathCohortView) for a homeroom/grade/section, latest result per task, with a cycle selector.
+
+**Access / row scope:** Server-enforced: signed-in; rows scoped in SQL by tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) — out-of-scope key returns nothing.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getMathCohort`, `getReportCycles`
-**Used on routes (auto):** `/reports/math/[groupKey]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — matrix or cycles read threw
+-  “No students in this group” — TVF returned no rows (also when the grade has no configured tasks — see sql/scripts/diag_math_report_blank_roster.sql)
+**Used in the app:**
+- `/reports/math/[groupKey]` — clicking a group card on /reports/math (or auto-redirect); page load: getMathCohort + getReportCycles
+**Caveats:** force-dynamic.
 
 ### webapp/src/app/reports/math/page.tsx
 
-[webapp/src/app/reports/math/page.tsx](../../webapp/src/app/reports/math/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/page.tsx](../../webapp/src/app/reports/math/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports > Math landing (P–5). Oversight roles (DimStaff.AccessLevel Administrator / SpecialistTeacher / RegionalAnalyst) get the MathRollupTree over their whole scope with a cycle selector; everyone else gets a GroupCards picker of homeroom/grade groups (auto-redirect when there is exactly one).
+
+**Access / row scope:** Server-enforced: signed-in; data scoped in SQL by tvf_StudentCohortMathAll(@UPN, @CycleGroupID) or tvf_MathCohortGroups(@UPN). The tree-vs-cards choice uses getCallerAccessLevel (1h cached, no fresh option) — it only picks the layout; scope is still enforced by the TVFs.
 **App gates (auto):** redirect, role:AccessLevel, role:oversight-set, signed-in (UPN)
 **data.ts calls:** `getCallerAccessLevel`, `getMathCohortAll`, `getMathCohortGroups`, `getReportCycles`
-**Used on routes (auto):** `/reports/math`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — access-level, roll-up, cycles or groups read threw
+-  “No students in your scope” — oversight roll-up returned no rows
+-  “No classes in your scope” — teacher picker returned no groups
+**Used in the app:**
+- `/reports/math` — Math tab on Reports; page load: getCallerAccessLevel, then getMathCohortAll + getReportCycles (oversight) or getMathCohortGroups (teacher)
+**Caveats:** force-dynamic. Only page that calls getCallerAccessLevel. The teacher branch shows no CycleSelector on the picker (it appears on the group page).
 
 ### webapp/src/app/reports/page.tsx
 
-[webapp/src/app/reports/page.tsx](../../webapp/src/app/reports/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/page.tsx](../../webapp/src/app/reports/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports > Reading (default) or Writing (?subject=writing) cohort: every student in the caller's scope with latest result, achievement band, IPP status and demographics, filterable with charts (CohortView). Optional ?cycle binds results to one cycle.
+
+**Access / row scope:** Server-enforced: signed-in; cohort scoped in SQL by tvf_StudentCohort / tvf_StudentCohortWriting(@UPN, @CycleGroupID) (teachers: own students; Administrator / SpecialistTeacher / RegionalAnalyst: their schools).
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getAchievementLevels`, `getAssessableGradeRange`, `getReportCycles`, `getStudentCohort`, `getStudentCohortWriting`
-**Used on routes (auto):** `/reports`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — any of the four reads threw
+-  “No students in your scope” — cohort TVF returned no rows
+**Used in the app:**
+- `/reports` — page load and every Reading/Writing toggle or cycle-selector change: getStudentCohort|getStudentCohortWriting, getAchievementLevels, getAssessableGradeRange, getReportCycles
+**Caveats:** force-dynamic. CohortView is keyed on subject+cycle to force a remount on same-route navigation.
 
 ### webapp/src/app/reports/rwm/[studentKey]/page.tsx
 
-[webapp/src/app/reports/rwm/[studentKey]/page.tsx](../../webapp/src/app/reports/rwm/[studentKey]/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/rwm/[studentKey]/page.tsx](../../webapp/src/app/reports/rwm/[studentKey]/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports > RWM > one student: per-area snapshot, per-cycle 0–3 table and trend, with prev/next over the caller's RWM cohort.
+
+**Access / row scope:** Server-enforced: signed-in; cohort from tvf_StudentCohortRWM(@UPN, NULL) and history from tvf_StudentRWMHistory(@UPN, @StudentKey) (scoped in SQL); shows 'Student not found in your scope' when the key is not in the caller's cohort.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getStudentCohortRWM`, `getStudentRWMHistory`
-**Used on routes (auto):** `/reports/rwm/[studentKey]`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — cohort or history read threw
+-  “Student not found in your scope” — key not in the caller's P–5 non-IPP cohort
+**Used in the app:**
+- `/reports/rwm/[studentKey]` — clicking a student in the RWM table; page load: getStudentCohortRWM + getStudentRWMHistory
+**Caveats:** force-dynamic. studentKey is not regex-validated before reaching SQL (unlike getStudentHistory) — a non-numeric key relies on the TVF's CAST, which would throw and show the generic error.
 
 ### webapp/src/app/reports/rwm/page.tsx
 
-[webapp/src/app/reports/rwm/page.tsx](../../webapp/src/app/reports/rwm/page.tsx) · **page** · skeleton (not yet reviewed)
+[webapp/src/app/reports/rwm/page.tsx](../../webapp/src/app/reports/rwm/page.tsx) · **page** · reviewed 2026-10-23
 
+Reports > RWM: P–5 students' 0–3 score for how many of Reading / Writing / Math they are meeting or exceeding (math roll-up ≥ 75%), students with a confirmed IPP in any area excluded; cycle-selectable.
+
+**Access / row scope:** Server-enforced: signed-in; cohort scoped in SQL by tvf_StudentCohortRWM(@UPN, @CycleGroupID).
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getReportCycles`, `getStudentCohortRWM`
-**Used on routes (auto):** `/reports/rwm`
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — cohort or cycles read threw
+-  “No students in your scope” — TVF returned no rows
+**Used in the app:**
+- `/reports/rwm` — RWM tab on Reports; page load: getStudentCohortRWM + getReportCycles
+**Caveats:** force-dynamic.
 
 ## Server actions
 
 ### webapp/src/app/admin/maintenance/actions.ts
 
-[webapp/src/app/admin/maintenance/actions.ts](../../webapp/src/app/admin/maintenance/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/admin/maintenance/actions.ts](../../webapp/src/app/admin/maintenance/actions.ts) · **action** · reviewed 2026-10-23
 
+Server actions to schedule (startMaintenance) or clear (clearMaintenance) the app maintenance window via usp_SetMaintenanceWindow / usp_ClearMaintenanceWindow.
+
+**Access / row scope:** Server-enforced: both actions require signed-in + StaffAppAccess IsSysAdmin re-checked fresh (assertSysAdmin). The procs also receive @CallerUPN.
 **App gates (auto):** capability:isSysAdmin, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
 **Procedures called:** `usp_ClearMaintenanceWindow`, `usp_SetMaintenanceWindow`
-**Errors raised (auto):**
-- Error “Not authorized.” (line 23)
-**Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/programming/[groupKey]`
+**Errors raised:**
+-  “Not authorized.” — caller is not a sysadmin (or the capability lookup failed)
+-  “Choose between 1 and 240 minutes.” — minutes not a number or outside 1–240
+-  “<proc THROW 51xxx text or generic message>” — usp_SetMaintenanceWindow / usp_ClearMaintenanceWindow failed (via toUserMessage)
+**Used in the app:**
+- `/admin/maintenance` — startMaintenance: 'Start countdown' / 'Reschedule' / 'Schedule anyway' buttons; clearMaintenance: 'Cancel / all clear' button
+- `any page` — clearMaintenance is also reachable from the maintenance banner/overlay in MaintenanceProvider (sysadmin)
+**Caveats:** Time is computed on the server and sent as a UTC 'YYYY-MM-DD HH:MM:SS' string. revalidatePath('/admin/maintenance') after success.
 
 ### webapp/src/app/admin/staff-access/actions.ts
 
-[webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) · **action** · reviewed 2026-10-23
 
+Server actions for the Staff Access screen: findStaff (look up a current DimStaff row by email) and setStaffAccess (upsert one person's five StaffAppAccess flags via usp_SetStaffAppAccess; all-false removes the row per the proc).
+
+**Access / row scope:** Server-enforced: both require signed-in + IsSysAdmin re-checked fresh. usp_SetStaffAppAccess re-checks the caller again (and blocks removing the sole sysadmin, 51051).
 **App gates (auto):** capability:canManageCycles, capability:canOverrideMath, capability:canRunIngest, capability:isSysAdmin, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`, `lookupStaffByEmail`
 **Procedures called:** `usp_SetStaffAppAccess`
-**Errors raised (auto):**
-- UserError “Only a system administrator can change staff access.” (line 16)
-- UserError “Enter a staff email to search.” (line 36)
-- UserError “A staff email is required.” (line 49)
-- message “No current staff member found with that email.” (line 38)
-**Used on routes (auto):** `/admin/staff-access`
+**Errors raised:**
+-  “Only a system administrator can change staff access.” — caller is not a sysadmin
+-  “Enter a staff email to search.” — findStaff with a blank email
+-  “No current staff member found with that email.” — no IsCurrent DimStaff row for the email
+-  “A staff email is required.” — setStaffAccess with a blank email
+-  “<proc THROW 51xxx text, e.g. sole-sysadmin protection>” — usp_SetStaffAppAccess rejected the change (via toUserMessage)
+**Used in the app:**
+- `/admin/staff-access` — findStaff: 'Add' button / Enter in the add-by-email box; setStaffAccess: 'Save N change(s)' (called once per dirty row)
+**Caveats:** After a successful save calls invalidateAllIdentities() (this container only) and revalidatePath('/admin/staff-access').
 
 ### webapp/src/app/cycles/actions.ts
 
-[webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) · **action** · reviewed 2026-10-23
 
+Server actions for Short Cycle admin: saveCycleHeader (create/edit a DimShortCycle header via usp_UpsertShortCycleHeader; generates a GUID CycleGroupID on create) and saveShortCycle (upserts each scoped instance window via usp_UpsertShortCycle).
+
+**Access / row scope:** Server-enforced: both require signed-in + CanManageCycles (or SysAdmin) re-checked fresh (requireCycleAdmin). Procs also receive @CallerUPN.
 **App gates (auto):** capability:canManageCycles, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
 **Procedures called:** `usp_UpsertShortCycle`, `usp_UpsertShortCycleHeader`
-**Errors raised (auto):**
-- Error “You do not have permission to manage assessment cycles.” (line 18)
-- Error “Add at least one assessment instance to the cycle.” (line 84)
-**Used on routes (auto):** `/cycles`
+**Errors raised:**
+-  “You do not have permission to manage assessment cycles.” — caller lacks CanManageCycles/SysAdmin
+-  “Add at least one assessment instance to the cycle.” — no instance with subject Reading/Writing/Math was submitted
+**Used in the app:**
+- `/cycles` — saveCycleHeader: header form Save and the per-row Activate/Deactivate toggle; saveShortCycle: 'Save instances' in the Instances panel
+**Caveats:** Throws plain Error and does not use toUserMessage/UserError, unlike the other admin actions — in a production build Next.js masks thrown server-action messages, so these texts (and proc THROW texts) may reach the user only as a generic error. 'Removing' an existing instance = saving it with active=false. Empty optional params are omitted so proc NULL defaults apply.
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) · **action** · reviewed 2026-10-23
 
+Server actions that save roster entries: saveReadingAssessments (usp_UpsertReadingAssessment), saveWritingAssessments (usp_UpsertWritingAssessment), saveMathAssessments (usp_UpsertMathAssessment, run concurrently), confirmRosterIPPs (usp_UpsertStudentIPP for Reading or Writing). Assessment date = MIN(Atlantic today, the window's EndDate) so late entries land inside the window.
+
+**Access / row scope:** Server-enforced: UPN resolved server-side and passed as @CallerUPN. SCOPE GATE before every write: the target student must be on the caller's @UPN roster TVF for that window + group keys (and language for writing). No capability check here — grace-lock/override and per-row validation are enforced in the procs.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getMathRoster`, `getTeacherRoster`, `getTeacherRosterWriting`, `getWindowEndDate`
 **Procedures called:** `usp_UpsertMathAssessment`, `usp_UpsertReadingAssessment`, `usp_UpsertStudentIPP`, `usp_UpsertWritingAssessment`
-**Errors raised (auto):**
-- message “Not in your roster for this window/group — not saved.” (line 64)
-- message “Not in your roster for this window/group — not saved.” (line 136)
-- message “Not in your roster for this window/group — not saved.” (line 276)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Errors raised:**
+-  “Not in your roster for this window/group — not saved.” — target student is not on the caller's scoped roster
+-  “<proc THROW 51xxx text, e.g. 51017 date gate, 51031 closed/locked window>” — the write proc rejected the row (passed through toUserMessage, per row)
+-  “Something went wrong. Please retry; if it persists, contact your administrator.” — reading/writing/math: session, window-date or roster lookup failed before the loop — every row is returned failed instead of throwing
+**Used in the app:**
+- `/enter/cycle/.../[groupKey] (Reading)` — RosterEntry 'Save N change(s)' -> saveReadingAssessments + confirmRosterIPPs (Reading); also the T-1 maintenance auto-save
+- `/enter/cycle/.../[groupKey] (Writing)` — WritingRosterEntry Save -> saveWritingAssessments + confirmRosterIPPs('Writing', language); also T-1 auto-save
+- `/enter/cycle/.../[groupKey] (Math)` — MathRosterEntry Save -> saveMathAssessments; also T-1 auto-save
+**Caveats:** Reading/writing/math saves call invalidateGroups(upn); math also revalidatePath('/enter','layout'). confirmRosterIPPs does NOT invalidate the group cache and its pre-loop (getCurrentUpn + roster) is NOT wrapped — a transient failure there throws to the client (the grids catch it and show 'Save failed'). Math upserts run in parallel bounded by the pool size; procs are idempotent so the db.ts stale-pool retry is safe.
 
 ### webapp/src/app/ingest/actions.ts
 
-[webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) · **action** · reviewed 2026-10-23
 
+Ingest server actions: uploadIngestFile (one PS export -> OneLake Files/imports/{topic}/ via lib/onelake), scheduleIngestMaintenance (usp_SetMaintenanceWindow 15 min out with a fixed teacher message), runIngestCycle (usp_TriggerIngestCycle, then clears all identity/group caches and tries usp_ClearMaintenanceWindow).
+
+**Access / row scope:** Server-enforced: every action requires signed-in + CanRunIngest (or SysAdmin) re-checked fresh. Setting/clearing maintenance additionally needs SysAdmin inside the procs (51040) — an ingest-only admin gets a friendly message and maintenance must be set/cleared by a sysadmin.
 **App gates (auto):** capability:canRunIngest, fresh-recheck, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
 **Procedures called:** `usp_ClearMaintenanceWindow`, `usp_SetMaintenanceWindow`, `usp_TriggerIngestCycle`
-**Errors raised (auto):**
-- UserError “You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed.” (line 20)
-- UserError “Unknown ingest topic: ${topic}” (line 36)
-- UserError “No file provided.” (line 38)
-- UserError “File is ${(file.size / 1048576).toFixed(1)} MB; the limit is 25 MB.” (line 43)
-**Used on routes (auto):** `/ingest`
+**Errors raised:**
+-  “You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed.” — caller lacks CanRunIngest
+-  “Unknown ingest topic: <topic>” — topic not in IMPORT_TOPICS
+-  “No file provided.” — missing or empty file
+-  “File is N MB; the limit is 25 MB.” — upload larger than 25 MB
+-  “Scheduling maintenance needs sysadmin rights, which this account does not have. Ask a sysadmin, or set the window in SQL (see docs/ingest-runbook.md).” — usp_SetMaintenanceWindow rejected the caller (51040 / 'sysadmin' in message)
+-  “Ingest cycle completed. The app is back up.” — run succeeded and maintenance cleared
+-  “Ingest cycle completed, but maintenance could not be cleared automatically — clear it on the Maintenance page.” — run succeeded but usp_ClearMaintenanceWindow failed (e.g. caller not sysadmin)
+-  “<raw error message> — maintenance has been left ON deliberately, so nobody writes against a half-applied ingest. Clear it once you have checked the warehouse.” — permission check or usp_TriggerIngestCycle threw
+**Used in the app:**
+- `/ingest` — uploadIngestFile: per-topic Upload button; scheduleIngestMaintenance: 'Schedule maintenance (15 min)'; runIngestCycle: 'Run ingest cycle'
+**Caveats:** runIngestCycle's failure path returns the RAW e.message (not toUserMessage), so SQL/driver text can reach the admin's screen — inconsistent with the other actions. Its suffix claims maintenance was left ON even when no window was scheduled or the failure was the permission check. Cache clears (invalidateAllIdentities / invalidateAllGroups) only reach the container that ran the ingest. Uploading replaces the topic folder's contents.
 
 ### webapp/src/app/programming/[groupKey]/actions.ts
 
-[webapp/src/app/programming/[groupKey]/actions.ts](../../webapp/src/app/programming/[groupKey]/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/programming/[groupKey]/actions.ts](../../webapp/src/app/programming/[groupKey]/actions.ts) · **action** · reviewed 2026-10-23
 
+saveProgramming: bulk-saves staged IPP and Adaptation confirmations via usp_UpsertStudentIPP / usp_UpsertStudentAdaptation.
+
+**Access / row scope:** Server-enforced: UPN resolved server-side (@CallerUPN). Scope + existence gate: each (student|subject|family) must appear in the caller's tvf_ProgrammingRoster for that group AND already have a fact row of that kind (procs update seeded rows, never create). No capability check.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getProgrammingRoster`
 **Procedures called:** `usp_UpsertStudentAdaptation`, `usp_UpsertStudentIPP`
-**Errors raised (auto):**
-- message “Out of your scope — not saved.” (line 53)
-**Used on routes (auto):** `/programming/[groupKey]`
+**Errors raised:**
+-  “Out of your scope — not saved.” — row not in the caller's roster, or no existing row of that kind
+-  “<proc THROW 51xxx text or generic message>” — usp_UpsertStudentIPP / usp_UpsertStudentAdaptation failed (toUserMessage)
+**Used in the app:**
+- `/programming/[groupKey]` — ProgrammingRosterGrid Save button (and the T-1 maintenance auto-save)
+**Caveats:** Pre-loop (getCurrentUpn + roster read) is NOT wrapped — a transient failure throws to the client, unlike the /enter saves which return per-row errors. revalidatePath('/programming/<groupKey>').
 
 ### webapp/src/app/reports/[studentKey]/actions.ts
 
-[webapp/src/app/reports/[studentKey]/actions.ts](../../webapp/src/app/reports/[studentKey]/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/reports/[studentKey]/actions.ts](../../webapp/src/app/reports/[studentKey]/actions.ts) · **action** · reviewed 2026-10-23
 
+loadStudentHistory / loadStudentHistoryWriting: fetch one student's reading or writing history for client-side prev/next paging and neighbour prefetch.
+
+**Access / row scope:** Server-enforced: UPN resolved server-side; the history TVFs scope by @UPN so an out-of-scope key returns no rows. Malformed keys (not 1–20 digits) return [] before SQL.
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getStudentHistory`, `getStudentHistoryWriting`
-**Used on routes (auto):** `/reports/[studentKey]`
+**Used in the app:**
+- `/reports/[studentKey]` — Prev / Next buttons and neighbour prefetch in StudentDetailView
 
 ### webapp/src/app/reports/math/actions.ts
 
-[webapp/src/app/reports/math/actions.ts](../../webapp/src/app/reports/math/actions.ts) · **action** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/actions.ts](../../webapp/src/app/reports/math/actions.ts) · **action** · reviewed 2026-10-23
 
+loadMathGroup: returns one group's math matrix rows (tvf_StudentCohortMath) for the oversight roll-up tree when a Grade/Homeroom row is expanded.
+
+**Access / row scope:** Server-enforced: UPN resolved server-side; the TVF scope-gates the group key (out-of-scope -> no rows).
 **App gates (auto):** signed-in (UPN)
 **data.ts calls:** `getMathCohort`
-**Used on routes (auto):** `/reports/math`
+**Errors raised:**
+-  “<toUserMessage text>” — session or TVF read failed (returned as {error})
+**Used in the app:**
+- `/reports/math` — expanding a Grade or Homeroom row in MathRollupTree
 
 ## API routes
 
 ### webapp/src/app/api/auth/[...nextauth]/route.ts
 
-[webapp/src/app/api/auth/[...nextauth]/route.ts](../../webapp/src/app/api/auth/[...nextauth]/route.ts) · **api-route** · skeleton (not yet reviewed)
+[webapp/src/app/api/auth/[...nextauth]/route.ts](../../webapp/src/app/api/auth/[...nextauth]/route.ts) · **api-route** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/api/auth/[...nextauth] [API]`
+Mounts the Auth.js GET/POST handlers at /api/auth/* (sign-in, callback, sign-out, session).
+
+**Used in the app:**
+- `/api/auth/*` — Sign in / Sign out buttons and the Entra callback
 
 ### webapp/src/app/api/health/route.ts
 
-[webapp/src/app/api/health/route.ts](../../webapp/src/app/api/health/route.ts) · **api-route** · skeleton (not yet reviewed)
+[webapp/src/app/api/health/route.ts](../../webapp/src/app/api/health/route.ts) · **api-route** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/api/health [API]`
+Unauthenticated liveness probe returning {status:'ok'} (no config or DB touched).
+
+**Access / row scope:** Public by design.
+**Used in the app:**
+- `/api/health` — container/host health check
+**Caveats:** force-dynamic.
 
 ### webapp/src/app/api/status/route.ts
 
-[webapp/src/app/api/status/route.ts](../../webapp/src/app/api/status/route.ts) · **api-route** · skeleton (not yet reviewed)
+[webapp/src/app/api/status/route.ts](../../webapp/src/app/api/status/route.ts) · **api-route** · reviewed 2026-10-23
 
+Public status endpoint for the client maintenance poller: returns the scheduled maintenance time (UTC) and message from AppMaintenance plus the server clock so clients can correct for skew.
+
+**Access / row scope:** Public (not in the middleware matcher, no getCurrentUpn) — exposes only the maintenance time/message.
 **data.ts calls:** `getMaintenanceWindow`
-**Used on routes (auto):** `/api/status [API]`
+**Used in the app:**
+- `every page` — MaintenanceProvider poll (/api/status)
+**Caveats:** Module-level 4s cache so many polling tabs hit the DB once per 4s per container. Fails OPEN: a DB error reports no maintenance. No auto-expire — a window stays until explicitly cleared. LOG_STATUS_POLLS=1 logs each poll (dev only). force-dynamic.
 
 ## Data module (lib/data.ts)
 
 ### webapp/src/lib/data.ts
 
-[webapp/src/lib/data.ts](../../webapp/src/lib/data.ts) · **data-module** · skeleton (not yet reviewed)
+[webapp/src/lib/data.ts](../../webapp/src/lib/data.ts) · **data-module** · reviewed 2026-10-23
 
+The app's secured read layer. Per-user reads query the @UPN-parameterised inline TVFs (dbo.tvf_*) via queryAsUser, which binds the signed-in UPN — scoping (teacher / Administrator / SpecialistTeacher / RegionalAnalyst branches) is enforced in SQL inside the TVFs. Reference/config reads (cycles, windows, scale levels, achievement bands, maintenance, capabilities) use plain query() against tables. Maps rows into the TS shapes the pages use. Writes are NOT here — they go through execProc in the actions.
+
+**Access / row scope:** Server-only. Does no authorization of its own except getCallerCapabilities / getCallerAccessLevel, which RETURN the caller's capabilities/role for pages and actions to check. getShortCycles, getStaffAppAccessList and lookupStaffByEmail are unscoped SP reads — callers must gate them (cycles page: CanManageCycles; staff-access page/actions: IsSysAdmin).
+**Used in the app:**
+- `every data page and most server actions` — see functions
+**Caveats:** Caches: getTeacherWindows + getTeacherGroups use lib/groupCache (30s, invalidated on save/ingest); getCallerAccessLevel + getCallerCapabilities use lib/identityCache (1h, invalidated on staff-access save/ingest; capabilities bypass with { fresh: true }); getScaleLevels + getAchievementLevels use lib/refCache (6h, restart only). getCallerCapabilities retries 3× on a thrown query and never caches a failure. DEAD CODE (no importer in webapp/src): getWindowAssessmentType, getWindowLanguage, getStudentIPPList. getStudentNavList interpolates the TVF and IPP column names (from a fixed 'Reading'|'Writing' enum), so the extractor shows no SQL objects for it — it reads tvf_StudentCohort / tvf_StudentCohortWriting. getStudentHistory* reject non-numeric keys before SQL; getStudentRWMHistory does not. Writing cohort reuses the CohortStudent shape (avg score in mostRecentLevelCode, writing IPP in ippStatusReading).
 
 ## Library
 
 ### webapp/src/lib/auth.ts
 
-[webapp/src/lib/auth.ts](../../webapp/src/lib/auth.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/auth.ts](../../webapp/src/lib/auth.ts) · **lib** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- Error “No authenticated user -- sign in required” (line 15)
-**Used on routes (auto):** `(every page — layout)`, `/`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+getCurrentUpn(): resolves the signed-in user's UPN (session.user.upn, falling back to email) from the Auth.js Entra session. This UPN is what every data.ts read binds as @UPN and every action passes as @CallerUPN.
+
+**Access / row scope:** Server-only. Throws if there is no authenticated session; it is the app's single 'signed-in' check used by every protected page and server action.
+**Errors raised:**
+-  “No authenticated user -- sign in required” — no Auth.js session or the session has neither upn nor email (normally pre-empted by the middleware redirect to /login)
+**Used in the app:**
+- `every protected page and server action` — first call when a page renders or an action runs
+**Caveats:** The UPN comes from the Entra token (upn / preferred_username) set in src/auth.ts — never from the browser. A dev-auth bypass exists only on the dev-impersonation branch, not here.
 
 ### webapp/src/lib/db.ts
 
-[webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) · **lib** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- Error “ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET must be set” (line 39)
-- Error “FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set” (line 57)
-- Error “Failed to acquire an Entra access token for Fabric” (line 66)
-**Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+The only warehouse connection: a lazily-created mssql pool authenticated with a pre-acquired Entra service-principal token. Exposes query() (unscoped reads), queryAsUser() (binds the signed-in UPN as @UPN for the tvf_* reads), execProc() (the only write path — stored procs), and getCredential() (also used by onelake.ts).
+
+**Access / row scope:** Server-only (import 'server-only'). Connects as the StudentDataAssessment service principal; per-user scoping is done by the TVFs/procs using the @UPN / @CallerUPN the app passes, not by the connection.
+**Errors raised:**
+-  “ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET must be set” — service-principal env vars missing
+-  “FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set” — warehouse env vars missing
+-  “Failed to acquire an Entra access token for Fabric” — token request for the SQL scope returned nothing
+**Used in the app:**
+- `all data-reading pages and server actions` — via lib/data.ts and direct execProc calls in actions
+**Caveats:** runOnPool self-heals a dead/expired-token connection: on ELOGIN/ESOCKET/ECONNCLOSED/ECONNRESET/ETIMEOUT or auth/socket messages it drops the pool and retries ONCE (relies on write procs being idempotent). Proc THROWs are not retried. Pool max 20, overridable via FABRIC_POOL_MAX. SQL_TIMING=1 logs per-query timings (object names only). execProc returns void — procs have no OUTPUT (Fabric limitation).
 
 ### webapp/src/lib/errors.ts
 
-[webapp/src/lib/errors.ts](../../webapp/src/lib/errors.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/errors.ts](../../webapp/src/lib/errors.ts) · **lib** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/admin/staff-access`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`, `/reports/math`
+UserError class (intentional, user-facing validation failures) and toUserMessage(), which maps any thrown error to a client-safe string.
+
+**Access / row scope:** Server-only helper; no gate.
+**Errors raised:**
+-  “Something went wrong. Please retry; if it persists, contact your administrator.” — any error that is not a UserError and not a SQL THROW numbered 51000–51999 (the real message is logged server-side only)
+**Used in the app:**
+- `/admin/maintenance, /admin/staff-access, /ingest, /enter roster, /programming roster, /reports actions` — server actions wrap their catch blocks in toUserMessage before returning an error to the client
+**Caveats:** Pass-through rule: UserError messages and SQL error numbers 51000–51999 (proc THROWs) reach the user verbatim; everything else is genericised. /cycles actions do NOT use this (they throw plain Error). Server pages genericise read failures separately via components/ui ErrorNote.
 
 ### webapp/src/lib/groupCache.ts
 
-[webapp/src/lib/groupCache.ts](../../webapp/src/lib/groupCache.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/groupCache.ts](../../webapp/src/lib/groupCache.ts) · **lib** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`
+Per-process 30-second cache of tvf_TeacherGroups results (keyed user|cycle|subject) and of tvf_UserAssessmentWindows results (keyed user), so the /enter landing -> picker -> roster journey does not re-run the slow TVFs.
+
+**Used in the app:**
+- `/enter, /enter/cycle/[cycleGroupId]/[subject], /enter/cycle/.../[groupKey]` — data.ts getTeacherWindows / getTeacherGroups read and fill it
+- `/enter/cycle/.../[groupKey]` — every save action calls invalidateGroups(upn)
+- `/ingest` — a successful ingest run calls invalidateAllGroups()
+**Caveats:** Invalidation: 30s TTL; invalidateGroups(upn) on reading/writing/math save; invalidateAllGroups() after ingest. The cached rows carry entered/applicable counts, so without the save invalidation the picker would show stale progress. Per-process — another container can serve counts up to 30s old. Deliberately keeps window IDs/labels out of the URL (access-adjacent values).
 
 ### webapp/src/lib/identityCache.ts
 
-[webapp/src/lib/identityCache.ts](../../webapp/src/lib/identityCache.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/identityCache.ts](../../webapp/src/lib/identityCache.ts) · **lib** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/admin/staff-access`, `/ingest`
+Per-process 1-hour cache of each user's DimStaff.AccessLevel and StaffAppAccess capabilities, keyed by lowercased UPN, so AppShell does not pay two warehouse round trips on every navigation.
+
+**Used in the app:**
+- `every page (via AppShell -> getCallerCapabilities) and /reports/math (getCallerAccessLevel)` — data.ts reads/writes it
+- `/admin/staff-access` — setStaffAccess calls invalidateAllIdentities after a save
+- `/ingest` — a successful ingest run calls invalidateAllIdentities
+**Caveats:** Invalidation: TTL 1h; invalidateAllIdentities() after a staff-access save or an ingest run. invalidateIdentity(upn) is exported but never called. Authorization paths bypass this cache via getCallerCapabilities(upn, { fresh: true }); getCallerAccessLevel has NO fresh option, so an AccessLevel read is always cache-eligible. Per-process (multiple containers each keep a copy; only the container that ran the ingest/save is cleared).
 
 ### webapp/src/lib/keys.ts
 
-[webapp/src/lib/keys.ts](../../webapp/src/lib/keys.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/keys.ts](../../webapp/src/lib/keys.ts) · **lib** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- Error “Invalid surrogate key (expected 1-20 digit string): ${v}” (line 16)
+Surrogate-key helpers: a branded SurrogateKey string type, toKey() (validates a 1–20 digit string) and isSafeAsNumber(). Documents why BIGINT keys must stay strings end to end in JS.
+
+**Errors raised:**
+-  “Invalid surrogate key (expected 1-20 digit string): <value>” — toKey called with anything other than 1–20 digits
+**Caveats:** DEAD CODE: nothing in webapp/src imports this module. Equivalent inline /^\d{1,20}$/ checks live in data.ts (getStudentHistory*) instead. Its doc comment is still the reference for the keys-as-strings rule.
 
 ### webapp/src/lib/onelake.ts
 
-[webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) · **lib** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- Error “ONELAKE_WORKSPACE and ONELAKE_LANDING_LAKEHOUSE must be set (workspace + Assessment_Landing lakehouse GUIDs)” (line 31)
-- Error “Failed to acquire a OneLake (storage) access token” (line 38)
-- Error “OneLake ${res.status} ${res.statusText}${detail ? ” (line 60)
-**Used on routes (auto):** `/ingest`
+Uploads an ingest CSV to the OneLake landing lakehouse (Files/imports/{topic}/) through the ADLS Gen2 REST API, using a storage-scoped token from the same service-principal credential as db.ts. Clears the topic folder first so the loaders' wildcard COPY INTO sees one file.
+
+**Access / row scope:** Server-only; no caller check of its own — the /ingest upload action gates it (canRunIngest, fresh).
+**Errors raised:**
+-  “ONELAKE_WORKSPACE and ONELAKE_LANDING_LAKEHOUSE must be set (workspace + Assessment_Landing lakehouse GUIDs)” — container env vars missing
+-  “Failed to acquire a OneLake (storage) access token” — Entra token request for the storage scope returned nothing
+-  “OneLake <status> <statusText>: <detail>” — any DFS call fails (other than 409 on mkdir / 404 on list/delete)
+**Used in the app:**
+- `/ingest` — uploadFile action (Upload button per topic)
+**Caveats:** IMPORT_TOPICS folder names must match the COPY INTO paths in the usp_Load*Staging procs (lockstep). The SP needs workspace Contributor. Student PII transits this server — container must run in a Canadian region. These errors are not UserErrors, so toUserMessage genericises them in the UI.
 
 ### webapp/src/lib/patchNotes.ts
 
-[webapp/src/lib/patchNotes.ts](../../webapp/src/lib/patchNotes.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/patchNotes.ts](../../webapp/src/lib/patchNotes.ts) · **lib** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Teacher-facing release notes (PATCH_NOTES, newest first, starting at 1.0.0), APP_VERSION (from NEXT_PUBLIC_APP_VERSION, falling back to the newest note) and recentNotes() (current + previous minor line).
+
+**Used in the app:**
+- `every page` — VersionFooter version tag + What's new modal
+**Caveats:** Add an entry whenever a user-visible change ships; full history lives in CHANGELOG.md.
 
 ### webapp/src/lib/refCache.ts
 
-[webapp/src/lib/refCache.ts](../../webapp/src/lib/refCache.ts) · **lib** · skeleton (not yet reviewed)
+[webapp/src/lib/refCache.ts](../../webapp/src/lib/refCache.ts) · **lib** · reviewed 2026-10-23
 
+Per-process 6-hour cache for static reference data: reading-scale levels (DimReadingScale, key 'scale:<ScaleSystem>') and achievement bands (DimAchievementLevel, key 'achievement').
+
+**Used in the app:**
+- `/enter/cycle/.../[groupKey], /reports` — data.ts getScaleLevels / getAchievementLevels read and fill it
+**Caveats:** Only invalidated by TTL or a container restart (deploy). invalidateRefs() exists but nothing calls it — a scale/band seed changed without a restart is served stale for up to 6 hours. Per-process: each container holds its own copy.
 
 ## Components
 
 ### webapp/src/components/AppShell.tsx
 
-[webapp/src/components/AppShell.tsx](../../webapp/src/components/AppShell.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/AppShell.tsx](../../webapp/src/components/AppShell.tsx) · **component** · reviewed 2026-10-23
 
+Server app chrome around every page: brand/home link, Nav, AuthArea, MaintenanceProvider, VersionFooter and PostLoginRefresh. Resolves the caller's capabilities once to decide which nav items show.
+
+**Access / row scope:** Nav gating here is COSMETIC: uses the cached getCallerCapabilities (no fresh). Unauthenticated visitors ('/' is public) get no capabilities. The gated pages/actions re-check server-side.
 **App gates (auto):** capability:canManageCycles, capability:canRunIngest, capability:isSysAdmin, signed-in (UPN)
 **data.ts calls:** `getCallerCapabilities`
-**Used on routes (auto):** `(every page — layout)`
+**Used in the app:**
+- `every page` — rendered by app/layout.tsx
+**Caveats:** A caps-query failure sets capsError so PostLoginRefresh retries a bounded number of times instead of flipping the user to signed-out.
 
 ### webapp/src/components/AuthArea.tsx
 
-[webapp/src/components/AuthArea.tsx](../../webapp/src/components/AuthArea.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/AuthArea.tsx](../../webapp/src/components/AuthArea.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Header identity widget: shows the signed-in UPN with a Sign out button, or a Sign in button (Entra) when signed out. Uses inline server actions for signIn/signOut.
+
+**Used in the app:**
+- `every page` — AppShell header; also passed into the maintenance down overlay so an admin can switch accounts
 
 ### webapp/src/components/GroupCards.tsx
 
-[webapp/src/components/GroupCards.tsx](../../webapp/src/components/GroupCards.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/GroupCards.tsx](../../webapp/src/components/GroupCards.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]`, `/programming`, `/reports/math`
+Shared choose-a-group picker. 'My classes' (Scope Taught) always; 'All groups' (Scope Oversight) with a Homeroom/Section/Grade lens, grade chips and a school filter (persisted per tab in sessionStorage). 'course' mode (Data Entry) groups cards by course language and allows multi-selecting same-language sections into one combined roster link; card links carry ?w/label/lang/school for the roster fast path.
+
+**Access / row scope:** Client-side only; which groups exist is decided by the server page's @UPN TVF. Filters are display-only.
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]` — section picker (mode course, metaSuffix 'done', math shows started/done)
+- `/programming` — Programming group picker (lens mode; enteredCount shown as 'need confirmation')
+- `/reports/math` — Math cohort report group picker (count meta)
+**Caveats:** The URL metadata it adds (window IDs etc.) is what the roster page's fast path trusts — lockstep with [groupKey]/page.tsx.
 
 ### webapp/src/components/LinkPending.tsx
 
-[webapp/src/components/LinkPending.tsx](../../webapp/src/components/LinkPending.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/LinkPending.tsx](../../webapp/src/components/LinkPending.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+Shows an instant 'Opening…' spinner inside a Link while its navigation is pending (useLinkStatus), independent of server streaming (works around proxy response buffering on live).
+
+**Used in the app:**
+- `all card links` — rendered inside CardLink in components/ui
 
 ### webapp/src/components/Nav.tsx
 
-[webapp/src/components/Nav.tsx](../../webapp/src/components/Nav.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/Nav.tsx](../../webapp/src/components/Nav.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Primary nav links: Home, Data Entry, Reports, Programming always; Cycles, Ingest, Maintenance, Staff Access only when the matching show* prop is true. Highlights the active route.
+
+**Access / row scope:** Client-side only, cosmetic hiding. Real enforcement: /cycles (CanManageCycles), /ingest (CanRunIngest), /admin/* (IsSysAdmin) pages and actions.
+**Used in the app:**
+- `every page` — rendered in the AppShell header
 
 ### webapp/src/components/PostLoginRefresh.tsx
 
-[webapp/src/components/PostLoginRefresh.tsx](../../webapp/src/components/PostLoginRefresh.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/PostLoginRefresh.tsx](../../webapp/src/components/PostLoginRefresh.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Invisible client helper that does one router.refresh() after the first authenticated render of a tab session (login cookie race) and up to 3 refreshes when AppShell reports a capabilities-query error, so the capability-gated nav resolves.
+
+**Access / row scope:** Client-side only.
+**Used in the app:**
+- `every page` — rendered by AppShell
+**Caveats:** Bounded via sessionStorage keys postLoginRefreshed and capsRetryCount.
 
 ### webapp/src/components/VersionFooter.tsx
 
-[webapp/src/components/VersionFooter.tsx](../../webapp/src/components/VersionFooter.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/VersionFooter.tsx](../../webapp/src/components/VersionFooter.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Footer version tag (vX.Y.Z); clicking opens the 'What's new' modal listing patch notes for the current and previous minor line.
+
+**Used in the app:**
+- `every page` — rendered by AppShell; click the version tag
 
 ### webapp/src/components/entryDraft.ts
 
-[webapp/src/components/entryDraft.ts](../../webapp/src/components/entryDraft.ts) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/entryDraft.ts](../../webapp/src/components/entryDraft.ts) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+localStorage persistence of UNSAVED grid edits (key scor:draft:<subject>:<windowId>:<groupKey>, 90-minute TTL), reconciled against the current roster on restore.
+
+**Access / row scope:** Client-side only. Stores surrogate keys + scores only — never student numbers or names.
+**Used in the app:**
+- `/enter/cycle/.../[groupKey]` — Reading, Writing and Math grids write on every edit and read on mount
+**Caveats:** clearDraft is exported but unused (writeDraft with an empty map clears instead). Storage failures silently no-op.
 
 ### webapp/src/components/maintenance/MaintenanceProvider.tsx
 
-[webapp/src/components/maintenance/MaintenanceProvider.tsx](../../webapp/src/components/maintenance/MaintenanceProvider.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/maintenance/MaintenanceProvider.tsx](../../webapp/src/components/maintenance/MaintenanceProvider.tsx) · **component** · reviewed 2026-10-23
 
+Client context that polls /api/status, offsets to server time, and drives the staged maintenance lifecycle (warn at T-20, lock-after-save T-5, full lock T-3, auto-save T-1, down past T): renders the banner and, past T, a full-screen 'We'll be right back' overlay. Sysadmins get a 'Clear maintenance now' button.
+
+**Access / row scope:** Client-side only. The clear button is shown when AppShell passes isSysAdmin (cached capability); clearMaintenance re-checks sysadmin fresh on the server. /ingest and /admin/maintenance are exempt from the overlay by path (those pages gate server-side).
 **App gates (auto):** capability:canRunIngest, capability:isSysAdmin
-**Used on routes (auto):** `(every page — layout)`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/programming/[groupKey]`
+**Errors raised:**
+-  “We'll be right back — The SCoR Dashboard is being updated…” — maintenance time has passed and the window has not been cleared (custom message replaces the text)
+-  “Scheduled maintenance at <time> — data entry will lock a few minutes beforehand…” — stage warn (T-20..T-5)
+-  “Maintenance at <time>. Inputs will lock after your next save…” — stage lockAfterSave (T-5..T-3)
+-  “Data entry is paused for maintenance at <time>…” — stage fullLock (T-3..T-1)
+-  “Saving your work and restarting for maintenance…” — stage autoSave (T-1..T)
+-  “Sign in as a system administrator to clear maintenance.” — down overlay shown to a non-sysadmin
+**Used in the app:**
+- `every page` — wrapped around the app by AppShell
+**Caveats:** Visible tabs poll every 8s; hidden tabs stop polling unless they hold unsaved entry work (then ~8 min, 30s retry on failure). No auto-expire — overlay stays until a sysadmin clears.
 
 ### webapp/src/components/maintenance/useEntryLock.ts
 
-[webapp/src/components/maintenance/useEntryLock.ts](../../webapp/src/components/maintenance/useEntryLock.ts) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/maintenance/useEntryLock.ts](../../webapp/src/components/maintenance/useEntryLock.ts) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/programming/[groupKey]`
+Maintenance-aware entry lock hook for the data-entry grids: returns inputsLocked + markSaved, fires a one-shot quiet auto-save at T-1 when dirty, installs a beforeunload guard while dirty, and registers unsaved work with MaintenanceProvider to keep the hidden-tab heartbeat alive.
+
+**Access / row scope:** Client-side only; maintenance is cosmetic/UX — no server enforcement blocks writes during a window.
+**Used in the app:**
+- `/enter/cycle/.../[groupKey], /programming/[groupKey]` — Reading / Writing / Math grids and the Programming grid
+**Caveats:** 'Locked after save' is sticky per maintenance time via sessionStorage key maintLockedAfterSave.
 
 ### webapp/src/components/ui.tsx
 
-[webapp/src/components/ui.tsx](../../webapp/src/components/ui.tsx) · **component** · skeleton (not yet reviewed)
+[webapp/src/components/ui.tsx](../../webapp/src/components/ui.tsx) · **component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/`, `/admin/maintenance`, `/admin/staff-access`, `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+Shared presentational pieces: PageHeader, ScaffoldNote, Placeholder, EmptyState, ErrorNote, Loading, CardLink (prefetch disabled, with LinkPending).
+
+**Errors raised:**
+-  “Couldn't load data — Please retry; if it persists, contact your administrator.” — a server page passes a caught read error to ErrorNote (the real message is console.error'd server-side only)
+**Used in the app:**
+- `most pages` — headers, empty/error states, loading fallbacks, cards
+**Caveats:** CardLink uses prefetch={false} deliberately: targets are force-dynamic, so prefetch would run their warehouse queries. ScaffoldNote / Placeholder are legacy scaffold helpers.
 
 ## Route-local components
 
 ### webapp/src/app/admin/maintenance/MaintenanceControl.tsx
 
-[webapp/src/app/admin/maintenance/MaintenanceControl.tsx](../../webapp/src/app/admin/maintenance/MaintenanceControl.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/admin/maintenance/MaintenanceControl.tsx](../../webapp/src/app/admin/maintenance/MaintenanceControl.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/admin/maintenance`
+Client form for the maintenance window: quick-pick lead times (10/15/30/60 min) or custom 1–240, optional message, start/reschedule and cancel/all-clear buttons, with a confirm step when notice is under 10 minutes.
+
+**Access / row scope:** Client-side only; enforcement is in app/admin/maintenance/actions.ts (sysadmin, fresh).
+**Errors raised:**
+-  “Could not schedule maintenance.” — startMaintenance returned ok:false with no message
+-  “Could not clear maintenance.” — clearMaintenance returned ok:false with no message
+-  “Less than 10 minutes' notice — unsaved work could be lost” — warning (not a block) when the chosen lead time is under 10 minutes; sysadmin must click 'Schedule anyway'
+**Used in the app:**
+- `/admin/maintenance` — rendered by the page; buttons call startMaintenance / clearMaintenance
 
 ### webapp/src/app/admin/staff-access/StaffAccessManager.tsx
 
-[webapp/src/app/admin/staff-access/StaffAccessManager.tsx](../../webapp/src/app/admin/staff-access/StaffAccessManager.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/admin/staff-access/StaffAccessManager.tsx](../../webapp/src/app/admin/staff-access/StaffAccessManager.tsx) · **app-component** · reviewed 2026-10-23
 
+Client grid of staff × capability checkboxes (Sysadmin, Manage Cycles, Run Ingest, Math Override, Literacy Override) with filter, add-by-email, and a single 'Save N change(s)' that saves each dirty row; clearing every box removes the person.
+
+**Access / row scope:** Client-side only; enforcement is in app/admin/staff-access/actions.ts (sysadmin, fresh) and usp_SetStaffAppAccess. UI-only guards: your own Sysadmin box and the sole saved sysadmin's box are disabled; confirm() prompts for new sysadmin grants and for removals.
 **App gates (auto):** capability:canManageCycles, capability:canOverrideMath, capability:canRunIngest, capability:isSysAdmin
-**Used on routes (auto):** `/admin/staff-access`
+**Errors raised:**
+-  “That staff member is already in the list.” — add-by-email for someone already shown
+-  “Not found.” — findStaff failed with no message
+-  “<n> failed — <name>: <message>” — one or more setStaffAccess calls returned ok:false (summary after Save)
+**Used in the app:**
+- `/admin/staff-access` — rendered by the page
 
 ### webapp/src/app/cycles/ShortCyclesManager.tsx
 
-[webapp/src/app/cycles/ShortCyclesManager.tsx](../../webapp/src/app/cycles/ShortCyclesManager.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/cycles/ShortCyclesManager.tsx](../../webapp/src/app/cycles/ShortCyclesManager.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/cycles`
+Client manager for cycles: table of headers (name, dates, status badge, active instances), header create/edit form (name, dates, active, grace days+hours), and an Instances panel to add/edit/deactivate subject × language × program-scope × grade-band instances.
+
+**Access / row scope:** Client-side only; enforcement is in app/cycles/actions.ts (CanManageCycles, fresh).
+**Errors raised:**
+-  “Cycle name is required.” — header saved with a blank name
+-  “Start and end dates are required.” — header saved without both dates
+-  “End date must be on or after the start date.” — end < start
+-  “<Subject>: min grade must be at or below max grade.” — an instance's min grade is after its max grade
+-  “<action error message>” — saveCycleHeader / saveShortCycle threw
+**Used in the app:**
+- `/cycles` — rendered by the page
+**Caveats:** Default grade bands prefilled per subject: Reading P–8, Writing P–RG, Math P–6. The Activate/Deactivate toggle calls saveCycleHeader without graceHours (null -> keep existing).
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/MathRosterEntry.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/MathRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/MathRosterEntry.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/MathRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/MathRosterEntry.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+Client math checklist grid: students × tasks grouped by grade and unit; clicking a cell cycles clear → 1 (can do) → 0 (cannot) (IPP students start at 'ipp'). Shows per-task heat percentages and per-unit band (Emerging / Developing / Meeting / In-depth, 'Incomplete' under 80% scored), an 'Edit checklist' mode to hide tasks for the session, grade chips and a small-group student picker.
+
+**Access / row scope:** Client-side only; enforcement is in actions.ts saveMathAssessments (scope gate + usp_UpsertMathAssessment). Lock/override UI as in RosterEntry (Math override).
+**Errors raised:**
+-  “Couldn't confirm the save — reload to check before re-entering…” — the save request itself threw/timed out (marks may or may not have committed)
+-  “Saved N · K failed + per-mark messages” — action returned per-mark errors
+-  “This cycle is locked (view only). The grace period for late entry has ended.” — window Locked and not overridden
+**Used in the app:**
+- `/enter/cycle/.../[groupKey] (Math)` — rendered per instance slice; Save sends all dirty cells to saveMathAssessments
+**Caveats:** Unit band thresholds (<50 / <75 / <90 %, 80% completeness) are client-side and should match the SQL math roll-ups. No math IPP confirmation here (math IPP is read-only from the roster).
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx) · **app-component** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- message “Missing program family — redeploy tvf_TeacherRoster.” (line 178)
-- message “Could not save right now — your entries are still on screen. Please try again.” (line 211)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+Client reading-entry grid: per student shows Prev June, last/previous levels, a New Level dropdown, live delta and achievement-band colour (computed client-side mirroring usp_UpsertReadingAssessment), and an inline Literacy-IPP Yes/No confirmation for unresolved students. Grades 7–8 students already meeting expectation are hidden by default in the small-group filter.
+
+**Access / row scope:** Client-side only; enforcement is in actions.ts (scope gate + procs). The grace-lock read-only state and the 'Override lock for this group' button (shown only when canOverride) are UI; the proc enforces the lock.
+**Errors raised:**
+-  “Missing program family — redeploy tvf_TeacherRoster.” — a staged IPP confirmation has no IPPProgramFamily from the roster TVF
+-  “Save failed: Could not save right now — your entries are still on screen. Please try again.” — a save action threw (grid stays mounted and dirty)
+-  “<student>: <per-row action error>” — rows returned in the action's errors list
+-  “This cycle is locked (view only). The grace period for late entry has ended.” — window status Locked and no override active
+-  “Restored N unsaved entries from an earlier session — review and Save.” — a localStorage draft (entryDraft, 90 min) was found for this grid
+**Used in the app:**
+- `/enter/cycle/.../[groupKey] (Reading)` — rendered per instance slice; Save calls saveReadingAssessments then confirmRosterIPPs
+**Caveats:** Override is one-shot (re-locks after a save). Draft persistence via components/entryDraft; maintenance lock + T-1 auto-save + beforeunload via useEntryLock.
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) · **app-component** · reviewed 2026-10-23
 
-**Errors raised (auto):**
-- message “All assessed traits required — not saved.” (line 221)
-- message “Missing program family — redeploy tvf_TeacherRosterWriting.” (line 222)
-- message “Could not save right now — your entries are still on screen. Please try again.” (line 248)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+Client writing-entry grid: four trait dropdowns (Ideas, Organization, Language, Conventions incl. 'SCR' Scribed) per student, live average and band (client-side writingBand thresholds 3.5 / 2.75 / 1.75), excluded traits shown as '-', plus inline Literacy-IPP confirmation.
+
+**Access / row scope:** Client-side only; enforcement is in actions.ts (scope gate against the language's roster + usp_UpsertWritingAssessment validation). Lock/override UI as in RosterEntry.
+**Errors raised:**
+-  “All assessed traits required — not saved.” — a dirty row is missing a non-excluded trait
+-  “Missing program family — redeploy tvf_TeacherRosterWriting.” — staged IPP with no IPPProgramFamily
+-  “Save failed: Could not save right now — your entries are still on screen. Please try again.” — a save action threw
+-  “This cycle is locked (view only). The grace period for late entry has ended.” — window Locked and not overridden
+**Used in the app:**
+- `/enter/cycle/.../[groupKey] (Writing)` — rendered per instance slice; Save calls saveWritingAssessments then confirmRosterIPPs('Writing', language)
+**Caveats:** Band thresholds are hard-coded client-side and must stay in lockstep with the writing band logic in SQL (DimAchievementLevel / the writing TVFs).
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/loading.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/loading.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/loading.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback for the roster page.
+
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — navigation while the page renders
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/smallGroup.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/smallGroup.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/smallGroup.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/smallGroup.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/smallGroup.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+useSmallGroup hook + SmallGroupFilter component: grade-chip filter and collapsible student picker so a teacher can show only the small group they pulled to assess; supports default-hidden students.
+
+**Access / row scope:** Client-side display filter only (hiding a student does not affect what can be saved).
+**Used in the app:**
+- `/enter/cycle/.../[groupKey]` — Reading and Writing grids (Math has its own equivalent)
 
 ### webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/loading.tsx
 
-[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/loading.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/loading.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback ('Loading groups…') for the group picker.
+
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]` — navigation while the page renders
 
 ### webapp/src/app/enter/loading.tsx
 
-[webapp/src/app/enter/loading.tsx](../../webapp/src/app/enter/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/enter/loading.tsx](../../webapp/src/app/enter/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback ('Loading cycles…') for /enter.
+
+**Used in the app:**
+- `/enter` — navigation while the page renders
 
 ### webapp/src/app/error.tsx
 
-[webapp/src/app/error.tsx](../../webapp/src/app/error.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/error.tsx](../../webapp/src/app/error.tsx) · **app-component** · reviewed 2026-10-23
 
+Route-level error boundary: 'Something went wrong' with a Try again (reset) button instead of a blank page.
+
+**Errors raised:**
+-  “Something went wrong — This screen hit an unexpected error…” — any uncaught error in a route segment
+**Used in the app:**
+- `any route` — an unhandled render/action error below the root layout
+**Caveats:** Reaching it unmounts the screen, so unsaved grid state is lost (entryDraft is the safety net).
 
 ### webapp/src/app/global-error.tsx
 
-[webapp/src/app/global-error.tsx](../../webapp/src/app/global-error.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/global-error.tsx](../../webapp/src/app/global-error.tsx) · **app-component** · reviewed 2026-10-23
 
+Last-resort error boundary for errors escaping the root layout; renders its own html/body with a Try again button.
+
+**Errors raised:**
+-  “Something went wrong — The app hit an unexpected error…” — uncaught error at the root
+**Used in the app:**
+- `any route` — an error in the root layout / AppShell
 
 ### webapp/src/app/ingest/IngestPanel.tsx
 
-[webapp/src/app/ingest/IngestPanel.tsx](../../webapp/src/app/ingest/IngestPanel.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/ingest/IngestPanel.tsx](../../webapp/src/app/ingest/IngestPanel.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/ingest`
+Client ingest panel: a row per PowerSchool topic (Students, Staff, Sections, Enrollments, Section teachers) with file picker + Upload + status, a 'Schedule maintenance (15 min)' step and a 'Run ingest cycle' step showing the result message.
+
+**Access / row scope:** Client-side only; enforcement is in app/ingest/actions.ts (CanRunIngest, fresh). Running is deliberately not gated on a maintenance window being scheduled.
+**Errors raised:**
+-  “<action message>” — upload / schedule / run returned ok:false (shown inline in red)
+**Used in the app:**
+- `/ingest` — rendered by the page
 
 ### webapp/src/app/ingest/constants.ts
 
-[webapp/src/app/ingest/constants.ts](../../webapp/src/app/ingest/constants.ts) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/ingest/constants.ts](../../webapp/src/app/ingest/constants.ts) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/ingest`
+INGEST_NOTICE_MINUTES = 15: lead time for the maintenance window scheduled before an ingest (long enough for hidden tabs, which poll every ~8 min, to auto-save). Kept out of actions.ts because a 'use server' module may only export async functions.
+
+**Used in the app:**
+- `/ingest` — scheduleIngestMaintenance and the 'Schedule maintenance (15 min)' button label
 
 ### webapp/src/app/ingest/loading.tsx
 
-[webapp/src/app/ingest/loading.tsx](../../webapp/src/app/ingest/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/ingest/loading.tsx](../../webapp/src/app/ingest/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback ('Loading ingest…').
+
+**Used in the app:**
+- `/ingest` — navigation while the page renders
 
 ### webapp/src/app/layout.tsx
 
-[webapp/src/app/layout.tsx](../../webapp/src/app/layout.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/layout.tsx](../../webapp/src/app/layout.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`
+Root layout: global CSS, page metadata/icons, and wraps every page in AppShell.
+
+**Used in the app:**
+- `every page` — root layout
+**Caveats:** force-dynamic (auth in the shell reads cookies).
 
 ### webapp/src/app/programming/ProgrammingProgress.tsx
 
-[webapp/src/app/programming/ProgrammingProgress.tsx](../../webapp/src/app/programming/ProgrammingProgress.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/programming/ProgrammingProgress.tsx](../../webapp/src/app/programming/ProgrammingProgress.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/programming`, `/programming/[groupKey]`
+Presentational chips 'N of M IPPs confirmed' / 'N of M Adaptations confirmed', coloured red <50%, yellow 50–<100%, green 100%.
+
+**Used in the app:**
+- `/programming` — landing summary
+- `/programming/[groupKey]` — roster grid header
 
 ### webapp/src/app/programming/[groupKey]/ProgrammingRosterGrid.tsx
 
-[webapp/src/app/programming/[groupKey]/ProgrammingRosterGrid.tsx](../../webapp/src/app/programming/[groupKey]/ProgrammingRosterGrid.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/programming/[groupKey]/ProgrammingRosterGrid.tsx](../../webapp/src/app/programming/[groupKey]/ProgrammingRosterGrid.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/programming/[groupKey]`
+Client grid with an IPP / Adaptations toggle: students as rows, Reading / Writing / Math as columns; a 2-way Yes/No cell per subject, or a 4-way (No / FLA Only / ELA Only / Both) for French Immersion literacy rows. Changes are staged and saved together; progress chips at the top.
+
+**Access / row scope:** Client-side only; enforcement is in app/programming/[groupKey]/actions.ts (scope + existence gate).
+**Errors raised:**
+-  “Student <studentKey>: <message>” — per-row errors returned by saveProgramming
+**Used in the app:**
+- `/programming/[groupKey]` — rendered by the page; Save calls saveProgramming
+**Caveats:** No try/catch around the save call and no entryDraft persistence (unlike the /enter grids) — a thrown action error reaches the route error boundary and unsaved toggles are lost. Uses useEntryLock for maintenance locking.
 
 ### webapp/src/app/programming/loading.tsx
 
-[webapp/src/app/programming/loading.tsx](../../webapp/src/app/programming/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/programming/loading.tsx](../../webapp/src/app/programming/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback ('Loading cells…') for /programming.
+
+**Used in the app:**
+- `/programming` — navigation while the page renders
 
 ### webapp/src/app/reports/CohortView.tsx
 
-[webapp/src/app/reports/CohortView.tsx](../../webapp/src/app/reports/CohortView.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/CohortView.tsx](../../webapp/src/app/reports/CohortView.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports`
+Client cohort table + charts for Reading/Writing reports: facet filters (grade range, gender, self-ID African/Indigenous, homeroom, program, school, achievement), 'Assessable grades only' toggle, sortable columns, achievement donut and distribution charts over chart-eligible (non-IPP) students, and links to each student's detail page.
+
+**Access / row scope:** Client-side only; data scoping is in the cohort TVFs called by app/reports/page.tsx.
+**Used in the app:**
+- `/reports` — rendered by the page; student name links to /reports/[studentKey]
+**Caveats:** Filters/sort persisted per tab in sessionStorage key cohortFilters. IPP/unresolved students are excluded from aggregate charts and from benchmark/achievement sort values.
 
 ### webapp/src/app/reports/CycleSelector.tsx
 
-[webapp/src/app/reports/CycleSelector.tsx](../../webapp/src/app/reports/CycleSelector.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/CycleSelector.tsx](../../webapp/src/app/reports/CycleSelector.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`
+Shared 'Cycle' button row: Current plus one button per started cycle this school year; sets/clears ?cycle while preserving other query params. Hover shows the date range.
+
+**Used in the app:**
+- `/reports, /reports/math, /reports/math/[groupKey], /reports/rwm` — cycle buttons
 
 ### webapp/src/app/reports/[studentKey]/StudentDetailView.tsx
 
-[webapp/src/app/reports/[studentKey]/StudentDetailView.tsx](../../webapp/src/app/reports/[studentKey]/StudentDetailView.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/[studentKey]/StudentDetailView.tsx](../../webapp/src/app/reports/[studentKey]/StudentDetailView.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/[studentKey]`
+Client student detail: meta strip, 'Student X of Y' prev/next paging over the nav list (history cached and neighbours prefetched), Reading/Writing toggle, assessment history table and an SVG trend chart (reading level or writing average over time).
+
+**Access / row scope:** Client-side only; enforcement is in app/reports/[studentKey]/page.tsx + actions.ts (@UPN TVFs).
+**Used in the app:**
+- `/reports/[studentKey]` — rendered by the page
+**Caveats:** A failed history load is cached as an empty history (shown as no results, no error message).
 
 ### webapp/src/app/reports/[studentKey]/loading.tsx
 
-[webapp/src/app/reports/[studentKey]/loading.tsx](../../webapp/src/app/reports/[studentKey]/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/[studentKey]/loading.tsx](../../webapp/src/app/reports/[studentKey]/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback for the student detail page.
+
+**Used in the app:**
+- `/reports/[studentKey]` — navigation while the page renders
 
 ### webapp/src/app/reports/loading.tsx
 
-[webapp/src/app/reports/loading.tsx](../../webapp/src/app/reports/loading.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/loading.tsx](../../webapp/src/app/reports/loading.tsx) · **app-component** · reviewed 2026-10-23
 
+Route loading fallback ('Loading student data…') for /reports.
+
+**Used in the app:**
+- `/reports` — navigation while the page renders
 
 ### webapp/src/app/reports/math/MathRollupTree.tsx
 
-[webapp/src/app/reports/math/MathRollupTree.tsx](../../webapp/src/app/reports/math/MathRollupTree.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/MathRollupTree.tsx](../../webapp/src/app/reports/math/MathRollupTree.tsx) · **app-component** · reviewed 2026-10-23
 
+Client oversight roll-up tree: School → (Summarize by Grade | Homeroom) rows with Overall + per-unit '% Meeting or In-depth' cells and hover tallies; expanding a row lazy-loads that group's matrix via loadMathGroup and shows per-grade blocks. Blanks can be excluded or counted as 0.
+
+**Access / row scope:** Client-side only; enforcement is in tvf_StudentCohortMathAll / tvf_StudentCohortMath via the page and loadMathGroup.
 **App gates (auto):** role:oversight-set
-**Errors raised (auto):**
-- message “Could not load this group. Please retry.” (line 179)
-**Used on routes (auto):** `/reports/math`
+**Errors raised:**
+-  “<loadMathGroup error>” — action returned an error for the expanded group
+-  “Could not load this group. Please retry.” — the loadMathGroup call itself threw
+**Used in the app:**
+- `/reports/math` — rendered for oversight roles
 
 ### webapp/src/app/reports/math/[groupKey]/MathCohortView.tsx
 
-[webapp/src/app/reports/math/[groupKey]/MathCohortView.tsx](../../webapp/src/app/reports/math/[groupKey]/MathCohortView.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/[groupKey]/MathCohortView.tsx](../../webapp/src/app/reports/math/[groupKey]/MathCohortView.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/math/[groupKey]`
+Client read-only math matrix styled like the entry grid: students × tasks grouped by unit, per-student unit and overall achievement bands, blanks exclude/count-as-0 toggle, roll-up donut and achievement-by-unit charts.
+
+**Access / row scope:** Client-side only; enforcement is in tvf_StudentCohortMath via the page.
+**Used in the app:**
+- `/reports/math/[groupKey]` — rendered by the page
+**Caveats:** Header comment says it covers ALL of the year's cycles; it now shows whatever the page's ?cycle selected (Current = latest).
 
 ### webapp/src/app/reports/math/mathCells.tsx
 
-[webapp/src/app/reports/math/mathCells.tsx](../../webapp/src/app/reports/math/mathCells.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/mathCells.tsx](../../webapp/src/app/reports/math/mathCells.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/math`, `/reports/math/[groupKey]`
+Read-only BandCell (achievement badge incl. IPP / — / Incomplete) and TaskCell (check / ring / IPP / blank) shared by the math matrix and roll-up tree.
+
+**Used in the app:**
+- `/reports/math, /reports/math/[groupKey]` — rendered inside MathRollupTree and MathCohortView
 
 ### webapp/src/app/reports/math/mathModel.ts
 
-[webapp/src/app/reports/math/mathModel.ts](../../webapp/src/app/reports/math/mathModel.ts) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/math/mathModel.ts](../../webapp/src/app/reports/math/mathModel.ts) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/math`, `/reports/math/[groupKey]`
+Shared Reports > Math model: types, grade ordering, achievement bands (Emerging / Developing / Meeting / In-depth via bandForAvg), heat classes, blank handling (exclude vs count-as-zero), unit/overall stats, tallies and builders that pivot MathCohortRow[] into grades → units → tasks.
+
+**Used in the app:**
+- `/reports/math, /reports/math/[groupKey]` — MathRollupTree, MathCohortView and mathCells
+**Caveats:** Band thresholds duplicate the inline logic in the entry grid (MathRosterEntry) and must stay in lockstep with it and with the SQL math roll-ups (tvf_StudentCohortMathAll / RWM ≥75%).
 
 ### webapp/src/app/reports/rwm/RWMCohortView.tsx
 
-[webapp/src/app/reports/rwm/RWMCohortView.tsx](../../webapp/src/app/reports/rwm/RWMCohortView.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/rwm/RWMCohortView.tsx](../../webapp/src/app/reports/rwm/RWMCohortView.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/rwm`
+Client RWM table: faceted grade / program / school / score filters, per-area Meeting+ / Not yet / no result pills, score distribution, and links to each student's RWM detail.
+
+**Access / row scope:** Client-side only; enforcement is in tvf_StudentCohortRWM via the page.
+**Used in the app:**
+- `/reports/rwm` — rendered by the page; name links to /reports/rwm/[studentKey]
+**Caveats:** Student links do not carry the selected ?cycle; the detail page always uses Current.
 
 ### webapp/src/app/reports/rwm/[studentKey]/RWMStudentView.tsx
 
-[webapp/src/app/reports/rwm/[studentKey]/RWMStudentView.tsx](../../webapp/src/app/reports/rwm/[studentKey]/RWMStudentView.tsx) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/app/reports/rwm/[studentKey]/RWMStudentView.tsx](../../webapp/src/app/reports/rwm/[studentKey]/RWMStudentView.tsx) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `/reports/rwm/[studentKey]`
+Client RWM student view: header with position and prev/next links, current Reading/Writing/Math meeting status, per-cycle score table and a dependency-free SVG 0–3 trend.
+
+**Access / row scope:** Client-side only; enforcement is in app/reports/rwm/[studentKey]/page.tsx.
+**Used in the app:**
+- `/reports/rwm/[studentKey]` — rendered by the page
 
 ### webapp/src/auth.ts
 
-[webapp/src/auth.ts](../../webapp/src/auth.ts) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/auth.ts](../../webapp/src/auth.ts) · **app-component** · reviewed 2026-10-23
 
-**Used on routes (auto):** `(every page — layout)`, `/`, `/admin/maintenance`, `/admin/staff-access`, `/api/auth/[...nextauth] [API]`, `/cycles`, `/enter`, `/enter/cycle/[cycleGroupId]/[subject]`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming`, `/programming/[groupKey]`, `/reports`, `/reports/[studentKey]`, `/reports/math`, `/reports/math/[groupKey]`, `/reports/rwm`, `/reports/rwm/[studentKey]`
+Auth.js (NextAuth v5) configuration: Microsoft Entra ID single-tenant sign-in using the AUTH_ENTRA_* login app registration (separate from the ENTRA_* data service principal). Lifts upn (or preferred_username / email) onto the JWT and session.
+
+**Access / row scope:** authorized() callback = signed-in check used by middleware. Sign-in page is /login.
+**Used in the app:**
+- `/api/auth/*` — Auth.js handlers (sign-in, callback, sign-out, session)
+- `all protected routes` — middleware + lib/auth getCurrentUpn
+**Caveats:** trustHost: true for running behind the container/proxy. Login and data identities never share a secret.
 
 ### webapp/src/middleware.ts
 
-[webapp/src/middleware.ts](../../webapp/src/middleware.ts) · **app-component** · skeleton (not yet reviewed)
+[webapp/src/middleware.ts](../../webapp/src/middleware.ts) · **app-component** · reviewed 2026-10-23
 
+Auth.js middleware: on /enter, /reports, /programming, /ipp, /ingest, /cycles and /admin (and sub-paths) an unauthenticated request is redirected to /login (which bounces to Entra).
+
+**Access / row scope:** Enforces signed-in only (authorized() in src/auth.ts = session has a user). No role/capability check here. '/', /login, /api/* and static assets are not matched.
 **App gates (auto):** signed-in (UPN)
+**Used in the app:**
+- `/enter, /reports, /programming, /ipp, /ingest, /cycles, /admin/*` — every request
+**Caveats:** Header comment says 'Dev mode bypasses (see authorized())' — stale: authorized() has no dev bypass on this branch. /api/status is intentionally public.
 
 ## data.ts functions → SQL objects
 
 | Function | Does | Objects / tables | Procedures |
 |---|---|---|---|
-| `getAchievementLevels` |  | `DimAchievementLevel` |  |
-| `getAssessableGradeRange` |  | `DimAssessmentWindow`, `DimGrade` |  |
-| `getCallerAccessLevel` |  | `DimStaff` |  |
-| `getCallerCapabilities` |  | `DimStaff`, `StaffAppAccess` |  |
-| `getMaintenanceWindow` |  | `AppMaintenance` |  |
-| `getMathCohort` |  | `tvf_StudentCohortMath` |  |
-| `getMathCohortAll` |  | `tvf_StudentCohortMathAll` |  |
-| `getMathCohortGroups` |  | `tvf_MathCohortGroups` |  |
-| `getMathRoster` |  | `tvf_TeacherRosterMath` |  |
-| `getProgrammingGroups` |  | `tvf_ProgrammingGroups` |  |
-| `getProgrammingRoster` |  | `tvf_ProgrammingRoster` |  |
-| `getProgrammingSummary` |  | `tvf_StudentAdaptation`, `tvf_StudentIPP` |  |
-| `getReportCycles` |  | `DimShortCycle` |  |
-| `getScaleLevels` |  | `DimReadingScale` |  |
-| `getShortCycles` |  | `DimAssessmentWindow`, `DimShortCycle` |  |
-| `getStaffAppAccessList` |  | `DimStaff`, `StaffAppAccess` |  |
-| `getStudentCohort` |  | `tvf_StudentCohort` |  |
-| `getStudentCohortRWM` |  | `tvf_StudentCohortRWM` |  |
-| `getStudentCohortWriting` |  | `tvf_StudentCohortWriting` |  |
-| `getStudentHistory` |  | `tvf_StudentAssessmentHistory` |  |
-| `getStudentHistoryWriting` |  | `tvf_StudentAssessmentHistoryWriting` |  |
-| `getStudentIPPList` |  | `tvf_StudentIPP` |  |
-| `getStudentNavList` |  |  |  |
-| `getStudentRWMHistory` |  | `tvf_StudentRWMHistory` |  |
-| `getTeacherGroups` |  | `tvf_TeacherGroups` |  |
-| `getTeacherRoster` |  | `tvf_TeacherRoster` |  |
-| `getTeacherRosterWriting` |  | `tvf_TeacherRosterWriting` |  |
-| `getTeacherWindows` |  | `tvf_UserAssessmentWindows` |  |
-| `getWindowAssessmentType` |  | `DimAssessmentWindow` |  |
-| `getWindowEndDate` |  | `DimAssessmentWindow` |  |
-| `getWindowLanguage` |  | `DimAssessmentWindow` |  |
-| `lookupStaffByEmail` |  | `DimStaff` |  |
+| `getAchievementLevels` | Active achievement bands (bounds, operators, colours) — DimAchievementLevel; 6h refCache. Used by the reading roster page (live band colouring) and /reports. | `DimAchievementLevel` |  |
+| `getAssessableGradeRange` | Min/max DimGrade.GradeOrder for a subject's active windows (cycle or current school year) — DimAssessmentWindow + DimGrade; unscoped. Used by /reports 'Assessable grades only' toggle. | `DimAssessmentWindow`, `DimGrade` |  |
+| `getCallerAccessLevel` | Caller's DimStaff.AccessLevel (IsCurrent, email match) or null = teacher; 1h identityCache, no fresh option. Used only by /reports/math (tree vs card layout). | `DimStaff` |  |
+| `getCallerCapabilities` | Caller's StaffAppAccess flags (IsSysAdmin implies all) — StaffAppAccess; 1h identityCache unless { fresh: true }. Used by AppShell + home (cached, cosmetic), the roster page (override flag, cached), and fresh by /cycles, /ingest, /admin/* pages and actions. | `DimStaff`, `StaffAppAccess` |  |
+| `getMaintenanceWindow` | The single AppMaintenance row (MaintenanceAt UTC, Message) — unscoped. Used by /api/status (public poller) and /admin/maintenance. | `AppMaintenance` |  |
+| `getMathCohort` | One group's math matrix rows (latest result per task) — tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID). Used by /reports/math/[groupKey] and loadMathGroup. | `tvf_StudentCohortMath` |  |
+| `getMathCohortAll` | Oversight roll-up feed: per student × unit task/scored/can-do counts, no names — tvf_StudentCohortMathAll(@UPN, @CycleGroupID). Used by /reports/math (oversight branch). | `tvf_StudentCohortMathAll` |  |
+| `getMathCohortGroups` | Group picker for the math report (homeroom/grade lenses, P–5) — tvf_MathCohortGroups(@UPN). Used by /reports/math (teacher branch). | `tvf_MathCohortGroups` |  |
+| `getMathRoster` | Math roster: one row per student × applicable task with latest result and math IPP gate — tvf_TeacherRosterMath(@UPN, @WindowID, @GroupKeys). Used by the roster page and the math save scope gate. | `tvf_TeacherRosterMath` |  |
+| `getProgrammingGroups` | Groups containing IPP/Adaptation-flagged students (needs-confirmation count in enteredCount) — tvf_ProgrammingGroups(@UPN). Used by /programming. | `tvf_ProgrammingGroups` |  |
+| `getProgrammingRoster` | Per (student, subject, family) IPP/Adaptation existence + values for a group — tvf_ProgrammingRoster(@UPN, @GroupKey). Used by /programming/[groupKey] page and the saveProgramming scope gate. | `tvf_ProgrammingRoster` |  |
+| `getProgrammingSummary` | Student-level confirmed/total for IPPs and Adaptations — tvf_StudentIPP(@UPN) + tvf_StudentAdaptation(@UPN). Used by /programming progress chips. | `tvf_StudentAdaptation`, `tvf_StudentIPP` |  |
+| `getReportCycles` | This school year's active, already-started cycles — DimShortCycle; unscoped. Used by /reports, /reports/math (oversight), /reports/math/[groupKey], /reports/rwm cycle selectors. | `DimShortCycle` |  |
+| `getScaleLevels` | Active levels for a scale system, ordered — DimReadingScale; 6h refCache. Used by the roster page (reading New Level dropdown). | `DimReadingScale` |  |
+| `getShortCycles` | All DimShortCycle headers (Atlantic-date status) with their DimAssessmentWindow instances — unscoped SP query. Used by /cycles and the roster page (instance labels when a class straddles instances). | `DimAssessmentWindow`, `DimShortCycle` |  |
+| `getStaffAppAccessList` | Everyone on the StaffAppAccess allowlist with display name — StaffAppAccess LEFT JOIN DimStaff; unscoped. Used by /admin/staff-access (page gates IsSysAdmin first). | `DimStaff`, `StaffAppAccess` |  |
+| `getStudentCohort` | Reading cohort with latest level, delta, benchmark, achievement band, IPP and demographics — tvf_StudentCohort(@UPN, @CycleGroupID). Used by /reports (Reading). | `tvf_StudentCohort` |  |
+| `getStudentCohortRWM` | P–5 non-IPP students with reading/writing codes, math roll-up % and 0–3 RWM score — tvf_StudentCohortRWM(@UPN, @CycleGroupID). Used by /reports/rwm and /reports/rwm/[studentKey]. | `tvf_StudentCohortRWM` |  |
+| `getStudentCohortWriting` | Writing cohort in the CohortStudent shape (avg score as level, writing band/IPP) — tvf_StudentCohortWriting(@UPN, @CycleGroupID). Used by /reports?subject=writing. | `tvf_StudentCohortWriting` |  |
+| `getStudentHistory` | One student's reading history with benchmarks, June anchor and bands — tvf_StudentAssessmentHistory(@UPN, @StudentKey); rejects non-numeric keys. Used by /reports/[studentKey] page + loadStudentHistory. | `tvf_StudentAssessmentHistory` |  |
+| `getStudentHistoryWriting` | One student's writing history (4 traits as strings, avg, band) — tvf_StudentAssessmentHistoryWriting(@UPN, @StudentKey); rejects non-numeric keys. Used by /reports/[studentKey]?subject=writing + loadStudentHistoryWriting. | `tvf_StudentAssessmentHistoryWriting` |  |
+| `getStudentIPPList` | Reading IPP rows in scope — tvf_StudentIPP(@UPN). DEAD (no importer; the old /ipp screen now redirects to /programming). | `tvf_StudentIPP` |  |
+| `getStudentNavList` | Ordered lightweight student list (key, name, grade, program, school, homeroom, subject IPP) — tvf_StudentCohort or tvf_StudentCohortWriting(@UPN, NULL), names interpolated. Used by /reports/[studentKey] (scope check + prev/next). |  |  |
+| `getStudentRWMHistory` | One student's per-cycle RWM rows — tvf_StudentRWMHistory(@UPN, @StudentKey); key not regex-validated. Used by /reports/rwm/[studentKey]. | `tvf_StudentRWMHistory` |  |
+| `getTeacherGroups` | Mapped-course sections for a cycle + subject with progress counts and window IDs — tvf_TeacherGroups(@UPN, @CycleGroupID, @AssessmentType); 30s groupCache. Used by the /enter picker and the roster page slow path. | `tvf_TeacherGroups` |  |
+| `getTeacherRoster` | Reading roster for a window + group keys with existing level, benchmark range, IPP gate, June/last/prev levels — tvf_TeacherRoster(@UPN, @WindowID, @GroupKeys). Used by the roster page and the reading save + IPP confirm scope gates. | `tvf_TeacherRoster` |  |
+| `getTeacherRosterWriting` | Writing roster for a window + group keys + language with existing trait scores, excluded traits, IPP gate — tvf_TeacherRosterWriting(@UPN, @WindowID, @GroupKeys, @Language). Used by the roster page and the writing save + IPP confirm scope gates. | `tvf_TeacherRosterWriting` |  |
+| `getTeacherWindows` | Assessment windows applicable to the user with status/grace/progress counts — tvf_UserAssessmentWindows(@UPN); 30s groupCache. Used by /enter (cycle cards) and the roster page (grace-lock check). | `tvf_UserAssessmentWindows` |  |
+| `getWindowAssessmentType` | A window's AssessmentType from DimAssessmentWindow — DEAD (no importer). | `DimAssessmentWindow` |  |
+| `getWindowEndDate` | A window's EndDate from DimAssessmentWindow — unscoped. Used by the /enter save actions to date late entries at MIN(today, EndDate). | `DimAssessmentWindow` |  |
+| `getWindowLanguage` | A window's AssessmentLanguage (English/French/null) from DimAssessmentWindow — DEAD (no importer). | `DimAssessmentWindow` |  |
+| `lookupStaffByEmail` | One current DimStaff row by email (email + display name) or null — unscoped. Used by the staff-access findStaff action (gated IsSysAdmin). | `DimStaff` |  |

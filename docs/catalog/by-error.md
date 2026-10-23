@@ -111,32 +111,32 @@ Every error the code is written to raise: SQL `THROW` numbers first (51010+ = us
 | 60004 | fix_dev_orphan_enteredby_projectlead: resolved keep key equals the orphan key -- the deleted row still exists? Inspect DimStaff before proceeding. | [sql/scripts/fix_dev_orphan_enteredby_projectlead.sql](../../sql/scripts/fix_dev_orphan_enteredby_projectlead.sql) | 55 |  |
 | 60004 | seed_primary_homeroom_dev: this homeroom section already exists. Run the CLEANUP block first. | [sql/scripts/seed_primary_homeroom_dev.sql](../../sql/scripts/seed_primary_homeroom_dev.sql) | 69 |  |
 | 60010 | seed_split_homeroom_dev: DEVSEED Primary homeroom not found. Run seed_primary_homeroom_dev.sql first. | [sql/scripts/seed_split_homeroom_dev.sql](../../sql/scripts/seed_split_homeroom_dev.sql) | 30 |  |
-| Error | Add at least one assessment instance to the cycle. | [webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) | 84 |  |
-| Error | ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET must be set | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 39 |  |
-| Error | FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 57 |  |
-| Error | Failed to acquire a OneLake (storage) access token | [webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) | 38 |  |
-| Error | Failed to acquire an Entra access token for Fabric | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 66 |  |
+| Error | Add at least one assessment instance to the cycle. | [webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) | 84 | no instance with subject Reading/Writing/Math was submitted |
+| Error | ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET must be set | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 39 | service-principal env vars missing |
+| Error | FABRIC_SQL_SERVER and FABRIC_SQL_DATABASE must be set | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 57 | warehouse env vars missing |
+| Error | Failed to acquire a OneLake (storage) access token | [webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) | 38 | Entra token request for the storage scope returned nothing |
+| Error | Failed to acquire an Entra access token for Fabric | [webapp/src/lib/db.ts](../../webapp/src/lib/db.ts) | 66 | token request for the SQL scope returned nothing |
 | Error | Invalid surrogate key (expected 1-20 digit string): ${v} | [webapp/src/lib/keys.ts](../../webapp/src/lib/keys.ts) | 16 |  |
-| Error | No authenticated user -- sign in required | [webapp/src/lib/auth.ts](../../webapp/src/lib/auth.ts) | 15 |  |
-| Error | Not authorized. | [webapp/src/app/admin/maintenance/actions.ts](../../webapp/src/app/admin/maintenance/actions.ts) | 23 |  |
-| Error | ONELAKE_WORKSPACE and ONELAKE_LANDING_LAKEHOUSE must be set (workspace + Assessment_Landing lakehouse GUIDs) | [webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) | 31 |  |
+| Error | No authenticated user -- sign in required | [webapp/src/lib/auth.ts](../../webapp/src/lib/auth.ts) | 15 | no Auth.js session or the session has neither upn nor email (normally pre-empted by the middleware redirect to /login) |
+| Error | Not authorized. | [webapp/src/app/admin/maintenance/actions.ts](../../webapp/src/app/admin/maintenance/actions.ts) | 23 | caller is not a sysadmin (or the capability lookup failed) |
+| Error | ONELAKE_WORKSPACE and ONELAKE_LANDING_LAKEHOUSE must be set (workspace + Assessment_Landing lakehouse GUIDs) | [webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) | 31 | container env vars missing |
 | Error | OneLake ${res.status} ${res.statusText}${detail ?  | [webapp/src/lib/onelake.ts](../../webapp/src/lib/onelake.ts) | 60 |  |
-| Error | You do not have permission to manage assessment cycles. | [webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) | 18 |  |
-| UserError | A staff email is required. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 49 |  |
-| UserError | Enter a staff email to search. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 36 |  |
+| Error | You do not have permission to manage assessment cycles. | [webapp/src/app/cycles/actions.ts](../../webapp/src/app/cycles/actions.ts) | 18 | caller lacks CanManageCycles/SysAdmin |
+| UserError | A staff email is required. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 49 | setStaffAccess with a blank email |
+| UserError | Enter a staff email to search. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 36 | findStaff with a blank email |
 | UserError | File is ${(file.size / 1048576).toFixed(1)} MB; the limit is 25 MB. | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 43 |  |
-| UserError | No file provided. | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 38 |  |
-| UserError | Only a system administrator can change staff access. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 16 |  |
+| UserError | No file provided. | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 38 | missing or empty file |
+| UserError | Only a system administrator can change staff access. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 16 | caller is not a sysadmin |
 | UserError | Unknown ingest topic: ${topic} | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 36 |  |
-| UserError | You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed. | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 20 |  |
-| message | All assessed traits required — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) | 221 |  |
-| message | Could not load this group. Please retry. | [webapp/src/app/reports/math/MathRollupTree.tsx](../../webapp/src/app/reports/math/MathRollupTree.tsx) | 179 |  |
+| UserError | You do not have permission to run ingest. Contact an administrator if a PowerSchool refresh is needed. | [webapp/src/app/ingest/actions.ts](../../webapp/src/app/ingest/actions.ts) | 20 | caller lacks CanRunIngest |
+| message | All assessed traits required — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) | 221 | a dirty row is missing a non-excluded trait |
+| message | Could not load this group. Please retry. | [webapp/src/app/reports/math/MathRollupTree.tsx](../../webapp/src/app/reports/math/MathRollupTree.tsx) | 179 | the loadMathGroup call itself threw |
 | message | Could not save right now — your entries are still on screen. Please try again. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx) | 211 |  |
 | message | Could not save right now — your entries are still on screen. Please try again. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) | 248 |  |
-| message | Missing program family — redeploy tvf_TeacherRoster. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx) | 178 |  |
-| message | Missing program family — redeploy tvf_TeacherRosterWriting. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) | 222 |  |
-| message | No current staff member found with that email. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 38 |  |
-| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 64 |  |
-| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 136 |  |
-| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 276 |  |
-| message | Out of your scope — not saved. | [webapp/src/app/programming/[groupKey]/actions.ts](../../webapp/src/app/programming/[groupKey]/actions.ts) | 53 |  |
+| message | Missing program family — redeploy tvf_TeacherRoster. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/RosterEntry.tsx) | 178 | a staged IPP confirmation has no IPPProgramFamily from the roster TVF |
+| message | Missing program family — redeploy tvf_TeacherRosterWriting. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/WritingRosterEntry.tsx) | 222 | staged IPP with no IPPProgramFamily |
+| message | No current staff member found with that email. | [webapp/src/app/admin/staff-access/actions.ts](../../webapp/src/app/admin/staff-access/actions.ts) | 38 | no IsCurrent DimStaff row for the email |
+| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 64 | target student is not on the caller's scoped roster |
+| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 136 | target student is not on the caller's scoped roster |
+| message | Not in your roster for this window/group — not saved. | [webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts](../../webapp/src/app/enter/cycle/[cycleGroupId]/[subject]/[groupKey]/actions.ts) | 276 | target student is not on the caller's scoped roster |
+| message | Out of your scope — not saved. | [webapp/src/app/programming/[groupKey]/actions.ts](../../webapp/src/app/programming/[groupKey]/actions.ts) | 53 | row not in the caller's roster, or no existing row of that kind |
