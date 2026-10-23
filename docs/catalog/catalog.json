@@ -10388,9 +10388,16 @@
   },
   "sql/scripts/diag_live_deployed_proc_versions.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "6d30248a1d0db981b6d14a9b661f61f7e89d8168",
    "notes": {
-    "purpose": ""
+    "purpose": "Check that the procs actually deployed in a warehouse carry expected version fingerprints (marker strings in sys.sql_modules), because a bundle deploy can silently skip an object. Reports PRESENT / OLD/UNEXPECTED VERSION / PROC MISSING per proc.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Did the latest versions of the upsert and loader procs really land on this warehouse?",
+     "target": "either (catalog metadata only, no PII)",
+     "rerunSafe": true
+    },
+    "caveats": "The marker list is hard-coded to the 2026-10-07 state (51014 reading fix v1.0.1, math grace-lock, writing AssessmentLanguage, #1119 Workspace Identity loaders). Edit the VALUES list for each new release. Markers are case-sensitive (BIN2 collation)."
    },
    "blob": "6d30248a1d0db981b6d14a9b661f61f7e89d8168",
    "auto": {
@@ -10411,7 +10418,8 @@
     "lastCommit": "2026-10-09 01d76d8 chore(#1119): delete investigative loader scripts on ticket closure; back up ingest diagnostics",
     "headerPurpose": "Verify that the ACTUALLY-DEPLOYED proc definitions in the warehouse carry the expected version fingerprints — because a mass/bundle deploy can silently skip an object, and \"it's in GitHub\" does not prove \"it ran on live.\" Reads each proc's stored definition from sys.sql_modules and checks for a distinctive marker string.",
     "headerScript": "diag_live_deployed_proc_versions.sql (LIVE or DEV — read-only metadata)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_math_report_blank_roster.sql": {
    "kind": "script",
@@ -10497,9 +10505,20 @@
   },
   "sql/scripts/diag_math_roster_dropped_students.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "3dac36dcda9540066a0dea3c2b94fc545916a4c2",
    "notes": {
-    "purpose": ""
+    "purpose": "Explain why a Math card shows N students but the roster opens with fewer. tvf_TeacherRosterMath INNER JOINs DimMathTask on grade + resolved month, so a grade with no active tasks for that month is dropped. Shows students per grade in the section with TasksForGrade, and lists all active (grade, month) task pairs.",
+    "script": {
+     "kind": "template",
+     "question": "Which students does the Math roster drop for this cycle and section because their grade has no tasks that month?",
+     "target": "either",
+     "rerunSafe": true
+    },
+    "params": {
+     "CycleGroupID": "cycle instance GUID from the /enter/cycle/<guid>/Math URL",
+     "SectionID": "section business key (the SEC:<id> part of the URL)"
+    },
+    "caveats": "Defaults are the 2026-09-18 dev case (cycle 609ba4af…, section 9000001). Replace them with your own values. Cycle GUIDs differ between dev and live. Returns counts per grade only, with no student rows. Related: diag_math_task_month_mismatch.sql (month cause) and diag_math_report_blank_roster.sql."
    },
    "blob": "3dac36dcda9540066a0dea3c2b94fc545916a4c2",
    "auto": {
@@ -10554,7 +10573,8 @@
     "lastCommit": "2026-09-18 d203faf diag(math): script explaining roster students dropped by the task INNER JOIN",
     "headerPurpose": "Explain why a Math card shows \"0/4\" but the roster opens with fewer students than that.",
     "headerScript": "diag_math_roster_dropped_students.sql (READ-ONLY diagnostic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_math_save_landed.sql": {
    "kind": "script",
@@ -10621,9 +10641,16 @@
   },
   "sql/scripts/diag_math_task_month_mismatch.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8e4170cbf49e7591cc38add1ef6b28f9442a92ef",
    "notes": {
-    "purpose": ""
+    "purpose": "Test whether math grids are blank because Math windows have BenchmarkMonth = NULL and fall back to a dominant month that has no DimMathTask rows. Result 1 lists each active Math window with its resolved month and task count. Result 2 is the task inventory by grade x month.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Do the active Math cycles resolve to a month that actually has math tasks?",
+     "target": "either (no PII)",
+     "rerunSafe": true
+    },
+    "caveats": "Led to fix_math_cycle_months_and_task_miscoding(_dev).sql (2026-10-07), which set BenchmarkMonth on Math windows and exposed it on /cycles. If Result 2 shows no tasks at all for a grade, the cause is unseeded grades (see diag_math_report_blank_roster.sql), not a month mismatch."
    },
    "blob": "8e4170cbf49e7591cc38add1ef6b28f9442a92ef",
    "auto": {
@@ -10654,13 +10681,21 @@
     "lastCommit": "2026-10-09 01d76d8 chore(#1119): delete investigative loader scripts on ticket closure; back up ingest diagnostics",
     "headerPurpose": "Confirm WHY math tasks aren't showing. Hypothesis: Math cycle instances save with BenchmarkMonth = NULL (the /cycles form exposes the month for Reading only), so tvf_TeacherRosterMath falls back to the window's DOMINANT calendar month to match DimMathTask.AssessmentMonth. If the seeded tasks sit on a DIFFERENT month, the task join matches nothing and the grid is blank.",
     "headerScript": "diag_math_task_month_mismatch.sql (DEV or LIVE — read-only diagnostic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_mislocated_immersion_reading.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "c7396a348265d91cfcc287a50df6f02e3f3feef4",
    "notes": {
-    "purpose": ""
+    "purpose": "Aggregate reading facts by window language/scope vs the student's program bucket (DimProgram.ScopeBucket) and the fact's own scale. Finds immersion results entered on the old generic (now Reading·English·English) window before the French and Late-Immersion instances existed.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which immersion reading results sit on the wrong cycle instance, and can they be repointed cleanly?",
+     "target": "either (aggregate counts only, safe on live)",
+     "rerunSafe": true
+    },
+    "caveats": "Interpretation: an FR_Reading fact on an English window can be repointed cleanly. An EN_Reading fact for a Late Immersion student can also be repointed cleanly. An EN_Reading fact for an Early Immersion student needs a decision, so do NOT auto-migrate it. Needs DimProgram.ScopeBucket (migrate_DimProgram_add_ScopeBucket.sql) and DimShortCycle."
    },
    "blob": "c7396a348265d91cfcc287a50df6f02e3f3feef4",
    "auto": {
@@ -10701,13 +10736,21 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Characterize the immersion reading results that were entered against the wrong instance (the old generic window, now Reading·English·English) before the French/Late-Immersion reading instances existed. This decides HOW they migrate, because the fact's own scale (ReadingScaleID -> DimReadingScale.ScaleSystem) determines whether a window repoint is clean.",
     "headerScript": "diag_mislocated_immersion_reading.sql (READ-ONLY — AGGREGATE, no row PII)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_missing_programcode.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8753fcf33c1452e4e8d2571c533a98b69d70d952",
    "notes": {
-    "purpose": ""
+    "purpose": "List the ProgramCodes on current DimStudent rows that are missing from DimProgram, with a student count for each (DQ check #41). Returns no student-level PII.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which student program codes are not seeded in DimProgram?",
+     "target": "either (codes and counts only)",
+     "rerunSafe": true
+    },
+    "caveats": "Each code returned needs one of two fixes. Seed it into DimProgram if it is a real program that was missed. Filter it at ingest if it belongs to an excluded family (CSAP / Adult / TAP). Students with blank ProgramCode show up here as NULL or ''. See fix_blank_programcode.sql."
    },
    "blob": "8753fcf33c1452e4e8d2571c533a98b69d70d952",
    "auto": {
@@ -10725,13 +10768,25 @@
     "lastCommit": "2026-09-08 2ceb74c fix(ingest): stop usp_MergeStaff stacking duplicate DimStaff markers",
     "headerPurpose": "Name the ProgramCode(s) that current DimStudent rows carry but that are absent from the DimProgram reference dim (DQ check #41, \"DimStudent.ProgramCode not found in DimProgram\"). Returns only the code + a count — no student-level PII.",
     "headerScript": "diag_missing_programcode.sql (diagnostic — PII-free)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_programming_chip_counts_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ab099242261ab15a3e1fd08423f344cd73c04f78",
    "notes": {
-    "purpose": ""
+    "purpose": "Reproduce the 0.6.3 Programming chip numbers (IPP and Adaptation) at student level from tvf_StudentIPP / tvf_StudentAdaptation. Shows Total / Confirmed / Outstanding students, plus the inflated pre-0.6.3 record count for comparison.",
+    "script": {
+     "kind": "template",
+     "question": "Do the IPP/Adaptation chip counts for this analyst match the student-level logic introduced in 0.6.3?",
+     "target": "dev (written for the awdev DEV_FAKE_UPN; would also work on live with a real analyst UPN)",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-24 (verification of 0.6.3)"
+    },
+    "params": {
+     "UPN": "the analyst account the chip is evaluated for (the awdev DEV_FAKE_UPN on dev)"
+    },
+    "caveats": "One-off release verification for 0.6.3. Only useful again if the chip logic changes. Counts only, no PII."
    },
    "blob": "ab099242261ab15a3e1fd08423f344cd73c04f78",
    "auto": {
@@ -10759,13 +10814,24 @@
     ],
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-24 ede35d5 sql(diag): verify 0.6.3 Programming chip student-level counts (dev)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_reading_instance_counts.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "00aeb15a48dffad56c11cee34283b4916695b870",
    "notes": {
-    "purpose": ""
+    "purpose": "Find why a regional analyst's Reading card on live counted only the English instance (\"2/3707\") while tvf_TeacherGroups found the French/immersion sections. Shows instance config, the analyst's tvf_UserAssessmentWindows counts, and a staged probe that applies grade band, then +family, then +scope to each Reading instance.",
+    "script": {
+     "kind": "template",
+     "question": "Which filter (grade band, program family, or program scope) is zeroing a Reading instance in the analyst's count?",
+     "target": "live (where the bug was), also works on dev",
+     "rerunSafe": true
+    },
+    "params": {
+     "UPN": "the regional-analyst account whose card counts are wrong"
+    },
+    "caveats": "Aggregate/config only, safe on live. Result labels are A, B, D (there is no C). NoDimProgram > 0 means unseeded ProgramCodes (see diag_missing_programcode.sql). PlusScope = 0 with PlusFamily > 0 means the ProgramScope string does not match DimProgram.ScopeBucket."
    },
    "blob": "00aeb15a48dffad56c11cee34283b4916695b870",
    "auto": {
@@ -10827,13 +10893,21 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Pin down why the /enter Reading card for a REGIONAL ANALYST on LIVE counts only the English reading instance (card showed \"2/3707\"), while the group screen (tvf_TeacherGroups) clearly finds the French/immersion reading sections and their entries. The two TVFs apply the SAME grade + program-family + program-scope filters, so one of those filters is silently zeroing the French reading instance in the analyst COUNT path.",
     "headerScript": "diag_reading_instance_counts.sql (READ-ONLY — config + AGGREGATE counts, no row PII)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_roster_timing.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "0bb500c7fad688b8712b38dda9143b67f99747ca",
    "notes": {
-    "purpose": ""
+    "purpose": "Time tvf_TeacherRoster, tvf_TeacherRosterOwn (teacher fast path) and tvf_TeacherGroups server-side, cold and warm, for the teacher with the largest taught Reading group in the current cycle. Shows whether slow roster opens come from the query or from app connection/token overhead.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Is the ~3.5 s roster load spent in SQL, or in the app's connection overhead?",
+     "target": "either (wraps the TVFs in COUNT_BIG, so no student rows are returned)",
+     "rerunSafe": true
+    },
+    "caveats": "Self-resolving: no placeholders. It picks the cycle and the teacher itself, and THROWs if there is no active Reading cycle or taught group. Needs tvf_TeacherRosterOwn deployed. Fabric does not support table variables, so the script uses scalar accumulators only. The output shows one teacher UPN (staff, not student PII)."
    },
    "blob": "0bb500c7fad688b8712b38dda9143b67f99747ca",
    "auto": {
@@ -10900,13 +10974,21 @@
     ],
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-23 33bca40 perf(roster): teacher fast-path TVF + A/B it in the timing diagnostic"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_scaling_factors.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1d31436e0140e1ea5f516b5262e442fbee173b35",
    "notes": {
-    "purpose": ""
+    "purpose": "Count rows in the tables the entry queries scan (DimSection/DimStudent all versions vs current, enrollment, facts, access tables), reading rows per school year, and sections per school. Lets live performance be predicted from dev timings.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "How big are the tables the roster/group queries scan here, compared with the other warehouse?",
+     "target": "dev and live (run on both and compare; counts only)",
+     "rerunSafe": true
+    },
+    "caveats": "The header's reasoning dates from 2026-09-18 (before section-first resolution and the teacher fast path). The counts are always current, but the per-table cost analysis may be stale."
    },
    "blob": "1d31436e0140e1ea5f516b5262e442fbee173b35",
    "auto": {
@@ -10931,13 +11013,24 @@
     "lastCommit": "2026-09-18 0c04a31 diag(perf): scaling-factor counts, to predict live cost from dev timings",
     "headerPurpose": "Size the tables the entry queries scan, so their LIVE behaviour can be predicted from DEV timings instead of guessed at.",
     "headerScript": "diag_scaling_factors.sql (READ-ONLY, counts only — no PII)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_section_undercount_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "4b03ab3ac9c297b67137cd7d0ef2b5d93dd8cc41",
    "notes": {
-    "purpose": ""
+    "purpose": "Diagnose a high-school section under-count (DHCS English 10 showed ~4 students instead of ~15) by testing duplicate current SectionIDs vs stale DimSection versions. Shows section versions, enrollment split by current/stale version, teacher-link SectionIDs, and school-wide duplicate (CourseCode, SectionNumber, TermID) groups.",
+    "script": {
+     "kind": "template",
+     "question": "Why does a section's roster show fewer students than expected: duplicate current sections or stale SCD versions?",
+     "target": "live (aggregate counts + section metadata, no student rows)",
+     "rerunSafe": true
+    },
+    "params": {
+     "SchoolID": "school to inspect (default '0981' = Drumlin Heights Consolidated)"
+    },
+    "caveats": "The course filter is hard-coded as LIKE '%ENGLISH 10%' in R1–R3. Edit it for another course (keep it UPPER-case, because the collation is case-sensitive). Root cause found 2026-09-09: FactEnrollment.ActiveFlag was 0 for every row (fixed in ingest), so this is mostly historical."
    },
    "blob": "4b03ab3ac9c297b67137cd7d0ef2b5d93dd8cc41",
    "auto": {
@@ -10976,7 +11069,8 @@
     "lastCommit": "2026-09-09 fd0fb35 fix(ingest): correct FactEnrollment.ActiveFlag â€” was 0 for every row",
     "headerPurpose": "Diagnose the HS section under-count (Drumlin/DHCS English 10 shows ~4, should be ~15). Discovery (R1) revealed DHCS has DUPLICATE current sections — two SectionID ranges (141xxx / 145xxx) for the same course, both IsCurrent=1 with different enrollment counts. These queries test whether the roster splits across those duplicates and/or across stale DimSection VERSIONS of one SectionID.",
     "headerScript": "diag_section_undercount_live.sql (v2 — DHCS English 10, case-safe)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_staff_lookup.sql": {
    "kind": "script",
@@ -11023,9 +11117,16 @@
   },
   "sql/scripts/diag_unresolved_enrollment_sections_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "a937fdebe6546fff3a2d8703c3787b73ec57d0c9",
    "notes": {
-    "purpose": ""
+    "purpose": "Characterize staged enrollment rows whose SectionID has no current DimSection (the \"282 rows excluded\" audit warning). Counts closed-only vs never-landed sections, and whether usp_MergeSection dropped them for 0/blank students or an unresolved teacher.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Why are some enrollment rows not resolving to a current section after ingest?",
+     "target": "live (counts + SectionIDs only)",
+     "rerunSafe": true
+    },
+    "caveats": "Reads Stg_Enrollment / Stg_Section, so it reflects only the most recent load. Follow-up for the teacher cause: diag_unresolved_section_teachers_live.sql. Fabric rejects aggregates over subqueries (Msg 130), so the flags are computed in CTEs."
    },
    "blob": "a937fdebe6546fff3a2d8703c3787b73ec57d0c9",
    "auto": {
@@ -11053,13 +11154,21 @@
     "lastCommit": "2026-09-09 ed39826 Session wrap (2026-09-09): ActiveFlag fix (root of section under-count), prior-year baseline loaded, display scoped",
     "headerPurpose": "Characterize the enrollment rows whose SectionID does NOT resolve to a current DimSection (the \"282 rows excluded\" audit warning). Tests — does NOT assume — WHY: do those sections exist as closed-only versions, never landed at all, are they present in the Sections export, and if present were they dropped for 0 students or an unresolved teacher?",
     "headerScript": "diag_unresolved_enrollment_sections_live.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_unresolved_section_teachers_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "b7cfb4eee4fdb923a7ecd8a098f31271ea65d0c4",
    "notes": {
-    "purpose": ""
+    "purpose": "For sections dropped at ingest because their teacher did not resolve, classify each teacher email as current-active, current-inactive, closed-only, or absent from DimStaff. Also lists the section-to-teacher cases so they can be fixed in PowerSchool.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Why don't the teachers of the excluded sections resolve to an active DimStaff row?",
+     "target": "live (lists staff emails and course names, not student PII)",
+     "rerunSafe": true
+    },
+    "caveats": "Comments mention '12 sections / 281 enrollments' (the 2026-09-09 case), but the query is generic. Reads the last load's Stg_* tables. For one person, diag_staff_lookup.sql is the fuller look-up."
    },
    "blob": "b7cfb4eee4fdb923a7ecd8a098f31271ea65d0c4",
    "auto": {
@@ -11085,13 +11194,21 @@
     "lastCommit": "2026-09-09 ed39826 Session wrap (2026-09-09): ActiveFlag fix (root of section under-count), prior-year baseline loaded, display scoped",
     "headerPurpose": "The 12 sections that stranded 281 enrollments were dropped because their teacher didn't resolve to a current active DimStaff row. This characterizes WHY the teachers don't resolve — absent from DimStaff entirely, present but inactive, or present but closed (IsCurrent=0).",
     "headerScript": "diag_unresolved_section_teachers_live.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/enrollment_currency_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "0e162f3ebb2928bfbce4b22072631a69df2c6c87",
    "notes": {
-    "purpose": ""
+    "purpose": "Show FactEnrollment's date span, how many rows are current today (Atlantic time), and rows by school year of StartDate. Confirms whether empty teacher rosters on dev come from expired prior-year synthetic enrollments rather than broken links.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Are the dev enrollments current for today, or all from a past school year?",
+     "target": "dev (synthetic data; also harmless on live as it returns only counts/dates)",
+     "rerunSafe": true
+    },
+    "caveats": "Answered 2026-09-04, which led to the dev enrollment roll-forward. Re-run it after each school-year rollover if dev rosters go empty."
    },
    "blob": "0e162f3ebb2928bfbce4b22072631a69df2c6c87",
    "auto": {
@@ -11110,13 +11227,22 @@
     "lastCommit": "2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment ",
     "headerPurpose": "Confirm whether classroom teachers resolve no roster because the synthetic FactEnrollment rows are for a PRIOR school year (expired as of today), rather than a linkage problem. Today is the driver: the roster chain keeps an enrollment only if StartDate <= today AND (EndDate IS NULL OR EndDate >= today).",
     "headerScript": "enrollment_currency_dev.sql (DEV synthetic only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_DimSection_coursename_mojibake.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "0b626a7110cb93cdef57a78169a49975c8f48a7e",
    "notes": {
-    "purpose": ""
+    "purpose": "Repair double-encoded French accents in DimSection.CourseName (\"FranÃ§ais\" becomes \"Français\") with one decode round of REPLACEs across every SCD version in place. Shows BEFORE, AFTER and REMAINING BROKEN results.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Fix course names that show garbled accents (Ã©, Ã¨, Ã§…).",
+     "target": "dev (hand-seeded rows); live only if the bottom check shows broken names",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-18 (live not confirmed)"
+    },
+    "caveats": "Run the REMAINING BROKEN query on live first, because live names come from the PowerSchool CSV ingest and may be clean. This repairs stored data only; whatever wrote the bad bytes must be fixed separately or they come back. The guard is '%Ã%', so it is idempotent. The BEFORE/REMAINING results also match 'Â', but the UPDATE does not repair 'Â' sequences."
    },
    "blob": "0b626a7110cb93cdef57a78169a49975c8f48a7e",
    "auto": {
@@ -11139,13 +11265,22 @@
     "lastCommit": "2026-09-18 6d18043 fix(data): repair double-encoded accents in DimSection.CourseName",
     "headerPurpose": "Repair DOUBLE-ENCODED accents in DimSection.CourseName, which render as \"FranÃ§ais 1Ã¨re\" instead of \"Français 1ère\".",
     "headerScript": "fix_DimSection_coursename_mojibake.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_blank_programcode.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "44bd4d3e21e8f7f48d32d79400a83c0219f68762",
    "notes": {
-    "purpose": ""
+    "purpose": "Clear DQ check #41 by deleting a phantom DimStudent version with a blank ProgramCode (a same-day add-then-remove), plus its FactEnrollment rows. Only touches versions still in #41 violation that have no Reading/Writing/IPP facts.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Remove the phantom blank-ProgramCode student version that keeps tripping the ingest DQ gate.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-08 (committed with the usp_MergeStaff stacking fix; exact environments not recorded)"
+    },
+    "caveats": "DANGER: it DELETEs every DimStudent version whose ProgramCode is not in DimProgram and that has no assessments, not just blank codes. A real but unseeded program code (see diag_missing_programcode.sql) would also be deleted, with its enrollments. Run pre-checks 1–2 first, and STOP if any row shows Reading/Writing/IPP > 0 or a non-blank code."
    },
    "blob": "44bd4d3e21e8f7f48d32d79400a83c0219f68762",
    "auto": {
@@ -11197,13 +11332,25 @@
     "lastCommit": "2026-09-08 2ceb74c fix(ingest): stop usp_MergeStaff stacking duplicate DimStaff markers",
     "headerPurpose": "Clear DQ check #41 (\"DimStudent.ProgramCode not found in DimProgram\") for a phantom, malformed student version (blank ProgramCode, a same-day add-then-remove of a null-grade student pulled from the file pending a school correction). #41 scans ALL versions and treats '' as non-NULL, so the dead row keeps tripping the ingest DQ gate.",
     "headerScript": "fix_blank_programcode.sql (LIVE + DEV data remediation)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_dev_dimstaff_overlap_projectlead.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "057ceaf10d867de4d8bcc42154ca9b5b0d2ba90e",
    "notes": {
-    "purpose": ""
+    "purpose": "On dev, clear DQ rule D (overlapping DimStaff windows) for the project lead's email. Keeps the newest RegionalAnalyst row as the single current/open/active row and DELETEs every other DimStaff row for that email.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Fix the overlapping-window DQ error on the project lead's dev staff rows.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-06"
+    },
+    "params": {
+     "Email": "staff email to collapse (default: the project lead)"
+    },
+    "caveats": "The 'no fact references them' assumption was wrong: a deleted StaffKey was an EnteredByStaffKey, which needed fix_dev_orphan_enteredby_projectlead.sql the next day. Before re-using this, check fact references to the rows it will delete (fix_dimstaff_stacked_markers.sql has the reference-count pre-check). Run order: grant_dev_projectlead_access.sql, then fix_dev_projectlead_analyst_active.sql, then this, then fix_dev_orphan_enteredby_projectlead.sql. THROWs if there is no RegionalAnalyst row."
    },
    "blob": "057ceaf10d867de4d8bcc42154ca9b5b0d2ba90e",
    "auto": {
@@ -11256,13 +11403,26 @@
     "lastCommit": "2026-10-06 14e8b18 sql(dev): fix DimStaff overlapping-window DQ (rule D) for project lead",
     "headerPurpose": "Clear DQ rule D (\"overlapping effective windows for same Email\") for jeffrey.raine@tcrce.ca. Cause: fix_dev_projectlead_analyst_active.sql ENDED the spurious NULL-access deactivation-marker row at today while the RegionalAnalyst row is open from an earlier date -- so the marker's window sits INSIDE the open window (overlap). The marker should have been DELETED, not ended.",
     "headerScript": "fix_dev_dimstaff_overlap_projectlead.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_dev_orphan_enteredby_projectlead.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "a94ab643d39c2acd4c89153872d6a71caaad346d",
    "notes": {
-    "purpose": ""
+    "purpose": "On dev, re-point Reading/Writing/Math fact rows whose EnteredByStaffKey refers to a deleted DimStaff row (key 8016407336719482881) to the project lead's surviving StaffKey. Then lists any EnteredBy orphans that remain across the three fact tables.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Clear the DQ 'Orphan' violations caused by the dev over-delete of the project lead's staff rows.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-07"
+    },
+    "params": {
+     "Email": "staff email whose surviving StaffKey becomes the new author stamp",
+     "OrphanKey": "the deleted StaffKey that facts still reference (hard-coded to the 2026-10-07 case)"
+    },
+    "caveats": "One-off cleanup after fix_dev_dimstaff_overlap_projectlead.sql. Never use this pattern on live: there, staff rows that authored facts are not deleted. The final orphan-scan SELECT can be reused on its own as a generic EnteredBy-orphan diagnostic."
    },
    "blob": "a94ab643d39c2acd4c89153872d6a71caaad346d",
    "auto": {
@@ -11350,13 +11510,25 @@
     "lastCommit": "2026-10-07 9eb398d sql(dev): fix DQ orphan â€” re-point project-lead's deleted EnteredByStaffKey",
     "headerPurpose": "Clear the 3 DQ \"Orphan\" violations from the 2026-10-07 app ingest: FactAssessmentReading (2) + FactAssessmentWriting (1) rows whose EnteredByStaffKey = 8016407336719482881 point at a DimStaff row that no longer exists.",
     "headerScript": "fix_dev_orphan_enteredby_projectlead.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_dev_projectlead_analyst_active.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "5ca3b05e0c25bc5a9f8c20141b15f8bc5bbb2e45",
    "notes": {
-    "purpose": ""
+    "purpose": "On dev, collapse the project lead's stacked DimStaff rows to one current, active RegionalAnalyst row by ENDING the others. Then rebuilds StaffSchoolAccess (all active schools) and StaffAppAccess (sysadmin, cycles, ingest) for that email.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Why does the project lead see \"No cycles\" on dev? Restore their single active RegionalAnalyst row and access.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-06"
+    },
+    "params": {
+     "Email": "dev sign-in UPN to repair (default: the project lead)"
+    },
+    "caveats": "Ending (not deleting) the NULL-access marker created an overlapping window (DQ rule D), which needed fix_dev_dimstaff_overlap_projectlead.sql afterwards. Overwrites StaffSchoolAccess and StaffAppAccess for the email (DELETE + INSERT). Requires a RegionalAnalyst row and THROWs otherwise; run grant_dev_projectlead_access.sql first."
    },
    "blob": "5ca3b05e0c25bc5a9f8c20141b15f8bc5bbb2e45",
    "auto": {
@@ -11440,7 +11612,8 @@
     "lastCommit": "2026-10-06 f4c7bae sql(dev): project-lead analyst reactivation + cycle live-vs-dev diagnostic",
     "headerPurpose": "The project lead resolves to \"No cycles\" because a re-ingest/merge left",
     "headerScript": "fix_dev_projectlead_analyst_active.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_dimstaff_stacked_markers.sql": {
    "kind": "script",
@@ -11496,9 +11669,17 @@
   },
   "sql/scripts/fix_math_cycle_months_and_task_miscoding.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ddbdbaa22ee7c22a818a536c00c27b88b4128ae3",
    "notes": {
-    "purpose": ""
+    "purpose": "Part A re-codes DimMathTask.AssessmentMonth 2→1 and 5→4 (the math team's SCoR-3/SCoR-5 mis-coding). Part B stamps BenchmarkMonth {9,11,1,3,4,6} on the Reading and Math windows of the six SCoR cycles, keyed by live CycleGroupID GUIDs. Fixes blank math grids.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Make Math (and Reading) cycle instances pull the right task month, and correct the mis-coded task months.",
+     "target": "live (Part B GUIDs are live's; Part A applies to whatever warehouse it runs on)",
+     "rerunSafe": true,
+     "applied": "2026-10-07 (live; dev used the _dev variant)"
+    },
+    "caveats": "Part A must be RE-APPLIED after every usp_LoadMathTasks seed, because the math team keeps the wrong months. Part B is inert on dev (GUIDs differ; use fix_math_cycle_months_and_task_miscoding_dev.sql). Part B overwrites any BenchmarkMonth set per instance on /cycles for those six cycles. Next year's cycles have new GUIDs, so Part B is year-specific."
    },
    "blob": "ddbdbaa22ee7c22a818a536c00c27b88b4128ae3",
    "auto": {
@@ -11543,13 +11724,22 @@
     "lastCommit": "2026-10-07 8dbc59b math cycles: let Math carry a task-pull month (fix blank math grid)",
     "headerPurpose": "Make math (and reading) cycle instances pull/benchmark the correct month, and correct the math team's mis-coded task months. Two data fixes: A. Re-code DimMathTask.AssessmentMonth: 2 -> 1 (SCoR-3 Feb->Jan), 5 -> 4 (SCoR-5 May->Apr). The math team codes those tasks under the wrong month and WON'T change, so this must be RE-APPLIED after every usp_LoadMathTasks seed — see memory project_math_task_month_miscoding. B. Stamp BenchmarkMonth on the six SCoR cycles' Reading AND Math windows to the canonical months {9,11,1,3,4,6} (Sep,Nov,Jan,Mar,Apr,Jun). Was NULL for Math (the",
     "headerScript": "fix_math_cycle_months_and_task_miscoding.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_math_cycle_months_and_task_miscoding_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "64fc1ad952b45409dc675e3e1affd802531bbf03",
    "notes": {
-    "purpose": ""
+    "purpose": "Dev counterpart of fix_math_cycle_months_and_task_miscoding.sql. Same task-month re-code (2→1, 5→4), but stamps BenchmarkMonth on Reading and Math windows keyed by the six 2026-27 SCoR StartDates, because dev's CycleGroupIDs differ from live.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Apply the math cycle-month and task-month fix on dev.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-07"
+    },
+    "caveats": "Near-duplicate of the live script; only the Part B key differs (StartDate vs GUID). Could be merged into one script keyed by StartDate. Part B hits EVERY active Reading/Math window whose StartDate matches, so it overwrites per-instance months set on /cycles. AFTER rows with BenchmarkMonth NULL mean a StartDate did not match. The dates are 2026-27 only."
    },
    "blob": "64fc1ad952b45409dc675e3e1affd802531bbf03",
    "auto": {
@@ -11594,13 +11784,22 @@
     "lastCommit": "2026-10-07 51c1972 sql(dev): math cycle-month + task-miscoding fix keyed by StartDate (dev GUIDs differ from live)",
     "headerPurpose": "Dev counterpart of fix_math_cycle_months_and_task_miscoding.sql. Dev's six SCoR cycles have DIFFERENT CycleGroupIDs than live, so Part B here keys on StartDate instead of GUID (dev was built to match live's cycle dates). Two fixes: A. Re-code DimMathTask.AssessmentMonth 2 -> 1 and 5 -> 4 (the math team's mis-coding; RE-APPLY after every usp_LoadMathTasks seed — memory project_math_task_month_miscoding).",
     "headerScript": "fix_math_cycle_months_and_task_miscoding_dev.sql (DEV warehouse)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/fix_math_task_month_10_to_9.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "003b09fdfef4586ab21b1ccfd07b28b2dddc65f0",
    "notes": {
-    "purpose": ""
+    "purpose": "Remap every DimMathTask row with AssessmentMonth 10 to month 9, because the math team authored the grade 1/2/3 fall tasks as October while the fall cycle runs in September. Then shows task counts by grade x month.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Make the grade 1–3 fall math tasks appear in the September cycle.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-22 (shipped with release 0.6.0)"
+    },
+    "caveats": "The source CSVs/workbook still say month 10, so reloading usp_LoadMathTasks REVERTS this. Re-apply it after each reload, together with Part A of fix_math_cycle_months_and_task_miscoding (2→1, 5→4), unless the workbook or transform is fixed. The UPDATE is unguarded by grade, so it relabels ANY month-10 task."
    },
    "blob": "003b09fdfef4586ab21b1ccfd07b28b2dddc65f0",
    "auto": {
@@ -11623,13 +11822,24 @@
     "lastCommit": "2026-09-22 46a6098 release 0.6.0: The SCoR Hub rename + French math answer key (dev -> main)",
     "headerPurpose": "The math team authored grades 1/2/3 fall tasks as AssessmentMonth 10 (October) when the fall Short Cycle runs in month 9 (September) — so those grades resolved NO tasks. Remap month 10 -> 9. (Grade P already used 9 and has no month-10 rows, so it's untouched; grades 1/2/3 have no existing month-9 rows, so no natural-key collision.)",
     "headerScript": "fix_math_task_month_10_to_9.sql (LIVE + DEV)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/grant_dev_projectlead_access.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "fb482ebe60f9a2ca6c8d4ad5c295c22d9c8947e9",
    "notes": {
-    "purpose": ""
+    "purpose": "On dev, give the project lead access without re-ingesting staff. Inserts a RegionalAnalyst DimStaff row if no current row exists, rebuilds StaffSchoolAccess for all active schools, and resets StaffAppAccess to sysadmin + cycles + ingest.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Restore the project lead's analyst/sysadmin access on a freshly ingested dev set.",
+     "target": "dev",
+     "rerunSafe": true
+    },
+    "params": {
+     "Email": "dev Entra sign-in UPN to grant (lowercased)"
+    },
+    "caveats": "The DimStaff insert is skipped if ANY current row exists, even a bad one such as a NULL-access deactivation marker. For that case use fix_dev_projectlead_analyst_active.sql. The insert hard-codes the name, title and CanChangeSchool for the project lead, so edit them for another person. The next staff re-ingest that omits the email closes the row again."
    },
    "blob": "fb482ebe60f9a2ca6c8d4ad5c295c22d9c8947e9",
    "auto": {
@@ -11715,13 +11925,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Give the project lead access on the freshly-ingested dev test set, without re-ingesting the staff file: 1. A DimStaff RegionalAnalyst row (analyst scope for /enter, group picker, reports) — the ingest rebuilt DimStaff without this email. 2. StaffAppAccess.IsSysAdmin = 1 (super-user for /cycles, /ingest, maintenance). This table is keyed by EMAIL and is NOT cleared by resets, so it likely already exists — this just guarantees it.",
     "headerScript": "grant_dev_projectlead_access.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/load_prior_year_baseline.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "181af1fec695de29475291b214d36c4bfa277c40",
    "notes": {
-    "purpose": ""
+    "purpose": "Load the 2025-2026 June reading and writing baseline from four OneLake CSVs (ELA/FLA Reading/Writing) into Stg_PriorReading / Stg_PriorWriting with COPY INTO, tag AssessmentLanguage, and rebuild PriorYearBaseline as one wide row per (StudentNumber, language). Ends with count-only verification.",
+    "script": {
+     "kind": "seed",
+     "question": "Load (or reload) last year's June reading/writing baseline.",
+     "target": "live (abfss paths use the LIVE workspace/lakehouse GUIDs); dev only after swapping in the _Dev lakehouse GUID",
+     "rerunSafe": true,
+     "applied": "live 2026-09-09"
+    },
+    "caveats": "TRUNCATEs both staging tables AND PriorYearBaseline, so a re-run fully replaces the baseline. Requires PriorYearBaseline.sql and Stg_PriorYearBaseline.sql to exist first, and the CSVs uploaded with their exact original file names (literal spaces, not %20). SchoolYear '2025-2026' is hard-coded, so a new year needs edits and must not wipe the earlier year. The staging tables hold student names (PII)."
    },
    "blob": "181af1fec695de29475291b214d36c4bfa277c40",
    "auto": {
@@ -11789,13 +12008,22 @@
     "lastCommit": "2026-09-09 604453c fix(baseline): literal spaces in COPY INTO paths (not %20)",
     "headerPurpose": "One-time (re-runnable) load of the 2025-2026 June reading + writing baseline from the four ELA/FLA CSVs into PriorYearBaseline.",
     "headerScript": "load_prior_year_baseline.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_0.7.0_grace_and_overrides.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "adc671aefed84c9f8595b5f421092d400806bb82",
    "notes": {
-    "purpose": ""
+    "purpose": "0.7.0 schema migration. Adds DimShortCycle.GraceHours (backfilled to 168) and StaffAppAccess.CanOverrideMath / CanOverrideLiteracy (backfilled to 0), using sys.columns guards and EXEC-wrapped ALTERs.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the grace-lock and override columns for 0.7.0.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev then live with the 0.7.0 release (committed 2026-09-24)"
+    },
+    "caveats": "Columns are NULL-able (Fabric cannot ADD NOT NULL to a populated table), so readers COALESCE. A re-run also backfills any NULL GraceHours or override flags that appeared later (to 168 / 0), which is harmless given the read defaults. Must run before deploying the 0.7.0 procs/TVFs that reference these columns."
    },
    "blob": "adc671aefed84c9f8595b5f421092d400806bb82",
    "auto": {
@@ -11828,13 +12056,22 @@
     },
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-24 8483e4d 0.7.0 grace-lock (1/n): schema + Locked window status"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimAchievementLevel_add_tint.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1c8702f9979d230cf614208dc831e82d13a71621",
    "notes": {
-    "purpose": ""
+    "purpose": "Add the nullable HexColorTint VARCHAR(7) column (a light row-wash colour per achievement level) to DimAchievementLevel, guarded by sys.columns.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the achievement-level tint colour column used by the restyled roster/student screens.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-06-09 (Direction B restyle, Power Apps era)"
+    },
+    "caveats": "Run order, each in a separate execution: this file, then seed_DimAchievementLevel.sql, then vw_StudentCohort.sql, then vw_StudentAssessmentHistory.sql. The listed consumers (scrRosterGrid, scrStudentData, scrStudentDetail) are Power Apps canvas screens that the later web app may have superseded."
    },
    "blob": "1c8702f9979d230cf614208dc831e82d13a71621",
    "auto": {
@@ -11853,13 +12090,22 @@
     "scriptEffect": "ddl",
     "lastCommit": "2026-06-09 8711453 Session wrap (2026-06-09): Direction B restyle â€” scrLanding + scrIPP ported",
     "headerPurpose": "Add HexColorTint to DimAchievementLevel -- a light '#RRGGBB' row-wash color per achievement level, distinct from the solid HexColor used for chart series. Drives the restyled gallery row backgrounds on scrRosterGrid (via colAchievementLevels), scrStudentData (via vw_StudentCohort), and scrStudentDetail (via vw_StudentAssessmentHistory)."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimAssessmentWindow_add_AssessmentLanguage.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1d31c044a461e64e687625f903f414f700a66644",
    "notes": {
-    "purpose": ""
+    "purpose": "Add DimAssessmentWindow.AssessmentLanguage ('English'/'French', NULL = both) and ProgramScope (comma-delimited English / Early Immersion / Late Immersion buckets, NULL = all) for per-cycle language and program scoping. Guarded, with no backfill.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the per-cycle language and program-scope columns (dual-language feature).",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-17 (dual-language scoping)"
+    },
+    "caveats": "Pairs with migrate_DimProgram_add_ScopeBucket.sql, because ProgramScope values match DimProgram.ScopeBucket. Existing cycles stay NULL, which means all programs and both languages."
    },
    "blob": "1d31c044a461e64e687625f903f414f700a66644",
    "auto": {
@@ -11880,13 +12126,22 @@
     "lastCommit": "2026-09-17 b3bcdec feat(assessment): app-level per-cycle language + program scoping (dual-language)",
     "headerPurpose": "App-level per-cycle scoping. Adds two columns to DimAssessmentWindow so a Short Cycle can be scoped, from the /cycles page, along: AssessmentLanguage 'English'|'French' (NULL = Both: writing toggle / reading per student). ProgramScope comma-delimited bucket set from {English, Early Immersion, Late Immersion} (NULL = all programs). Buckets come from DimProgram.ScopeBucket (non-immersion -> English). These combine with the existing MinGrade/MaxGrade grade band. Membership follows the structural rule (French literacy = French Immersion); WHICH grades/programs/language a cycle covers is this confi",
     "headerScript": "migrate_DimAssessmentWindow_add_AssessmentLanguage.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimAssessmentWindow_add_BenchmarkMonth.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "9ceb0c76893a8d54f2d3c2efc4df429e75f27285",
    "notes": {
-    "purpose": ""
+    "purpose": "Add DimAssessmentWindow.BenchmarkMonth INT NULL: an explicit benchmark/task month per cycle instance. NULL falls back to the window's dominant calendar month.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the explicit benchmark-month column for Short Cycles.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "dev then live, 2026-08/09 (Short Cycle rollout; committed 2026-09-01)"
+    },
+    "caveats": "The ALTER is UNGUARDED: a re-run fails with 'column already exists' (an error, not data damage). It was not included in the 2026-09-21 idempotency pass, so run it alone in its own batch. Math windows were left NULL until fix_math_cycle_months_and_task_miscoding(_dev).sql set them."
    },
    "blob": "9ceb0c76893a8d54f2d3c2efc4df429e75f27285",
    "auto": {
@@ -11903,13 +12158,22 @@
     "scriptEffect": "ddl",
     "lastCommit": "2026-09-01 fd46616 Short Cycle: explicit BenchmarkMonth (option 4) over dominant-month tie-break",
     "headerPurpose": "Support the \"Short Cycle of Response\" model — an EXPLICIT grade-month benchmark that the admin sets per reading cycle, so a multi-month cycle's expected reading levels come from the intended month rather than the auto-computed dominant month (which can pick a less representative month when a cycle spans several). NULL = fall back to the dominant month of the cycle's [StartDate, EndDate] range."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimAssessmentWindow_add_CycleGroupID.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8016b9d105e2db7a87543fd7dd0cf4be0821f239",
    "notes": {
-    "purpose": ""
+    "purpose": "Add DimAssessmentWindow.CycleGroupID VARCHAR(36) NULL, the app-generated GUID that groups one Short Cycle's per-subject window rows. Guarded by sys.columns.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the column that groups per-subject windows into one multi-subject cycle.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev then live, 2026-09 (guard added 2026-09-21 so the live deploy stage-01 no-ops on dev)"
+    },
+    "caveats": "Legacy rows stay NULL and are treated as their own one-subject cycle. Run it in its own batch before deploying the procs/TVFs that read CycleGroupID."
    },
    "blob": "8016b9d105e2db7a87543fd7dd0cf4be0821f239",
    "auto": {
@@ -11928,13 +12192,22 @@
     "scriptEffect": "ddl",
     "lastCommit": "2026-09-21 94df79a fix(deploy): make stage-01 migrations idempotent (guard bare ALTERs + SCR swap) so they no-op on already-migrated dev and run clean on live",
     "headerPurpose": "A \"Short Cycle of Response\" can cover MULTIPLE subjects (Reading, Writing, Math) over one date range. Each subject is still its own DimAssessmentWindow row (facts tie to a single-subject window), so the rows of one cycle are grouped by a shared CycleGroupID (a GUID the app generates). This keeps per-subject storage flexible — a cycle could later carry different dates/grades per subject with no schema change — while letting the admin manage it as one cycle."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimAssessmentWindow_v2.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "432fea39099e2156d75fa4d1bb34f17e51845f27",
    "notes": {
-    "purpose": ""
+    "purpose": "DROP and re-CREATE DimAssessmentWindow in its v2 shape: drops AppliesTo/IsCurrentWindow, replaces ProgramCode with ProgramFamily, adds ScaleSystem, and makes MinGrade/MaxGrade NOT NULL. Written when the table was verified empty.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Reshape DimAssessmentWindow for the window-applicability model (Step 18 prerequisite #2).",
+     "target": "dev and live (pre-MVP, empty table)",
+     "rerunSafe": false,
+     "applied": "2026-05-13 (pre-MVP, table empty)"
+    },
+    "caveats": "OBSOLETE and DANGEROUS: DROP TABLE with no data preservation. Running it now would wipe every cycle window and orphan all assessment facts. It also lacks the columns added later (CycleGroupID, BenchmarkMonth, AssessmentLanguage, ProgramScope, …). The current definition lives in the table DDL, not here. Never re-run."
    },
    "blob": "432fea39099e2156d75fa4d1bb34f17e51845f27",
    "auto": {
@@ -12031,13 +12304,22 @@
     "scriptEffect": "ddl",
     "lastCommit": "2026-05-13 4278954 Session wrap (2026-05-13): Step 18 SQL prereqs DONE + Power Apps build pivot to VS Code YAML",
     "headerPurpose": "Reshape DimAssessmentWindow for the new window-applicability model."
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimProgram_add_ScopeBucket.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "cc924aa3b0851ba12c43884bedbc1ae4762d2ea8",
    "notes": {
-    "purpose": ""
+    "purpose": "Add DimProgram.ScopeBucket and backfill it: non-immersion becomes 'English', French Immersion with 'Late' in the name becomes 'Late Immersion', other French Immersion becomes 'Early Immersion'. Used by cycle ProgramScope matching.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Classify every program into the English / Early Immersion / Late Immersion scope bucket.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-09-17 (dual-language scoping)"
+    },
+    "caveats": "The backfill UPDATE recomputes ALL rows, so a re-run overwrites any hand-edited ScopeBucket. Programs seeded into DimProgram later need ScopeBucket set, otherwise PlusScope filters drop their students (see diag_reading_instance_counts.sql). Pairs with migrate_DimAssessmentWindow_add_AssessmentLanguage.sql."
    },
    "blob": "cc924aa3b0851ba12c43884bedbc1ae4762d2ea8",
    "auto": {
@@ -12062,13 +12344,22 @@
     "lastCommit": "2026-09-17 b3bcdec feat(assessment): app-level per-cycle language + program scoping (dual-language)",
     "headerPurpose": "Classify each program into the cycle PROGRAM-SCOPE bucket used by the",
     "headerScript": "migrate_DimProgram_add_ScopeBucket.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimRole_22_32_to_Teacher.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "ead162bd693f2fea8069fae5b622efda16296f9e",
    "notes": {
-    "purpose": ""
+    "purpose": "Reclassify PowerSchool RoleNumbers 22 (IB/O2/Co-op Coordinators) and 32 (APSEA Itinerant Teachers) in DimRole from RoleCode 'SpecialistTeacher' to 'Teacher'.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Treat coordinators and itinerant teachers as Teachers rather than SpecialistTeachers.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "2026-05-01 (pre-MVP)"
+    },
+    "caveats": "Takes effect only after the next usp_MergeStaff / full ingest, which cascades it into FactStaffAssignment and DimStaff.AccessLevel. Staff with only groups 22/32 lose SpecialistTeacher access. Its rationale mentions SchoolAdmins DAX RLS from the Power BI/Power Apps era. Check that it still agrees with current DimRole seeding (SpecialistTeacher behaviour changed in 1.2.x) before re-running."
    },
    "blob": "ead162bd693f2fea8069fae5b622efda16296f9e",
    "auto": {
@@ -12099,13 +12390,22 @@
     "lastCommit": "2026-05-01 2532ef5 Session wrap (2026-05-01): Step 8 closed, Steps 9-10 done, Steps 11-12 deliverables ready",
     "headerPurpose": "Reclassify PS RoleNumbers 22 (IB/O2/Co-op Coordinators) and 32 (APSEA Itinerant Teachers) from RoleCode 'SpecialistTeacher' to 'Teacher'. Both groups ARE teachers (vs the remaining SpecialistTeacher list which is admin-tier — counsellors, registrars, resource teachers).",
     "headerScript": "migrate_DimRole_22_32_to_Teacher.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimSection_add_fields.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "33903b10522462f63eca418c92ab1b93520684c4",
    "notes": {
-    "purpose": ""
+    "purpose": "DROP and re-CREATE DimSection to add SectionNumber, CourseName, EnrollmentCount and MaxEnrollment. Written pre-MVP when DimSection was empty.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the section display/size fields to DimSection (pre-MVP schema change).",
+     "target": "dev and live (pre-MVP, empty table)",
+     "rerunSafe": false,
+     "applied": "2026-04-28 (pre-MVP, table empty)"
+    },
+    "caveats": "OBSOLETE and DANGEROUS: DROP TABLE DimSection with no preservation. Running it now would wipe every section and orphan FactEnrollment and section-teacher links. The schema is also stale (for example TeacherStaffKey NOT NULL). The current definition lives in DimSection.sql. Never re-run."
    },
    "blob": "33903b10522462f63eca418c92ab1b93520684c4",
    "auto": {
@@ -12208,7 +12508,8 @@
     "lastCommit": "2026-04-28 dd7fc0f Section schema refinements: fields, SCD policy, bridge decoupling",
     "headerPurpose": "Add 4 fields to DimSection — SectionNumber, CourseName, EnrollmentCount, MaxEnrollment. All Type 2 SCD triggers per the updated all-business-fields-Type-2 policy on DimSection (see DimSection.sql header).",
     "headerScript": "migrate_DimSection_add_fields.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/migrate_DimStaff_add_AccessLevel.sql": {
    "kind": "script",
