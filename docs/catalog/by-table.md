@@ -71,8 +71,8 @@ SINGLE-ROW store for the app maintenance window, so a sysadmin can schedule a gr
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) — update — `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
-- [sql/procedures/usp_SetMaintenanceWindow.sql](../../sql/procedures/usp_SetMaintenanceWindow.sql) — insert/update — `Id`, `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
+- [sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) — update: `MaintenanceAt (NULL)`, `Message (NULL)`, `SetByEmail`, `SetAt`, `LastUpdated`; delete: never - only row Id=1 is updated; a no-op if that row does not exist
+- [sql/procedures/usp_SetMaintenanceWindow.sql](../../sql/procedures/usp_SetMaintenanceWindow.sql) — insert: `Id (=1)`, `MaintenanceAt`, `Message`, `SetByEmail`, `SetAt`, `LastUpdated`; update: `MaintenanceAt`, `Message`, `SetByEmail`, `SetAt`, `LastUpdated`
 - [sql/security/AppMaintenance.sql](../../sql/security/AppMaintenance.sql) — insert — `Id`, `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
 
 **Read by:**
@@ -151,9 +151,9 @@ Defines when assessments are collected, for which grades, programs, and (for rea
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) — insert — `ActiveFlag`, `AssessmentType`, `CreatedBy`, `CreatedDate`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
-- [sql/procedures/usp_UpsertShortCycle.sql](../../sql/procedures/usp_UpsertShortCycle.sql) — insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
-- [sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) — update — `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`, `WindowName`
+- [sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) — insert: `WindowName`, `AssessmentType`, `SchoolYear`, `StartDate`, `EndDate`, `MinGrade`, `MaxGrade`, `ProgramFamily`, `ScaleSystem`, `ActiveFlag`, `CreatedDate`, `CreatedBy='usp_GenerateMonthlyWindows'`, `LastUpdated`
+- [sql/procedures/usp_UpsertShortCycle.sql](../../sql/procedures/usp_UpsertShortCycle.sql) — insert: `WindowName`, `AssessmentType`, `SchoolYear (Sep-Aug from StartDate)`, `StartDate`, `EndDate`, `MinGrade`, `MaxGrade`, `ProgramFamily=NULL`, `ProgramScope`, `ScaleSystem`, `AssessmentLanguage`, `BenchmarkMonth`, `CycleGroupID`, `ActiveFlag`, `CreatedDate`, `CreatedBy`, `LastUpdated`; update: `same columns except CreatedDate/CreatedBy; ProgramFamily forced NULL`
+- [sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) — update: `WindowName`, `StartDate`, `EndDate`, `SchoolYear`, `LastUpdated - all rows with this CycleGroupID (edit only)`
 
 **Read by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — *(columns not resolved)*
@@ -401,7 +401,7 @@ The bank of P-6 math assessment TASKS. Each task is one outcome-based item a stu
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — insert/update — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `LastUpdated`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
+- [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — insert: `GradeCode`, `AssessmentMonth`, `UnitName`, `UnitOrder`, `QuestionNumber`, `DisplayOrder`, `OutcomeCode`, `TaskDescriptionEN`, `TaskDescriptionFR`, `AnswerKey`, `AnswerKeyFR`, `ActiveFlag`, `LastUpdated`; update: `all non-key columns (Type 1 overwrite on natural-key match)`, `ActiveFlag=0 for tasks of a loaded grade+month that are absent from the sheet`
 
 **Read by:**
 - [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — `ActiveFlag`, `AssessmentMonth`, `GradeCode`, `QuestionNumber`, `UnitName`
@@ -657,8 +657,8 @@ Instructional sections and their teacher-of-record assignments over time
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert/update — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `LastUpdated`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`
-- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`
+- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — update: `close changed (any of SchoolID, TermID, CourseCode, SectionNumber, CourseName, EnrollmentCount, MaxEnrollment, TeacherStaffKey differs; started before today)`, `same-day in-place correction`, `same-day revive of a 0-day closed row`, `touch unchanged`, `close every current row whose SectionID is not in Wrk (EndDate guarded; no replacement)`; insert: `new version for each Wrk section without a current row`
+- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update: `IsCurrent=0, EffectiveEndDate=@EffectiveDate-1 for current rows in closing-year terms`
 
 **Read by:**
 - [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — `IsCurrent`, `SectionID`, `SectionKey`, `TermID`
@@ -724,7 +724,7 @@ HEADER for a Short Cycle of Response (SCoR). One row per cycle, identified by a 
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) — insert/update — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `GraceHours`, `LastUpdated`, `SchoolYear`, `StartDate`
+- [sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) — insert: `CycleGroupID`, `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours (default 168)`, `CreatedDate`, `CreatedBy`, `LastUpdated`; update: `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours`, `LastUpdated`
 
 **Read by:**
 - [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — `CycleGroupID`, `GraceHours`
@@ -771,7 +771,7 @@ Person-level staff identity. One row per unique staff email, versioned by SCD Ty
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert/update — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — update: `close changed active rows (FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel differ; started before today)`, `same-day in-place correction`, `close active rows missing from the import (EndDate guarded)`, `same-day revive of a 0-day closed row`, `close a prior-day ActiveFlag=0 marker when the person returns`, `touch LastUpdated`, `AccessLevel Type-1 refresh on current active rows`; insert: `deactivation marker (ActiveFlag=0, AccessLevel=NULL) for emails closed as missing yesterday-dated with no current row`, `active version for every Wrk email without a current active row (new/changed/returning)`
 
 **Read by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — *(columns not resolved)*
@@ -853,7 +853,7 @@ Student profile over time — tracks grade, school, and program changes
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert/update — `Adap`, `DateOfBirth`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `LastUpdated`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
+- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `close changed: EffectiveEndDate=@EffectiveDate-1, IsCurrent=0 when any of the 14 Type-2 fields differ (EXCEPT, NULL-safe) and the row started before today`, `same-day in-place: all attributes + GroupKey when the current row started today`, `same-day revive: re-open a 0-day [today,today] closed row with no current sibling`, `touch LastUpdated on unchanged current rows`, `close missing: IsCurrent=0, EffectiveEndDate=max(start, @EffectiveDate-1) for current rows absent from the import (no replacement row)`; insert: `new current version for every Wrk student without a current row (new + just-closed changed), EffectiveStartDate=@EffectiveDate`
 
 **Read by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — `StudentKey`, `StudentNumber`
@@ -962,7 +962,7 @@ Per-task math results entered by teachers — one bit per student per task per c
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — delete/insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `MathTaskKey`, `Result`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
+- [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `MathTaskKey`, `Result`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `Result`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - same (StudentKey, window, task, date)`; delete: the row for exactly (StudentKey, window, task, AssessmentDate) when Result is NULL/blank; earlier dates untouched
 
 **Read by:**
 - [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — *(columns not resolved)*
@@ -1008,8 +1008,8 @@ Reading assessment results entered by teachers
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — delete
-- [sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) — insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LastUpdated`, `LevelCode`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
+- [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — delete: ONE arbitrary row (TOP 1, no ORDER BY) for the student number + window
+- [sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) — insert: `StudentKey (version effective at AssessmentDate)`, `StudentNumber`, `AssessmentWindowID`, `ReadingScaleID`, `ReadingDelta`, `LevelCode`, `ExpectedMinLevelCode`, `ExpectedMaxLevelCode`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `ReadingScaleID`, `ReadingDelta`, `LevelCode`, `ExpectedMinLevelCode`, `ExpectedMaxLevelCode`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - only when a row exists for the same (StudentKey, window, AssessmentDate)`
 
 **Read by:**
 - [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — `AssessmentWindowID`, `ReadingAssessmentID`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`
@@ -1072,7 +1072,7 @@ Writing assessment rubric scores entered by teachers
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) — insert/update — `AssessmentDate`, `AssessmentLanguage`, `AssessmentWindowID`, `ConventionsScore`, `EnteredByStaffKey`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`, `WritingAverage`
+- [sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `AssessmentLanguage`, `IdeasScore`, `OrganizationScore`, `LanguageScore`, `ConventionsScore`, `WritingAverage`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `the four trait columns`, `WritingAverage`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - when a row exists for the same (StudentKey, window, AssessmentLanguage, AssessmentDate)`
 
 **Read by:**
 - [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — *(columns not resolved)*
@@ -1122,7 +1122,7 @@ Append-only audit log for data quality check runs against the Assessment_Warehou
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`
+- [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — insert: `one row per violation (CheckCategory, CheckName, TableName, KeyColumn, KeyValue, Detail)`, `or one PASS sentinel row`
 
 **Read by:**
 - [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — *(columns not resolved)*
@@ -1151,8 +1151,8 @@ Student membership in sections over time
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert/update — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
-- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update — `ActiveFlag`, `EndDate`, `LastUpdated`
+- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — update: `StartDate, EndDate, ActiveFlag (+ StudentKey/SectionKey re-pointed to current versions unless the row was and stays inactive) when any differs`, `touch LastUpdated on matched unchanged rows`, `ActiveFlag=0 for every active row whose SourceSystemID is absent from Wrk`; insert: `rows with a SourceSystemID not yet in the fact`
+- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update: `ActiveFlag=0, EndDate=COALESCE(EndDate, term end: Jun 30 / Jan 30 / Jun 30 by TermCode)`
 
 **Read by:**
 - [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
@@ -1216,8 +1216,8 @@ Many-to-many bridge of teacher-to-section assignments, supporting co-teaching an
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert/update — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
-- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`
+- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — update: `close (IsCurrent=0, EndDate guarded) current triples absent from Wrk`, `touch unchanged`; insert: `triples with no current row, EffectiveStartDate=@EffectiveDate`
+- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — update: `IsCurrent=0, EffectiveEndDate=@EffectiveDate-1 where the SectionID has any closing-year DimSection version`
 
 **Read by:**
 - [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — `EffectiveStartDate`, `IsCurrent`, `SectionID`, `TeacherEmail`, `TeacherRole`
@@ -1282,7 +1282,7 @@ Bridge of staff-to-school-to-role assignments. One row per distinct (StaffKey, S
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert/update — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `RoleCode`, `SchoolID`, `SourceSystemID`, `StaffKey`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — update: `close on SourceSystemID collision (same triple, different PS ID)`, `close triples missing from the import or at a now-inactive school`, `touch unchanged`; insert: `new triples at ACTIVE DimSchool schools only (district '0000' and closed schools dropped)`
 
 **Read by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — `EffectiveStartDate`, `IsCurrent`, `RoleCode`, `SchoolID`, `SourceSystemID`, `StaffKey`
@@ -1318,8 +1318,8 @@ Tracks per-student, per-subject, per-program-family ADAPTATION status with SCD T
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- [sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
+- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `same close rule keyed on Adap`; insert: `HasAdaptation=NULL, ChangedBy='system' placeholders`
+- [sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) — update: `no-op: LastUpdated only`, `flip: IsCurrent=0, EffectiveEndDate=today-1`; insert: `flip: new current row, ChangedBy=caller`
 
 **Read by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — `IsCurrent`, `ProgramFamily`, `StudentKey`, `Subject`
@@ -1360,8 +1360,8 @@ Tracks per-student, per-subject, per-program-family IPP status with SCD Type 2 v
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- [sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
+- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — update: `close (IsCurrent=0, EffectiveEndDate=@EffectiveDate-1) current rows whose (StudentKey, Subject, ProgramFamily) is no longer expected`; insert: `IsIPP=NULL, ChangedBy='system' for each expected triple lacking a current row`
+- [sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) — update: `no-op: LastUpdated only`, `flip: IsCurrent=0, EffectiveEndDate=today-1`; insert: `flip: new current row with IsIPP, EffectiveStartDate=today Atlantic, ChangedBy=caller`
 
 **Read by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — `IsCurrent`, `ProgramFamily`, `StudentKey`, `Subject`
@@ -1418,22 +1418,22 @@ Audit log for all data ingestion and teacher submission activity
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- [sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) — insert: `RecordType='ReadingAssessment', Message 'DELETE | Prior...'`
+- [sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) — insert: `RecordType='WindowGen'`
 - [sql/procedures/usp_InsertSubmissionAudit.sql](../../sql/procedures/usp_InsertSubmissionAudit.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert: `CSVImport row; 'AcceptedWithWarnings' on unresolved students/sections or any missing-closures`
+- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert: `CSVImport row; 'AcceptedWithWarnings' when teacher emails did not resolve`
+- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert: `CSVImport row; warning only for blank emails`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `CSVImport row; 'AcceptedWithWarnings' on unknown PS Group, same-email field conflicts, or SourceSystemID collisions`
+- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert: `RecordType='CSVImport', Source='PowerSchool', counts message`
+- [sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) — insert: `RecordType='IngestCycle', Source/SubmittedBy='system', Status 'Accepted' (clean) or 'Rejected' (DQ fail)`
+- [sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) — insert: `RecordType='StaffAppAccess'`, `Source='WebApp' (always, even on a direct SQL call)`, `SubmittedBy`, `SubmissionTimestamp`, `Status='Accepted'`, `Message`, `RecordCount`, `LastUpdated`
+- [sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) — insert: `RecordType='MathAssessment', action INSERT/UPDATE/CLEAR/NOOP`
+- [sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) — insert: `RecordType='ReadingAssessment', Source WebApp/PowerApps, 'AcceptedWithWarnings' when no benchmark matched, ' | GRACE-OVERRIDE' when saved into a locked cycle`
+- [sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) — insert: `RecordType='StudentAdaptationStatus' (flips only)`
+- [sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) — insert: `RecordType='StudentIPPStatus' (flips only)`
+- [sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) — insert: `RecordType='WritingAssessment', always 'Accepted', ' | GRACE-OVERRIDE' when locked`
+- [sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) — insert: `RecordType='YearEndCloseOut'`
 
 **Changed by scripts (fixes / migrations / seeds):**
 - [sql/scripts/deploy_step14_data_quality.sql](../../sql/scripts/deploy_step14_data_quality.sql) — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
@@ -1464,7 +1464,7 @@ Defined in [sql/facts/IngestRunLog.sql](../../sql/facts/IngestRunLog.sql) · ske
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) — insert — `CallerUPN`, `CycleStart`, `LastUpdated`, `LoggedAt`, `Message`, `Phase`, `RowsLoaded`, `Source`, `Status`, `Topic`
+- [sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) — insert: `'Cycle' Started row`, `one 'Load' row per topic (students, staff, sections, enrollments, section-teachers) with RowsLoaded = staging COUNT(*)`, `'Cycle' Completed or Failed row`
 
 **Reached from app routes:** `/ingest`
 
@@ -1531,7 +1531,7 @@ Pre-joins the expensive, ingest-STABLE half of the entry roster — which studen
 | `LastRebuiltAt` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionKey`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
+- [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert: `TRUNCATE + rebuild: sections at their CURRENT version mapped via DimCourseAssessment (Literacy -> Reading/Writing, Math -> Math, language match), enrolment matched by stable SectionID across all section versions overlapping the window dates (no ActiveFlag filter), student at current version by StudentNumber, filtered by window grade band, ProgramFamily, ProgramScope bucket and language; WindowEffectiveDate = MIN(today Atlantic, EndDate)`
 
 **Read by:**
 - [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
@@ -1562,7 +1562,7 @@ Per-staff APP-LEVEL capability allowlist for restricted admin features, keyed by
 | `LastUpdated` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) — delete/insert/update — `CanManageCycles`, `CanOverrideLiteracy`, `CanOverrideMath`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`
+- [sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) — insert: `Email`, `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; update: `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; delete: LOWER(Email) = target, when all five flags are 0
 
 **Read by:**
 - [sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) — *(columns not resolved)*
@@ -1601,7 +1601,7 @@ Materialized RLS-oracle for school-tier staff access. Replaces the prior vw_Staf
 | `LastRebuilt` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert/truncate — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + rebuild for current active staff with AccessLevel NOT NULL, active schools only`
 
 **Read by:**
 - [sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) — `Email`, `SchoolID`, `StaffKey`, `StaffSchoolAccessID`
@@ -1727,9 +1727,6 @@ All-VARCHAR landing table for the math task-bank seed CSV (one file per grade, a
 | `AnswerKey` | VARCHAR(500) | yes |  |
 | `AnswerKeyFR` | VARCHAR(500) | yes |  |
 | `ActiveFlag` | VARCHAR(50) | yes |  |
-
-**Written by:**
-- [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — truncate
 
 **Read by:**
 - [sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
@@ -1926,7 +1923,7 @@ The Taught-scope projection of SectionRosterMembership — one row per (TeacherE
 | `LastRebuiltAt` | DATETIME2(0) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `TeacherEmail`
+- [sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) — insert: `TRUNCATE + base rows x FactSectionTeachers where WindowEffectiveDate is within the teacher row's effective range`
 
 **Read by:**
 - [sql/security/tvf_TeacherRosterOwn.sql](../../sql/security/tvf_TeacherRosterOwn.sql) — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramCode`, `ProgramFamily`, `SchoolName`, `StudentKey`, `StudentNumber`, `TeacherEmail`
@@ -1981,7 +1978,7 @@ Typed working set for enrollment merge. Populated by usp_MergeEnrollment from St
 | `SourceSystemID` | VARCHAR(50) | no |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert/truncate — `ActiveFlag`, `EndDate`, `SectionID`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`, `StudentNumber`
+- [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — insert: `TRUNCATE + rows that resolve to a current student AND current section AND a DimTerm row`
 
 **Read by:**
 - [sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) — `ActiveFlag`, `EndDate`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
@@ -2012,7 +2009,7 @@ Typed working set for section merge. Populated by usp_MergeSection from Stg_Sect
 | `SourceSystemID` | VARCHAR(50) | yes |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert/truncate — `CourseCode`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherEmail`, `TeacherStaffKey`, `TermID`
+- [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — insert: `TRUNCATE + filtered/translated rows`
 
 **Read by:**
 - [sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) — `CourseCode`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`
@@ -2036,7 +2033,7 @@ Typed working set for the FactSectionTeachers merge. Populated by usp_MergeSecti
 | `SourceSystemID` | VARCHAR(50) | yes |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert/truncate — `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
+- [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — insert: `TRUNCATE + DISTINCT triples whose SectionID has a current DimSection row AND whose email has a current active DimStaff row`
 
 **Read by:**
 - [sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) — `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
@@ -2060,7 +2057,7 @@ Per-import-row working set for FactStaffAssignment merge. ONE row per Stg_Staff 
 | `SourceSystemID` | VARCHAR(50) | yes |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert/truncate — `Email`, `RoleCode`, `SchoolID`, `SourceSystemID`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + one row per (Email, SchoolID, RoleCode) from Stg_Staff joined to active DimRole (MIN PS ID)`
 
 **Read by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — `AccessLevel`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `IsDistrictLevel`, `LastName`, `RoleCode`, `SchoolID`, `SourceSystemID`, `Title`
@@ -2088,7 +2085,7 @@ Person-grain working set for DimStaff merge. ONE row per unique Email after dedu
 | `AccessLevel` | VARCHAR(50) | yes |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert/truncate — `AccessLevel`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `IsDistrictLevel`, `LastName`, `Title`
+- [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — insert: `TRUNCATE + canonical row per email (lowest PS ID); all-zero HomeSchoolID -> NULL; IsDistrictLevel when CanChangeSchool lists 0`
 
 **Read by:**
 - [sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) — *(columns not resolved)*
@@ -2125,7 +2122,7 @@ Typed working set for student merge. Populated by usp_MergeStudent from Stg_Stud
 | `GroupKey` | VARCHAR(70) | yes |  |
 
 **Written by:**
-- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert/truncate — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
+- [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — insert: `TRUNCATE + rebuild from Stg_Student (blank Student_Number rows dropped)`
 
 **Read by:**
 - [sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`

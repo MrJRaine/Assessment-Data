@@ -265,9 +265,12 @@ def build_by_file(m):
         for p in sorted(by_kind[k]):
             L.append(render_entry(m, p))
     if 'webapp/src/lib/data.ts' in m.files:
-        L += ['## data.ts functions → SQL objects', '', '| Function | Objects / tables | Procedures |', '|---|---|---|']
+        desc = m.notes('webapp/src/lib/data.ts').get('functions', {}) or {}
+        L += ['## data.ts functions → SQL objects', '',
+              '| Function | Does | Objects / tables | Procedures |', '|---|---|---|---|']
         for fn, d in sorted(m.data_fns.items()):
-            L.append(f"| `{fn}` | {', '.join('`' + o + '`' for o in d.get('objects', []))} | "
+            L.append(f"| `{fn}` | {str(desc.get(fn, '')).replace('|', '/')} | "
+                     f"{', '.join('`' + o + '`' for o in d.get('objects', []))} | "
                      f"{', '.join('`' + o + '`' for o in d.get('procs', []))} |")
     return '\n'.join(L) + '\n'
 

@@ -488,32 +488,36 @@ The Taught-scope projection of SectionRosterMembership — one row per (TeacherE
 
 ### sql/procedures/usp_ClearMaintenanceWindow.sql
 
-[sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_ClearMaintenanceWindow.sql](../../sql/procedures/usp_ClearMaintenanceWindow.sql) · **procedure** · reviewed 2026-10-22
 
-Cancel a scheduled window / post "all clear" after a swap — sets the single AppMaintenance row's MaintenanceAt back to NULL so clients drop the banner and re-enable entry immediately (no waiting for auto-expiry).
+Ends (or cancels) the app maintenance window: nulls MaintenanceAt + Message on the single AppMaintenance row (Id=1) so every client's poller drops the banner/lock on its next poll.
 
 **Defines:** procedure `usp_ClearMaintenanceWindow`
-**Parameters (usp_ClearMaintenanceWindow):** `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_ClearMaintenanceWindow):** `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** In-proc gate: caller must have a StaffAppAccess row with IsSysAdmin=1 (51040). EXECUTE granted to StudentDataAssessment (self-grant + grant_webapp_sp.sql).
 **Grants:** EXECUTE on `usp_ClearMaintenanceWindow` → StudentDataAssessment
 **Reads:**
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
-- `AppMaintenance` — update — `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
+- `AppMaintenance` — update: `MaintenanceAt (NULL)`, `Message (NULL)`, `SetByEmail`, `SetAt`, `LastUpdated`; delete: never - only row Id=1 is updated; a no-op if that row does not exist
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51040 “usp_ClearMaintenanceWindow: caller is not a sysadmin.” (line 25)
-**Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+**Errors raised:**
+- 51040 “usp_ClearMaintenanceWindow: caller is not a sysadmin.” — the caller has no StaffAppAccess row with IsSysAdmin = 1
+**Used in the app:**
+- `/admin/maintenance` — Clear / all-clear button (clearMaintenance)
+- `(any page)` — sysadmin 'clear' on the maintenance banner / down overlay (MaintenanceProvider -> clearMaintenance)
+- `/ingest` — automatically after a clean Run ingest (runIngestCycle); failure (e.g. ingest admin who is not a sysadmin) is swallowed and the user told to clear on the Maintenance page
+**Caveats:** Lockstep partner of usp_SetMaintenanceWindow (same 51040 gate). There is no auto-expiry: the window stays until this proc runs. Code 51040 is reused with different meanings elsewhere (grace-lock in the assessment upserts, blank @CycleGroupID in usp_UpsertShortCycleHeader).
 
 ### sql/procedures/usp_DeleteReadingAssessment.sql
 
-[sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_DeleteReadingAssessment.sql](../../sql/procedures/usp_DeleteReadingAssessment.sql) · **procedure** · reviewed 2026-10-22
 
-Power Apps wrapper for removing a single reading assessment row. Called from `scrRosterGrid` when a teacher (during an open window) or an admin/analyst (any time) clicks the per-row trash icon and confirms the deletion modal. Hard DELETE — the row goes away; the action is preserved in FactSubmissionAudit with the prior values.
+Hard-deletes one FactAssessmentReading row for (StudentNumber, window), matched across any DimStudent version, and writes an audit row recording the prior level/delta. Built for the Power Apps trash icon.
 
 **Defines:** procedure `usp_DeleteReadingAssessment`
-**Parameters (usp_DeleteReadingAssessment):** `@StudentNumber BIGINT`, `@AssessmentWindowID VARCHAR(20)`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_DeleteReadingAssessment):** `@StudentNumber BIGINT` — provincial student number, `@AssessmentWindowID VARCHAR(20)` — window id as text, `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN. Caller must have a current DimStaff row (51030); a caller with NULL AccessLevel (plain teacher) cannot delete in a Closed window (51031). No per-student scope check. EXECUTE granted to StudentDataAssessment in grant_webapp_sp.sql.
 **Reads:**
 - `DimAssessmentWindow` — *(columns not resolved — see file)*
 - `DimReadingScale` — *(columns not resolved — see file)*
@@ -521,124 +525,146 @@ Power Apps wrapper for removing a single reading assessment row. Called from `sc
 - `DimStudent` — `StudentKey`, `StudentNumber`
 - `FactAssessmentReading` — `AssessmentWindowID`, `ReadingAssessmentID`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`
 **Writes:**
-- `FactAssessmentReading` — delete
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-**Errors raised (auto):**
-- 51010 “usp_DeleteReadingAssessment: @StudentNumber and @AssessmentWindowID are both required.” (line 79)
-- 51030 “usp_DeleteReadingAssessment: caller does not resolve to a current DimStaff row.” (line 96)
-- 51012 “usp_DeleteReadingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” (line 111)
-- 51031 “usp_DeleteReadingAssessment: window is Closed. Teachers cannot delete retroactively — contact a School Admin or Regional Analyst.” (line 125)
-- 51018 “usp_DeleteReadingAssessment: no existing FactAssessmentReading row for (@StudentNumber, @AssessmentWindowID). UI may be out of sync — refresh the roster.” (line 145)
+- `FactAssessmentReading` — delete: ONE arbitrary row (TOP 1, no ORDER BY) for the student number + window
+- `FactSubmissionAudit` — insert: `RecordType='ReadingAssessment', Message 'DELETE | Prior...'`
+**Errors raised:**
+- 51010 “usp_DeleteReadingAssessment: @StudentNumber and @AssessmentWindowID are both required.” — either parameter is NULL
+- 51030 “usp_DeleteReadingAssessment: caller does not resolve to a current DimStaff row.” — no current DimStaff row for the caller
+- 51012 “usp_DeleteReadingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” — window not found or inactive
+- 51031 “usp_DeleteReadingAssessment: window is Closed. Teachers cannot delete retroactively ...” — today is after the window EndDate and the caller's DimStaff.AccessLevel is NULL
+- 51018 “usp_DeleteReadingAssessment: no existing FactAssessmentReading row for (@StudentNumber, @AssessmentWindowID). ...” — no reading row for that student number in that window
+**Caveats:** Nothing in the web app calls it (granted but unused - dead in the current app). Pre-dates the 2026-06-25 dated-history grain: with several dated rows per window it deletes an unpredictable one. Ignores the grace-lock / override model used by the upserts.
 
 ### sql/procedures/usp_GenerateMonthlyWindows.sql
 
-[sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_GenerateMonthlyWindows.sql](../../sql/procedures/usp_GenerateMonthlyWindows.sql) · **procedure** · reviewed 2026-10-22
 
-Create monthly assessment-window bins for a school year. The model (2026-06-25) is ONGOING assessment over time: each window opens on the 1st of a month and is treated as closed on the last day of that month. Windows remain the grouping/tracking bin; teachers may enter multiple dated results within a window and may still enter after it closes (late entry). See usp_UpsertReadingAssessment.
+RETIRED generator of monthly DimAssessmentWindow bins (Sep-Jun, optionally Jul/Aug) for a school year across a hard-coded scope catalogue (Reading EN/FR and Writing EN/FR, grades P-6). Idempotent per (scope, StartDate). Writes a 'WindowGen' audit row.
 
 **Defines:** procedure `usp_GenerateMonthlyWindows`
-**Parameters (usp_GenerateMonthlyWindows):** `@SchoolYear VARCHAR(9)`, `@IncludeSummer BIT`
+**Parameters (usp_GenerateMonthlyWindows):** `@SchoolYear VARCHAR(9)` — e.g. '2026-2027' (first 4 chars = start year), `@IncludeSummer BIT` — 1 also creates July/August windows
+**Access / row scope:** No in-proc checks; no GRANT. Manual SQL only.
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentType`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `StartDate`
 **Writes:**
-- `DimAssessmentWindow` — insert — `ActiveFlag`, `AssessmentType`, `CreatedBy`, `CreatedDate`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- `DimAssessmentWindow` — insert: `WindowName`, `AssessmentType`, `SchoolYear`, `StartDate`, `EndDate`, `MinGrade`, `MaxGrade`, `ProgramFamily`, `ScaleSystem`, `ActiveFlag`, `CreatedDate`, `CreatedBy='usp_GenerateMonthlyWindows'`, `LastUpdated`
+- `FactSubmissionAudit` — insert: `RecordType='WindowGen'`
+**Caveats:** Superseded by Short Cycles (usp_UpsertShortCycle / usp_UpsertShortCycleHeader); nothing calls it. Its windows set the legacy ProgramFamily column and no CycleGroupID, so they have no DimShortCycle header (grace defaults to 168h) and would not appear in /cycles. Do not run on live.
 
 ### sql/procedures/usp_InsertSubmissionAudit.sql
 
-[sql/procedures/usp_InsertSubmissionAudit.sql](../../sql/procedures/usp_InsertSubmissionAudit.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_InsertSubmissionAudit.sql](../../sql/procedures/usp_InsertSubmissionAudit.sql) · **procedure** · reviewed 2026-10-22
 
-Power Apps writeable wrapper for inserting one row into FactSubmissionAudit. Bypasses the Power Apps Patch/SubmitForm limitation against Fabric Warehouse tables (see project memory `project_powerapps_write_pattern.md` and fabric-warehouse-sql skill items 15-16).
+Generic wrapper that inserts one FactSubmissionAudit row after allow-list validation (RecordType, Source, Status, an '@' in SubmittedBy). Originally the Power Apps write-path smoke test (Step 16).
 
 **Defines:** procedure `usp_InsertSubmissionAudit`
-**Parameters (usp_InsertSubmissionAudit):** `@RecordType VARCHAR(50)`, `@Source VARCHAR(50)`, `@SubmittedBy VARCHAR(255)`, `@Status VARCHAR(50)`, `@Message VARCHAR(MAX)`, `@RecordCount INT`
+**Parameters (usp_InsertSubmissionAudit):** `@RecordType VARCHAR(50)` — 'ReadingAssessment' | 'WritingAssessment' | 'CSVImport' | 'Test' | 'DataQualityCheck', `@Source VARCHAR(50)` — 'PowerApps' | 'PowerSchool' | 'system', `@SubmittedBy VARCHAR(255)` — email of the submitter (lowercased; NOT verified against the caller), `@Status VARCHAR(50)` — 'Accepted' | 'Rejected' | 'Test' | 'AcceptedWithWarnings', `@Message VARCHAR(MAX)` — free text, `@RecordCount INT` — optional count
+**Access / row scope:** No identity check - whoever can EXECUTE can write an audit row in anyone's name. EXECUTE granted to StudentDataAssessment in grant_webapp_sp.sql.
 **Writes:**
 - `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-**Errors raised (auto):**
-- 51010 “usp_InsertSubmissionAudit: @RecordType, @Source, @SubmittedBy, and @Status are required (no NULLs).” (line 92)
-- 51011 “usp_InsertSubmissionAudit: @RecordType must be one of ReadingAssessment, WritingAssessment, CSVImport, Test, DataQualityCheck.” (line 99)
-- 51012 “usp_InsertSubmissionAudit: @Source must be one of PowerApps, PowerSchool, system.” (line 105)
-- 51013 “usp_InsertSubmissionAudit: @Status must be one of Accepted, Rejected, Test, AcceptedWithWarnings.” (line 111)
-- 51014 “usp_InsertSubmissionAudit: @SubmittedBy must be an email address (contain '@').” (line 117)
+**Errors raised:**
+- 51010 “usp_InsertSubmissionAudit: @RecordType, @Source, @SubmittedBy, and @Status are required (no NULLs).” — any required parameter is NULL
+- 51011 “usp_InsertSubmissionAudit: @RecordType must be one of ...” — RecordType outside the allow-list
+- 51012 “usp_InsertSubmissionAudit: @Source must be one of PowerApps, PowerSchool, system.” — Source outside the allow-list (note 'WebApp' is not allowed)
+- 51013 “usp_InsertSubmissionAudit: @Status must be one of ...” — Status outside the allow-list
+- 51014 “usp_InsertSubmissionAudit: @SubmittedBy must be an email address (contain '@').” — SubmittedBy contains no '@'
+**Caveats:** Not called by the web app (db.ts mentions it only as the proc execProc was first proven against, 2026-06-19). Its allow-lists predate 'WebApp', Math and the newer RecordTypes, so it could not record today's app events anyway. Candidate to revoke/retire; no GRANT in this file.
 
 ### sql/procedures/usp_LoadCoTeacherStaging.sql
 
-[sql/procedures/usp_LoadCoTeacherStaging.sql](../../sql/procedures/usp_LoadCoTeacherStaging.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadCoTeacherStaging.sql](../../sql/procedures/usp_LoadCoTeacherStaging.sql) · **procedure** · reviewed 2026-10-22
 
-Strategy A loader — TRUNCATE Stg_CoTeacher and COPY INTO from the OneLake section-teachers/ folder. Decoupled from usp_MergeSectionTeachers so the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
+Strategy-A loader: TRUNCATE Stg_CoTeacher, then COPY INTO it from the OneLake landing lakehouse folder Files/imports/section-teachers/Co-Teachers* (comma-delimited, '"' quoted, header row skipped). Feeds usp_MergeSectionTeachers (co-teachers).
 
 **Defines:** procedure `usp_LoadCoTeacherStaging`
+**Access / row scope:** No in-proc checks; no GRANT in the file. Runs inside usp_RunFullIngestCycle (reached from the app via usp_TriggerIngestCycle).
 **Writes:**
 - `Stg_CoTeacher` — copy-into/truncate
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 1, load 5 of 5 (section-teachers)
+**Caveats:** File-name prefix 'Co-Teachers' is required by the wildcard. Now ALWAYS runs (the @SkipCoTeachers skip was removed), so an empty section-teachers/ folder fails the ingest - drop a header-only file if PS has no co-teachers. Uses the Workspace Identity credential (#1119 workaround); hard-coded abfss GUIDs; folder must match IMPORT_TOPICS in webapp/src/lib/onelake.ts.
 
 ### sql/procedures/usp_LoadEnrollmentStaging.sql
 
-[sql/procedures/usp_LoadEnrollmentStaging.sql](../../sql/procedures/usp_LoadEnrollmentStaging.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadEnrollmentStaging.sql](../../sql/procedures/usp_LoadEnrollmentStaging.sql) · **procedure** · reviewed 2026-10-22
 
-Strategy A loader — TRUNCATE Stg_Enrollment and COPY INTO from the OneLake enrollments/ folder. Decoupled from usp_MergeEnrollment so the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
+Strategy-A loader: TRUNCATE Stg_Enrollment, then COPY INTO it from the OneLake landing lakehouse folder Files/imports/enrollments/Enrollments* (comma-delimited, '"' quoted, header row skipped). Feeds usp_MergeEnrollment.
 
 **Defines:** procedure `usp_LoadEnrollmentStaging`
+**Access / row scope:** No in-proc checks; no GRANT in the file. Runs inside usp_RunFullIngestCycle (reached from the app via usp_TriggerIngestCycle).
 **Writes:**
 - `Stg_Enrollment` — copy-into/truncate
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 1, load 4 of 5 (enrollments)
+**Caveats:** File-name prefix 'Enrollments' IS required by the wildcard - the header's 'any single dropped file loads, no filename prefix required' is wrong. All matching files are unioned, so stale exports in the folder duplicate rows (the app's upload replaces the folder's contents). Uses CREDENTIAL = (IDENTITY = 'Workspace Identity') - the #1119 workaround because the app SP cannot mint a OneLake passthrough token for COPY INTO. Hard-coded workspace/lakehouse GUIDs in the abfss path; folder name must match IMPORT_TOPICS in webapp/src/lib/onelake.ts. No COPY INTO error handling: a missing/empty folder fails the whole ingest. Also EXEC'd by sql/scripts/deploy_step14_data_quality.sql.
 
 ### sql/procedures/usp_LoadMathTasks.sql
 
-[sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadMathTasks.sql](../../sql/procedures/usp_LoadMathTasks.sql) · **procedure** · reviewed 2026-10-22
 
-Seed / refresh DimMathTask from a grade-level task CSV (authored to mirror the table's columns). TRUNCATE + COPY INTO Stg_MathTask, then a Type-1 upsert into DimMathTask on the natural key (GradeCode, AssessmentMonth, UnitName, QuestionNumber).
+Seeds/refreshes the math task catalogue: TRUNCATE + COPY INTO Stg_MathTask from a caller-supplied abfss path, then a Type-1 upsert into DimMathTask on (GradeCode, AssessmentMonth, UnitName, QuestionNumber), retiring (ActiveFlag=0) tasks missing from the sheet for the grade+month pairs present in this batch. Returns a one-row summary (TasksInserted, TasksUpdated, TasksRetired).
 
 **Defines:** procedure `usp_LoadMathTasks`
-**Parameters (usp_LoadMathTasks):** `@SourceUri VARCHAR(1000)`
+**Parameters (usp_LoadMathTasks):** `@SourceUri VARCHAR(1000)` — full abfss:// path to the task CSV (wildcards allowed) - lets the same proc run against dev or live
+**Access / row scope:** No in-proc checks; no GRANT. Analyst/admin-run manually in SQL.
 **Reads:**
 - `DimMathTask` — `ActiveFlag`, `AssessmentMonth`, `GradeCode`, `QuestionNumber`, `UnitName`
 - `Stg_MathTask` — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
 **Writes:**
-- `DimMathTask` — insert/update — `ActiveFlag`, `AnswerKey`, `AnswerKeyFR`, `AssessmentMonth`, `DisplayOrder`, `GradeCode`, `LastUpdated`, `OutcomeCode`, `QuestionNumber`, `TaskDescriptionEN`, `TaskDescriptionFR`, `UnitName`, `UnitOrder`
-- `Stg_MathTask` — truncate
+- `DimMathTask` — insert: `GradeCode`, `AssessmentMonth`, `UnitName`, `UnitOrder`, `QuestionNumber`, `DisplayOrder`, `OutcomeCode`, `TaskDescriptionEN`, `TaskDescriptionFR`, `AnswerKey`, `AnswerKeyFR`, `ActiveFlag`, `LastUpdated`; update: `all non-key columns (Type 1 overwrite on natural-key match)`, `ActiveFlag=0 for tasks of a loaded grade+month that are absent from the sheet`
+**Caveats:** Not called by the app or the ingest cycle - run via sql/scripts/run_math_task_ingest_dev.sql / run_math_task_ingest_live.sql. Builds COPY INTO by string concatenation through sp_executesql (no escaping of @SourceUri - admin input only). Has NO 'Workspace Identity' CREDENTIAL, unlike the PS loaders - if run as the app SP it would hit the #1119 OneLake token failure. Rows with blank GradeCode/QuestionNumber or non-numeric AssessmentMonth are ignored.
 
 ### sql/procedures/usp_LoadSectionStaging.sql
 
-[sql/procedures/usp_LoadSectionStaging.sql](../../sql/procedures/usp_LoadSectionStaging.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadSectionStaging.sql](../../sql/procedures/usp_LoadSectionStaging.sql) · **procedure** · reviewed 2026-10-22
 
-Strategy A loader — TRUNCATE Stg_Section and COPY INTO from the OneLake sections/ folder. Decoupled from usp_MergeSection so the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
+Strategy-A loader: TRUNCATE Stg_Section, then COPY INTO it from the OneLake landing lakehouse folder Files/imports/sections/Sections* (comma-delimited, '"' quoted, header row skipped). Feeds usp_MergeSection and usp_MergeSectionTeachers (primary teachers).
 
 **Defines:** procedure `usp_LoadSectionStaging`
+**Access / row scope:** No in-proc checks; no GRANT in the file. Runs inside usp_RunFullIngestCycle (reached from the app via usp_TriggerIngestCycle).
 **Writes:**
 - `Stg_Section` — copy-into/truncate
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 1, load 3 of 5 (sections)
+**Caveats:** File-name prefix 'Sections' IS required by the wildcard - the header's 'any single dropped file loads, no filename prefix required' is wrong. All matching files are unioned, so stale exports in the folder duplicate rows (the app's upload replaces the folder's contents). Uses CREDENTIAL = (IDENTITY = 'Workspace Identity') - the #1119 workaround because the app SP cannot mint a OneLake passthrough token for COPY INTO. Hard-coded workspace/lakehouse GUIDs in the abfss path; folder name must match IMPORT_TOPICS in webapp/src/lib/onelake.ts. No COPY INTO error handling: a missing/empty folder fails the whole ingest. Also EXEC'd by sql/scripts/deploy_step14_data_quality.sql.
 
 ### sql/procedures/usp_LoadStaffStaging.sql
 
-[sql/procedures/usp_LoadStaffStaging.sql](../../sql/procedures/usp_LoadStaffStaging.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadStaffStaging.sql](../../sql/procedures/usp_LoadStaffStaging.sql) · **procedure** · reviewed 2026-10-22
 
-Strategy A loader — TRUNCATE Stg_Staff and COPY INTO from the OneLake staff/ folder. Decoupled from usp_MergeStaff so the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
+Strategy-A loader: TRUNCATE Stg_Staff, then COPY INTO it from the OneLake landing lakehouse folder Files/imports/staff/Staff* (comma-delimited, '"' quoted, header row skipped). Feeds usp_MergeStaff.
 
 **Defines:** procedure `usp_LoadStaffStaging`
+**Access / row scope:** No in-proc checks; no GRANT in the file. Runs inside usp_RunFullIngestCycle (reached from the app via usp_TriggerIngestCycle).
 **Writes:**
 - `Stg_Staff` — copy-into/truncate
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 1, load 2 of 5 (staff)
+**Caveats:** File-name prefix 'Staff' IS required by the wildcard - the header's 'any single dropped file loads, no filename prefix required' is wrong. All matching files are unioned, so stale exports in the folder duplicate rows (the app's upload replaces the folder's contents). Uses CREDENTIAL = (IDENTITY = 'Workspace Identity') - the #1119 workaround because the app SP cannot mint a OneLake passthrough token for COPY INTO. Hard-coded workspace/lakehouse GUIDs in the abfss path; folder name must match IMPORT_TOPICS in webapp/src/lib/onelake.ts. No COPY INTO error handling: a missing/empty folder fails the whole ingest. Also EXEC'd by sql/scripts/deploy_step14_data_quality.sql.
 
 ### sql/procedures/usp_LoadStudentsStaging.sql
 
-[sql/procedures/usp_LoadStudentsStaging.sql](../../sql/procedures/usp_LoadStudentsStaging.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_LoadStudentsStaging.sql](../../sql/procedures/usp_LoadStudentsStaging.sql) · **procedure** · reviewed 2026-10-22
 
-Strategy A loader — TRUNCATE Stg_Student and COPY INTO from the OneLake students/ folder. Decoupled from usp_MergeStudent so that the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
+Strategy-A loader: TRUNCATE Stg_Student, then COPY INTO it from the OneLake landing lakehouse folder Files/imports/students/Students* (comma-delimited, '"' quoted, header row skipped). Feeds usp_MergeStudent.
 
 **Defines:** procedure `usp_LoadStudentsStaging`
+**Access / row scope:** No in-proc checks; no GRANT in the file. Runs inside usp_RunFullIngestCycle (reached from the app via usp_TriggerIngestCycle).
 **Writes:**
 - `Stg_Student` — copy-into/truncate
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 1, load 1 of 5 (students)
+**Caveats:** File-name prefix 'Students' IS required by the wildcard - the header's 'any single dropped file loads, no filename prefix required' is wrong. All matching files are unioned, so stale exports in the folder duplicate rows (the app's upload replaces the folder's contents). Uses CREDENTIAL = (IDENTITY = 'Workspace Identity') - the #1119 workaround because the app SP cannot mint a OneLake passthrough token for COPY INTO. Hard-coded workspace/lakehouse GUIDs in the abfss path; folder name must match IMPORT_TOPICS in webapp/src/lib/onelake.ts. No COPY INTO error handling: a missing/empty folder fails the whole ingest. Also EXEC'd by sql/scripts/deploy_step14_data_quality.sql.
 
 ### sql/procedures/usp_MergeEnrollment.sql
 
-[sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_MergeEnrollment.sql](../../sql/procedures/usp_MergeEnrollment.sql) · **procedure** · reviewed 2026-10-22
 
-Type 1 reconciliation from Stg_Enrollment into FactEnrollment. FactEnrollment is NOT a Type 2 dimension — rows are inserted/updated/closed in place via ActiveFlag, not versioned.
+Type 1 merge Stg_Enrollment -> FactEnrollment keyed on SourceSystemID (PS CC.ID). Resolves StudentKey/SectionKey to the CURRENT DimStudent/DimSection rows; ActiveFlag = DateLeft is blank or not yet reached (>= @EffectiveDate). One summary audit row.
 
 **Defines:** procedure `usp_MergeEnrollment`
-**Parameters (usp_MergeEnrollment):** `@EffectiveDate DATE`
+**Parameters (usp_MergeEnrollment):** `@EffectiveDate DATE` — reference date for the ActiveFlag computation (DateLeft >= it = still enrolled); NULL -> today Atlantic
+**Access / row scope:** No in-proc checks; no GRANT. Runs inside usp_RunFullIngestCycle.
 **Reads:**
 - `DimSection` — `IsCurrent`, `SectionID`, `SectionKey`, `TermID`
 - `DimStudent` — `IsCurrent`, `StudentKey`, `StudentNumber`
@@ -647,38 +673,44 @@ Type 1 reconciliation from Stg_Enrollment into FactEnrollment. FactEnrollment is
 - `Stg_Enrollment` — `DateEnrolled`, `DateLeft`, `ID`, `SectionID`, `Student_Number`
 - `Wrk_Enrollment` — `ActiveFlag`, `EndDate`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
 **Writes:**
-- `FactEnrollment` — insert/update — `ActiveFlag`, `EndDate`, `LastUpdated`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `Wrk_Enrollment` — insert/truncate — `ActiveFlag`, `EndDate`, `SectionID`, `SectionKey`, `SourceSystemID`, `StartDate`, `StudentKey`, `StudentNumber`
-**Used on routes (auto):** `/ingest`
+- `FactEnrollment` — update: `StartDate, EndDate, ActiveFlag (+ StudentKey/SectionKey re-pointed to current versions unless the row was and stays inactive) when any differs`, `touch LastUpdated on matched unchanged rows`, `ActiveFlag=0 for every active row whose SourceSystemID is absent from Wrk`; insert: `rows with a SourceSystemID not yet in the fact`
+- `FactSubmissionAudit` — insert: `CSVImport row; 'AcceptedWithWarnings' on unresolved students/sections or any missing-closures`
+- `Wrk_Enrollment` — insert: `TRUNCATE + rows that resolve to a current student AND current section AND a DimTerm row`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 2, merge 4 of 5
+**Caveats:** Header says rows that fail key resolution 'linger as Active' - the code's step 5 closes them (they are absent from Wrk). The DimTerm INNER JOIN is retained only for scope parity and silently drops sections whose TermID is not in DimTerm. No blank-row guard: an empty CSV line casts Student_Number '' to 0 and is counted as unresolved. Must run after usp_MergeStudent and usp_MergeSection.
 
 ### sql/procedures/usp_MergeSection.sql
 
-[sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_MergeSection.sql](../../sql/procedures/usp_MergeSection.sql) · **procedure** · reviewed 2026-10-22
 
-SCD Type 2 reconciliation from Stg_Section into DimSection. All 8 business attributes are Type 2 triggers — any change to any of them produces a new versioned row.
+SCD Type 2 merge Stg_Section -> DimSection. Sections are kept only if they have a SectionID, a non-zero No_of_students, and a primary-teacher email that resolves to a current active DimStaff row (TeacherStaffKey). One summary audit row.
 
 **Defines:** procedure `usp_MergeSection`
-**Parameters (usp_MergeSection):** `@EffectiveDate DATE`
+**Parameters (usp_MergeSection):** `@EffectiveDate DATE` — SCD effective date for this run; NULL -> today (Atlantic). Override only for backfill/replay
+**Access / row scope:** No in-proc checks; no GRANT. Runs inside usp_RunFullIngestCycle.
 **Reads:**
 - `DimSection` — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `TeacherStaffKey`, `TermID`
 - `DimStaff` — `ActiveFlag`, `Email`, `IsCurrent`, `StaffKey`
 - `Stg_Section` — `Course_Number`, `Email_Addr`, `ID`, `MaxEnrollment`, `No_of_students`, `SchoolID`, `Section_Number`, `TermID`, `course_name`
 - `Wrk_Section` — `CourseCode`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`
 **Writes:**
-- `DimSection` — insert/update — `CourseCode`, `CourseName`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollmentCount`, `IsCurrent`, `LastUpdated`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherStaffKey`, `TermID`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `Wrk_Section` — insert/truncate — `CourseCode`, `CourseName`, `EnrollmentCount`, `MaxEnrollment`, `SchoolID`, `SectionID`, `SectionNumber`, `SourceSystemID`, `TeacherEmail`, `TeacherStaffKey`, `TermID`
-**Used on routes (auto):** `/ingest`
+- `DimSection` — update: `close changed (any of SchoolID, TermID, CourseCode, SectionNumber, CourseName, EnrollmentCount, MaxEnrollment, TeacherStaffKey differs; started before today)`, `same-day in-place correction`, `same-day revive of a 0-day closed row`, `touch unchanged`, `close every current row whose SectionID is not in Wrk (EndDate guarded; no replacement)`; insert: `new version for each Wrk section without a current row`
+- `FactSubmissionAudit` — insert: `CSVImport row; 'AcceptedWithWarnings' when teacher emails did not resolve`
+- `Wrk_Section` — insert: `TRUNCATE + filtered/translated rows`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 2, merge 3 of 5
+**Caveats:** A section excluded from Wrk (unresolved teacher, 0 students) is CLOSED by the missing-row step, not just skipped - its enrollments then fail to resolve in usp_MergeEnrollment. EnrollmentCount and TeacherStaffKey are Type-2 triggers, so DimSection churns versions all year (rosters match by stable SectionID since 2026-10-13). The unresolved-teacher warning count does not include the zero-enrolment exclusions. Must run after usp_MergeStaff, before usp_MergeEnrollment.
 
 ### sql/procedures/usp_MergeSectionTeachers.sql
 
-[sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_MergeSectionTeachers.sql](../../sql/procedures/usp_MergeSectionTeachers.sql) · **procedure** · reviewed 2026-10-22
 
-Type 2 reconciliation into FactSectionTeachers from the UNION of Stg_Section (primary teachers) and Stg_CoTeacher (co-teachers). Independent of DimSection / DimStaff versioning per the 2026-04-28 decoupling decision — the bridge keys on business keys (SectionID, TeacherEmail) directly.
+Type 2 merge into FactSectionTeachers (business keys SectionID x TeacherEmail x TeacherRole) from primary teachers in Stg_Section ('Primary') UNION co-teachers in Stg_CoTeacher (role normalised: Co-teacher -> CoTeacher, Support, Substitute, Primary). This bridge is what grants teachers their 'Taught' rosters.
 
 **Defines:** procedure `usp_MergeSectionTeachers`
-**Parameters (usp_MergeSectionTeachers):** `@EffectiveDate DATE`
+**Parameters (usp_MergeSectionTeachers):** `@EffectiveDate DATE` — SCD effective date for this run; NULL -> today (Atlantic). Override only for backfill/replay
+**Access / row scope:** No in-proc checks; no GRANT. Runs inside usp_RunFullIngestCycle.
 **Reads:**
 - `DimSection` — `IsCurrent`, `SectionID`
 - `DimStaff` — `ActiveFlag`, `Email`, `IsCurrent`
@@ -687,20 +719,22 @@ Type 2 reconciliation into FactSectionTeachers from the UNION of Stg_Section (pr
 - `Stg_Section` — `Email_Addr`, `ID`
 - `Wrk_SectionTeacher` — `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
 **Writes:**
-- `FactSectionTeachers` — insert/update — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `Wrk_SectionTeacher` — insert/truncate — `SectionID`, `SourceSystemID`, `TeacherEmail`, `TeacherRole`
-**Used on routes (auto):** `/ingest`
+- `FactSectionTeachers` — update: `close (IsCurrent=0, EndDate guarded) current triples absent from Wrk`, `touch unchanged`; insert: `triples with no current row, EffectiveStartDate=@EffectiveDate`
+- `FactSubmissionAudit` — insert: `CSVImport row; warning only for blank emails`
+- `Wrk_SectionTeacher` — insert: `TRUNCATE + DISTINCT triples whose SectionID has a current DimSection row AND whose email has a current active DimStaff row`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 2, merge 5 of 5
+**Caveats:** Header says 'No JOINs' - the code now filters on current DimSection + current active DimStaff, and rows dropped by that filter are NOT counted in the audit warning. A role change is a close + new triple. Feeds usp_RebuildRosterMembership (TeacherRosterMembership) and every Taught branch; must run after usp_MergeSection and usp_MergeStaff.
 
 ### sql/procedures/usp_MergeStaff.sql
 
-[sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_MergeStaff.sql](../../sql/procedures/usp_MergeStaff.sql) · **procedure** · reviewed 2026-10-22
 
-SCD Type 2 reconciliation for BOTH DimStaff (person-grain) and FactStaffAssignment (assignment-grain) in one transaction. They're tightly coupled — FactStaffAssignment needs StaffKey from the just-merged DimStaff.
+SCD Type 2 merge Stg_Staff -> DimStaff (one row per lowercased email; AccessLevel = highest of RegionalAnalyst > Administrator > SpecialistTeacher from DimRole-mapped PS Groups, Type 1) and FactStaffAssignment (Email x School x RoleCode), then TRUNCATE + rebuild of StaffSchoolAccess (HomeSchoolID + parsed CanChangeSchool, active schools only). One summary audit row.
 
 **Defines:** procedure `usp_MergeStaff`
-**Parameters (usp_MergeStaff):** `@EffectiveDate DATE`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess
+**Parameters (usp_MergeStaff):** `@EffectiveDate DATE` — SCD effective date for this run; NULL -> today (Atlantic). Override only for backfill/replay
+**Access / row scope:** No in-proc checks; no GRANT. Runs inside usp_RunFullIngestCycle.
 **Reads:**
 - `DimRole` — `ActiveFlag`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `LastName`, `RoleCode`, `RoleNumber`, `Title`, `rn`
 - `DimSchool` — `ActiveFlag`, `SchoolID`
@@ -710,23 +744,26 @@ SCD Type 2 reconciliation for BOTH DimStaff (person-grain) and FactStaffAssignme
 - `Wrk_StaffAssignment` — `AccessLevel`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `IsDistrictLevel`, `LastName`, `RoleCode`, `SchoolID`, `SourceSystemID`, `Title`
 - `Wrk_StaffPersons` — *(columns not resolved — see file)*
 **Writes:**
-- `DimStaff` — insert/update — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`
-- `FactStaffAssignment` — insert/update — `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `LastUpdated`, `RoleCode`, `SchoolID`, `SourceSystemID`, `StaffKey`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `StaffSchoolAccess` — insert/truncate — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`
-- `Wrk_StaffAssignment` — insert/truncate — `Email`, `RoleCode`, `SchoolID`, `SourceSystemID`
-- `Wrk_StaffPersons` — insert/truncate — `AccessLevel`, `CanChangeSchool`, `Email`, `FirstName`, `HomeSchoolID`, `IsDistrictLevel`, `LastName`, `Title`
+- `DimStaff` — update: `close changed active rows (FirstName, LastName, Title, HomeSchoolID, CanChangeSchool, IsDistrictLevel differ; started before today)`, `same-day in-place correction`, `close active rows missing from the import (EndDate guarded)`, `same-day revive of a 0-day closed row`, `close a prior-day ActiveFlag=0 marker when the person returns`, `touch LastUpdated`, `AccessLevel Type-1 refresh on current active rows`; insert: `deactivation marker (ActiveFlag=0, AccessLevel=NULL) for emails closed as missing yesterday-dated with no current row`, `active version for every Wrk email without a current active row (new/changed/returning)`
+- `FactStaffAssignment` — update: `close on SourceSystemID collision (same triple, different PS ID)`, `close triples missing from the import or at a now-inactive school`, `touch unchanged`; insert: `new triples at ACTIVE DimSchool schools only (district '0000' and closed schools dropped)`
+- `FactSubmissionAudit` — insert: `CSVImport row; 'AcceptedWithWarnings' on unknown PS Group, same-email field conflicts, or SourceSystemID collisions`
+- `StaffSchoolAccess` — insert: `TRUNCATE + rebuild for current active staff with AccessLevel NOT NULL, active schools only`
+- `Wrk_StaffAssignment` — insert: `TRUNCATE + one row per (Email, SchoolID, RoleCode) from Stg_Staff joined to active DimRole (MIN PS ID)`
+- `Wrk_StaffPersons` — insert: `TRUNCATE + canonical row per email (lowest PS ID); all-zero HomeSchoolID -> NULL; IsDistrictLevel when CanChangeSchool lists 0`
 **Calls functions:** `STRING_SPLIT`
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 2, merge 2 of 5
+**Caveats:** Header says 'in one transaction' - there is no transaction (Fabric). AccessLevel is computed from the UNfiltered Wrk_StaffAssignment so district-level analysts (school '0000') keep RegionalAnalyst. Any DimStaff Type-2 change mints a new StaffKey, which re-versions every DimSection taught by that person on the next usp_MergeSection. StaffSchoolAccess is the oracle for every Oversight branch in the TVFs - it is fully rebuilt each run. Must run before usp_MergeSection.
 
 ### sql/procedures/usp_MergeStudent.sql
 
-[sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_MergeStudent.sql](../../sql/procedures/usp_MergeStudent.sql) · **procedure** · reviewed 2026-10-22
 
-SCD Type 2 reconciliation from Stg_Student into DimStudent. All 14 business attributes are Type 2 triggers — any change to any of them produces a new versioned row. Also reconciles FactStudentIPP rows for students whose DimStudent.IPP = 1, creating NULL-status placeholders that teachers/admins resolve via scrIPP.
+SCD Type 2 merge Stg_Student -> DimStudent (via Wrk_Student with PS translations: grade 0/-1/13 -> P/PP/RG, 4-digit SchoolID, DOB, Y/N flags, GroupKey = school abbreviation + cleaned homeroom). Then reconciles FactStudentIPP and FactStudentAdaptation placeholder rows against current DimStudent.IPP / Adap, and writes one summary audit row.
 
 **Defines:** procedure `usp_MergeStudent`
-**Parameters (usp_MergeStudent):** `@EffectiveDate DATE`
+**Parameters (usp_MergeStudent):** `@EffectiveDate DATE` — SCD effective date for this run; NULL -> today (Atlantic). Override only for backfill/replay
+**Access / row scope:** No in-proc checks; no GRANT. Runs inside usp_RunFullIngestCycle.
 **Reads:**
 - `DimGrade` — `GradeCode`, `GradeOrder`
 - `DimProgram` — `ProgramCode`, `ProgramFamily`
@@ -737,20 +774,23 @@ SCD Type 2 reconciliation from Stg_Student into DimStudent. All 14 business attr
 - `Stg_Student` — *(columns not resolved — see file)*
 - `Wrk_Student` — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
 **Writes:**
-- `DimStudent` — insert/update — `Adap`, `DateOfBirth`, `EffectiveEndDate`, `EffectiveStartDate`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `LastUpdated`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
-- `FactStudentAdaptation` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- `FactStudentIPP` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `Wrk_Student` — insert/truncate — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `GroupKey`, `Homeroom`, `IPP`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `SourceSystemID`, `StudentNumber`
-**Used on routes (auto):** `/ingest`
+- `DimStudent` — update: `close changed: EffectiveEndDate=@EffectiveDate-1, IsCurrent=0 when any of the 14 Type-2 fields differ (EXCEPT, NULL-safe) and the row started before today`, `same-day in-place: all attributes + GroupKey when the current row started today`, `same-day revive: re-open a 0-day [today,today] closed row with no current sibling`, `touch LastUpdated on unchanged current rows`, `close missing: IsCurrent=0, EffectiveEndDate=max(start, @EffectiveDate-1) for current rows absent from the import (no replacement row)`; insert: `new current version for every Wrk student without a current row (new + just-closed changed), EffectiveStartDate=@EffectiveDate`
+- `FactStudentAdaptation` — update: `same close rule keyed on Adap`; insert: `HasAdaptation=NULL, ChangedBy='system' placeholders`
+- `FactStudentIPP` — update: `close (IsCurrent=0, EffectiveEndDate=@EffectiveDate-1) current rows whose (StudentKey, Subject, ProgramFamily) is no longer expected`; insert: `IsIPP=NULL, ChangedBy='system' for each expected triple lacking a current row`
+- `FactSubmissionAudit` — insert: `RecordType='CSVImport', Source='PowerSchool', counts message`
+- `Wrk_Student` — insert: `TRUNCATE + rebuild from Stg_Student (blank Student_Number rows dropped)`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 2, merge 1 of 5
+**Caveats:** Expected IPP/Adaptation triples (current students with the flag): English family -> Reading (P-8) + Writing (P-RG) x English; French Immersion -> Reading + Writing x French Immersion (except J020 Late Immersion: no FI Reading), plus x English at grade >= 3; any Eng/FI student P-6 -> Math x own family; PP and Core French excluded. The four Expected* CTEs are copy-pasted (Fabric CTEs do not persist) - change all four together, and keep in lockstep with usp_UpsertWritingAssessment's language rule and the roster TVFs. A student whose StudentKey changes (any Type-2 change) gets the old-key IPP/Adaptation rows closed and NEW NULL placeholders - resolved IPP answers do not carry over. The IPP/Adaptation close uses @EffectiveDate-1 unguarded, so a placeholder created and closed the same day gets a reversed window (not covered by the DQ checks). GroupKey reads DimSchool.Abbreviation, so DimSchool must be seeded first. Header still mentions scrIPP (Power Apps).
 
 ### sql/procedures/usp_RebuildRosterMembership.sql
 
-[sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_RebuildRosterMembership.sql](../../sql/procedures/usp_RebuildRosterMembership.sql) · **procedure** · reviewed 2026-10-22
 
-Rebuild the materialized roster skeleton — SectionRosterMembership (base, source of truth) then TeacherRosterMembership (derived Taught projection). TRUNCATE + INSERT each run; the tables are a derived cache, always safe to rebuild. Called as the final step of usp_RunFullIngestCycle (after the data quality gate passes) and runnable standalone on dev.
+Rebuilds the materialized roster cache after an ingest: SectionRosterMembership (every active window x mapped section x enrolled student, viewer-independent) then TeacherRosterMembership (that base joined to FactSectionTeachers in force on the window's effective date). Both TRUNCATE + INSERT.
 
 **Defines:** procedure `usp_RebuildRosterMembership`
+**Access / row scope:** No in-proc checks. EXECUTE self-granted to StudentDataAssessment, though the app never calls it directly.
 **Grants:** EXECUTE on `usp_RebuildRosterMembership` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — *(columns not resolved — see file)*
@@ -764,18 +804,21 @@ Rebuild the materialized roster skeleton — SectionRosterMembership (base, sour
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `SectionRosterMembership` — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
 **Writes:**
-- `SectionRosterMembership` — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionKey`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `WindowEffectiveDate`
-- `TeacherRosterMembership` — insert/truncate — `AssessmentWindowID`, `FirstName`, `Grade`, `GroupKey`, `Homeroom`, `LastName`, `LastRebuiltAt`, `ProgramCode`, `ProgramFamily`, `SchoolID`, `SchoolName`, `SectionID`, `SectionLanguage`, `StudentKey`, `StudentNumber`, `TeacherEmail`
+- `SectionRosterMembership` — insert: `TRUNCATE + rebuild: sections at their CURRENT version mapped via DimCourseAssessment (Literacy -> Reading/Writing, Math -> Math, language match), enrolment matched by stable SectionID across all section versions overlapping the window dates (no ActiveFlag filter), student at current version by StudentNumber, filtered by window grade band, ProgramFamily, ProgramScope bucket and language; WindowEffectiveDate = MIN(today Atlantic, EndDate)`
+- `TeacherRosterMembership` — insert: `TRUNCATE + base rows x FactSectionTeachers where WindowEffectiveDate is within the teacher row's effective range`
 **Executes:** `ON`
-**Used on routes (auto):** `/ingest`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 3.5 (after the DQ gate passes)
+**Caveats:** Lockstep with tvf_TeacherGroups (section selection) and tvf_TeacherRoster StudentGroups (student enumeration) - change all three together. Not run when the DQ gate fails (rosters keep the previous rebuild). Not refreshed by cycle edits on /cycles: a new or re-scoped DimAssessmentWindow has no membership until the next ingest or a standalone EXEC. WindowEffectiveDate is frozen at rebuild time, not recomputed per read. Students who left a section mid-window intentionally stay on that window's roster.
 
 ### sql/procedures/usp_RunDataQualityChecks.sql
 
-[sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_RunDataQualityChecks.sql](../../sql/procedures/usp_RunDataQualityChecks.sql) · **procedure** · reviewed 2026-10-22
 
-Comprehensive data quality validation for Assessment_Warehouse. Runs 52 checks across 5 categories, INSERTs any violations into FactDataQualityAudit, returns the violation set as a result set, and RETURNs the violation count as a status code (0 = clean).
+Runs 52 data-quality checks (19 Orphan, 5 IsCurrent, 19 Date rules A-D, 4 Reference, 5 Consistency) in one INSERT into FactDataQualityAudit sharing one RunTimestamp (or a single 'PASS' sentinel row when clean), returns those rows as a result set, and RETURNs the violation count.
 
 **Defines:** procedure `usp_RunDataQualityChecks`
+**Access / row scope:** No in-proc checks; no GRANT. Called by usp_RunFullIngestCycle as its gate; runnable ad hoc.
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentWindowID`
 - `DimGender` — `GenderCode`
@@ -795,17 +838,20 @@ Comprehensive data quality validation for Assessment_Warehouse. Runs 52 checks a
 - `FactStaffAssignment` — `AssessmentWindowID`, `EnrollmentID`, `EnteredByStaffKey`, `IsCurrent`, `ReadingAssessmentID`, `ReadingScaleID`, `RoleCode`, `SchoolID`, `SectionKey`, `StaffAssignmentID`, `StaffKey`, `StudentKey`, `WritingAssessmentID`
 - `StaffSchoolAccess` — `Email`, `SchoolID`, `StaffKey`, `StaffSchoolAccessID`
 **Writes:**
-- `FactDataQualityAudit` — insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`
+- `FactDataQualityAudit` — insert: `one row per violation (CheckCategory, CheckName, TableName, KeyColumn, KeyValue, Detail)`, `or one PASS sentinel row`
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle -> usp_RunFullIngestCycle Phase 3 data-quality gate (non-zero return -> THROW 51000)
+**Caveats:** Rule D (overlap) is checked only for DimStudent, DimStaff, DimSection - not FactStaffAssignment / FactSectionTeachers. FactStudentIPP, FactStudentAdaptation, FactAssessmentMath and the roster-membership tables are not checked at all. The '0000' exclusions in checks 13/14 are now redundant (MergeStaff drops inactive/district schools). Also EXEC'd by sql/scripts/data_quality_checks.sql and deploy_timezone_audit.sql.
 
 ### sql/procedures/usp_RunFullIngestCycle.sql
 
-[sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_RunFullIngestCycle.sql](../../sql/procedures/usp_RunFullIngestCycle.sql) · **procedure** · reviewed 2026-10-22
 
-Production orchestrator — runs all five load procs and all five merge procs in the correct dependency order. Single entry point for the job scheduler, manual full ingests, and dev rebuilds from the lakehouse files.
+Ingest orchestrator: logs a 'Started' row to IngestRunLog, runs the five usp_Load*Staging procs (logging each staging row count), then usp_MergeStudent -> usp_MergeStaff -> usp_MergeSection -> usp_MergeEnrollment -> usp_MergeSectionTeachers, then the usp_RunDataQualityChecks gate, then usp_RebuildRosterMembership, then the cycle-success audit + 'Completed' log row.
 
 **Defines:** procedure `usp_RunFullIngestCycle`
-**Parameters (usp_RunFullIngestCycle):** `@EffectiveDate DATE`, `@SkipCoTeachers BIT`, `@CallerUPN VARCHAR(255)`, `@Source VARCHAR(20)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_RunFullIngestCycle):** `@EffectiveDate DATE` — forwarded to all five merge procs (NULL -> each defaults to today Atlantic), `@SkipCoTeachers BIT` — DEPRECATED and ignored - co-teachers always load, `@CallerUPN VARCHAR(255)` — who started the run (from usp_TriggerIngestCycle; recorded in IngestRunLog only); NULL -> CURRENT_USER, `@Source VARCHAR(20)` — 'App' when started by usp_TriggerIngestCycle; default 'FabricSQL' for a direct EXEC
+**Access / row scope:** No in-proc permission check. No GRANT in this file - the web app reaches it only through usp_TriggerIngestCycle (ownership chaining); otherwise run directly by a warehouse admin.
 **Reads:**
 - `Stg_CoTeacher` — *(columns not resolved — see file)*
 - `Stg_Enrollment` — *(columns not resolved — see file)*
@@ -813,82 +859,91 @@ Production orchestrator — runs all five load procs and all five merge procs in
 - `Stg_Staff` — *(columns not resolved — see file)*
 - `Stg_Student` — *(columns not resolved — see file)*
 **Writes:**
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `IngestRunLog` — insert — `CallerUPN`, `CycleStart`, `LastUpdated`, `LoggedAt`, `Message`, `Phase`, `RowsLoaded`, `Source`, `Status`, `Topic`
+- `FactSubmissionAudit` — insert: `RecordType='IngestCycle', Source/SubmittedBy='system', Status 'Accepted' (clean) or 'Rejected' (DQ fail)`
+- `IngestRunLog` — insert: `'Cycle' Started row`, `one 'Load' row per topic (students, staff, sections, enrollments, section-teachers) with RowsLoaded = staging COUNT(*)`, `'Cycle' Completed or Failed row`
 **Executes:** `usp_LoadCoTeacherStaging`, `usp_LoadEnrollmentStaging`, `usp_LoadSectionStaging`, `usp_LoadStaffStaging`, `usp_LoadStudentsStaging`, `usp_MergeEnrollment`, `usp_MergeSection`, `usp_MergeSectionTeachers`, `usp_MergeStaff`, `usp_MergeStudent`, `usp_RebuildRosterMembership`
-**Errors raised (auto):**
-- 51000 “usp_RunFullIngestCycle halted: data quality checks failed. See FactDataQualityAudit for details.” (line 173)
-**Used on routes (auto):** `/ingest`
+**Errors raised:**
+- 51000 “usp_RunFullIngestCycle halted: data quality checks failed. See FactDataQualityAudit for details.” — usp_RunDataQualityChecks returns a non-zero violation count (after the merges have already committed); a Rejected 'IngestCycle' audit row and a 'Failed' IngestRunLog row are written first
+**Used in the app:**
+- `/ingest` — Run ingest (runIngestCycle) -> usp_TriggerIngestCycle
+**Caveats:** Fabric has no TRY/CATCH and there is no transaction: a failure mid-run leaves earlier loads/merges committed; a run with 'Started' but no Completed/Failed row died in a load/merge. The DQ gate runs AFTER all merges, so a 51000 does not roll anything back - it only skips the roster rebuild and the success audit (rosters stay at the previous rebuild). Also called by sql/scripts/reset_and_run_full_ingest.sql and reset_dev_full_and_ingest.sql. Canonical way to rebuild surrogate keys after a dim truncate-and-reload.
 
 ### sql/procedures/usp_SetMaintenanceWindow.sql
 
-[sql/procedures/usp_SetMaintenanceWindow.sql](../../sql/procedures/usp_SetMaintenanceWindow.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_SetMaintenanceWindow.sql](../../sql/procedures/usp_SetMaintenanceWindow.sql) · **procedure** · reviewed 2026-10-22
 
-Schedule (or reschedule) the app maintenance window — the moment T the container will be swapped. Writes the single AppMaintenance row; every client poller then keys its staged banner / entry-lock / auto-save off this window + the server clock.
+Schedules (or reschedules) the app maintenance moment T: upserts the single AppMaintenance row (Id=1). Clients key their staged banner -> entry lock -> auto-save off this row and the server clock.
 
 **Defines:** procedure `usp_SetMaintenanceWindow`
-**Parameters (usp_SetMaintenanceWindow):** `@MaintenanceAt VARCHAR(30)`, `@Message VARCHAR(500)`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_SetMaintenanceWindow):** `@MaintenanceAt VARCHAR(30)` — UTC swap moment as 'YYYY-MM-DD HH:MM:SS' (VARCHAR, CAST to DATETIME2 in-proc; a malformed string raises a native conversion error), `@Message VARCHAR(500)` — optional custom banner text, `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** In-proc gate: StaffAppAccess.IsSysAdmin = 1 for the caller (51040), checked before the NULL check. EXECUTE granted to StudentDataAssessment.
 **Grants:** EXECUTE on `usp_SetMaintenanceWindow` → StudentDataAssessment
 **Reads:**
 - `AppMaintenance` — *(columns not resolved — see file)*
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
-- `AppMaintenance` — insert/update — `Id`, `LastUpdated`, `MaintenanceAt`, `Message`, `SetAt`, `SetByEmail`
+- `AppMaintenance` — insert: `Id (=1)`, `MaintenanceAt`, `Message`, `SetByEmail`, `SetAt`, `LastUpdated`; update: `MaintenanceAt`, `Message`, `SetByEmail`, `SetAt`, `LastUpdated`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51040 “usp_SetMaintenanceWindow: caller is not a sysadmin.” (line 33)
-- 51041 “usp_SetMaintenanceWindow: @MaintenanceAt is required.” (line 38)
-**Used on routes (auto):** `(every page — layout)`, `/admin/maintenance`, `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/ingest`, `/programming/[groupKey]`
+**Errors raised:**
+- 51040 “usp_SetMaintenanceWindow: caller is not a sysadmin.” — the caller has no StaffAppAccess row with IsSysAdmin = 1
+- 51041 “usp_SetMaintenanceWindow: @MaintenanceAt is required.” — @MaintenanceAt is NULL
+**Used in the app:**
+- `/admin/maintenance` — Start maintenance (startMaintenance: 1-240 minutes from now + optional message)
+- `/ingest` — Schedule maintenance before an ingest (scheduleIngestMaintenance, INGEST_NOTICE_MINUTES ahead, fixed message); the app rewrites a 51040 into 'needs sysadmin rights'
+**Caveats:** The /ingest action is gated on CanRunIngest but this proc requires IsSysAdmin - an ingest admin who is not a sysadmin gets 51040 (handled in the action). 51040/51041 are reused with other meanings in other procs.
 
 ### sql/procedures/usp_SetStaffAppAccess.sql
 
-[sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_SetStaffAppAccess.sql](../../sql/procedures/usp_SetStaffAppAccess.sql) · **procedure** · reviewed 2026-10-22
 
-The SOLE writer of StaffAppAccess — upserts one staff email's five app-capability flags (IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy). Backs the SysAdmin-only
+Sole writer of StaffAppAccess: upserts one staff email's five capability flags (IsSysAdmin, CanManageCycles, CanRunIngest, CanOverrideMath, CanOverrideLiteracy); a save with all five = 0 deletes the row. Every change writes a FactSubmissionAudit row.
 
 **Defines:** procedure `usp_SetStaffAppAccess`
-**Parameters (usp_SetStaffAppAccess):** `@TargetEmail VARCHAR(255)`, `@IsSysAdmin BIT`, `@CanManageCycles BIT`, `@CanRunIngest BIT`, `@CanOverrideMath BIT`, `@CanOverrideLiteracy BIT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_SetStaffAppAccess):** `@TargetEmail VARCHAR(255)` — email of the staff member being changed (trimmed + lowercased), `@IsSysAdmin BIT` — flag, `@CanManageCycles BIT` — flag, `@CanRunIngest BIT` — flag, `@CanOverrideMath BIT` — flag, `@CanOverrideLiteracy BIT` — flag, `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** In-proc gate: caller must have StaffAppAccess.IsSysAdmin = 1 (51050). A SysAdmin may grant SysAdmin to others. Cannot demote the last SysAdmin (51051). EXECUTE self-granted to StudentDataAssessment (not listed in grant_webapp_sp.sql).
 **Grants:** EXECUTE on `usp_SetStaffAppAccess` → StudentDataAssessment
 **Reads:**
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-- `StaffAppAccess` — delete/insert/update — `CanManageCycles`, `CanOverrideLiteracy`, `CanOverrideMath`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`
+- `FactSubmissionAudit` — insert: `RecordType='StaffAppAccess'`, `Source='WebApp' (always, even on a direct SQL call)`, `SubmittedBy`, `SubmissionTimestamp`, `Status='Accepted'`, `Message`, `RecordCount`, `LastUpdated`
+- `StaffAppAccess` — insert: `Email`, `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; update: `IsSysAdmin`, `CanManageCycles`, `CanRunIngest`, `CanOverrideMath`, `CanOverrideLiteracy`, `LastUpdated`; delete: LOWER(Email) = target, when all five flags are 0
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51010 “usp_SetStaffAppAccess: @TargetEmail and all five capability flags are required.” (line 49)
-- 51050 “usp_SetStaffAppAccess: caller is not a SysAdmin — cannot change app access.” (line 58)
-- 51051 “usp_SetStaffAppAccess: cannot remove the last System Administrator. Grant SysAdmin to someone else first.” (line 68)
-**Used on routes (auto):** `/admin/staff-access`
+**Errors raised:**
+- 51010 “usp_SetStaffAppAccess: @TargetEmail and all five capability flags are required.” — @TargetEmail is blank/NULL or any of the five flags is NULL
+- 51050 “usp_SetStaffAppAccess: caller is not a SysAdmin - cannot change app access.” — the caller has no StaffAppAccess row, or its IsSysAdmin = 0
+- 51051 “usp_SetStaffAppAccess: cannot remove the last System Administrator. Grant SysAdmin to someone else first.” — @IsSysAdmin = 0, the target is currently a SysAdmin, and there is at most one SysAdmin row
+**Used in the app:**
+- `/admin/staff-access` — Save on a staff member's capability row (setStaffAccess)
+**Caveats:** The upsert does not check that TargetEmail exists in DimStaff (the GUI looks it up first via findStaff). Audit Source is hard-coded 'WebApp'.
 
 ### sql/procedures/usp_TriggerIngestCycle.sql
 
-[sql/procedures/usp_TriggerIngestCycle.sql](../../sql/procedures/usp_TriggerIngestCycle.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_TriggerIngestCycle.sql](../../sql/procedures/usp_TriggerIngestCycle.sql) · **procedure** · reviewed 2026-10-22
 
-Web-app/Power Apps wrapper for the Ingest screen. Validates that the caller has ingest permission in StaffAppAccess (CanRunIngest or IsSysAdmin), then invokes the orchestrator usp_RunFullIngestCycle.
+Web-app entry point for a PowerSchool refresh: checks the caller may run ingest, then EXECs usp_RunFullIngestCycle with @CallerUPN and @Source='App'. Writes nothing itself.
 
 **Defines:** procedure `usp_TriggerIngestCycle`
-**Parameters (usp_TriggerIngestCycle):** `@SkipCoTeachers BIT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_TriggerIngestCycle):** `@SkipCoTeachers BIT` — DEPRECATED and ignored (accepted only so a pre-1.1.0 container that still passes it does not error; NOT forwarded), `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** In-proc gate: StaffAppAccess row for the caller with CanRunIngest = 1 OR IsSysAdmin = 1 (51033) - deliberately not a DimStaff role, so it works on an empty post-reset warehouse. EXECUTE granted to StudentDataAssessment (self-grant + grant_webapp_sp.sql).
 **Grants:** EXECUTE on `usp_TriggerIngestCycle` → StudentDataAssessment
 **Reads:**
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Executes:** `ON`, `usp_RunFullIngestCycle`
-**Errors raised (auto):**
-- 51033 “usp_TriggerIngestCycle: you do not have permission to run an ingest cycle (StaffAppAccess CanRunIngest or IsSysAdmin required).” (line 73)
-**Used on routes (auto):** `/ingest`
+**Errors raised:**
+- 51033 “usp_TriggerIngestCycle: you do not have permission to run an ingest cycle (StaffAppAccess CanRunIngest or IsSysAdmin required).” — the caller has no StaffAppAccess row, or both CanRunIngest and IsSysAdmin are 0
+**Used in the app:**
+- `/ingest` — Run ingest button (runIngestCycle; the action also gates on CanRunIngest first)
+**Caveats:** Any error from the orchestrator (COPY INTO failure, DQ gate 51000, merge failure) bubbles up; the app then leaves maintenance ON deliberately. Header still says @SkipCoTeachers is forwarded - it is not. grant_webapp_sp.sql's comment says the proc enforces a 'RegionalAnalyst role gate' - stale, it is StaffAppAccess.
 
 ### sql/procedures/usp_UpsertMathAssessment.sql
 
-[sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertMathAssessment.sql](../../sql/procedures/usp_UpsertMathAssessment.sql) · **procedure** · reviewed 2026-10-22
 
-Web-app wrapper for entering / correcting a single MATH task result (can-do 1 / cannot 0) for one student. Called once per dirty cell in the roster grid's Save batch. Mirrors usp_UpsertReadingAssessment's 3-layer validation + ongoing-assessment (dated-history) upsert, but the value is a BIT and there is no benchmark/delta.
+Saves, corrects or clears one math task mark (1 can-do / 0 cannot) for one student, task and date in a Math cycle. A NULL/blank @Result deletes the row for that exact date (undo a same-day mismark). Audits every call including no-op clears.
 
 **Defines:** procedure `usp_UpsertMathAssessment`
-**Parameters (usp_UpsertMathAssessment):** `@StudentNumber BIGINT`, `@AssessmentWindowID VARCHAR(20)`, `@MathTaskKey VARCHAR(20)`, `@Result VARCHAR(10)`, `@AssessmentDate DATE`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_UpsertMathAssessment):** `@StudentNumber BIGINT` — provincial student number, `@AssessmentWindowID VARCHAR(20)` — window id as text, `@MathTaskKey VARCHAR(20)` — DimMathTask key as text, `@Result VARCHAR(10)` — '1' / '0' to mark; NULL or '' to clear, `@AssessmentDate DATE` — date of the mark; the app sends MIN(today Atlantic, window EndDate), `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN. In-proc: caller must have a current DimStaff row (51030); window must be active and not Upcoming; grace-lock requires StaffAppAccess.IsSysAdmin or CanOverrideMath (51040). NO per-student scope check - the server action first re-reads the caller's roster TVF and refuses students not on it. EXECUTE granted to StudentDataAssessment. (Self-granted; not listed in grant_webapp_sp.sql.)
 **Grants:** EXECUTE on `usp_UpsertMathAssessment` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentWindowID`, `CycleGroupID`
@@ -901,33 +956,35 @@ Web-app wrapper for entering / correcting a single MATH task result (can-do 1 / 
 - `FactAssessmentMath` — *(columns not resolved — see file)*
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
-- `FactAssessmentMath` — delete/insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `LastUpdated`, `MathTaskKey`, `Result`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- `FactAssessmentMath` — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `MathTaskKey`, `Result`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `Result`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - same (StudentKey, window, task, date)`; delete: the row for exactly (StudentKey, window, task, AssessmentDate) when Result is NULL/blank; earlier dates untouched
+- `FactSubmissionAudit` — insert: `RecordType='MathAssessment', action INSERT/UPDATE/CLEAR/NOOP`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51010 “usp_UpsertMathAssessment: @StudentNumber, @AssessmentWindowID, @MathTaskKey and @AssessmentDate are required (no NULLs).” (line 88)
-- 51019 “usp_UpsertMathAssessment: @Result must be '0', '1', or NULL/empty (to clear).” (line 94)
-- 51030 “usp_UpsertMathAssessment: caller does not resolve to a current DimStaff row.” (line 107)
-- 51012 “usp_UpsertMathAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” (line 123)
-- 51015 “usp_UpsertMathAssessment: window AssessmentType is not Math. Use the matching upsert proc for Reading/Writing.” (line 129)
-- 51032 “usp_UpsertMathAssessment: window is Upcoming (not yet started). No entries allowed before it opens.” (line 141)
-- 51040 “usp_UpsertMathAssessment: this cycle is locked (grace period expired). You do not hold the Math override to enter data for it.” (line 164)
-- 51017 “usp_UpsertMathAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” (line 172)
-- 51011 “usp_UpsertMathAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate.” (line 183)
-- 51016 “usp_UpsertMathAssessment: student grade at AssessmentDate is outside the window grade range.” (line 194)
-- 51013 “usp_UpsertMathAssessment: @MathTaskKey does not resolve to an active DimMathTask row.” (line 203)
-- 51018 “usp_UpsertMathAssessment: task is not applicable to this student/cycle (grade or month mismatch).” (line 219)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Errors raised:**
+- 51010 “usp_UpsertMathAssessment: @StudentNumber, @AssessmentWindowID, @MathTaskKey and @AssessmentDate are required (no NULLs).” — any of those four is NULL
+- 51019 “usp_UpsertMathAssessment: @Result must be '0', '1', or NULL/empty (to clear).” — Result (trimmed) is non-empty and not '0'/'1'
+- 51030 “usp_UpsertMathAssessment: caller does not resolve to a current DimStaff row.” — no current DimStaff row for the caller
+- 51012 “usp_UpsertMathAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” — window not found or inactive
+- 51015 “usp_UpsertMathAssessment: window AssessmentType is not Math. ...” — the window is Reading or Writing
+- 51032 “usp_UpsertMathAssessment: window is Upcoming (not yet started). ...” — today (Atlantic) is before the window StartDate
+- 51040 “usp_UpsertMathAssessment: this cycle is locked (grace period expired). You do not hold the Math override to enter data for it.” — past window EndDate + the cycle's GraceHours (DimShortCycle.GraceHours, default 168h, counted from midnight after EndDate, compared in Atlantic time) the cycle is locked, and the caller has no StaffAppAccess row with IsSysAdmin=1 or CanOverrideMath=1
+- 51017 “usp_UpsertMathAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” — AssessmentDate before StartDate or after MIN(today Atlantic, EndDate)
+- 51011 “usp_UpsertMathAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate.” — no DimStudent version covers AssessmentDate
+- 51016 “usp_UpsertMathAssessment: student grade at AssessmentDate is outside the window grade range.” — grade outside [MinGrade, MaxGrade] or unknown grade code
+- 51013 “usp_UpsertMathAssessment: @MathTaskKey does not resolve to an active DimMathTask row.” — task not found or inactive
+- 51018 “usp_UpsertMathAssessment: task is not applicable to this student/cycle (grade or month mismatch).” — task GradeCode differs from the student's grade, or task AssessmentMonth differs from the window BenchmarkMonth (else dominant month)
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save on a Math roster (saveMathAssessments) - one call per dirty cell, run concurrently over the pool
+**Caveats:** Math IPP is not stored per task (FactStudentIPP Subject='Math'). The task-month rule must match the roster TVF tvf_TeacherRosterMath and usp_UpsertShortCycle's BenchmarkMonth semantics. 51019/51018 have different meanings here than in the writing proc.
 
 ### sql/procedures/usp_UpsertReadingAssessment.sql
 
-[sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertReadingAssessment.sql](../../sql/procedures/usp_UpsertReadingAssessment.sql) · **procedure** · reviewed 2026-10-22
 
-Power Apps wrapper for entering or correcting a single reading assessment. Called from `scrRosterGrid` once per dirty row in the Save batch. Implements the 3-layer validation strategy and the ReadingDelta computation against DimReadingBenchmark.
+Saves one reading level for one student in a Reading cycle window. Validates the caller, window, scale and student, computes ReadingDelta against DimReadingBenchmark, then inserts (new AssessmentDate) or corrects in place (same date) a FactAssessmentReading row and writes an audit row.
 
 **Defines:** procedure `usp_UpsertReadingAssessment`
-**Parameters (usp_UpsertReadingAssessment):** `@StudentNumber BIGINT`, `@AssessmentWindowID VARCHAR(20)`, `@ReadingScaleID VARCHAR(20)`, `@AssessmentDate DATE`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_UpsertReadingAssessment):** `@StudentNumber BIGINT` — provincial student number, `@AssessmentWindowID VARCHAR(20)` — DimAssessmentWindow id as text (BIGINT cast in-proc), `@ReadingScaleID VARCHAR(20)` — DimReadingScale id of the entered level, as text, `@AssessmentDate DATE` — date of the result; the app sends MIN(today Atlantic, window EndDate), `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN. In-proc: caller must have a current DimStaff row (51030); window must be active and not Upcoming; grace-lock requires StaffAppAccess.IsSysAdmin or CanOverrideLiteracy (51040). NO per-student scope check - the server action first re-reads the caller's roster TVF and refuses students not on it. EXECUTE granted to StudentDataAssessment.
 **Grants:** EXECUTE on `usp_UpsertReadingAssessment` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentWindowID`, `CycleGroupID`
@@ -942,132 +999,143 @@ Power Apps wrapper for entering or correcting a single reading assessment. Calle
 - `FactAssessmentReading` — *(columns not resolved — see file)*
 - `StaffAppAccess` — *(columns not resolved — see file)*
 **Writes:**
-- `FactAssessmentReading` — insert/update — `AssessmentDate`, `AssessmentWindowID`, `EnteredByStaffKey`, `ExpectedMaxLevelCode`, `ExpectedMinLevelCode`, `LastUpdated`, `LevelCode`, `ReadingDelta`, `ReadingScaleID`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- `FactAssessmentReading` — insert: `StudentKey (version effective at AssessmentDate)`, `StudentNumber`, `AssessmentWindowID`, `ReadingScaleID`, `ReadingDelta`, `LevelCode`, `ExpectedMinLevelCode`, `ExpectedMaxLevelCode`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `ReadingScaleID`, `ReadingDelta`, `LevelCode`, `ExpectedMinLevelCode`, `ExpectedMaxLevelCode`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - only when a row exists for the same (StudentKey, window, AssessmentDate)`
+- `FactSubmissionAudit` — insert: `RecordType='ReadingAssessment', Source WebApp/PowerApps, 'AcceptedWithWarnings' when no benchmark matched, ' | GRACE-OVERRIDE' when saved into a locked cycle`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51010 “usp_UpsertReadingAssessment: @StudentNumber, @AssessmentWindowID, @ReadingScaleID, and @AssessmentDate are all required (no NULLs).” (line 167)
-- 51030 “usp_UpsertReadingAssessment: caller does not resolve to a current DimStaff row. Cannot enter assessments without a staff identity.” (line 187)
-- 51012 “usp_UpsertReadingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” (line 208)
-- 51015 “usp_UpsertReadingAssessment: window AssessmentType is not Reading. Use the matching upsert proc for Writing/Math.” (line 216)
-- 51032 “usp_UpsertReadingAssessment: window is Upcoming (not yet started). No entries allowed before the window opens.” (line 230)
-- 51040 “usp_UpsertReadingAssessment: this cycle is locked (grace period expired). You do not hold the Literacy override to enter data for it.” (line 253)
-- 51013 “usp_UpsertReadingAssessment: @ReadingScaleID does not resolve to an active DimReadingScale row.” (line 279)
-- 51011 “usp_UpsertReadingAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate. Student may not have existed yet, or AssessmentDate may be wrong.” (line 296)
-- 51014 “usp_UpsertReadingAssessment: entered scale does not match this reading cycle's scale (the cycle instance's language sets the scale).” (line 327)
-- 51016 “usp_UpsertReadingAssessment: student grade at AssessmentDate is outside the window grade range.” (line 340)
-- 51017 “usp_UpsertReadingAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” (line 352)
-- 51001 “usp_UpsertReadingAssessment: @StudentLevelOrder NULL despite valid @ReadingScaleID. Impossible state.” (line 411)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Errors raised:**
+- 51010 “usp_UpsertReadingAssessment: @StudentNumber, @AssessmentWindowID, @ReadingScaleID, and @AssessmentDate are all required (no NULLs).” — any of StudentNumber, AssessmentWindowID, ReadingScaleID, AssessmentDate is NULL
+- 51030 “usp_UpsertReadingAssessment: caller does not resolve to a current DimStaff row. Cannot enter assessments without a staff identity.” — no DimStaff row with IsCurrent=1 for the caller's email
+- 51012 “usp_UpsertReadingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” — window id not found or ActiveFlag = 0
+- 51015 “usp_UpsertReadingAssessment: window AssessmentType is not Reading. Use the matching upsert proc for Writing/Math.” — the window is a Writing or Math window
+- 51032 “usp_UpsertReadingAssessment: window is Upcoming (not yet started). No entries allowed before the window opens.” — today (Atlantic) is before the window StartDate
+- 51040 “usp_UpsertReadingAssessment: this cycle is locked (grace period expired). You do not hold the Literacy override to enter data for it.” — past window EndDate + the cycle's GraceHours (DimShortCycle.GraceHours, default 168h, counted from midnight after EndDate, compared in Atlantic time) the cycle is locked, and the caller has no StaffAppAccess row with IsSysAdmin=1 or CanOverrideLiteracy=1
+- 51013 “usp_UpsertReadingAssessment: @ReadingScaleID does not resolve to an active DimReadingScale row.” — scale id not found or inactive
+- 51011 “usp_UpsertReadingAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate. ...” — no DimStudent version of that StudentNumber covers AssessmentDate
+- 51014 “usp_UpsertReadingAssessment: entered scale does not match this reading cycle's scale (the cycle instance's language sets the scale).” — the level's ScaleSystem differs from the window's ScaleSystem (or, for a window with none, EN_Reading for English-family / FR_Reading for French Immersion students)
+- 51016 “usp_UpsertReadingAssessment: student grade at AssessmentDate is outside the window grade range.” — the student's grade (as of AssessmentDate) is outside [MinGrade, MaxGrade], or a grade code is missing from DimGrade
+- 51017 “usp_UpsertReadingAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” — AssessmentDate is before the window StartDate or after MIN(today Atlantic, window EndDate)
+- 51001 “usp_UpsertReadingAssessment: @StudentLevelOrder NULL despite valid @ReadingScaleID. Impossible state.” — unreachable safety net - 51013 already guarantees LevelOrder is non-NULL
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save on a Reading roster (saveReadingAssessments), once per changed student
+**Caveats:** ReadingDelta: 0 inside [ExpectedMin, ExpectedMax], else the LevelOrder distance to the nearer bound; benchmark month = window BenchmarkMonth else the dominant calendar month of the window; no benchmark -> NULL delta + warning. Same bounds logic lives in tvf_TeacherRoster and the app's getAchievementLevels - keep in lockstep. 51031 is retired (closed windows are writable). 51040 means something different in the maintenance procs. Grain is (StudentKey, window, AssessmentDate), so saves on different days create separate rows (reads take the latest).
 
 ### sql/procedures/usp_UpsertShortCycle.sql
 
-[sql/procedures/usp_UpsertShortCycle.sql](../../sql/procedures/usp_UpsertShortCycle.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertShortCycle.sql](../../sql/procedures/usp_UpsertShortCycle.sql) · **procedure** · reviewed 2026-10-22
 
-Create or edit a "Short Cycle of Response" — a manually-defined, REGION-WIDE assessment date range for one subject. Replaces the auto-generated monthly windows (usp_GenerateMonthlyWindows, retired). Backing table is still DimAssessmentWindow (internal name kept; only user-facing labels use "Short Cycle of Response").
+Creates or edits one assessment INSTANCE (a DimAssessmentWindow row) of a Short Cycle of Response: subject, grade band, program-scope buckets, language scope (Reading sets ScaleSystem EN_/FR_Reading), benchmark/task month, active flag, tied to the header by CycleGroupID. Returns the saved row.
 
 **Defines:** procedure `usp_UpsertShortCycle`
-**Parameters (usp_UpsertShortCycle):** `@AssessmentType VARCHAR(20)`, `@CycleName VARCHAR(100)`, `@StartDate DATE`, `@EndDate DATE`, `@MinGrade VARCHAR(10)`, `@MaxGrade VARCHAR(10)`, `@ProgramScope VARCHAR(100)`, `@AssessmentLanguage VARCHAR(10)`, `@BenchmarkMonth INT`, `@CycleGroupID VARCHAR(36)`, `@ActiveFlag BIT`, `@AssessmentWindowID BIGINT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_UpsertShortCycle):** `@AssessmentType VARCHAR(20)` — 'Reading' | 'Writing' | 'Math', `@CycleName VARCHAR(100)` — display name (copied from the header), `@StartDate DATE` — cycle start, `@EndDate DATE` — cycle end, `@MinGrade VARCHAR(10)` — DimGrade code, default 'PP', `@MaxGrade VARCHAR(10)` — DimGrade code, default '12', `@ProgramScope VARCHAR(100)` — comma list of {English, Early Immersion, Late Immersion}; NULL/'' = all programs, `@AssessmentLanguage VARCHAR(10)` — 'English' | 'French' | NULL (both); forced NULL for Math, `@BenchmarkMonth INT` — 1-12: Reading benchmark month / Math task month; forced NULL for Writing; NULL = dominant-month fallback, `@CycleGroupID VARCHAR(36)` — header key (GUID) from usp_UpsertShortCycleHeader, `@ActiveFlag BIT` — 0 hides/'removes' the instance, `@AssessmentWindowID BIGINT` — NULL = create; else the instance to edit, `@CallerUPN VARCHAR(255)` — recorded as CreatedBy on create only (not trusted for authorization)
+**Access / row scope:** NO in-proc authorization - input validation only. The /cycles server action requires the CanManageCycles capability (fresh) before calling. EXECUTE granted to StudentDataAssessment (self-grant + grant_webapp_sp.sql).
 **Grants:** EXECUTE on `usp_UpsertShortCycle` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — *(columns not resolved — see file)*
 - `DimGrade` — *(columns not resolved — see file)*
 **Writes:**
-- `DimAssessmentWindow` — insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
+- `DimAssessmentWindow` — insert: `WindowName`, `AssessmentType`, `SchoolYear (Sep-Aug from StartDate)`, `StartDate`, `EndDate`, `MinGrade`, `MaxGrade`, `ProgramFamily=NULL`, `ProgramScope`, `ScaleSystem`, `AssessmentLanguage`, `BenchmarkMonth`, `CycleGroupID`, `ActiveFlag`, `CreatedDate`, `CreatedBy`, `LastUpdated`; update: `same columns except CreatedDate/CreatedBy; ProgramFamily forced NULL`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51030 “usp_UpsertShortCycle: @AssessmentType must be Reading, Writing, or Math.” (line 68)
-- 51031 “usp_UpsertShortCycle: @CycleName is required.” (line 73)
-- 51032 “usp_UpsertShortCycle: @EndDate must be on or after @StartDate.” (line 78)
-- 51033 “usp_UpsertShortCycle: @MinGrade/@MaxGrade must be valid DimGrade.GradeCode values.” (line 84)
-- 51034 “usp_UpsertShortCycle: @MinGrade must be at or below @MaxGrade.” (line 90)
-- 51035 “usp_UpsertShortCycle: @BenchmarkMonth must be 1-12 (or NULL for dominant-month fallback).” (line 95)
-- 51037 “usp_UpsertShortCycle: @AssessmentLanguage must be 'English', 'French', or NULL (Both).” (line 100)
-- 51036 “usp_UpsertShortCycle: @AssessmentWindowID not found.” (line 157)
-**Used on routes (auto):** `/cycles`
+**Errors raised:**
+- 51030 “usp_UpsertShortCycle: @AssessmentType must be Reading, Writing, or Math.” — AssessmentType outside the allow-list
+- 51031 “usp_UpsertShortCycle: @CycleName is required.” — CycleName NULL or blank
+- 51032 “usp_UpsertShortCycle: @EndDate must be on or after @StartDate.” — a date is NULL or EndDate < StartDate
+- 51033 “usp_UpsertShortCycle: @MinGrade/@MaxGrade must be valid DimGrade.GradeCode values.” — MinGrade or MaxGrade not in DimGrade
+- 51034 “usp_UpsertShortCycle: @MinGrade must be at or below @MaxGrade.” — MinGrade's GradeOrder > MaxGrade's
+- 51035 “usp_UpsertShortCycle: @BenchmarkMonth must be 1-12 (or NULL for dominant-month fallback).” — BenchmarkMonth outside 1-12
+- 51037 “usp_UpsertShortCycle: @AssessmentLanguage must be 'English', 'French', or NULL (Both).” — AssessmentLanguage is another value
+- 51036 “usp_UpsertShortCycle: @AssessmentWindowID not found.” — edit requested for a window id that does not exist
+**Used in the app:**
+- `/cycles` — Save instances on a cycle (saveShortCycle), one call per subject instance
+**Caveats:** Codes 51030-51037 here are user-fixable input errors but overlap numbers used elsewhere for permission failures (51030 = caller not in DimStaff, 51033 = no ingest permission). Header says the screen is RegionalAnalyst-gated - the app actually gates on CanManageCycles. ProgramScope buckets are not validated in SQL. New/changed instances get no roster membership until the next ingest (usp_RebuildRosterMembership). Create read-back matches on name+type+dates (TOP 1 newest), not the new identity.
 
 ### sql/procedures/usp_UpsertShortCycleHeader.sql
 
-[sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertShortCycleHeader.sql](../../sql/procedures/usp_UpsertShortCycleHeader.sql) · **procedure** · reviewed 2026-10-22
 
-Create or edit a Short Cycle of Response HEADER (DimShortCycle) -- the display name + date range, identified by a distinct key (@CycleGroupID, an app-generated GUID). The per-subject/language/scope assessment instances (DimAssessmentWindow rows) tie to this key and INHERIT its dates. Editing the header here re-propagates the name/dates/year to all of the cycle's instance windows, so "set the dates once" stays true.
+Creates or edits a Short Cycle HEADER (DimShortCycle: display name, dates, school year, active flag, GraceHours) keyed by the app-generated CycleGroupID; an edit also pushes name/dates/school year to every instance window with that CycleGroupID. Returns the header row.
 
 **Defines:** procedure `usp_UpsertShortCycleHeader`
-**Parameters (usp_UpsertShortCycleHeader):** `@CycleGroupID VARCHAR(36)`, `@DisplayName VARCHAR(100)`, `@StartDate DATE`, `@EndDate DATE`, `@ActiveFlag BIT`, `@GraceHours INT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_UpsertShortCycleHeader):** `@CycleGroupID VARCHAR(36)` — header key (GUID; the app generates it on create), `@DisplayName VARCHAR(100)` — cycle name, `@StartDate DATE` — start, `@EndDate DATE` — end, `@ActiveFlag BIT` — header active flag, `@GraceHours INT` — hours a closed cycle stays editable before the override lock; NULL -> keep existing / 168, `@CallerUPN VARCHAR(255)` — recorded as CreatedBy on create only
+**Access / row scope:** NO in-proc authorization - input validation only; /cycles server action requires CanManageCycles (fresh). EXECUTE granted to StudentDataAssessment (self-grant + grant_webapp_sp.sql).
 **Grants:** EXECUTE on `usp_UpsertShortCycleHeader` → StudentDataAssessment
 **Reads:**
 - `DimShortCycle` — *(columns not resolved — see file)*
 **Writes:**
-- `DimAssessmentWindow` — update — `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`, `WindowName`
-- `DimShortCycle` — insert/update — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `GraceHours`, `LastUpdated`, `SchoolYear`, `StartDate`
+- `DimAssessmentWindow` — update: `WindowName`, `StartDate`, `EndDate`, `SchoolYear`, `LastUpdated - all rows with this CycleGroupID (edit only)`
+- `DimShortCycle` — insert: `CycleGroupID`, `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours (default 168)`, `CreatedDate`, `CreatedBy`, `LastUpdated`; update: `DisplayName`, `StartDate`, `EndDate`, `SchoolYear`, `ActiveFlag`, `GraceHours`, `LastUpdated`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51040 “usp_UpsertShortCycleHeader: @CycleGroupID is required.” (line 38)
-- 51041 “usp_UpsertShortCycleHeader: @DisplayName is required.” (line 43)
-- 51042 “usp_UpsertShortCycleHeader: @EndDate must be on or after @StartDate.” (line 48)
-**Used on routes (auto):** `/cycles`
+**Errors raised:**
+- 51040 “usp_UpsertShortCycleHeader: @CycleGroupID is required.” — CycleGroupID NULL or blank
+- 51041 “usp_UpsertShortCycleHeader: @DisplayName is required.” — DisplayName NULL or blank
+- 51042 “usp_UpsertShortCycleHeader: @EndDate must be on or after @StartDate.” — a date is NULL or EndDate < StartDate
+**Used in the app:**
+- `/cycles` — Create/edit cycle header (saveCycleHeader), and the per-cycle active toggle
+**Caveats:** The header ActiveFlag is NOT propagated to the instance windows (each instance keeps its own ActiveFlag). Moving dates changes grace-lock boundaries and 51017 date gates for already-entered data, and roster membership is not rebuilt until the next ingest. 51040/51041 mean 'not sysadmin'/'MaintenanceAt required' in the maintenance procs and 51040 is the grace-lock code in the entry upserts.
 
 ### sql/procedures/usp_UpsertStudentAdaptation.sql
 
-[sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertStudentAdaptation.sql](../../sql/procedures/usp_UpsertStudentAdaptation.sql) · **procedure** · reviewed 2026-10-22
 
-Web-app wrapper for setting (or flipping) a student's ADAPTATION status for a specific (Subject, ProgramFamily). Called from the Programming > Adaptations roster. Structural mirror of usp_UpsertStudentIPP, targeting FactStudentAdaptation / HasAdaptation.
+Sets a student's adaptation flag for one (Subject, ProgramFamily); structural mirror of usp_UpsertStudentIPP on FactStudentAdaptation.HasAdaptation. Record-only (does not gate entry or change achievement math).
 
 **Defines:** procedure `usp_UpsertStudentAdaptation`
-**Parameters (usp_UpsertStudentAdaptation):** `@StudentKey VARCHAR(20)`, `@Subject VARCHAR(20)`, `@ProgramFamily VARCHAR(50)`, `@HasAdaptation BIT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_UpsertStudentAdaptation):** `@StudentKey VARCHAR(20)` — current DimStudent key, as text, `@Subject VARCHAR(20)` — 'Reading' | 'Writing' | 'Math', `@ProgramFamily VARCHAR(50)` — 'English' | 'French Immersion', `@HasAdaptation BIT` — 1 / 0 (required), `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN; in-proc only requires a current DimStaff row (51030). /programming's action scope-gates against tvf_ProgrammingRoster and requires an existing adaptation row first. EXECUTE granted in grant_webapp_sp.sql (no self-grant here).
 **Reads:**
 - `DimStaff` — *(columns not resolved — see file)*
 - `DimStudent` — *(columns not resolved — see file)*
 - `FactStudentAdaptation` — *(columns not resolved — see file)*
 **Writes:**
-- `FactStudentAdaptation` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-**Errors raised (auto):**
-- 51010 “usp_UpsertStudentAdaptation: @StudentKey, @Subject, @ProgramFamily, and @HasAdaptation are all required.” (line 70)
-- 51012 “usp_UpsertStudentAdaptation: @Subject must be 'Reading', 'Writing', or 'Math'.” (line 78)
-- 51013 “usp_UpsertStudentAdaptation: @ProgramFamily must be 'English' or 'French Immersion'.” (line 84)
-- 51030 “usp_UpsertStudentAdaptation: caller does not resolve to a current DimStaff row.” (line 95)
-- 51011 “usp_UpsertStudentAdaptation: @StudentKey does not resolve to a current DimStudent row.” (line 106)
-- 51014 “usp_UpsertStudentAdaptation: no current FactStudentAdaptation row exists for (StudentKey, Subject, ProgramFamily). Run usp_MergeStudent if DimStudent.Adap recently changed; otherwise the student is not in scope for this adaptation.” (line 121)
-**Used on routes (auto):** `/programming/[groupKey]`
+- `FactStudentAdaptation` — update: `no-op: LastUpdated only`, `flip: IsCurrent=0, EffectiveEndDate=today-1`; insert: `flip: new current row, ChangedBy=caller`
+- `FactSubmissionAudit` — insert: `RecordType='StudentAdaptationStatus' (flips only)`
+**Errors raised:**
+- 51010 “usp_UpsertStudentAdaptation: @StudentKey, @Subject, @ProgramFamily, and @HasAdaptation are all required.” — any required parameter is NULL
+- 51012 “usp_UpsertStudentAdaptation: @Subject must be 'Reading', 'Writing', or 'Math'.” — Subject outside the allow-list
+- 51013 “usp_UpsertStudentAdaptation: @ProgramFamily must be 'English' or 'French Immersion'.” — ProgramFamily outside the allow-list
+- 51030 “usp_UpsertStudentAdaptation: caller does not resolve to a current DimStaff row.” — no current DimStaff row for the caller
+- 51011 “usp_UpsertStudentAdaptation: @StudentKey does not resolve to a current DimStudent row.” — StudentKey is not a CURRENT DimStudent version (e.g. the student re-versioned since the page loaded)
+- 51014 “usp_UpsertStudentAdaptation: no current FactStudentAdaptation row exists for (StudentKey, Subject, ProgramFamily). ...” — usp_MergeStudent never created (or has closed) the placeholder row for that triple
+**Used in the app:**
+- `/programming/[groupKey]` — Save on the Programming grid, Adaptation cells (saveProgramming)
+**Caveats:** Same same-day double-flip reversed-window issue as usp_UpsertStudentIPP; keep the two procs in lockstep. Redeploy drops the grant - re-run grant_webapp_sp.sql.
 
 ### sql/procedures/usp_UpsertStudentIPP.sql
 
-[sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertStudentIPP.sql](../../sql/procedures/usp_UpsertStudentIPP.sql) · **procedure** · reviewed 2026-10-22
 
-Power Apps wrapper for setting (or flipping) a student's IPP status for a specific (Subject, ProgramFamily). Called from scrIPP (bulk management) and from the inline IPP-confirmation control on scrRosterGrid (when a NULL gate forces resolution before assessment entry).
+Sets a student's IPP answer for one (Subject, ProgramFamily). The current FactStudentIPP row must already exist (seeded by usp_MergeStudent). Same value -> only LastUpdated touched; different/NULL -> SCD2 close + new row + audit.
 
 **Defines:** procedure `usp_UpsertStudentIPP`
-**Parameters (usp_UpsertStudentIPP):** `@StudentKey VARCHAR(20)`, `@Subject VARCHAR(20)`, `@ProgramFamily VARCHAR(50)`, `@IsIPP BIT`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN
+**Parameters (usp_UpsertStudentIPP):** `@StudentKey VARCHAR(20)` — current DimStudent key, as text, `@Subject VARCHAR(20)` — 'Reading' | 'Writing' | 'Math', `@ProgramFamily VARCHAR(50)` — 'English' | 'French Immersion' (the IPP row's family, not necessarily the student's), `@IsIPP BIT` — 1 = has an IPP, 0 = not (required), `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN; in-proc only requires a current DimStaff row (51030) - no role or per-student check. The /enter and /programming actions scope-gate against the caller's roster TVF first. EXECUTE granted in grant_webapp_sp.sql (no self-grant in this file).
 **Reads:**
 - `DimStaff` — *(columns not resolved — see file)*
 - `DimStudent` — *(columns not resolved — see file)*
 - `FactStudentIPP` — *(columns not resolved — see file)*
 **Writes:**
-- `FactStudentIPP` — insert/update — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
-**Errors raised (auto):**
-- 51010 “usp_UpsertStudentIPP: @StudentKey, @Subject, @ProgramFamily, and @IsIPP are all required.” (line 92)
-- 51012 “usp_UpsertStudentIPP: @Subject must be 'Reading', 'Writing', or 'Math'.” (line 104)
-- 51013 “usp_UpsertStudentIPP: @ProgramFamily must be 'English' or 'French Immersion'.” (line 112)
-- 51030 “usp_UpsertStudentIPP: caller does not resolve to a current DimStaff row.” (line 125)
-- 51011 “usp_UpsertStudentIPP: @StudentKey does not resolve to a current DimStudent row.” (line 138)
-- 51014 “usp_UpsertStudentIPP: no current FactStudentIPP row exists for (StudentKey, Subject, ProgramFamily). Run usp_MergeStudent if DimStudent.IPP recently changed; otherwise the student is not in scope for this IPP type.” (line 155)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/programming/[groupKey]`
+- `FactStudentIPP` — update: `no-op: LastUpdated only`, `flip: IsCurrent=0, EffectiveEndDate=today-1`; insert: `flip: new current row with IsIPP, EffectiveStartDate=today Atlantic, ChangedBy=caller`
+- `FactSubmissionAudit` — insert: `RecordType='StudentIPPStatus' (flips only)`
+**Errors raised:**
+- 51010 “usp_UpsertStudentIPP: @StudentKey, @Subject, @ProgramFamily, and @IsIPP are all required.” — any required parameter is NULL
+- 51012 “usp_UpsertStudentIPP: @Subject must be 'Reading', 'Writing', or 'Math'.” — Subject outside the allow-list
+- 51013 “usp_UpsertStudentIPP: @ProgramFamily must be 'English' or 'French Immersion'.” — ProgramFamily outside the allow-list
+- 51030 “usp_UpsertStudentIPP: caller does not resolve to a current DimStaff row.” — no current DimStaff row for the caller
+- 51011 “usp_UpsertStudentIPP: @StudentKey does not resolve to a current DimStudent row.” — StudentKey is not a CURRENT DimStudent version (e.g. the student re-versioned since the page loaded)
+- 51014 “usp_UpsertStudentIPP: no current FactStudentIPP row exists for (StudentKey, Subject, ProgramFamily). ...” — usp_MergeStudent never created (or has closed) the placeholder row for that triple
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save on a Reading/Writing roster with staged IPP Yes/No confirmations (confirmRosterIPPs)
+- `/programming/[groupKey]` — Save on the Programming grid, IPP cells (saveProgramming)
+**Caveats:** Two flips on the same day leave a closed row with EffectiveEndDate (today-1) < EffectiveStartDate (today) - not caught by the DQ checks. Lockstep with usp_UpsertStudentAdaptation. The redeploy drops the EXECUTE grant - re-run grant_webapp_sp.sql.
 
 ### sql/procedures/usp_UpsertWritingAssessment.sql
 
-[sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_UpsertWritingAssessment.sql](../../sql/procedures/usp_UpsertWritingAssessment.sql) · **procedure** · reviewed 2026-10-22
 
-Web-app / Power Apps wrapper for entering or correcting a single writing assessment — the four-trait rubric (Ideas, Organization, Language, Conventions), each scored 1–4 by the teacher. Mirrors usp_UpsertReadingAssessment's structure and the ongoing-assessment monthly-window model, but writing has NO reading scale, NO grade benchmark and NO delta: the teacher's scores ARE the value stored. The cohort roll-up (average of the four → achievement band) is a READ-side concern (the writing cohort/history TVFs), not stored here.
+Saves one 4-trait writing result (Ideas, Organization, Language 1-4; Conventions 1-4 or 'SCR') for one student, language track and date in a Writing cycle. Traits excluded for the student's grade x program x benchmark month (WritingTraitExclusion) are stored as '-'. Stamps WritingAverage over the numerically scored traits, then inserts or corrects in place and audits.
 
 **Defines:** procedure `usp_UpsertWritingAssessment`
-**Parameters (usp_UpsertWritingAssessment):** `@StudentNumber BIGINT`, `@AssessmentWindowID VARCHAR(20)`, `@IdeasScore INT`, `@OrganizationScore INT`, `@LanguageScore INT`, `@ConventionsScore VARCHAR(10)`, `@AssessmentDate DATE`, `@AssessmentLanguage VARCHAR(10)`, `@CallerUPN VARCHAR(255)`
-**Access signals (auto):** caller-scoped via @CallerUPN; StaffAppAccess
+**Parameters (usp_UpsertWritingAssessment):** `@StudentNumber BIGINT` — provincial student number, `@AssessmentWindowID VARCHAR(20)` — window id as text, `@IdeasScore INT` — 1-4 (NULL allowed only when excluded), `@OrganizationScore INT` — 1-4 (NULL only when excluded), `@LanguageScore INT` — 1-4 (NULL only when excluded), `@ConventionsScore VARCHAR(10)` — '1'-'4' or 'SCR' (scribed, not averaged); NULL only when excluded, `@AssessmentDate DATE` — date of the result; the app sends MIN(today Atlantic, window EndDate), `@AssessmentLanguage VARCHAR(10)` — 'English' | 'French' writing track (part of the grain); NULL -> French for French Immersion students, else English, `@CallerUPN VARCHAR(255)` — signed-in user's UPN, resolved server-side by the app and passed through (TRUSTED - the proc does not verify it); NULL -> CURRENT_USER (legacy Power Apps / direct SQL)
+**Access / row scope:** Trusts @CallerUPN. In-proc: caller must have a current DimStaff row (51030); window must be active and not Upcoming; grace-lock requires StaffAppAccess.IsSysAdmin or CanOverrideLiteracy (51040). NO per-student scope check - the server action first re-reads the caller's roster TVF and refuses students not on it. EXECUTE granted to StudentDataAssessment.
 **Grants:** EXECUTE on `usp_UpsertWritingAssessment` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentWindowID`, `CycleGroupID`
@@ -1080,45 +1148,49 @@ Web-app / Power Apps wrapper for entering or correcting a single writing assessm
 - `StaffAppAccess` — *(columns not resolved — see file)*
 - `WritingTraitExclusion` — *(columns not resolved — see file)*
 **Writes:**
-- `FactAssessmentWriting` — insert/update — `AssessmentDate`, `AssessmentLanguage`, `AssessmentWindowID`, `ConventionsScore`, `EnteredByStaffKey`, `IdeasScore`, `LanguageScore`, `LastUpdated`, `OrganizationScore`, `StudentKey`, `StudentNumber`, `SubmissionTimestamp`, `WritingAverage`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- `FactAssessmentWriting` — insert: `StudentKey`, `StudentNumber`, `AssessmentWindowID`, `AssessmentLanguage`, `IdeasScore`, `OrganizationScore`, `LanguageScore`, `ConventionsScore`, `WritingAverage`, `AssessmentDate`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated`; update: `the four trait columns`, `WritingAverage`, `EnteredByStaffKey`, `SubmissionTimestamp`, `LastUpdated - when a row exists for the same (StudentKey, window, AssessmentLanguage, AssessmentDate)`
+- `FactSubmissionAudit` — insert: `RecordType='WritingAssessment', always 'Accepted', ' | GRACE-OVERRIDE' when locked`
 **Executes:** `ON`
-**Errors raised (auto):**
-- 51010 “usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, and @AssessmentDate are required.” (line 103)
-- 51030 “usp_UpsertWritingAssessment: caller does not resolve to a current DimStaff row. Cannot enter assessments without a staff identity.” (line 117)
-- 51012 “usp_UpsertWritingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” (line 134)
-- 51015 “usp_UpsertWritingAssessment: window AssessmentType is not Writing. Use the matching upsert proc for Reading/Math.” (line 140)
-- 51032 “usp_UpsertWritingAssessment: window is Upcoming (not yet started). No entries allowed before the window opens.” (line 152)
-- 51040 “usp_UpsertWritingAssessment: this cycle is locked (grace period expired). You do not hold the Literacy override to enter data for it.” (line 175)
-- 51011 “usp_UpsertWritingAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate.” (line 190)
-- 51019 “usp_UpsertWritingAssessment: student ProgramFamily does not match the window ProgramFamily (e.g. an English student in a French Immersion window).” (line 198)
-- 51016 “usp_UpsertWritingAssessment: student grade at AssessmentDate is outside the window grade range.” (line 209)
-- 51017 “usp_UpsertWritingAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” (line 216)
-- 51019 “usp_UpsertWritingAssessment: @AssessmentLanguage must be 'English' or 'French'.” (line 228)
-- 51019 “usp_UpsertWritingAssessment: @AssessmentLanguage is not valid for this student (French writing requires French Immersion; English writing for an immersion student requires grade 3+).” (line 234)
-- 51010 “usp_UpsertWritingAssessment: every non-excluded trait score is required (no NULLs).” (line 270)
-- 51018 “usp_UpsertWritingAssessment: Ideas, Organization, and Language must each be an integer 1-4 (unless excluded for this grade/program/month).” (line 279)
-- 51018 “usp_UpsertWritingAssessment: Conventions must be '1'-'4' or 'SCR' (Scribed).” (line 284)
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`
+**Errors raised:**
+- 51010 “usp_UpsertWritingAssessment: @StudentNumber, @AssessmentWindowID, and @AssessmentDate are required.” — StudentNumber, AssessmentWindowID or AssessmentDate is NULL
+- 51030 “usp_UpsertWritingAssessment: caller does not resolve to a current DimStaff row. ...” — no current DimStaff row for the caller
+- 51012 “usp_UpsertWritingAssessment: @AssessmentWindowID does not resolve to an active DimAssessmentWindow row.” — window not found or inactive
+- 51015 “usp_UpsertWritingAssessment: window AssessmentType is not Writing. ...” — the window is Reading or Math
+- 51032 “usp_UpsertWritingAssessment: window is Upcoming (not yet started). ...” — today (Atlantic) is before the window StartDate
+- 51040 “usp_UpsertWritingAssessment: this cycle is locked (grace period expired). You do not hold the Literacy override to enter data for it.” — past window EndDate + the cycle's GraceHours (DimShortCycle.GraceHours, default 168h, counted from midnight after EndDate, compared in Atlantic time) the cycle is locked, and the caller has no StaffAppAccess row with IsSysAdmin=1 or CanOverrideLiteracy=1
+- 51011 “usp_UpsertWritingAssessment: @StudentNumber does not resolve to a DimStudent row effective at @AssessmentDate.” — no DimStudent version covers AssessmentDate
+- 51019 “usp_UpsertWritingAssessment: student ProgramFamily does not match the window ProgramFamily ...” — the (legacy) window ProgramFamily is set and differs from the student's
+- 51016 “usp_UpsertWritingAssessment: student grade at AssessmentDate is outside the window grade range.” — grade outside [MinGrade, MaxGrade] or unknown grade code
+- 51017 “usp_UpsertWritingAssessment: @AssessmentDate is outside this window's range [StartDate, min(today, EndDate)].” — AssessmentDate before StartDate or after MIN(today Atlantic, EndDate)
+- 51019 “usp_UpsertWritingAssessment: @AssessmentLanguage must be 'English' or 'French'.” — AssessmentLanguage is some other value
+- 51019 “usp_UpsertWritingAssessment: @AssessmentLanguage is not valid for this student ...” — French for a non-French-Immersion student, or English for a French Immersion student below grade 3
+- 51010 “usp_UpsertWritingAssessment: every non-excluded trait score is required (no NULLs).” — a trait that is not excluded for this grade/program/month is NULL
+- 51018 “usp_UpsertWritingAssessment: Ideas, Organization, and Language must each be an integer 1-4 ...” — a non-excluded Ideas/Organization/Language score is outside 1-4
+- 51018 “usp_UpsertWritingAssessment: Conventions must be '1'-'4' or 'SCR' (Scribed).” — a non-excluded Conventions value is not '1'-'4' or 'SCR'
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — Save on a Writing roster (saveWritingAssessments), once per changed student, per language track
+**Caveats:** Trait columns are VARCHAR: '1'-'4', 'SCR', '-' (excluded = deliberately not assessed) or NULL. WritingAverage counts only explicit '1'-'4' values (Fabric TRY_CAST('-' AS INT) returns 0, so an allow-list is used) - the read TVFs recompute it the same way; keep in lockstep. Exclusion month = window BenchmarkMonth else MONTH(StartDate). The language rule mirrors usp_MergeStudent Step 6. Header's THROW list omits 51040.
 
 ### sql/procedures/usp_YearEndCloseOut.sql
 
-[sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) · **procedure** · skeleton (not yet reviewed)
+[sql/procedures/usp_YearEndCloseOut.sql](../../sql/procedures/usp_YearEndCloseOut.sql) · **procedure** · reviewed 2026-10-22
 
-Scheduled close-out for a completed school year. Closes any rows that are still flagged active/current for sections in the closing school year (or earlier). Independent of the regular ingest merges — runs as a standalone job after the school year ends.
+Year-end close-out for a finished school year: sets FactEnrollment.ActiveFlag=0 (filling a NULL EndDate from the DimTerm term end), closes FactSectionTeachers triples and current DimSection rows for sections whose DimTerm.SchoolYearEnd <= the closing year. One summary audit row.
 
 **Defines:** procedure `usp_YearEndCloseOut`
-**Parameters (usp_YearEndCloseOut):** `@ClosingSchoolYearEnd INT`, `@EffectiveDate DATE`
+**Parameters (usp_YearEndCloseOut):** `@ClosingSchoolYearEnd INT` — SchoolYearEnd to close (e.g. 2026 for 2025-2026); NULL -> this calendar year if Atlantic month >= 7, else last year, `@EffectiveDate DATE` — close date (EffectiveEndDate = it - 1 day); NULL -> today Atlantic
+**Access / row scope:** No in-proc checks; no GRANT. Admin-run manually.
 **Reads:**
 - `DimSection` — `IsCurrent`, `SectionID`, `SectionKey`, `TermID`
 - `DimTerm` — `SchoolYearEnd`, `TermCode`, `TermID`
 - `FactEnrollment` — `ActiveFlag`, `EndDate`, `SectionKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`
 **Writes:**
-- `DimSection` — update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`
-- `FactEnrollment` — update — `ActiveFlag`, `EndDate`, `LastUpdated`
-- `FactSectionTeachers` — update — `EffectiveEndDate`, `IsCurrent`, `LastUpdated`
-- `FactSubmissionAudit` — insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`
+- `DimSection` — update: `IsCurrent=0, EffectiveEndDate=@EffectiveDate-1 for current rows in closing-year terms`
+- `FactEnrollment` — update: `ActiveFlag=0, EndDate=COALESCE(EndDate, term end: Jun 30 / Jan 30 / Jun 30 by TermCode)`
+- `FactSectionTeachers` — update: `IsCurrent=0, EffectiveEndDate=@EffectiveDate-1 where the SectionID has any closing-year DimSection version`
+- `FactSubmissionAudit` — insert: `RecordType='YearEndCloseOut'`
+**Caveats:** Nothing calls it (no app route, no job, no script; the header's July-1 Pipeline trigger does not exist in the repo). Header claims 'one transaction' - there is none. Passing the CURRENT year closes all live rosters. EndDate = @EffectiveDate-1 is unguarded, so a row that started today gets a reversed window (DQ rule C violation). Does not rebuild SectionRosterMembership, and the next ingest re-opens sections still present in the PS export.
 
 ## Table-valued functions (tvf_*)
 
@@ -1620,11 +1692,12 @@ The /enter landing: every active cycle instance (window) the caller has students
 
 ### sql/security/bridge_views.sql
 
-[sql/security/bridge_views.sql](../../sql/security/bridge_views.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/bridge_views.sql](../../sql/security/bridge_views.sql) · **legacy-view** · reviewed 2026-10-22
 
-warehouse-side sources for the Fabric bridge that maintains the SharePoint lists serving the $0-license Teacher Entry / Admin apps. The caller-scoped RLS views (vw_TeacherRoster, vw_StudentCohort, vw_StudentAssessmentHistory) filter by CURRENT_USER and therefore return NOTHING to a service identity — these views return ALL rows with the scoping key (TeacherEmail / SchoolID) as a COLUMN, so the bridge can partition rows into list items.
+Five RLS-BYPASSING views built for the abandoned SharePoint entry-layer bridge: vw_BridgeTeacherRosterAll (window x teacher x group x student with existing reading, benchmark and IPP status), vw_BridgeSchoolRosterAll (same keyed by school), vw_BridgeStudentCohortAll and vw_BridgeAssessmentHistoryAll (vw_StudentCohort / vw_StudentAssessmentHistory without the RLS gate), vw_BridgeScaleLevels (DimReadingScale wrapper).
 
 **Defines:** view `vw_BridgeTeacherRosterAll`, view `vw_BridgeSchoolRosterAll`, view `vw_BridgeStudentCohortAll`, view `vw_BridgeAssessmentHistoryAll`, view `vw_BridgeScaleLevels`
+**Access / row scope:** No row filter at all - every student/teacher. No GRANT in the file; grant_webapp_sp.sql DENYs SELECT on all five to StudentDataAssessment. Readable by workspace principals only.
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentType`, `AssessmentWindowID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
@@ -1640,51 +1713,56 @@ warehouse-side sources for the Fabric bridge that maintains the SharePoint lists
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
+**Caveats:** Not used by the web app (only comment references in data.ts/tvf_TeacherRoster; getScaleLevels reads dbo.DimReadingScale, not vw_BridgeScaleLevels). Dead since the SharePoint pivot was dropped - candidates to DROP, since they expose full PII to anyone with workspace Read. Logic is frozen at the June 2026 model: legacy 'HR:' group keys, window ProgramFamily (unused by Short Cycles), one-reading-per-window joins (multiple dated rows now duplicate).
 
 ### sql/security/vw_DimReadingScale.sql
 
-[sql/security/vw_DimReadingScale.sql](../../sql/security/vw_DimReadingScale.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_DimReadingScale.sql](../../sql/security/vw_DimReadingScale.sql) · **legacy-view** · reviewed 2026-10-22
 
-Power Apps-facing wrapper over DimReadingScale that casts the BIGINT IDENTITY ReadingScaleID to VARCHAR(20). Required because Power Fx Number is IEEE 754 double (16-digit safe max) and Fabric BIGINT IDENTITY emits ~19-digit values — direct binding loses precision and breaks any equality comparison on the key.
+Wrapper over DimReadingScale casting ReadingScaleID to VARCHAR(20) for Power Fx (BIGINT precision). Fed the legacy roster grid's level dropdown.
 
 **Defines:** view `vw_DimReadingScale`
+**Access / row scope:** No RLS - global reference data; no GRANT in file.
 **Reads:**
 - `DimReadingScale` — *(columns not resolved — see file)*
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. The app reads dbo.DimReadingScale directly (getScaleLevels).
 
 ### sql/security/vw_RegionalData.sql
 
-[sql/security/vw_RegionalData.sql](../../sql/security/vw_RegionalData.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_RegionalData.sql](../../sql/security/vw_RegionalData.sql) · **legacy-view** · reviewed 2026-10-22
 
-RLS-gated region-wide student roster for the 10 regional analyst users. One row per student, no school filter — full regional visibility. Used by Power BI region-level reports and Power Apps regional dashboards.
+Region-wide current student list (IsCurrent=1, EnrollStatus 0/-1, joined to DimSchool) with demographics, returned only to regional analysts.
 
 **Defines:** view `vw_RegionalData`
-**Access signals (auto):** roles: RegionalAnalyst
+**Access / row scope:** Returns every row if CURRENT_USER has a current, active DimStaff row with AccessLevel='RegionalAnalyst', otherwise nothing. No GRANT in file.
 **Reads:**
 - `DimSchool` — `SchoolID`, `SchoolName`
 - `DimStaff` — `AccessLevel`, `ActiveFlag`, `Email`, `IsCurrent`
 - `DimStudent` — `Adap`, `DateOfBirth`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI.
 
 ### sql/security/vw_SchoolStudents.sql
 
-[sql/security/vw_SchoolStudents.sql](../../sql/security/vw_SchoolStudents.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_SchoolStudents.sql](../../sql/security/vw_SchoolStudents.sql) · **legacy-view** · reviewed 2026-10-22
 
-RLS-gated school admin roster — returns the current students assigned to schools the calling user has school-tier access to. One row per student (no enrollment fanout). Used by school admin dashboards in Power Apps.
+School-scoped current student list (IsCurrent=1, EnrollStatus 0/-1) for admins: one row per student per matching StaffSchoolAccess row, with the caller's access level.
 
 **Defines:** view `vw_SchoolStudents`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess
+**Access / row scope:** Rows for schools where CURRENT_USER has a StaffSchoolAccess row with AccessLevel Administrator / SpecialistTeacher / RegionalAnalyst. No GRANT in file.
 **Reads:**
 - `DimSchool` — `SchoolID`, `SchoolName`
 - `DimStudent` — `Adap`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI.
 
 ### sql/security/vw_StudentAssessmentHistory.sql
 
-[sql/security/vw_StudentAssessmentHistory.sql](../../sql/security/vw_StudentAssessmentHistory.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_StudentAssessmentHistory.sql](../../sql/security/vw_StudentAssessmentHistory.sql) · **legacy-view** · reviewed 2026-10-22
 
-Power-Apps-facing history view for scrStudentData. One row per (student, completed reading assessment) for students in the calling user's scope. Powers the cohort bar chart (achievement distribution across windows in the selected date range) and the per-student detail timelines (reading level / achievement / difference over time).
+Legacy history source: one row per reading assessment for students in scope, with window, level, delta, achievement band and chart eligibility.
 
 **Defines:** view `vw_StudentAssessmentHistory`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Same three-branch CURRENT_USER rule as vw_StudentCohort. No GRANT.
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
 - `DimAssessmentWindow` — `AssessmentType`, `AssessmentWindowID`, `EndDate`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
@@ -1698,15 +1776,16 @@ Power-Apps-facing history view for scrStudentData. One row per (student, complet
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Joins DimStudent on far.StudentKey AND IsCurrent=1, dropping every reading entered under an older student version. Superseded by tvf_StudentAssessmentHistory.
 
 ### sql/security/vw_StudentCohort.sql
 
-[sql/security/vw_StudentCohort.sql](../../sql/security/vw_StudentCohort.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_StudentCohort.sql](../../sql/security/vw_StudentCohort.sql) · **legacy-view** · reviewed 2026-10-22
 
-Power-Apps-facing cohort view for scrStudentData. One row per student in the calling user's scope, with demographics for filters + most-recent reading evidence for the pie chart.
+Legacy cohort screen source: one row per current student (EnrollStatus 0/-1) in scope with demographics, Reading IPP status / chart eligibility, and the lifetime-latest reading result with its achievement band.
 
 **Defines:** view `vw_StudentCohort`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Analyst (AccessLevel='RegionalAnalyst', current) -> all; Administrator/SpecialistTeacher -> their StaffSchoolAccess schools; teacher -> students actively enrolled in their current sections. CURRENT_USER based. No GRANT.
 **Reads:**
 - `DimAchievementLevel` — `AchievementLevelCode`, `AchievementLevelName`, `ActiveFlag`, `HexColor`, `HexColorTint`, `LowerBound`, `LowerOp`, `UpperBound`, `UpperOp`
 - `DimAssessmentWindow` — `AssessmentWindowID`, `SchoolYear`, `WindowName`
@@ -1722,15 +1801,16 @@ Power-Apps-facing cohort view for scrStudentData. One row per student in the cal
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. LatestReading partitions by StudentKey, so readings stored under an older StudentKey version are invisible after the student re-versions. Superseded by tvf_StudentCohort ('mirrors vw_StudentCohort - keep in sync' in that TVF's header is now one-way).
 
 ### sql/security/vw_StudentCohortTeachers.sql
 
-[sql/security/vw_StudentCohortTeachers.sql](../../sql/security/vw_StudentCohortTeachers.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_StudentCohortTeachers.sql](../../sql/security/vw_StudentCohortTeachers.sql) · **legacy-view** · reviewed 2026-10-22
 
-Companion bridge view to vw_StudentCohort for the scrStudentData Teacher filter (Pack B). One row per (student, teacher) pair in the calling user's scope — a student appears once per distinct current section teacher. Power Apps uses it two ways: 1. Teacher combo options: distinct (TeacherEmail, TeacherName) 2. Filter predicate: cohort StudentKey membership against the pairs whose TeacherEmail is selected
+(student, current section teacher, teacher name) pairs for the legacy scrStudentData teacher filter.
 
 **Defines:** view `vw_StudentCohortTeachers`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Analyst (current DimStaff AccessLevel='RegionalAnalyst') -> all; Administrator/SpecialistTeacher -> students at their StaffSchoolAccess schools; teacher -> students actively enrolled in their current sections. All via CURRENT_USER. No GRANT.
 **Reads:**
 - `DimSection` — `IsCurrent`, `SectionID`, `SectionKey`
 - `DimStaff` — `AccessLevel`, `Email`, `FirstName`, `IsCurrent`, `LastName`
@@ -1738,15 +1818,16 @@ Companion bridge view to vw_StudentCohort for the scrStudentData Teacher filter 
 - `FactEnrollment` — `ActiveFlag`, `SectionKey`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI.
 
 ### sql/security/vw_StudentIPP.sql
 
-[sql/security/vw_StudentIPP.sql](../../sql/security/vw_StudentIPP.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_StudentIPP.sql](../../sql/security/vw_StudentIPP.sql) · **legacy-view** · reviewed 2026-10-22
 
-Power-Apps-facing view of per-student IPP status, RLS-filtered to the calling user's scope. Long format: one row per (Student, Subject, ProgramFamily) where a current FactStudentIPP row exists. Non-applicable combinations (e.g. English Reading IPP for an FI grade-1 student) simply don't appear -- the screen renders those cells as "n/a" by absence.
+Current FactStudentIPP rows (one per student x Subject x ProgramFamily) with student details, for the legacy scrIPP / roster IPP gate.
 
 **Defines:** view `vw_StudentIPP`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Same three-branch CURRENT_USER rule as vw_StudentCohort (analyst all; admin/specialist own schools; teacher own current section roster). No GRANT.
 **Reads:**
 - `DimProgram` — `ProgramCode`, `ProgramFamily`
 - `DimSection` — `IsCurrent`, `SectionID`, `SectionKey`
@@ -1756,30 +1837,36 @@ Power-Apps-facing view of per-student IPP status, RLS-filtered to the calling us
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`
 - `FactStudentIPP` — `ChangedBy`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `ProgramFamily`, `StudentIPPID`, `StudentKey`, `Subject`
 - `StaffSchoolAccess` — `AccessLevel`, `Email`, `SchoolID`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Superseded by tvf_StudentIPP.
 
 ### sql/security/vw_StudentReadingStartingPoint.sql
 
-[sql/security/vw_StudentReadingStartingPoint.sql](../../sql/security/vw_StudentReadingStartingPoint.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_StudentReadingStartingPoint.sql](../../sql/security/vw_StudentReadingStartingPoint.sql) · **legacy-view** · reviewed 2026-10-22
 
-Each student's READING "starting point" for the current school year — the last recorded reading level from the PREVIOUS school year — so the roster can show where a student began and the cumulative progress since.
+Each student's reading 'starting point' for the current school year, per (StudentNumber, ScaleSystem): the latest reading fact from the PREVIOUS school year (by window SchoolYear), else the PriorYearBaseline seed for that year. StartingLevelOrder is NULL for codes not in DimReadingScale (e.g. ABS/INS/EAL); StartingSource = 'fact' | 'baseline'.
 
 **Defines:** view `vw_StudentReadingStartingPoint`
+**Access / row scope:** No row filter (all students) - callers must scope it; it is consumed inside the @UPN role-scoped TVFs. SELECT self-granted to StudentDataAssessment.
 **Grants:** SELECT on `vw_StudentReadingStartingPoint` → StudentDataAssessment
 **Reads:**
 - `DimAssessmentWindow` — `AssessmentWindowID`, `SchoolYear`
 - `DimReadingScale` — `LevelCode`, `LevelOrder`, `ReadingScaleID`, `ScaleSystem`
 - `FactAssessmentReading` — `AssessmentDate`, `AssessmentWindowID`, `ReadingAssessmentID`, `ReadingScaleID`, `StudentNumber`
 - `PriorYearBaseline` — `AssessmentLanguage`, `ReadingLevel`, `SchoolYear`, `StudentNumber`
-**Used on routes (auto):** `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]`, `/reports`, `/reports/[studentKey]`
+**Used in the app:**
+- `/enter/cycle/[cycleGroupId]/[subject]/[groupKey]` — opening a Reading roster (via tvf_TeacherRoster / tvf_TeacherRosterOwn LEFT JOIN)
+- `/reports` — Reports, Reading tab (via tvf_StudentCohort)
+- `/reports/[studentKey]` — opening a student (via tvf_StudentAssessmentHistory)
+**Caveats:** NOT Power Apps era despite the vw_ prefix (created 2026-09-10 for the web app). Prior year derived from today Atlantic (Sep-Aug), so it flips automatically at the year boundary - keep the COALESCE(fact, baseline) shape. The direct SELECT grant lets the SP read unscoped student numbers + levels; the app does not query it directly.
 
 ### sql/security/vw_TeacherGroups.sql
 
-[sql/security/vw_TeacherGroups.sql](../../sql/security/vw_TeacherGroups.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_TeacherGroups.sql](../../sql/security/vw_TeacherGroups.sql) · **legacy-view** · reviewed 2026-10-22
 
-Returns one row per (calling user, applicable window, group) tuple. Powers `scrGroupSelect` in the Power Apps entry app. Power Apps filters client-side by gblSelectedWindow.AssessmentWindowID.
+Legacy group picker: per (window, group) counts, grouping PP-9 by 'HR:'+Homeroom and 10-12/RG by 'SEC:'+SectionID, with the same role branches as vw_UserAssessmentWindows.
 
 **Defines:** view `vw_TeacherGroups`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Same AccessLevel branches as vw_UserAssessmentWindows (CURRENT_USER). No GRANT.
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentWindowID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `StartDate`
 - `DimGrade` — `AssessmentWindowID`, `Grade`, `GradeCode`, `GradeOrder`, `GroupKey`, `GroupLabel`, `GroupType`, `StudentKey`
@@ -1791,15 +1878,16 @@ Returns one row per (calling user, applicable window, group) tuple. Powers `scrG
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Legacy 'HR:' group keys (DimStudent.GroupKey is now school-abbreviation based); Reading-only counts. Superseded by tvf_TeacherGroups.
 
 ### sql/security/vw_TeacherRoster.sql
 
-[sql/security/vw_TeacherRoster.sql](../../sql/security/vw_TeacherRoster.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_TeacherRoster.sql](../../sql/security/vw_TeacherRoster.sql) · **legacy-view** · reviewed 2026-10-22
 
-Returns one row per (calling user, applicable window, group, student) tuple with existing reading-assessment value if any. Powers `scrRosterGrid` in the Power Apps entry app. Power Apps filters client-side by gblSelectedWindow.AssessmentWindowID AND gblSelectedGroup.GroupKey.
+Legacy roster grid: (window, group, student) rows with any existing reading value, same role branches and group keys as vw_TeacherGroups.
 
 **Defines:** view `vw_TeacherRoster`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Same AccessLevel branches as vw_UserAssessmentWindows (CURRENT_USER). No GRANT.
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentWindowID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `StartDate`
 - `DimGrade` — `AssessmentWindowID`, `FirstName`, `Grade`, `GradeCode`, `GradeOrder`, `GroupKey`, `LastName`, `ProgramCode`, `ProgramFamily`, `StudentKey`, `StudentNumber`
@@ -1812,28 +1900,31 @@ Returns one row per (calling user, applicable window, group, student) tuple with
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Header's 'one assessment per (student, window)' is stale - with dated history it returns one row per dated reading. Superseded by tvf_TeacherRoster.
 
 ### sql/security/vw_TeacherStudents.sql
 
-[sql/security/vw_TeacherStudents.sql](../../sql/security/vw_TeacherStudents.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_TeacherStudents.sql](../../sql/security/vw_TeacherStudents.sql) · **legacy-view** · reviewed 2026-10-22
 
-RLS-gated teacher roster — returns the current students enrolled in sections taught by the calling user. One row per (student × section assignment). Used by the Power Apps assessment-entry form to populate the student dropdown for a given section.
+Teacher's current roster: one row per (student x section x teacher role) for active enrollments that have started (StartDate <= today Atlantic) in current sections the caller currently teaches.
 
 **Defines:** view `vw_TeacherStudents`
+**Access / row scope:** FactSectionTeachers.TeacherEmail = CURRENT_USER (IsCurrent=1); students IsCurrent=1, EnrollStatus 0/-1. No GRANT in file.
 **Reads:**
 - `DimSection` — `CourseCode`, `CourseName`, `IsCurrent`, `SectionID`, `SectionKey`, `SectionNumber`
 - `DimStudent` — `Adap`, `EnrollStatus`, `FirstName`, `Gender`, `Grade`, `Homeroom`, `IPP`, `IsCurrent`, `LastName`, `MiddleName`, `ProgramCode`, `SchoolID`, `SelfIDAfrican`, `SelfIDIndigenous`, `StudentKey`, `StudentNumber`
 - `FactEnrollment` — `ActiveFlag`, `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `IsCurrent`, `SectionID`, `TeacherEmail`, `TeacherRole`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Header's caveat about service-principal connections is exactly why the app moved to @UPN TVFs.
 
 ### sql/security/vw_UserAssessmentWindows.sql
 
-[sql/security/vw_UserAssessmentWindows.sql](../../sql/security/vw_UserAssessmentWindows.sql) · **legacy-view** · skeleton (not yet reviewed)
+[sql/security/vw_UserAssessmentWindows.sql](../../sql/security/vw_UserAssessmentWindows.sql) · **legacy-view** · reviewed 2026-10-22
 
-Returns one row per (calling user, applicable assessment window) tuple. Powers `scrWindowSelect` in the Power Apps entry app.
+Legacy window picker: per active window, the caller's applicable-student count and the count with a reading row, using the window effective date MIN(today, EndDate) for historical rosters.
 
 **Defines:** view `vw_UserAssessmentWindows`
-**Access signals (auto):** roles: Administrator, RegionalAnalyst, SpecialistTeacher; StaffSchoolAccess; FactSectionTeachers
+**Access / row scope:** Branches on the caller's current DimStaff.AccessLevel: NULL -> students in sections they taught at the effective date; Administrator/SpecialistTeacher -> students at their StaffSchoolAccess schools; RegionalAnalyst -> all. CURRENT_USER based. No GRANT.
 **Reads:**
 - `DimAssessmentWindow` — `ActiveFlag`, `AssessmentType`, `AssessmentWindowID`, `EndDate`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`
 - `DimGrade` — `GradeCode`, `GradeOrder`
@@ -1845,15 +1936,22 @@ Returns one row per (calling user, applicable assessment window) tuple. Powers `
 - `FactEnrollment` — `EndDate`, `SectionKey`, `StartDate`, `StudentKey`
 - `FactSectionTeachers` — `EffectiveEndDate`, `EffectiveStartDate`, `SectionID`, `TeacherEmail`
 - `StaffSchoolAccess` — `SchoolID`, `StaffKey`
+**Caveats:** Power Apps era; not used by the web app (no webapp/src reference). CURRENT_USER-based RLS returns nothing to the web app's service principal, so it is inert for the app; kept for the legacy canvas app / Power BI. Entered counts are Reading-only; still filters on the legacy window ProgramFamily (NULL for Short Cycles, so no program scoping). Superseded by tvf_UserAssessmentWindows.
 
 ## Grants
 
 ### sql/security/grant_webapp_sp.sql
 
-[sql/security/grant_webapp_sp.sql](../../sql/security/grant_webapp_sp.sql) · **grants** · skeleton (not yet reviewed)
+[sql/security/grant_webapp_sp.sql](../../sql/security/grant_webapp_sp.sql) · **grants** · reviewed 2026-10-22
 
+Least-privilege grants for the web app's service principal [StudentDataAssessment]: EXECUTE on the write/wrapper procs, SELECT on the @UPN role-scoped TVFs, DimShortCycle, AppMaintenance, DimReadingScale and DimAchievementLevel, and DENY SELECT on the five RLS-bypassing vw_Bridge* views. Re-run after any DROP+CREATE of an object that has no self-grant.
+
+**Access / row scope:** Run by a warehouse admin. Grants only to StudentDataAssessment.
 **Grants:** EXECUTE on `usp_UpsertReadingAssessment` → StudentDataAssessment, EXECUTE on `usp_UpsertWritingAssessment` → StudentDataAssessment, EXECUTE on `usp_DeleteReadingAssessment` → StudentDataAssessment, EXECUTE on `usp_UpsertStudentIPP` → StudentDataAssessment, EXECUTE on `usp_UpsertStudentAdaptation` → StudentDataAssessment, EXECUTE on `usp_InsertSubmissionAudit` → StudentDataAssessment, SELECT on `tvf_UserAssessmentWindows` → StudentDataAssessment, SELECT on `tvf_TeacherGroups` → StudentDataAssessment, SELECT on `tvf_TeacherRoster` → StudentDataAssessment, SELECT on `tvf_StudentCohort` → StudentDataAssessment, SELECT on `tvf_StudentAssessmentHistory` → StudentDataAssessment, SELECT on `tvf_StudentIPP` → StudentDataAssessment, SELECT on `tvf_StudentAdaptation` → StudentDataAssessment, SELECT on `tvf_TeacherRosterWriting` → StudentDataAssessment, SELECT on `tvf_TeacherRosterMath` → StudentDataAssessment, SELECT on `tvf_ProgrammingGroups` → StudentDataAssessment, SELECT on `tvf_ProgrammingRoster` → StudentDataAssessment, EXECUTE on `usp_UpsertShortCycle` → StudentDataAssessment, EXECUTE on `usp_UpsertShortCycleHeader` → StudentDataAssessment, SELECT on `DimShortCycle` → StudentDataAssessment, EXECUTE on `usp_TriggerIngestCycle` → StudentDataAssessment, SELECT on `AppMaintenance` → StudentDataAssessment, EXECUTE on `usp_SetMaintenanceWindow` → StudentDataAssessment, EXECUTE on `usp_ClearMaintenanceWindow` → StudentDataAssessment, SELECT on `DimReadingScale` → StudentDataAssessment, SELECT on `DimAchievementLevel` → StudentDataAssessment
 **Executes:** `ON`
+**Used in the app:**
+- `(all app routes)` — defines what the app's SP may execute/select
+**Caveats:** Incomplete vs the live app: usp_UpsertMathAssessment, usp_SetStaffAppAccess and usp_RebuildRosterMembership are granted only by self-grants in their own files; vw_StudentReadingStartingPoint is self-granted; other TVFs the app reads (e.g. tvf_MathCohortGroups, tvf_TeacherRosterOwn) are not listed here - check their own files. Still grants usp_DeleteReadingAssessment and usp_InsertSubmissionAudit, which the app no longer calls. Comments are stale: 'the 6 TVFs' (11 listed) and the ingest proc's 'RegionalAnalyst role gate' (it is StaffAppAccess CanRunIngest/IsSysAdmin). Section (B) (removing the SP's workspace ReadData role) is a manual, not-yet-confirmed step.
 
 ## App pages
 
@@ -2454,37 +2552,37 @@ Returns one row per (calling user, applicable assessment window) tuple. Powers `
 
 ## data.ts functions → SQL objects
 
-| Function | Objects / tables | Procedures |
-|---|---|---|
-| `getAchievementLevels` | `DimAchievementLevel` |  |
-| `getAssessableGradeRange` | `DimAssessmentWindow`, `DimGrade` |  |
-| `getCallerAccessLevel` | `DimStaff` |  |
-| `getCallerCapabilities` | `DimStaff`, `StaffAppAccess` |  |
-| `getMaintenanceWindow` | `AppMaintenance` |  |
-| `getMathCohort` | `tvf_StudentCohortMath` |  |
-| `getMathCohortAll` | `tvf_StudentCohortMathAll` |  |
-| `getMathCohortGroups` | `tvf_MathCohortGroups` |  |
-| `getMathRoster` | `tvf_TeacherRosterMath` |  |
-| `getProgrammingGroups` | `tvf_ProgrammingGroups` |  |
-| `getProgrammingRoster` | `tvf_ProgrammingRoster` |  |
-| `getProgrammingSummary` | `tvf_StudentAdaptation`, `tvf_StudentIPP` |  |
-| `getReportCycles` | `DimShortCycle` |  |
-| `getScaleLevels` | `DimReadingScale` |  |
-| `getShortCycles` | `DimAssessmentWindow`, `DimShortCycle` |  |
-| `getStaffAppAccessList` | `DimStaff`, `StaffAppAccess` |  |
-| `getStudentCohort` | `tvf_StudentCohort` |  |
-| `getStudentCohortRWM` | `tvf_StudentCohortRWM` |  |
-| `getStudentCohortWriting` | `tvf_StudentCohortWriting` |  |
-| `getStudentHistory` | `tvf_StudentAssessmentHistory` |  |
-| `getStudentHistoryWriting` | `tvf_StudentAssessmentHistoryWriting` |  |
-| `getStudentIPPList` | `tvf_StudentIPP` |  |
-| `getStudentNavList` |  |  |
-| `getStudentRWMHistory` | `tvf_StudentRWMHistory` |  |
-| `getTeacherGroups` | `tvf_TeacherGroups` |  |
-| `getTeacherRoster` | `tvf_TeacherRoster` |  |
-| `getTeacherRosterWriting` | `tvf_TeacherRosterWriting` |  |
-| `getTeacherWindows` | `tvf_UserAssessmentWindows` |  |
-| `getWindowAssessmentType` | `DimAssessmentWindow` |  |
-| `getWindowEndDate` | `DimAssessmentWindow` |  |
-| `getWindowLanguage` | `DimAssessmentWindow` |  |
-| `lookupStaffByEmail` | `DimStaff` |  |
+| Function | Does | Objects / tables | Procedures |
+|---|---|---|---|
+| `getAchievementLevels` |  | `DimAchievementLevel` |  |
+| `getAssessableGradeRange` |  | `DimAssessmentWindow`, `DimGrade` |  |
+| `getCallerAccessLevel` |  | `DimStaff` |  |
+| `getCallerCapabilities` |  | `DimStaff`, `StaffAppAccess` |  |
+| `getMaintenanceWindow` |  | `AppMaintenance` |  |
+| `getMathCohort` |  | `tvf_StudentCohortMath` |  |
+| `getMathCohortAll` |  | `tvf_StudentCohortMathAll` |  |
+| `getMathCohortGroups` |  | `tvf_MathCohortGroups` |  |
+| `getMathRoster` |  | `tvf_TeacherRosterMath` |  |
+| `getProgrammingGroups` |  | `tvf_ProgrammingGroups` |  |
+| `getProgrammingRoster` |  | `tvf_ProgrammingRoster` |  |
+| `getProgrammingSummary` |  | `tvf_StudentAdaptation`, `tvf_StudentIPP` |  |
+| `getReportCycles` |  | `DimShortCycle` |  |
+| `getScaleLevels` |  | `DimReadingScale` |  |
+| `getShortCycles` |  | `DimAssessmentWindow`, `DimShortCycle` |  |
+| `getStaffAppAccessList` |  | `DimStaff`, `StaffAppAccess` |  |
+| `getStudentCohort` |  | `tvf_StudentCohort` |  |
+| `getStudentCohortRWM` |  | `tvf_StudentCohortRWM` |  |
+| `getStudentCohortWriting` |  | `tvf_StudentCohortWriting` |  |
+| `getStudentHistory` |  | `tvf_StudentAssessmentHistory` |  |
+| `getStudentHistoryWriting` |  | `tvf_StudentAssessmentHistoryWriting` |  |
+| `getStudentIPPList` |  | `tvf_StudentIPP` |  |
+| `getStudentNavList` |  |  |  |
+| `getStudentRWMHistory` |  | `tvf_StudentRWMHistory` |  |
+| `getTeacherGroups` |  | `tvf_TeacherGroups` |  |
+| `getTeacherRoster` |  | `tvf_TeacherRoster` |  |
+| `getTeacherRosterWriting` |  | `tvf_TeacherRosterWriting` |  |
+| `getTeacherWindows` |  | `tvf_UserAssessmentWindows` |  |
+| `getWindowAssessmentType` |  | `DimAssessmentWindow` |  |
+| `getWindowEndDate` |  | `DimAssessmentWindow` |  |
+| `getWindowLanguage` |  | `DimAssessmentWindow` |  |
+| `lookupStaffByEmail` |  | `DimStaff` |  |
