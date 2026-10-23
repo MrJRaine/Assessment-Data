@@ -7605,9 +7605,17 @@
   },
   "sql/scripts/01_CreateSchema.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "042ebb28892949818b15b34b3059b3e61471eef4",
    "notes": {
-    "purpose": ""
+    "purpose": "Original MVP bootstrap: SQLCMD-mode (:r) include of the core dimension and fact table DDL files in dependency order (DimSchool…DimSection, then FactEnrollment/Reading/Writing/SubmissionAudit) to initialize an empty warehouse.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Create the original core star-schema tables on a brand-new warehouse.",
+     "target": "either (new, empty warehouse only)",
+     "rerunSafe": false,
+     "applied": "initial commit 2026-04-24; untouched since"
+    },
+    "caveats": "OBSOLETE as a full bootstrap: lists only the April 2026 MVP tables (no DimProgram/DimGrade/DimShortCycle/FactAssessmentMath/FactStudentIPP/Adaptation/Stg_* etc.) and RLS tables are commented out. Uses SQLCMD :r includes, which the Fabric web query editor does not support. Do not run against an existing warehouse."
    },
    "blob": "042ebb28892949818b15b34b3059b3e61471eef4",
    "auto": {
@@ -7617,13 +7625,22 @@
     "lastCommit": "2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills",
     "headerPurpose": "Create all dimension and fact tables in dependency order Run this script once against a new Fabric Warehouse to initialize the schema.",
     "headerScript": "01_CreateSchema.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/add_Abbreviation_to_DimSchool.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "894ae5585080ea2d3072f4973cb4943726e79c91",
    "notes": {
-    "purpose": ""
+    "purpose": "Add DimSchool.Abbreviation (VARCHAR(10)) and fill it for the 22 TCRCE schools by SchoolID (e.g. 0511 -> CHES), for a DimSchool seeded before the column existed.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add and populate school abbreviations on an older DimSchool.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "initial commit 2026-04-24 (early schema era); DimSchool DDL now includes the column"
+    },
+    "caveats": "Two parts must run SEPARATELY (ALTER, then UPDATE in a fresh window) — Fabric compiles the batch before the column exists. Re-running the ALTER fails once the column exists; Part 2 alone is safe to re-run. Likely obsolete: current DimSchool.sql already has Abbreviation."
    },
    "blob": "894ae5585080ea2d3072f4973cb4943726e79c91",
    "auto": {
@@ -7646,13 +7663,22 @@
     "lastCommit": "2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills",
     "headerPurpose": "Add the Abbreviation column to DimSchool and populate it for all 22 TCRCE schools. Use this ONLY if DimSchool was already seeded before the Abbreviation column was added to the schema.",
     "headerScript": "add_Abbreviation_to_DimSchool.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/backfill_DimShortCycle_headers.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "5ae65323e9100c66f3680312c60cfa8d0b0353fe",
    "notes": {
-    "purpose": ""
+    "purpose": "One-time seed of DimShortCycle cycle headers for cycles that predate the header table: gives legacy windows with NULL CycleGroupID their own GUID, then inserts one header per un-headed CycleGroupID using its windows' name/dates/year/active flag.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Create cycle header rows for pre-existing assessment windows after DimShortCycle was introduced.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "committed 2026-09-17 with the cycle header feature (run once after DimShortCycle.sql)"
+    },
+    "caveats": "Idempotent (NOT EXISTS guard), but step 1 permanently assigns new GUIDs to any window with NULL CycleGroupID — any window created later without a group key would silently become its own cycle. Must run after DimShortCycle.sql. GO-separated."
    },
    "blob": "5ae65323e9100c66f3680312c60cfa8d0b0353fe",
    "auto": {
@@ -7701,13 +7727,22 @@
     "lastCommit": "2026-09-17 f5c8662 feat(cycles): cycle header (DimShortCycle) + scoped-instance builder",
     "headerPurpose": "Seed DimShortCycle headers for cycles that predate the header table. 1) Give any legacy single window (CycleGroupID NULL) its own key so it becomes a standalone cycle. 2) Create a header row for every distinct CycleGroupID not yet headed, taking the name/dates/year from its instance windows (which share them).",
     "headerScript": "backfill_DimShortCycle_headers.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/backfill_adaptation_facts_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "c631cfd13918229079d399a3a395b07d01f693a5",
    "notes": {
-    "purpose": ""
+    "purpose": "One-time live backfill of FactStudentAdaptation: inserts one current unresolved (HasAdaptation NULL) row per expected (Student, Subject, ProgramFamily) for DimStudent.Adap = 1, copying usp_MergeStudent Step 6d verbatim, because live had zero current adaptation rows.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Build the missing adaptation fact rows on live so the Programming > Adaptations roster shows students.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-24 (commit: diagnose + backfill empty FactStudentAdaptation on live)"
+    },
+    "caveats": "INSERT-only with NOT EXISTS guard, so re-running is a no-op. Afterwards usp_MergeStudent must be redeployed on live or the next ingest regresses. Applicability rules are a frozen copy (Math P-6 here; Math later narrowed to P-5 in 1.2.0) — don't re-run as-is without reconciling with the current proc. Companion diagnostic: diag_adaptation_source_live.sql; sibling: backfill_ipp_facts_live.sql."
    },
    "blob": "c631cfd13918229079d399a3a395b07d01f693a5",
    "auto": {
@@ -7762,13 +7797,22 @@
     ],
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/backfill_ipp_facts_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "d54ee92ba098cb9dbb80f505d7821da447a36c2c",
    "notes": {
-    "purpose": ""
+    "purpose": "One-time additive live backfill of FactStudentIPP: inserts one current unresolved (IsIPP NULL) row per expected (Student, Subject, ProgramFamily) for DimStudent.IPP = 1, copying usp_MergeStudent Step 6b verbatim — mainly to add the missing Math IPP rows on live.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Add the missing Math (and newly in-band) IPP fact rows on live so the Programming > IPP roster's Math column populates.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-24 (twin of backfill_adaptation_facts_live.sql)"
+    },
+    "caveats": "INSERT-only: does not close out-of-band rows (Step 6a) — that happens only when usp_MergeStudent is redeployed on live and the next ingest runs. Rules are a frozen copy (Math P-6; Math later narrowed to P-5 in 1.2.0), so don't re-run as-is. Near-duplicate of backfill_adaptation_facts_live.sql (differs only in flag column + target table)."
    },
    "blob": "d54ee92ba098cb9dbb80f505d7821da447a36c2c",
    "auto": {
@@ -7823,13 +7867,22 @@
     ],
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-24 0610c9d sql(fix): twin IPP backfill for missing Math IPP rows on live"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/classroom_teacher_grades_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "638119a4ec647578acc0811f12ead327171eef28",
    "notes": {
-    "purpose": ""
+    "purpose": "For every impersonable classroom teacher (DimStaff.AccessLevel NULL) on dev, show the grade span of students reachable through the app's roster chain (FactSectionTeachers -> DimSection -> FactEnrollment -> DimStudent) and which subjects that implies they would see.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which dev classroom teachers will see Reading / Writing / Math cycles, based on the grades of the students they actually teach today?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "created 2026-09-04 (per-subject grade band work)"
+    },
+    "caveats": "WouldSeeSubjects hard-codes the 2026-09-04 bands (Math P-6, Reading P-8, Writing P-RG); Math is now P-5 and bands can be set per cycle instance on /cycles, so treat that column as approximate. A teacher with no row has no current section-teacher link. Returns staff names only, but restricted to dev by header."
    },
    "blob": "638119a4ec647578acc0811f12ead327171eef28",
    "auto": {
@@ -7874,13 +7927,22 @@
     "lastCommit": "2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment ",
     "headerPurpose": "For every impersonable CLASSROOM teacher (AccessLevel NULL), show the grade span of the students actually reachable through the roster chain the app uses (FactSectionTeachers -> DimSection -> FactEnrollment -> DimStudent). This explains who will see which open cycle-subjects: a teacher sees Reading if any student is P-8, Math if any is P-6, Writing if any is P-RG.",
     "headerScript": "classroom_teacher_grades_dev.sql (DEV synthetic only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/data_quality_checks.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "47756dfb0db2aaf6006324ec558069c826ef04c2",
    "notes": {
-    "purpose": ""
+    "purpose": "Tombstone only — the 49 ad-hoc data quality queries moved into usp_RunDataQualityChecks on 2026-05-11; the file now just points to the proc, FactDataQualityAudit, and deploy_step14_data_quality.sql.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Where did the data quality checks go?",
+     "target": "either",
+     "rerunSafe": true,
+     "applied": "superseded 2026-05-11"
+    },
+    "caveats": "SUPERSEDED — contains no executable SQL. Use EXEC usp_RunDataQualityChecks or read FactDataQualityAudit (see diag_last_dq_run.sql / diag_dq_latest_run_dev.sql)."
    },
    "blob": "47756dfb0db2aaf6006324ec558069c826ef04c2",
    "auto": {
@@ -7888,13 +7950,22 @@
     "reads": {},
     "scriptEffect": "read-only",
     "lastCommit": "2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/delete_test_reading_assessment.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "dd399ca78bbcb6847b54494d7780984cfad1dec0",
    "notes": {
-    "purpose": ""
+    "purpose": "Delete ONE test/bug-repro reading row on live by primary key (ReadingAssessmentID 8655918483806093313), with a confirm SELECT first.",
+    "script": {
+     "kind": "fix/migration",
+     "question": "Remove one specific test reading result from live.",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-29 (bug-repro cleanup)"
+    },
+    "caveats": "Hard-coded to one PK — done; re-running deletes nothing. To reuse for another row, change BOTH PK literals and run the confirm SELECT first. The confirm query returns student name/number (live PII). Raw DELETE writes no FactSubmissionAudit row."
    },
    "blob": "dd399ca78bbcb6847b54494d7780984cfad1dec0",
    "auto": {
@@ -7934,13 +8005,22 @@
     },
     "scriptEffect": "writes-data",
     "lastCommit": "2026-09-29 fda2896 script: delete reading row by PK 8655918483806093313 (confirm SELECT + DELETE)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_analyst_rls_scoping.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "4106bc16d5d09990c732d18287b60e971c01cf90",
    "notes": {
-    "purpose": ""
+    "purpose": "RLS remediation bundle: DROP + CREATE + GRANT of 13 @UPN RLS TVFs (tvf_UserAssessmentWindows, tvf_TeacherGroups, tvf_TeacherRoster/Math/Writing, tvf_StudentCohort(+Writing), tvf_StudentAssessmentHistory(+Writing), tvf_StudentIPP, tvf_StudentAdaptation, tvf_ProgrammingGroups/Roster) so RegionalAnalyst is scoped by StaffSchoolAccess instead of region-wide.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Deploy analyst-by-school RLS scoping across every live user-scoped TVF in one run.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "shipped to main 2026-09-22 (PR #33, analyst RLS scoping)"
+    },
+    "caveats": "Frozen 2026-09-22 snapshot of the sql/security TVF sources. Re-running NOW would roll back every later TVF change (e.g. 1.2.0 SpecialistTeacher own-sections patch, cohort/roster fixes) — redeploy from the individual sql/security/*.sql files instead. Live pre-check: analysts need StaffSchoolAccess rows (from CanChangeSchool) or they see nothing; verify one analyst sees data after deploy."
    },
    "blob": "4106bc16d5d09990c732d18287b60e971c01cf90",
    "auto": {
@@ -8499,13 +8579,22 @@
     "headerPurpose": "RLS REMEDIATION -- scope RegionalAnalyst by StaffSchoolAccess (their CanChangeSchool buildings) across every LIVE user-scoped RLS TVF, removing the region-wide analyst branch so analyst scoping matches Administrator/SpecialistTeacher. 13 @UPN TVFs, each self-contained (DROP + CREATE + GRANT), GO-separated. Re-runnable.",
     "headerScript": "deploy_analyst_rls_scoping.sql",
     "headerFunction": "tvf_UserAssessmentWindows (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_dev_cutover_loaders.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8d84fc4caace9e9295b82fdaeb2944b7a5723e2f",
    "notes": {
-    "purpose": ""
+    "purpose": "Recreate the five DEV staging loader procs (usp_LoadStudents/Staff/Section/Enrollment/CoTeacherStaging) in the live PowerSchool CSV 'cutover' format (comma, FIELDQUOTE, FIRSTROW=2), pointed at the DEV lakehouse GUID.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Make dev's staging loaders read the same CSV format as live, from the dev lakehouse.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev, merged to main 2026-09-22 (PR #33)"
+    },
+    "caveats": "SUPERSEDED by deploy_dev_loaders_workspace_identity.sql: these procs use caller-passthrough auth (no CREDENTIAL), which hit the #1119 COPY INTO OneLake token failure. Re-running reverts dev to the failing auth — only use as a deliberate revert. Never run on live (hard-codes the DEV lakehouse GUID). Pairs with data/imports/_generate_ingest_testset.ps1 -Format Cutover."
    },
    "blob": "8d84fc4caace9e9295b82fdaeb2944b7a5723e2f",
    "auto": {
@@ -8610,13 +8699,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Bring the DEV staging loaders up to the LIVE \"cutover\" format so dev mirrors production. Live already runs the PowerSchool sqlReport CSV loaders (comma-delimited, FIELDQUOTE, FIRSTROW=2, Students*, Staff*, Sections*, Enrollments*, Co-Teachers* filenames); dev still ran the old direct-extract TAB loaders. This replaces the five dev load procs with the CSV format, pointed at the DEV lakehouse.",
     "headerScript": "deploy_dev_cutover_loaders.sql (DEV warehouse ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_dev_loaders_workspace_identity.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "547c742c8fdbc156c170a9afb4ccca34312107ef",
    "notes": {
-    "purpose": ""
+    "purpose": "Recreate the five DEV staging loader procs identical to the cutover loaders but with COPY INTO authorized by CREDENTIAL = (IDENTITY = 'Workspace Identity'), the fix for the #1119 OneLake token failure.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Deploy the Workspace-Identity COPY INTO loaders on dev (the #1119 workaround).",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-06; same approach shipped to live via PR #34 (v1.1.0); #1119 closed as workaround 2026-10-09"
+    },
+    "caveats": "DEV only (hard-codes the DEV lakehouse GUID 8c5589bd-…); live uses sql/procedures/usp_Load*Staging.sql. Prerequisite: the workspace identity must be provisioned with Contributor on the workspace or every COPY INTO fails. Revert path is deploy_dev_cutover_loaders.sql."
    },
    "blob": "547c742c8fdbc156c170a9afb4ccca34312107ef",
    "auto": {
@@ -8721,13 +8819,22 @@
     "lastCommit": "2026-10-06 83f1c7c sql(dev): Workspace-Identity COPY INTO loaders (test fix for #1119)",
     "headerPurpose": "TEST the Workspace-Identity fix for the #1119 COPY INTO OneLake token failure. Redeploys the five DEV staging loaders identically to deploy_dev_cutover_loaders.sql EXCEPT each COPY INTO now authorizes the OneLake source read with the WORKSPACE IDENTITY instead of the caller's (SP) passthrough token: CREDENTIAL = (IDENTITY = 'Workspace Identity') This decouples the source read from the SP's control-plane Fabric token, so it needs no token bootstrap and never lapses.",
     "headerScript": "deploy_dev_loaders_workspace_identity.sql (DEV warehouse ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_groupkey_tvfs.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "3a6bc0de99ddaf049a5c16bce2c1a486af4c9834",
    "notes": {
-    "purpose": ""
+    "purpose": "Convenience bundle concatenating the roster/group TVFs (tvf_TeacherGroups, tvf_TeacherRoster, tvf_TeacherRosterWriting, tvf_TeacherRosterMath) from sql/security/, with inline re-grants to StudentDataAssessment.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Redeploy the group-key roster/group TVFs in one batch.",
+     "target": "dev and live",
+     "rerunSafe": true,
+     "applied": "dev 2026-09-08; last regenerated 2026-09-17"
+    },
+    "caveats": "STALE — DANGEROUS to re-run: its roster TVFs take a single @GroupKey VARCHAR(70), while later versions (e.g. deploy_analyst_rls_scoping.sql, 2026-09-22) take @GroupKeys VARCHAR(4000); re-running would break the web app's calls and drop analyst scoping. Regenerate from sql/security/ before any use. Prereq: DimStudent.GroupKey (migrate_DimStudent_add_GroupKey.sql). Live twin: deploy_groupkey_tvfs_live.sql."
    },
    "blob": "3a6bc0de99ddaf049a5c16bce2c1a486af4c9834",
    "auto": {
@@ -9025,13 +9132,22 @@
     "headerPurpose": "Deploy all four roster/group TVFs together. Verbatim concatenation of the individual source files under sql/security/ (those remain the source of truth); REGENERATE from them after any TVF change rather than hand-patching here.",
     "headerScript": "deploy_groupkey_tvfs.sql (convenience bundle -- run as one batch)",
     "headerFunction": "tvf_TeacherGroups (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_groupkey_tvfs_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8b386b1bce567b3bc589ade4e79c3ce4e023714a",
    "notes": {
-    "purpose": ""
+    "purpose": "LIVE-only bundle of the three group-key TVFs that existed on live on 2026-09-08 (tvf_TeacherGroups, tvf_TeacherRoster, tvf_TeacherRosterWriting) for the URL-safe homeroom GroupKey hotfix; excludes tvf_TeacherRosterMath (Math not on live then).",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Deploy the URL-safe GroupKey roster/group TVFs to live.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "live 2026-09-08 (hotfix: URL-safe homeroom group key + small-group roster filter)"
+    },
+    "caveats": "OBSOLETE and DANGEROUS to re-run: a 2026-09-08 snapshot with single-@GroupKey signatures, no oversight lenses, no analyst scoping, no Math — re-running would regress live well past 1.2.0. Prereq at the time: migrate_DimStudent_add_GroupKey.sql + usp_MergeStudent.sql. Redeploy from sql/security/*.sql instead."
    },
    "blob": "8b386b1bce567b3bc589ade4e79c3ce4e023714a",
    "auto": {
@@ -9280,13 +9396,22 @@
     "headerPurpose": "The three TVFs that exist on LIVE for the URL-safe GroupKey fix (Groups + Reading + Writing rosters). EXCLUDES tvf_TeacherRosterMath -- Math is not deployed to live yet (it would error). Verbatim concatenation of the source files. PREREQ: migrate_DimStudent_add_GroupKey.sql + usp_MergeStudent.sql first.",
     "headerScript": "deploy_groupkey_tvfs_live.sql (LIVE bundle -- run as one batch)",
     "headerFunction": "tvf_TeacherGroups (INLINE table-valued function)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_load_staging_procs.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "8b60fb97fd2bce77d22f4fdb3f4f6acd0ef31072",
    "notes": {
-    "purpose": ""
+    "purpose": "Combined DROP+GO+CREATE deploy of the five usp_Load*Staging COPY INTO loaders (Students, Staff, Sections, Enrollments, Co-Teachers) in PowerSchool sqlReport CSV format, inlining the sql/procedures sources.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Redeploy all five staging loader procs in one run.",
+     "target": "live",
+     "rerunSafe": false,
+     "applied": "committed 2026-09-01"
+    },
+    "caveats": "STALE/DANGEROUS: hard-codes the LIVE lakehouse GUID (b3819971-…) despite the header saying 'dev or live' — running on dev would point dev at live files. Predates the #1119 fix: no CREDENTIAL = (IDENTITY = 'Workspace Identity'), so re-running on live would re-break COPY INTO. Use sql/procedures/usp_Load*Staging.sql (live) or deploy_dev_loaders_workspace_identity.sql (dev). Loaders union all matching files — clear stale exports first."
    },
    "blob": "8b60fb97fd2bce77d22f4fdb3f4f6acd0ef31072",
    "auto": {
@@ -9391,13 +9516,22 @@
     "lastCommit": "2026-09-01 d9e7832 Add combined deploy script for the 5 load-staging procs (DROP+GO wrapped)",
     "headerPurpose": "Strategy A loader — TRUNCATE Stg_Student and COPY INTO from the OneLake students/ folder. Decoupled from usp_MergeStudent so that the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.",
     "headerProcedure": "usp_LoadStudentsStaging"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_step14_data_quality.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "0609efd5b8d07fc7ba938b50b2683a6d7c803dd7",
    "notes": {
-    "purpose": ""
+    "purpose": "One-shot Step 14 bundle: creates FactDataQualityAudit, deploys usp_RunDataQualityChecks (49 checks, writes violations, returns count) and replaces usp_RunFullIngestCycle with a Phase 3 DQ gate that THROWs on violations.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Install the persisted data quality checks and gate the ingest orchestrator on them.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-11 (Step 14)"
+    },
+    "caveats": "OBSOLETE snapshot — re-running would overwrite today's usp_RunDataQualityChecks and usp_RunFullIngestCycle with May 2026 versions (losing all later checks and orchestrator phases). CREATE TABLE errors 'already exists' on re-run. Redeploy from sql/procedures/ sources instead."
    },
    "blob": "0609efd5b8d07fc7ba938b50b2683a6d7c803dd7",
    "auto": {
@@ -9639,13 +9773,22 @@
     ],
     "scriptEffect": "writes-data",
     "lastCommit": "2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/deploy_timezone_audit.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1c37b3f68a2640540919bff8faff7f8b0b821b66",
    "notes": {
-    "purpose": ""
+    "purpose": "Step 16 time-zone follow-up: verifies AT TIME ZONE works, DROPs the 7 objects whose date logic changed to Atlantic-local day (usp_MergeStudent/Staff/Section/Enrollment/SectionTeachers, usp_YearEndCloseOut, vw_TeacherStudents), then lists the source files to re-run in order.",
+    "script": {
+     "kind": "deploy-helper",
+     "question": "Apply the 'store UTC, compare in Atlantic' convention by recreating the 7 date-sensitive objects.",
+     "target": "dev and live",
+     "rerunSafe": false,
+     "applied": "2026-05-11 (Step 16 session)"
+    },
+    "caveats": "DANGER: Step 2 DROPs the merge procs and does NOT recreate them — the ingest is broken until all 7 source files in Step 3 are run. Done; don't re-run. Step 1 alone is a harmless AT TIME ZONE check."
    },
    "blob": "1c37b3f68a2640540919bff8faff7f8b0b821b66",
    "auto": {
@@ -9707,13 +9850,27 @@
     ],
     "scriptEffect": "ddl",
     "lastCommit": "2026-05-11 4f7d45f Session wrap (2026-05-11): Step 16 closed (PA writes via stored procs), timezone audit, Step 17 design"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "55e0635be78f2e2a4f748d961d1d921a5b1fdaf2",
    "notes": {
-    "purpose": ""
+    "purpose": "Give dev the same six-cycle set as live: renames dev 'SCoR 1'/'SCoR 2' to 'Short Cycle 1'/'2' and adds Short Cycle 2–6 instances (8 each) cloned from dev Short Cycle 1, overriding only name, dates, English reading benchmark month and CycleGroupID. Writes DimShortCycle + DimAssessmentWindow only; no facts.",
+    "script": {
+     "kind": "dev-helper",
+     "question": "Build dev's Short Cycle 1–6 headers and instances to mirror live without touching data-bearing cycles.",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-06"
+    },
+    "params": {
+     "SC1..SC6": "CycleGroupID GUIDs: SC1/SC2 are existing dev keys, SC3–SC6 fixed new GUIDs (hard-coded so re-runs hit the same keys)",
+     "By": "CreatedBy stamp",
+     "Now": "LastUpdated stamp"
+    },
+    "caveats": "Done; dev-only (hard-coded dev GUIDs — never run on live). Clones dev's Math P-6 instances; Math was later narrowed to P-5 in 1.2.0, so a re-run would recreate P-6 Math on any missing instance. Decided from diag_cycles_live_vs_dev.sql output."
    },
    "blob": "55e0635be78f2e2a4f748d961d1d921a5b1fdaf2",
    "auto": {
@@ -9831,13 +9988,22 @@
     "lastCommit": "2026-10-06 e8aaf21 sql(dev): build Short Cycle 1-6 (add-only, clone SC1 template); memory: #1119 setting ON",
     "headerPurpose": "Give dev the full 6-cycle set (matching LIVE's dates/structure) WITHOUT touching the data-bearing cycles. Add-only + rename. No fact re-point.",
     "headerScript": "dev_build_cycles_to_match_live_2026-10-06.sql (DEV / TEST ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_adaptation_source_live.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "5c8672ee454564befcdfd4d0a7e622b199872407",
    "notes": {
-    "purpose": ""
+    "purpose": "Explain why IPPs show but adaptations don't: compares DimStudent Adap vs IPP flag counts, current FactStudentAdaptation vs FactStudentIPP rows, and the raw Stg_Student CurrentAdap/CurrentIPP codes (bracketed, with byte length) — counts only.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Is the adaptation flag missing at the source/export, mis-coded ('y', 'Yes', 'Y '), or set but never expanded into fact rows?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-24 — led to backfill_adaptation_facts_live.sql"
+    },
+    "caveats": "Queries C/D only mean something if Stg_Student still holds the last import. Header has a decision table for reading A–D together. Fact-side counts (B) also work on dev."
    },
    "blob": "5c8672ee454564befcdfd4d0a7e622b199872407",
    "auto": {
@@ -9850,13 +10016,25 @@
     },
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_ches_fixed_membership_preview_2026-10-13.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "f7995c03897231179774f0703a8a25164bb9c6e9",
    "notes": {
-    "purpose": ""
+    "purpose": "Read-only preview of the proposed section-stable usp_RebuildRosterMembership fix on live: per (cycle, subject, section) at one school, shows WouldBeMembers (enrollment matched by stable SectionID across all DimSection versions, date-overlapped) next to CurrentMembers in SectionRosterMembership. Counts only.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Would the fixed roster-membership logic restore the full class for sections that showed ~1 student (CHES SC1)?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-10-13; the fix shipped the same day (usp_RebuildRosterMembership 'section-stable roster membership')"
+    },
+    "params": {
+     "SchoolID": "PowerSchool SchoolID to preview (default '0511' = CHES)"
+    },
+    "caveats": "Purpose served — the fix is deployed; after it, WouldBe and Current should match. Logic is a frozen copy of the proposed fix; if usp_RebuildRosterMembership changes, this preview no longer mirrors it. Part of the 2026-10-13 CHES series (with diag_ches_reading_membership, _sc1_enrollment_dates, _sc1_section_reversion)."
    },
    "blob": "f7995c03897231179774f0703a8a25164bb9c6e9",
    "auto": {
@@ -9926,13 +10104,25 @@
     "lastCommit": "2026-10-13 6fb1f41 sql(diag): preview the fixed roster-membership logic on live (read-only)",
     "headerPurpose": "Prove the proposed usp_RebuildRosterMembership fix against REAL (live) data WITHOUT changing anything. Reproduces the FIXED selection logic as a SELECT: match enrollment to a section by the stable SectionID across ALL of the section's DimSection versions (not the single version in force on the window EndDate), overlap the window's dates, and collapse to DISTINCT StudentNumber. Shows, per (cycle, subject, section) at CHES, what the roster WOULD contain (WouldBeMembers) next to what membership holds now (CurrentMembers). For SC1 the broken sections (e.g. ELA6 141049, ILA3 141130) should jump fro",
     "headerScript": "diag_ches_fixed_membership_preview_2026-10-13.sql (LIVE diagnostic — READ ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_ches_reading_membership_2026-10-13.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1c1571eb35e06d74820762afa4be716b73ad58bc",
    "notes": {
-    "purpose": ""
+    "purpose": "For one school, compare SectionRosterMembership member counts per section for every active Reading vs Writing window, next to each window's scope (grade band, program scope/family, language, dates) — to explain a reading roster showing far fewer students than writing.",
+    "script": {
+     "kind": "template",
+     "question": "Why does a class's Reading roster show fewer students than its Writing roster — misconfigured window scope or under-run membership rebuild?",
+     "target": "live or dev (counts + section IDs, no PII)",
+     "rerunSafe": true,
+     "applied": "live 2026-10-13 (CHES SCoR-1 investigation)"
+    },
+    "params": {
+     "SchoolID": "PowerSchool SchoolID (default '0511' = CHES)"
+    },
+    "caveats": "If scopes differ, fix the reading window's scope; if identical, the membership rebuild under-ran (root cause turned out to be section re-versioning — fixed 2026-10-13 in usp_RebuildRosterMembership)."
    },
    "blob": "1c1571eb35e06d74820762afa4be716b73ad58bc",
    "auto": {
@@ -9975,13 +10165,27 @@
     "lastCommit": "2026-10-13 dca5b16 sql(diag): compare CHES reading vs writing roster membership per window/section",
     "headerPurpose": "Clark's Harbour Elementary (SchoolID 0511) shows only 1 student on the SCoR-1 READING roster for two classes, while the SAME classes show the correct count for WRITING. Reading and writing read the SAME SectionRosterMembership table but at DIFFERENT window IDs, and the reading roster has FEWER filters than writing — so reading showing fewer students means the reading WINDOW's membership rows are sparse for those sections. This compares, per section, the member count for every active Reading vs Writing window at CHES, next to each window's SCOPE (grade band / program scope / family / language /",
     "headerScript": "diag_ches_reading_membership_2026-10-13.sql (LIVE diagnostic — READ ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_ches_sc1_enrollment_dates_2026-10-13.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7d179060f8b9d24b1c58f14440ee6a80b2617a04",
    "notes": {
-    "purpose": ""
+    "purpose": "Per section at one school, count current enrollments overlapping a closed window's dates vs active now vs starting after it, with min/max StartDate — to test whether sparse closed-cycle rosters come from late (October) enrollment StartDates. Counts and dates only.",
+    "script": {
+     "kind": "template",
+     "question": "Are a class's students missing from a closed cycle's roster because their enrollment StartDate falls after the cycle ended?",
+     "target": "live or dev (counts + dates, no PII)",
+     "rerunSafe": true,
+     "applied": "live 2026-10-13 — ruled OUT (enrollment fully overlapped SC1); led to diag_ches_sc1_section_reversion"
+    },
+    "params": {
+     "SchoolID": "PowerSchool SchoolID (default '0511' = CHES)",
+     "SC1Start": "start date of the window being checked",
+     "SC1End": "end date of the window being checked"
+    },
+    "caveats": "Part of the 2026-10-13 CHES SC1 series; root cause was DimSection re-versioning, fixed 2026-10-13 in usp_RebuildRosterMembership. Still useful as a generic enrollment-overlap check for any school/window."
    },
    "blob": "7d179060f8b9d24b1c58f14440ee6a80b2617a04",
    "auto": {
@@ -10024,13 +10228,22 @@
     "lastCommit": "2026-10-13 076d109 sql(diag): confirm CHES SC1 sparse rosters are enrollment-overlap (StartDate > Oct 5)",
     "headerPurpose": "Clark's Harbour (0511) Short-Cycle-1 rosters/cards show ~1 student for many sections while SC2–6 are full (see diag_ches_reading_membership). SC1 ran 2026-09-01 → 2026-10-05. A student only counts toward a window if their enrollment OVERLAPS it (StartDate <= window end AND (EndDate NULL OR >= start)) — the SAME rule the live cards (tvf_TeacherGroups) and the membership rebuild use. This confirms whether the sparse SC1 counts are because most of each class has a FactEnrollment StartDate AFTER 2026-10-05 (i.e. enrollment \"started\" in October, typically a PowerSchool scheduling artifact), vs a st",
     "headerScript": "diag_ches_sc1_enrollment_dates_2026-10-13.sql (LIVE diagnostic — READ ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_ches_sc1_section_reversion_2026-10-13.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "147f147641d0e3ed8a44991e0d8864d30c262cf3",
    "notes": {
-    "purpose": ""
+    "purpose": "For a hard-coded list of sample sections, show DimSection version history and how many current enrollments point at the section version in force on a closed window's EndDate — confirming that a re-version after the window closed strands its roster.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Did a section re-version after a cycle closed, leaving that cycle's roster joined to an old SectionKey with ~1 enrollment?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-10-13 — confirmed the cause; fix shipped same day (section-stable usp_RebuildRosterMembership)"
+    },
+    "caveats": "Section IDs (141049, 141130, 140873) and the 2026-10-05 date are hard-coded in the queries — edit the IN list/date to reuse. Purpose served: the rebuild now matches by stable SectionID, so this pattern should no longer cause sparse rosters."
    },
    "blob": "147f147641d0e3ed8a44991e0d8864d30c262cf3",
    "auto": {
@@ -10055,13 +10268,22 @@
     "lastCommit": "2026-10-13 e1697a4 sql(diag): confirm SC1 sparse rosters = DimSection re-version vs closed-window EffDate",
     "headerPurpose": "CONFIRM the Short-Cycle-1 sparse-roster cause. Enrollment fully overlaps SC1 (diag_ches_sc1_enrollment_dates: OverlapSC1 = full), yet SectionRosterMembership shows ~1 for SC1 while SC2-6 are full. usp_RebuildRosterMembership resolves a CLOSED window's sections AS OF the window EndDate (SC1 -> 2026-10-05) and joins enrollment to THAT section version's SectionKey. If DimSection re-versioned after Oct 5, the current FactEnrollment (re-pointed to the CURRENT SectionKey on ingest) no longer matches the Oct-5 version -> SC1 under-populates. This checks exactly that.",
     "headerScript": "diag_ches_sc1_section_reversion_2026-10-13.sql (LIVE diagnostic — READ ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_cohort_base_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "9c9f5cc4ab0faf06baa13be3fc5a9d9fd82365fd",
    "notes": {
-    "purpose": ""
+    "purpose": "After a dev re-ingest expired FactEnrollment, count the cohort TVF's base pieces (current students by EnrollStatus, StaffSchoolAccess, current FactSectionTeachers/DimSection, active FactEnrollment) and the DimStudent IsCurrent x EnrollStatus split.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Did a dev re-ingest hollow out the cohort base (students/sections/access), or does an enrollment date roll-forward alone restore Reports?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-05"
+    },
+    "caveats": "If the base is intact, rollforward_enrollment_dev.sql is the fix. Counts only; safe on live too, but written for dev. Companion: diag_cohort_scope_dev.sql."
    },
    "blob": "9c9f5cc4ab0faf06baa13be3fc5a9d9fd82365fd",
    "auto": {
@@ -10077,13 +10299,22 @@
     "lastCommit": "2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)",
     "headerPurpose": "After a dev re-ingest left FactEnrollment expired (all 2025-2026, 0 current today), determine whether the COHORT BASE is also hollowed out — i.e. whether the re-ingest left current students + staff access intact (so rollforward_enrollment_dev.sql alone restores Reports), or whether students/sections were dropped in the merge (needs more than a date shift). The cohort TVF's base is: DimStudent IsCurrent=1 AND EnrollStatus IN (0,-1) analyst branch: StaffSchoolAccess match on the student's SchoolID teacher branch: FactSectionTeachers -> DimSection -> FactEnrollment ActiveFlag=1",
     "headerScript": "diag_cohort_base_dev.sql (DEV synthetic — diagnostic, read-only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_cohort_scope_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "1d45a51bbb454b0ec576285be400c86708d6a177",
    "notes": {
-    "purpose": ""
+    "purpose": "For every user holding StaffSchoolAccess, compare current students at their schools with the row counts tvf_StudentCohort / tvf_StudentCohortWriting actually return, plus the project lead's own scope — to tell a scope gap from a TVF bug.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Why do the Reading/Writing cohort reports say 'No students in your scope' — no access rows, or the TVF dropping students?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-05"
+    },
+    "caveats": "Project lead email (jeffrey.raine@tcrce.ca) is hard-coded in section 3. Calls tvf_StudentCohort(@UPN, NULL) with two arguments — breaks if that TVF's signature changes. Runs the cohort TVF for every access holder, so it can be slow on live; written for dev. Companion: diag_cohort_base_dev.sql."
    },
    "blob": "1d45a51bbb454b0ec576285be400c86708d6a177",
    "auto": {
@@ -10108,13 +10339,22 @@
     "lastCommit": "2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)",
     "headerPurpose": "Reading/Writing cohort show \"No students in your scope\" (TVF returns 0) while Math works for some users. Base is intact (500 current students).",
     "headerScript": "diag_cohort_scope_dev.sql (DEV — diagnostic, read-only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_cycles_live_vs_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "882b9420350d14905531e2ce91b9862cf379537e",
    "notes": {
-    "purpose": ""
+    "purpose": "Dump both warehouses' cycle structure side by side — live DimShortCycle + DimAssessmentWindow via three-part names, dev headers/instances, and dev fact row counts per window — to plan a safe live-to-dev cycle copy.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "How do dev's cycles and window instances differ from live's, and which dev windows carry data?",
+     "target": "dev and live (run on dev; reads live via [Assessment_Warehouse].dbo)",
+     "rerunSafe": true,
+     "applied": "2026-10-06 — output drove dev_build_cycles_to_match_live_2026-10-06.sql"
+    },
+    "caveats": "Run while connected to DEV; if cross-warehouse naming is blocked, run sections 1–2 on live and 3–5 on dev. Cycle config only, no PII. Reusable whenever dev/live cycle drift is suspected."
    },
    "blob": "882b9420350d14905531e2ce91b9862cf379537e",
    "auto": {
@@ -10153,13 +10393,25 @@
     "lastCommit": "2026-10-06 f4c7bae sql(dev): project-lead analyst reactivation + cycle live-vs-dev diagnostic",
     "headerPurpose": "Dump both warehouses' cycle structures so we can write a SAFE \"copy live cycles -> dev + re-point dev facts to the new window keys\" migration. Confirms the old-dev-window -> new-window re-point map will be unambiguous (1:1) before anything is changed.",
     "headerScript": "diag_cycles_live_vs_dev.sql (READ-ONLY diagnostic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_dev_entry_access.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "b3f78462003b1021516e4dab8437430d942427ea",
    "notes": {
-    "purpose": ""
+    "purpose": "Find why /enter shows 'No cycles' for an account: checks course mapping (unmapped DimSection course codes vs DimCourseAssessment), the account's DimStaff/StaffSchoolAccess rows, and what tvf_UserAssessmentWindows actually returns for it.",
+    "script": {
+     "kind": "template",
+     "question": "Why does /enter show no cycles for this user — unmapped courses, missing identity/access, or the app resolving a different UPN?",
+     "target": "dev (also safe on live: config + aggregate counts)",
+     "rerunSafe": true,
+     "applied": "dev, merged 2026-09-22 (PR #33)"
+    },
+    "params": {
+     "UPN": "account /enter is running as (default is the project lead's email)"
+    },
+    "caveats": "If the TVF returns rows but the screen says 'No cycles', the app is resolving a different UPN (dev-auth DEV_FAKE_UPN / impersonation cookie)."
    },
    "blob": "b3f78462003b1021516e4dab8437430d942427ea",
    "auto": {
@@ -10199,13 +10451,22 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Find why /enter shows \"No cycles\" for a given account. Checks the three things that can each independently zero it out: course mapping, the caller's identity + access rows, and the actual TVF output. SET @UPN to the account you're viewing as. Run on DEV. ****************************************************************************",
     "headerScript": "diag_dev_entry_access.sql (DEV, READ-ONLY — config + aggregate counts)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_dq_latest_run_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "cc09eabd9d23d72180a6519ab6df5eb6edc111c1",
    "notes": {
-    "purpose": ""
+    "purpose": "Show which data quality checks failed on the most recent usp_RunDataQualityChecks run: violation summary by category/check/table, up to 100 sample offending rows, and the run header — read from FactDataQualityAudit.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "The ingest halted at the DQ gate — which checks failed on the latest run, and is it real data or recovery residue?",
+     "target": "dev (logic works on live; sample rows may include emails/IDs)",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-07 (confirmed #1119 SP-path COPY INTO fixed; ingest reached the DQ gate)"
+    },
+    "caveats": "Near-duplicate of diag_last_dq_run.sql — both read the latest RunTimestamp from FactDataQualityAudit; prefer one shared template."
    },
    "blob": "cc09eabd9d23d72180a6519ab6df5eb6edc111c1",
    "auto": {
@@ -10224,13 +10485,22 @@
     "lastCommit": "2026-10-07 ebbae1a sql(dev): DQ-latest-run diagnostic â€” #1119 SP-path COPY INTO CONFIRMED FIXED (https+WI)",
     "headerPurpose": "After the 2026-10-07 app ingest reached the DQ gate (so #1119's SP-path COPY INTO is FIXED) and usp_RunFullIngestCycle halted on \"data quality checks failed\", show exactly WHICH checks failed on the most recent run so we can decide if it's a real data problem or dev-recovery residue.",
     "headerScript": "diag_dq_latest_run_dev.sql (DEV warehouse -- read-only diagnostic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_enrollment_by_term_shelburne_digby.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "d152cfad8407c32bf7ad2e2abeb03bc9106dbdb7",
    "notes": {
-    "purpose": ""
+    "purpose": "For DRHS (0709) and SRHS (0716), break out current sections, active enrollments, and any S2 enrollment ActiveFlag by term — to explain why the O2 report shows no Semester 2 rows.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Is Semester 2 missing from the O2 report because S2 enrollments aren't pulled yet, or because of ActiveFlag?",
+     "target": "live",
+     "rerunSafe": true,
+     "applied": "live 2026-09-29"
+    },
+    "caveats": "School IDs are hard-coded IN ('0709','0716') in all three queries — edit to reuse for other high schools (good candidate for a @SchoolID template). Counts only. Expected answer: S2 enrollments only arrive once S2 starts (the CC export sends currently-active enrollments)."
    },
    "blob": "d152cfad8407c32bf7ad2e2abeb03bc9106dbdb7",
    "auto": {
@@ -10262,13 +10532,22 @@
     },
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-29 ee7f936 diag: why no Semester 2 in the O2 report (enrollment-by-term, DRHS/SRHS)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_find_drumlin_sections.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "df93e2d437d1386f3265b488553ed2048347a1e7",
    "notes": {
-    "purpose": ""
+    "purpose": "Discovery step for a section under-count investigation: find the Drumlin school's real SchoolName/Abbreviation in DimSchool, then list its current DimSection rows to see how CourseName is actually spelled. Metadata only.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "What is this school's exact name/ID and how are its section course names spelled (e.g. English 10)?",
+     "target": "either (school + section metadata, no PII)",
+     "rerunSafe": true,
+     "applied": "2026-09-09 (part of the FactEnrollment.ActiveFlag-was-0 fix)"
+    },
+    "caveats": "Name patterns ('%Drum%', '%DR%') are hard-coded — '%DR%' also matches DRHS/DHCS etc. For a general lookup by school, a @SchoolName template would replace this. The under-count it chased was the ActiveFlag bug, fixed 2026-09-09."
    },
    "blob": "df93e2d437d1386f3265b488553ed2048347a1e7",
    "auto": {
@@ -10293,13 +10572,22 @@
     "lastCommit": "2026-09-09 fd0fb35 fix(ingest): correct FactEnrollment.ActiveFlag â€” was 0 for every row",
     "headerPurpose": "Discovery step for the section under-count diagnosis — find the real school name/abbrev and the real CourseName strings, since the first pass matched nothing. PII-safe (school + section metadata only).",
     "headerScript": "diag_find_drumlin_sections.sql"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_ingest_failure_state.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "7ee8260fc287360adab3b75148a415b9d321105d",
    "notes": {
-    "purpose": ""
+    "purpose": "After an ingest cycle failed at the LOAD step, confirm the warehouse is clean before retrying: AppMaintenance state, recent IngestCycle audit rows, MAX(LastUpdated) of the merged dims/facts, and staging row counts.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "An ingest failed at the COPY INTO load step — did any merge run, and is it safe to clear maintenance and retry?",
+     "target": "live (also valid on dev)",
+     "rerunSafe": true,
+     "applied": "live 2026-09-29 (#1119 OneLake token failure)"
+    },
+    "caveats": "Read-only, but clearing maintenance afterwards is a separate write. If any MaxLastUpdated is from the failed attempt, a merge ran — investigate before retrying."
    },
    "blob": "7ee8260fc287360adab3b75148a415b9d321105d",
    "auto": {
@@ -10319,13 +10607,22 @@
     },
     "scriptEffect": "read-only",
     "lastCommit": "2026-09-29 48a6654 diag: confirm warehouse clean after an ingest load-step failure (read-only)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_j020_reading_coding_dev.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "3e16daac8ecfecb71d6f10f996c6dfb37cad0858",
    "notes": {
-    "purpose": ""
+    "purpose": "Check whether dev's synthetic J020 (Late French Immersion) reading results are English- or French-coded and which window instance they sit on: J020 students by grade, reading facts bucketed by fact scale x window scale x language, and sample rows.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Are J020 reading results correctly EN_Reading-coded on EN_Reading windows, or mislocated as French?",
+     "target": "dev",
+     "rerunSafe": true,
+     "applied": "dev 2026-10-07 (before testing the 51014 instance-based reading scale fix)"
+    },
+    "caveats": "Result 3 returns student-level rows (synthetic on dev) — on live it would expose student numbers, so keep to counts there. FR-coded J020 rows are a separate data-remediation issue, not the 51014 fix."
    },
    "blob": "3e16daac8ecfecb71d6f10f996c6dfb37cad0858",
    "auto": {
@@ -10359,13 +10656,22 @@
     "lastCommit": "2026-10-07 0d2793b sql(dev): diagnostic â€” J020 reading EN/FR coding check ahead of 51014 entry test",
     "headerPurpose": "Before testing the 51014 instance-based scale fix, answer \"are the synthetic J020 (Late French Immersion) reading results EN- or FR-coded, and what instance do they sit on?\" J020 reads ENGLISH only, so correct = FactScale EN_Reading on a Window whose ScaleSystem is EN_Reading. FR-coded J020 rows = the old mislocation (a separate data-remediation thread, NOT the 51014 entry fix).",
     "headerScript": "diag_j020_reading_coding_dev.sql (DEV warehouse — read-only diagnostic)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_last_dq_run.sql": {
    "kind": "script",
-   "reviewedBlob": null,
+   "reviewedBlob": "3c5a96802d531a421b8f3c24d60e5985fd4b7a87",
    "notes": {
-    "purpose": ""
+    "purpose": "Show the violations from the most recent usp_RunDataQualityChecks run (the gate that halts usp_RunFullIngestCycle with Msg 51000): per-check summary plus up to 200 offending rows from FactDataQualityAudit.",
+    "script": {
+     "kind": "diagnostic",
+     "question": "Which data quality checks failed on the latest run, and on which keys?",
+     "target": "either",
+     "rerunSafe": true,
+     "applied": "merged 2026-09-22 (PR #33)"
+    },
+    "caveats": "Canonical 'latest DQ run' query; diag_dq_latest_run_dev.sql is a near-duplicate (100-row sample + run header). Sample rows can include staff emails/IDs."
    },
    "blob": "3c5a96802d531a421b8f3c24d60e5985fd4b7a87",
    "auto": {
@@ -10384,7 +10690,8 @@
     "lastCommit": "2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)",
     "headerPurpose": "Show the violations from the MOST RECENT usp_RunDataQualityChecks run (the gate that halts usp_RunFullIngestCycle with Msg 51000). Result 1 is the per-check summary; Result 2 is up to 200 offending rows so you can see the actual keys/detail.",
     "headerScript": "diag_last_dq_run.sql (READ-ONLY)"
-   }
+   },
+   "reviewedOn": "2026-10-23"
   },
   "sql/scripts/diag_live_deployed_proc_versions.sql": {
    "kind": "script",

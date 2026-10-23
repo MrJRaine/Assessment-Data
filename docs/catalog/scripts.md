@@ -4,51 +4,17 @@
 
 Search here BEFORE writing a new diagnostic or fix. Reuse or extend; template it with variables if a near-duplicate exists. Kinds: diagnostic (read-only) · template (DECLARE variables) · fix/migration · seed · dev-helper. “(auto)” = classified from the SQL alone, not yet reviewed.
 
-- [DDL / object changes (auto)](#ddl--object-changes-(auto)) (19)
-- [dev-helper](#dev-helper) (4)
-- [diagnostic](#diagnostic) (9)
-- [diagnostic (auto)](#diagnostic-(auto)) (26)
-- [fix/migration](#fixmigration) (16)
+- [DDL / object changes (auto)](#ddl--object-changes-(auto)) (15)
+- [deploy-helper](#deploy-helper) (9)
+- [dev-helper](#dev-helper) (5)
+- [diagnostic](#diagnostic) (23)
+- [diagnostic (auto)](#diagnostic-(auto)) (8)
+- [fix/migration](#fixmigration) (21)
 - [seed](#seed) (1)
-- [template](#template) (7)
-- [writes data (auto)](#writes-data-(auto)) (51)
+- [template](#template) (10)
+- [writes data (auto)](#writes-data-(auto)) (41)
 
 ## DDL / object changes (auto)
-
-### deploy_analyst_rls_scoping.sql
-
-[sql/scripts/deploy_analyst_rls_scoping.sql](../../sql/scripts/deploy_analyst_rls_scoping.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-RLS REMEDIATION -- scope RegionalAnalyst by StaffSchoolAccess (their CanChangeSchool buildings) across every LIVE user-scoped RLS TVF, removing the region-wide analyst branch so analyst scoping matches Administrator/SpecialistTeacher. 13 @UPN TVFs, each self-contained (DROP + CREATE + GRANT), GO-separated. Re-runnable.
-
-effect: **ddl**
-**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
-
-### deploy_groupkey_tvfs.sql
-
-[sql/scripts/deploy_groupkey_tvfs.sql](../../sql/scripts/deploy_groupkey_tvfs.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 c7219d2 fix(sql): card labels missing space â€” CONCAT instead of '+' (Fabric literal trim)
-
-Deploy all four roster/group TVFs together. Verbatim concatenation of the individual source files under sql/security/ (those remain the source of truth); REGENERATE from them after any TVF change rather than hand-patching here.
-
-effect: **ddl**
-**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
-
-### deploy_groupkey_tvfs_live.sql
-
-[sql/scripts/deploy_groupkey_tvfs_live.sql](../../sql/scripts/deploy_groupkey_tvfs_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-08 90a285e hotfix: URL-safe homeroom group key + small-group roster filter (prod)
-
-The three TVFs that exist on LIVE for the URL-safe GroupKey fix (Groups + Reading + Writing rosters). EXCLUDES tvf_TeacherRosterMath -- Math is not deployed to live yet (it would error). Verbatim concatenation of the source files. PREREQ: migrate_DimStudent_add_GroupKey.sql + usp_MergeStudent.sql first.
-
-effect: **ddl**
-**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
-
-### deploy_timezone_audit.sql
-
-[sql/scripts/deploy_timezone_audit.sql](../../sql/scripts/deploy_timezone_audit.sql) · skeleton (not yet reviewed) · last change: 2026-05-11 4f7d45f Session wrap (2026-05-11): Step 16 closed (PA writes via stored procs), timezone audit, Step 17 design
-
-effect: **ddl**
-**Variables:** `@AtlanticToday` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Writes:** `usp_MergeEnrollment` (drop); `usp_MergeSection` (drop); `usp_MergeSectionTeachers` (drop); `usp_MergeStaff` (drop); `usp_MergeStudent` (drop); `usp_YearEndCloseOut` (drop); `vw_TeacherStudents` (drop)
 
 ### migrate_DimStaff_add_AccessLevel.sql
 
@@ -172,7 +138,103 @@ effect: **ddl**
 effect: **ddl**
 **Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `SectionRosterMembership`, `StaffSchoolAccess`, `TeacherRosterMembership`, `vw_StudentReadingStartingPoint`
 
+## deploy-helper
+
+### 01_CreateSchema.sql
+
+[sql/scripts/01_CreateSchema.sql](../../sql/scripts/01_CreateSchema.sql) · reviewed 2026-10-23 · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
+
+Create the original core star-schema tables on a brand-new warehouse.
+
+effect: **read-only** · target: either (new, empty warehouse only) · re-run safe: no · applied: initial commit 2026-04-24; untouched since
+
+### deploy_analyst_rls_scoping.sql
+
+[sql/scripts/deploy_analyst_rls_scoping.sql](../../sql/scripts/deploy_analyst_rls_scoping.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Deploy analyst-by-school RLS scoping across every live user-scoped TVF in one run.
+
+effect: **ddl** · target: dev and live · re-run safe: yes · applied: shipped to main 2026-09-22 (PR #33, analyst RLS scoping)
+**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimCourseAssessment`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimShortCycle`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentAdaptation`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
+
+### deploy_dev_cutover_loaders.sql
+
+[sql/scripts/deploy_dev_cutover_loaders.sql](../../sql/scripts/deploy_dev_cutover_loaders.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Make dev's staging loaders read the same CSV format as live, from the dev lakehouse.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev, merged to main 2026-09-22 (PR #33)
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
+
+### deploy_dev_loaders_workspace_identity.sql
+
+[sql/scripts/deploy_dev_loaders_workspace_identity.sql](../../sql/scripts/deploy_dev_loaders_workspace_identity.sql) · reviewed 2026-10-23 · last change: 2026-10-06 83f1c7c sql(dev): Workspace-Identity COPY INTO loaders (test fix for #1119)
+
+Deploy the Workspace-Identity COPY INTO loaders on dev (the #1119 workaround).
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-10-06; same approach shipped to live via PR #34 (v1.1.0); #1119 closed as workaround 2026-10-09
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
+
+### deploy_groupkey_tvfs.sql
+
+[sql/scripts/deploy_groupkey_tvfs.sql](../../sql/scripts/deploy_groupkey_tvfs.sql) · reviewed 2026-10-23 · last change: 2026-09-17 c7219d2 fix(sql): card labels missing space â€” CONCAT instead of '+' (Fabric literal trim)
+
+Redeploy the group-key roster/group TVFs in one batch.
+
+effect: **ddl** · target: dev and live · re-run safe: yes · applied: dev 2026-09-08; last regenerated 2026-09-17
+**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimMathTask`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`, `vw_StudentReadingStartingPoint`
+
+### deploy_groupkey_tvfs_live.sql
+
+[sql/scripts/deploy_groupkey_tvfs_live.sql](../../sql/scripts/deploy_groupkey_tvfs_live.sql) · reviewed 2026-10-23 · last change: 2026-09-08 90a285e hotfix: URL-safe homeroom group key + small-group roster filter (prod)
+
+Deploy the URL-safe GroupKey roster/group TVFs to live.
+
+effect: **ddl** · target: live · re-run safe: no · applied: live 2026-09-08 (hotfix: URL-safe homeroom group key + small-group roster filter)
+**Reads:** `DimAchievementLevel`, `DimAssessmentWindow`, `DimCalendar`, `DimGrade`, `DimProgram`, `DimReadingBenchmark`, `DimReadingScale`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `FactAssessmentReading`, `FactAssessmentWriting`, `FactEnrollment`, `FactSectionTeachers`, `FactStudentIPP`, `StaffSchoolAccess`
+
+### deploy_load_staging_procs.sql
+
+[sql/scripts/deploy_load_staging_procs.sql](../../sql/scripts/deploy_load_staging_procs.sql) · reviewed 2026-10-23 · last change: 2026-09-01 d9e7832 Add combined deploy script for the 5 load-staging procs (DROP+GO wrapped)
+
+Redeploy all five staging loader procs in one run.
+
+effect: **writes-data** · target: live · re-run safe: no · applied: committed 2026-09-01
+**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
+
+### deploy_step14_data_quality.sql
+
+[sql/scripts/deploy_step14_data_quality.sql](../../sql/scripts/deploy_step14_data_quality.sql) · reviewed 2026-10-23 · last change: 2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks
+
+Install the persisted data quality checks and gate the ingest orchestrator on them.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: 2026-05-11 (Step 14)
+**Variables:** `@RunTimestamp` = `GETDATE()`, `@ViolationCount`, `@CycleStart` = `GETDATE()`, `@DqViolations`
+**Reads:** `DimAssessmentWindow`, `DimGender`, `DimProgram`, `DimReadingScale`, `DimRole`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactAssessmentReading`, `FactDataQualityAudit`, `FactEnrollment`, `FactSectionTeachers`, `FactStaffAssignment`, `StaffSchoolAccess`
+**Writes:** `FactDataQualityAudit` (insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
+
+### deploy_timezone_audit.sql
+
+[sql/scripts/deploy_timezone_audit.sql](../../sql/scripts/deploy_timezone_audit.sql) · reviewed 2026-10-23 · last change: 2026-05-11 4f7d45f Session wrap (2026-05-11): Step 16 closed (PA writes via stored procs), timezone audit, Step 17 design
+
+Apply the 'store UTC, compare in Atlantic' convention by recreating the 7 date-sensitive objects.
+
+effect: **ddl** · target: dev and live · re-run safe: no · applied: 2026-05-11 (Step 16 session)
+**Variables:** `@AtlanticToday` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Writes:** `usp_MergeEnrollment` (drop); `usp_MergeSection` (drop); `usp_MergeSectionTeachers` (drop); `usp_MergeStaff` (drop); `usp_MergeStudent` (drop); `usp_YearEndCloseOut` (drop); `vw_TeacherStudents` (drop)
+
 ## dev-helper
+
+### dev_build_cycles_to_match_live_2026-10-06.sql
+
+[sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql](../../sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql) · reviewed 2026-10-23 · last change: 2026-10-06 e8aaf21 sql(dev): build Short Cycle 1-6 (add-only, clone SC1 template); memory: #1119 setting ON
+
+Build dev's Short Cycle 1–6 headers and instances to mirror live without touching data-bearing cycles.
+
+effect: **writes-data** · target: dev · re-run safe: yes · applied: dev 2026-10-06
+**Variables:** `@SC1` = `'609ba4af-8168-492e-bb55-baefbfd540d8'`, `@SC2` = `'49be285a-3dcd-46b9-b94c-560e4f2f08a8'`, `@SC3` = `'7c0f3a21-3b6e-4d82-9a14-0c3f9d2e1a33'`, `@SC4` = `'1e8b4c57-9f2a-4e63-b7d1-5a6c8e0f2b44'`, `@SC5` = `'9d2a6f84-5c1b-4a79-8e32-7b4d1c6a3e55'`, `@SC6` = `'4f7e1b93-2d8c-4f65-a1b8-3e9c7d5a2f66'`, `@By` = `'jeffrey.raine@tcrce.ca'`, `@Now` = `GETDATE()`
+**Reads:** `DimAssessmentWindow`, `DimShortCycle`
+**Writes:** `DimAssessmentWindow` (insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`); `DimShortCycle` (insert/update — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `GraceHours`, `LastUpdated`, `SchoolYear`, `StartDate`)
 
 ### fix_dev_dimstaff_overlap_projectlead.sql
 
@@ -219,6 +281,134 @@ effect: **writes-data** · target: dev · re-run safe: yes
 **Writes:** `DimStaff` (insert — `AccessLevel`, `ActiveFlag`, `CanChangeSchool`, `EffectiveEndDate`, `EffectiveStartDate`, `Email`, `FirstName`, `HomeSchoolID`, `IsCurrent`, `IsDistrictLevel`, `LastName`, `LastUpdated`, `Title`); `StaffAppAccess` (delete/insert — `CanManageCycles`, `CanRunIngest`, `Email`, `IsSysAdmin`, `LastUpdated`); `StaffSchoolAccess` (delete/insert — `AccessLevel`, `Email`, `LastRebuilt`, `SchoolID`, `StaffKey`)
 
 ## diagnostic
+
+### classroom_teacher_grades_dev.sql
+
+[sql/scripts/classroom_teacher_grades_dev.sql](../../sql/scripts/classroom_teacher_grades_dev.sql) · reviewed 2026-10-23 · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
+
+Which dev classroom teachers will see Reading / Writing / Math cycles, based on the grades of the students they actually teach today?
+
+effect: **read-only** · target: dev · re-run safe: yes · applied: created 2026-09-04 (per-subject grade band work)
+**Reads:** `DimGrade`, `DimSection`, `DimStaff`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`
+
+### data_quality_checks.sql
+
+[sql/scripts/data_quality_checks.sql](../../sql/scripts/data_quality_checks.sql) · reviewed 2026-10-23 · last change: 2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks
+
+Where did the data quality checks go?
+
+effect: **read-only** · target: either · re-run safe: yes · applied: superseded 2026-05-11
+
+### diag_adaptation_source_live.sql
+
+[sql/scripts/diag_adaptation_source_live.sql](../../sql/scripts/diag_adaptation_source_live.sql) · reviewed 2026-10-23 · last change: 2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live
+
+Is the adaptation flag missing at the source/export, mis-coded ('y', 'Yes', 'Y '), or set but never expanded into fact rows?
+
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-09-24 — led to backfill_adaptation_facts_live.sql
+**Reads:** `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`, `Stg_Student`
+
+### diag_ches_fixed_membership_preview_2026-10-13.sql
+
+[sql/scripts/diag_ches_fixed_membership_preview_2026-10-13.sql](../../sql/scripts/diag_ches_fixed_membership_preview_2026-10-13.sql) · reviewed 2026-10-23 · last change: 2026-10-13 6fb1f41 sql(diag): preview the fixed roster-membership logic on live (read-only)
+
+Would the fixed roster-membership logic restore the full class for sections that showed ~1 student (CHES SC1)?
+
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-10-13; the fix shipped the same day (usp_RebuildRosterMembership 'section-stable roster membership')
+**Variables:** `@SchoolID` = `'0511'`
+**Reads:** `DimAssessmentWindow`, `DimCourseAssessment`, `DimGrade`, `DimProgram`, `DimSection`, `DimShortCycle`, `DimStudent`, `FactEnrollment`, `SectionRosterMembership`
+
+### diag_ches_sc1_section_reversion_2026-10-13.sql
+
+[sql/scripts/diag_ches_sc1_section_reversion_2026-10-13.sql](../../sql/scripts/diag_ches_sc1_section_reversion_2026-10-13.sql) · reviewed 2026-10-23 · last change: 2026-10-13 e1697a4 sql(diag): confirm SC1 sparse rosters = DimSection re-version vs closed-window EffDate
+
+Did a section re-version after a cycle closed, leaving that cycle's roster joined to an old SectionKey with ~1 enrollment?
+
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-10-13 — confirmed the cause; fix shipped same day (section-stable usp_RebuildRosterMembership)
+**Reads:** `DimSection`, `FactEnrollment`
+
+### diag_cohort_base_dev.sql
+
+[sql/scripts/diag_cohort_base_dev.sql](../../sql/scripts/diag_cohort_base_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)
+
+Did a dev re-ingest hollow out the cohort base (students/sections/access), or does an enrollment date roll-forward alone restore Reports?
+
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-10-05
+**Reads:** `DimSection`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
+
+### diag_cohort_scope_dev.sql
+
+[sql/scripts/diag_cohort_scope_dev.sql](../../sql/scripts/diag_cohort_scope_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)
+
+Why do the Reading/Writing cohort reports say 'No students in your scope' — no access rows, or the TVF dropping students?
+
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-10-05
+**Reads:** `DimStaff`, `DimStudent`, `StaffSchoolAccess`
+
+### diag_cycles_live_vs_dev.sql
+
+[sql/scripts/diag_cycles_live_vs_dev.sql](../../sql/scripts/diag_cycles_live_vs_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-06 f4c7bae sql(dev): project-lead analyst reactivation + cycle live-vs-dev diagnostic
+
+How do dev's cycles and window instances differ from live's, and which dev windows carry data?
+
+effect: **read-only** · target: dev and live (run on dev; reads live via [Assessment_Warehouse].dbo) · re-run safe: yes · applied: 2026-10-06 — output drove dev_build_cycles_to_match_live_2026-10-06.sql
+**Reads:** `Assessment_Warehouse.dbo`, `DimAssessmentWindow`, `DimShortCycle`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
+
+### diag_dq_latest_run_dev.sql
+
+[sql/scripts/diag_dq_latest_run_dev.sql](../../sql/scripts/diag_dq_latest_run_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-07 ebbae1a sql(dev): DQ-latest-run diagnostic â€” #1119 SP-path COPY INTO CONFIRMED FIXED (https+WI)
+
+The ingest halted at the DQ gate — which checks failed on the latest run, and is it real data or recovery residue?
+
+effect: **read-only** · target: dev (logic works on live; sample rows may include emails/IDs) · re-run safe: yes · applied: dev 2026-10-07 (confirmed #1119 SP-path COPY INTO fixed; ingest reached the DQ gate)
+**Variables:** `@LatestRun` = `(SELECT MAX(RunTimestamp) FROM FactDataQualityAudit)`
+**Reads:** `FactDataQualityAudit`
+
+### diag_enrollment_by_term_shelburne_digby.sql
+
+[sql/scripts/diag_enrollment_by_term_shelburne_digby.sql](../../sql/scripts/diag_enrollment_by_term_shelburne_digby.sql) · reviewed 2026-10-23 · last change: 2026-09-29 ee7f936 diag: why no Semester 2 in the O2 report (enrollment-by-term, DRHS/SRHS)
+
+Is Semester 2 missing from the O2 report because S2 enrollments aren't pulled yet, or because of ActiveFlag?
+
+effect: **read-only** · target: live · re-run safe: yes · applied: live 2026-09-29
+**Reads:** `DimSchool`, `DimSection`, `DimTerm`, `FactEnrollment`
+
+### diag_find_drumlin_sections.sql
+
+[sql/scripts/diag_find_drumlin_sections.sql](../../sql/scripts/diag_find_drumlin_sections.sql) · reviewed 2026-10-23 · last change: 2026-09-09 fd0fb35 fix(ingest): correct FactEnrollment.ActiveFlag â€” was 0 for every row
+
+What is this school's exact name/ID and how are its section course names spelled (e.g. English 10)?
+
+effect: **read-only** · target: either (school + section metadata, no PII) · re-run safe: yes · applied: 2026-09-09 (part of the FactEnrollment.ActiveFlag-was-0 fix)
+**Reads:** `DimSchool`, `DimSection`
+
+### diag_ingest_failure_state.sql
+
+[sql/scripts/diag_ingest_failure_state.sql](../../sql/scripts/diag_ingest_failure_state.sql) · reviewed 2026-10-23 · last change: 2026-09-29 48a6654 diag: confirm warehouse clean after an ingest load-step failure (read-only)
+
+An ingest failed at the COPY INTO load step — did any merge run, and is it safe to clear maintenance and retry?
+
+effect: **read-only** · target: live (also valid on dev) · re-run safe: yes · applied: live 2026-09-29 (#1119 OneLake token failure)
+**Reads:** `AppMaintenance`, `DimSection`, `DimStaff`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`, `FactSubmissionAudit`, `Stg_Enrollment`, `Stg_Section`, `Stg_Staff`, `Stg_Student`
+
+### diag_j020_reading_coding_dev.sql
+
+[sql/scripts/diag_j020_reading_coding_dev.sql](../../sql/scripts/diag_j020_reading_coding_dev.sql) · reviewed 2026-10-23 · last change: 2026-10-07 0d2793b sql(dev): diagnostic â€” J020 reading EN/FR coding check ahead of 51014 entry test
+
+Are J020 reading results correctly EN_Reading-coded on EN_Reading windows, or mislocated as French?
+
+effect: **read-only** · target: dev · re-run safe: yes · applied: dev 2026-10-07 (before testing the 51014 instance-based reading scale fix)
+**Reads:** `DimAssessmentWindow`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`
+
+### diag_last_dq_run.sql
+
+[sql/scripts/diag_last_dq_run.sql](../../sql/scripts/diag_last_dq_run.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Which data quality checks failed on the latest run, and on which keys?
+
+effect: **read-only** · target: either · re-run safe: yes · applied: merged 2026-09-22 (PR #33)
+**Variables:** `@LastRun` = `(SELECT MAX(RunTimestamp) FROM FactDataQualityAudit)`
+**Reads:** `FactDataQualityAudit`
 
 ### diag_live_deployed_proc_versions.sql
 
@@ -305,164 +495,6 @@ effect: **read-only** · target: dev (synthetic data; also harmless on live as i
 
 ## diagnostic (auto)
 
-### 01_CreateSchema.sql
-
-[sql/scripts/01_CreateSchema.sql](../../sql/scripts/01_CreateSchema.sql) · skeleton (not yet reviewed) · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
-
-Create all dimension and fact tables in dependency order Run this script once against a new Fabric Warehouse to initialize the schema.
-
-effect: **read-only**
-
-### classroom_teacher_grades_dev.sql
-
-[sql/scripts/classroom_teacher_grades_dev.sql](../../sql/scripts/classroom_teacher_grades_dev.sql) · skeleton (not yet reviewed) · last change: 2026-09-04 e7e2eae Session wrap (2026-09-04): per-subject cycle grade bands, cycles-list polish, windowâ†’cycle wording, ASD-STE100 user guides, dev enrollment 
-
-For every impersonable CLASSROOM teacher (AccessLevel NULL), show the grade span of the students actually reachable through the roster chain the app uses (FactSectionTeachers -> DimSection -> FactEnrollment -> DimStudent). This explains who will see which open cycle-subjects: a teacher sees Reading if any student is P-8, Math if any is P-6, Writing if any is P-RG.
-
-effect: **read-only**
-**Reads:** `DimGrade`, `DimSection`, `DimStaff`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`
-
-### data_quality_checks.sql
-
-[sql/scripts/data_quality_checks.sql](../../sql/scripts/data_quality_checks.sql) · skeleton (not yet reviewed) · last change: 2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks
-
-effect: **read-only**
-
-### diag_adaptation_source_live.sql
-
-[sql/scripts/diag_adaptation_source_live.sql](../../sql/scripts/diag_adaptation_source_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live
-
-effect: **read-only**
-**Reads:** `DimStudent`, `FactStudentAdaptation`, `FactStudentIPP`, `Stg_Student`
-
-### diag_ches_fixed_membership_preview_2026-10-13.sql
-
-[sql/scripts/diag_ches_fixed_membership_preview_2026-10-13.sql](../../sql/scripts/diag_ches_fixed_membership_preview_2026-10-13.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 6fb1f41 sql(diag): preview the fixed roster-membership logic on live (read-only)
-
-Prove the proposed usp_RebuildRosterMembership fix against REAL (live) data WITHOUT changing anything. Reproduces the FIXED selection logic as a SELECT: match enrollment to a section by the stable SectionID across ALL of the section's DimSection versions (not the single version in force on the window EndDate), overlap the window's dates, and collapse to DISTINCT StudentNumber. Shows, per (cycle, subject, section) at CHES, what the roster WOULD contain (WouldBeMembers) next to what membership holds now (CurrentMembers). For SC1 the broken sections (e.g. ELA6 141049, ILA3 141130) should jump fro
-
-effect: **read-only**
-**Variables:** `@SchoolID` = `'0511'`
-**Reads:** `DimAssessmentWindow`, `DimCourseAssessment`, `DimGrade`, `DimProgram`, `DimSection`, `DimShortCycle`, `DimStudent`, `FactEnrollment`, `SectionRosterMembership`
-
-### diag_ches_reading_membership_2026-10-13.sql
-
-[sql/scripts/diag_ches_reading_membership_2026-10-13.sql](../../sql/scripts/diag_ches_reading_membership_2026-10-13.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 dca5b16 sql(diag): compare CHES reading vs writing roster membership per window/section
-
-Clark's Harbour Elementary (SchoolID 0511) shows only 1 student on the SCoR-1 READING roster for two classes, while the SAME classes show the correct count for WRITING. Reading and writing read the SAME SectionRosterMembership table but at DIFFERENT window IDs, and the reading roster has FEWER filters than writing — so reading showing fewer students means the reading WINDOW's membership rows are sparse for those sections. This compares, per section, the member count for every active Reading vs Writing window at CHES, next to each window's SCOPE (grade band / program scope / family / language /
-
-effect: **read-only**
-**Variables:** `@SchoolID` = `'0511'`
-**Reads:** `DimAssessmentWindow`, `DimShortCycle`, `SectionRosterMembership`
-
-### diag_ches_sc1_enrollment_dates_2026-10-13.sql
-
-[sql/scripts/diag_ches_sc1_enrollment_dates_2026-10-13.sql](../../sql/scripts/diag_ches_sc1_enrollment_dates_2026-10-13.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 076d109 sql(diag): confirm CHES SC1 sparse rosters are enrollment-overlap (StartDate > Oct 5)
-
-Clark's Harbour (0511) Short-Cycle-1 rosters/cards show ~1 student for many sections while SC2–6 are full (see diag_ches_reading_membership). SC1 ran 2026-09-01 → 2026-10-05. A student only counts toward a window if their enrollment OVERLAPS it (StartDate <= window end AND (EndDate NULL OR >= start)) — the SAME rule the live cards (tvf_TeacherGroups) and the membership rebuild use. This confirms whether the sparse SC1 counts are because most of each class has a FactEnrollment StartDate AFTER 2026-10-05 (i.e. enrollment "started" in October, typically a PowerSchool scheduling artifact), vs a st
-
-effect: **read-only**
-**Variables:** `@SchoolID` = `'0511'`, `@SC1Start` = `'2026-09-01'`, `@SC1End` = `'2026-10-05'`
-**Reads:** `DimSection`, `FactEnrollment`
-
-### diag_ches_sc1_section_reversion_2026-10-13.sql
-
-[sql/scripts/diag_ches_sc1_section_reversion_2026-10-13.sql](../../sql/scripts/diag_ches_sc1_section_reversion_2026-10-13.sql) · skeleton (not yet reviewed) · last change: 2026-10-13 e1697a4 sql(diag): confirm SC1 sparse rosters = DimSection re-version vs closed-window EffDate
-
-CONFIRM the Short-Cycle-1 sparse-roster cause. Enrollment fully overlaps SC1 (diag_ches_sc1_enrollment_dates: OverlapSC1 = full), yet SectionRosterMembership shows ~1 for SC1 while SC2-6 are full. usp_RebuildRosterMembership resolves a CLOSED window's sections AS OF the window EndDate (SC1 -> 2026-10-05) and joins enrollment to THAT section version's SectionKey. If DimSection re-versioned after Oct 5, the current FactEnrollment (re-pointed to the CURRENT SectionKey on ingest) no longer matches the Oct-5 version -> SC1 under-populates. This checks exactly that.
-
-effect: **read-only**
-**Reads:** `DimSection`, `FactEnrollment`
-
-### diag_cohort_base_dev.sql
-
-[sql/scripts/diag_cohort_base_dev.sql](../../sql/scripts/diag_cohort_base_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)
-
-After a dev re-ingest left FactEnrollment expired (all 2025-2026, 0 current today), determine whether the COHORT BASE is also hollowed out — i.e. whether the re-ingest left current students + staff access intact (so rollforward_enrollment_dev.sql alone restores Reports), or whether students/sections were dropped in the merge (needs more than a date shift). The cohort TVF's base is: DimStudent IsCurrent=1 AND EnrollStatus IN (0,-1) analyst branch: StaffSchoolAccess match on the student's SchoolID teacher branch: FactSectionTeachers -> DimSection -> FactEnrollment ActiveFlag=1
-
-effect: **read-only**
-**Reads:** `DimSection`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`, `StaffSchoolAccess`
-
-### diag_cohort_scope_dev.sql
-
-[sql/scripts/diag_cohort_scope_dev.sql](../../sql/scripts/diag_cohort_scope_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-05 6c2f29d diag(dev): cohort base + scope checks (enrollment currency / StaffSchoolAccess / per-user cohort row counts)
-
-Reading/Writing cohort show "No students in your scope" (TVF returns 0) while Math works for some users. Base is intact (500 current students).
-
-effect: **read-only**
-**Reads:** `DimStaff`, `DimStudent`, `StaffSchoolAccess`
-
-### diag_cycles_live_vs_dev.sql
-
-[sql/scripts/diag_cycles_live_vs_dev.sql](../../sql/scripts/diag_cycles_live_vs_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-06 f4c7bae sql(dev): project-lead analyst reactivation + cycle live-vs-dev diagnostic
-
-Dump both warehouses' cycle structures so we can write a SAFE "copy live cycles -> dev + re-point dev facts to the new window keys" migration. Confirms the old-dev-window -> new-window re-point map will be unambiguous (1:1) before anything is changed.
-
-effect: **read-only**
-**Reads:** `Assessment_Warehouse.dbo`, `DimAssessmentWindow`, `DimShortCycle`, `FactAssessmentMath`, `FactAssessmentReading`, `FactAssessmentWriting`
-
-### diag_dev_entry_access.sql
-
-[sql/scripts/diag_dev_entry_access.sql](../../sql/scripts/diag_dev_entry_access.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Find why /enter shows "No cycles" for a given account. Checks the three things that can each independently zero it out: course mapping, the caller's identity + access rows, and the actual TVF output. SET @UPN to the account you're viewing as. Run on DEV. ****************************************************************************
-
-effect: **read-only**
-**Variables:** `@UPN` = `'jeffrey.raine@tcrce.ca'`
-**Reads:** `DimCourseAssessment`, `DimSection`, `DimStaff`, `StaffSchoolAccess`
-
-### diag_dq_latest_run_dev.sql
-
-[sql/scripts/diag_dq_latest_run_dev.sql](../../sql/scripts/diag_dq_latest_run_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-07 ebbae1a sql(dev): DQ-latest-run diagnostic â€” #1119 SP-path COPY INTO CONFIRMED FIXED (https+WI)
-
-After the 2026-10-07 app ingest reached the DQ gate (so #1119's SP-path COPY INTO is FIXED) and usp_RunFullIngestCycle halted on "data quality checks failed", show exactly WHICH checks failed on the most recent run so we can decide if it's a real data problem or dev-recovery residue.
-
-effect: **read-only**
-**Variables:** `@LatestRun` = `(SELECT MAX(RunTimestamp) FROM FactDataQualityAudit)`
-**Reads:** `FactDataQualityAudit`
-
-### diag_enrollment_by_term_shelburne_digby.sql
-
-[sql/scripts/diag_enrollment_by_term_shelburne_digby.sql](../../sql/scripts/diag_enrollment_by_term_shelburne_digby.sql) · skeleton (not yet reviewed) · last change: 2026-09-29 ee7f936 diag: why no Semester 2 in the O2 report (enrollment-by-term, DRHS/SRHS)
-
-effect: **read-only**
-**Reads:** `DimSchool`, `DimSection`, `DimTerm`, `FactEnrollment`
-
-### diag_find_drumlin_sections.sql
-
-[sql/scripts/diag_find_drumlin_sections.sql](../../sql/scripts/diag_find_drumlin_sections.sql) · skeleton (not yet reviewed) · last change: 2026-09-09 fd0fb35 fix(ingest): correct FactEnrollment.ActiveFlag â€” was 0 for every row
-
-Discovery step for the section under-count diagnosis — find the real school name/abbrev and the real CourseName strings, since the first pass matched nothing. PII-safe (school + section metadata only).
-
-effect: **read-only**
-**Reads:** `DimSchool`, `DimSection`
-
-### diag_ingest_failure_state.sql
-
-[sql/scripts/diag_ingest_failure_state.sql](../../sql/scripts/diag_ingest_failure_state.sql) · skeleton (not yet reviewed) · last change: 2026-09-29 48a6654 diag: confirm warehouse clean after an ingest load-step failure (read-only)
-
-effect: **read-only**
-**Reads:** `AppMaintenance`, `DimSection`, `DimStaff`, `DimStudent`, `FactEnrollment`, `FactSectionTeachers`, `FactSubmissionAudit`, `Stg_Enrollment`, `Stg_Section`, `Stg_Staff`, `Stg_Student`
-
-### diag_j020_reading_coding_dev.sql
-
-[sql/scripts/diag_j020_reading_coding_dev.sql](../../sql/scripts/diag_j020_reading_coding_dev.sql) · skeleton (not yet reviewed) · last change: 2026-10-07 0d2793b sql(dev): diagnostic â€” J020 reading EN/FR coding check ahead of 51014 entry test
-
-Before testing the 51014 instance-based scale fix, answer "are the synthetic J020 (Late French Immersion) reading results EN- or FR-coded, and what instance do they sit on?" J020 reads ENGLISH only, so correct = FactScale EN_Reading on a Window whose ScaleSystem is EN_Reading. FR-coded J020 rows = the old mislocation (a separate data-remediation thread, NOT the 51014 entry fix).
-
-effect: **read-only**
-**Reads:** `DimAssessmentWindow`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`
-
-### diag_last_dq_run.sql
-
-[sql/scripts/diag_last_dq_run.sql](../../sql/scripts/diag_last_dq_run.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Show the violations from the MOST RECENT usp_RunDataQualityChecks run (the gate that halts usp_RunFullIngestCycle with Msg 51000). Result 1 is the per-check summary; Result 2 is up to 200 offending rows so you can see the actual keys/detail.
-
-effect: **read-only**
-**Variables:** `@LastRun` = `(SELECT MAX(RunTimestamp) FROM FactDataQualityAudit)`
-**Reads:** `FactDataQualityAudit`
-
 ### report_o2_sections_shelburne_digby.sql
 
 [sql/scripts/report_o2_sections_shelburne_digby.sql](../../sql/scripts/report_o2_sections_shelburne_digby.sql) · skeleton (not yet reviewed) · last change: 2026-09-29 70b611e report(o2 sections): add Semester (DimTerm.TermName), ordered by term
@@ -534,6 +566,58 @@ effect: **read-only**
 **Reads:** `DimStaff`
 
 ## fix/migration
+
+### add_Abbreviation_to_DimSchool.sql
+
+[sql/scripts/add_Abbreviation_to_DimSchool.sql](../../sql/scripts/add_Abbreviation_to_DimSchool.sql) · reviewed 2026-10-23 · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
+
+Add and populate school abbreviations on an older DimSchool.
+
+effect: **writes-data** · target: dev and live · re-run safe: no · applied: initial commit 2026-04-24 (early schema era); DimSchool DDL now includes the column
+**Reads:** `DimSchool`
+**Writes:** `DimSchool` (alter/update — `Abbreviation`)
+
+### backfill_DimShortCycle_headers.sql
+
+[sql/scripts/backfill_DimShortCycle_headers.sql](../../sql/scripts/backfill_DimShortCycle_headers.sql) · reviewed 2026-10-23 · last change: 2026-09-17 f5c8662 feat(cycles): cycle header (DimShortCycle) + scoped-instance builder
+
+Create cycle header rows for pre-existing assessment windows after DimShortCycle was introduced.
+
+effect: **writes-data** · target: dev and live · re-run safe: yes · applied: committed 2026-09-17 with the cycle header feature (run once after DimShortCycle.sql)
+**Reads:** `DimAssessmentWindow`, `DimShortCycle`
+**Writes:** `DimAssessmentWindow` (update — `CycleGroupID`, `LastUpdated`); `DimShortCycle` (insert — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`)
+
+### backfill_adaptation_facts_live.sql
+
+[sql/scripts/backfill_adaptation_facts_live.sql](../../sql/scripts/backfill_adaptation_facts_live.sql) · reviewed 2026-10-23 · last change: 2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live
+
+Build the missing adaptation fact rows on live so the Programming > Adaptations roster shows students.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: live 2026-09-24 (commit: diagnose + backfill empty FactStudentAdaptation on live)
+**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentAdaptation`
+**Writes:** `FactStudentAdaptation` (insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
+
+### backfill_ipp_facts_live.sql
+
+[sql/scripts/backfill_ipp_facts_live.sql](../../sql/scripts/backfill_ipp_facts_live.sql) · reviewed 2026-10-23 · last change: 2026-09-24 0610c9d sql(fix): twin IPP backfill for missing Math IPP rows on live
+
+Add the missing Math (and newly in-band) IPP fact rows on live so the Programming > IPP roster's Math column populates.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: live 2026-09-24 (twin of backfill_adaptation_facts_live.sql)
+**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
+**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentIPP`
+**Writes:** `FactStudentIPP` (insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
+
+### delete_test_reading_assessment.sql
+
+[sql/scripts/delete_test_reading_assessment.sql](../../sql/scripts/delete_test_reading_assessment.sql) · reviewed 2026-10-23 · last change: 2026-09-29 fda2896 script: delete reading row by PK 8655918483806093313 (confirm SELECT + DELETE)
+
+Remove one specific test reading result from live.
+
+effect: **writes-data** · target: live · re-run safe: yes · applied: live 2026-09-29 (bug-repro cleanup)
+**Reads:** `DimAssessmentWindow`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`
+**Writes:** `FactAssessmentReading` (delete)
 
 ### fix_DimSection_coursename_mojibake.sql
 
@@ -703,6 +787,36 @@ effect: **writes-data** · target: live (abfss paths use the LIVE workspace/lake
 
 ## template
 
+### diag_ches_reading_membership_2026-10-13.sql
+
+[sql/scripts/diag_ches_reading_membership_2026-10-13.sql](../../sql/scripts/diag_ches_reading_membership_2026-10-13.sql) · reviewed 2026-10-23 · last change: 2026-10-13 dca5b16 sql(diag): compare CHES reading vs writing roster membership per window/section
+
+Why does a class's Reading roster show fewer students than its Writing roster — misconfigured window scope or under-run membership rebuild?
+
+effect: **read-only** · target: live or dev (counts + section IDs, no PII) · re-run safe: yes · applied: live 2026-10-13 (CHES SCoR-1 investigation)
+**Variables:** `@SchoolID` = `'0511'`
+**Reads:** `DimAssessmentWindow`, `DimShortCycle`, `SectionRosterMembership`
+
+### diag_ches_sc1_enrollment_dates_2026-10-13.sql
+
+[sql/scripts/diag_ches_sc1_enrollment_dates_2026-10-13.sql](../../sql/scripts/diag_ches_sc1_enrollment_dates_2026-10-13.sql) · reviewed 2026-10-23 · last change: 2026-10-13 076d109 sql(diag): confirm CHES SC1 sparse rosters are enrollment-overlap (StartDate > Oct 5)
+
+Are a class's students missing from a closed cycle's roster because their enrollment StartDate falls after the cycle ended?
+
+effect: **read-only** · target: live or dev (counts + dates, no PII) · re-run safe: yes · applied: live 2026-10-13 — ruled OUT (enrollment fully overlapped SC1); led to diag_ches_sc1_section_reversion
+**Variables:** `@SchoolID` = `'0511'`, `@SC1Start` = `'2026-09-01'`, `@SC1End` = `'2026-10-05'`
+**Reads:** `DimSection`, `FactEnrollment`
+
+### diag_dev_entry_access.sql
+
+[sql/scripts/diag_dev_entry_access.sql](../../sql/scripts/diag_dev_entry_access.sql) · reviewed 2026-10-23 · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
+
+Why does /enter show no cycles for this user — unmapped courses, missing identity/access, or the app resolving a different UPN?
+
+effect: **read-only** · target: dev (also safe on live: config + aggregate counts) · re-run safe: yes · applied: dev, merged 2026-09-22 (PR #33)
+**Variables:** `@UPN` = `'jeffrey.raine@tcrce.ca'`
+**Reads:** `DimCourseAssessment`, `DimSection`, `DimStaff`, `StaffSchoolAccess`
+
 ### diag_math_report_blank_roster.sql
 
 [sql/scripts/diag_math_report_blank_roster.sql](../../sql/scripts/diag_math_report_blank_roster.sql) · reviewed 2026-10-22 · last change: 2026-09-25 db8bc45 diag: Math report blank-roster investigation (card counts vs empty matrix)
@@ -773,99 +887,6 @@ effect: **read-only** · target: dev or live (staff name + work email are not PI
 **Reads:** `DimStaff`, `Stg_Staff`
 
 ## writes data (auto)
-
-### add_Abbreviation_to_DimSchool.sql
-
-[sql/scripts/add_Abbreviation_to_DimSchool.sql](../../sql/scripts/add_Abbreviation_to_DimSchool.sql) · skeleton (not yet reviewed) · last change: 2026-04-24 4d6223a Initial commit: Fabric Warehouse MVP schema + docs + Claude skills
-
-Add the Abbreviation column to DimSchool and populate it for all 22 TCRCE schools. Use this ONLY if DimSchool was already seeded before the Abbreviation column was added to the schema.
-
-effect: **writes-data**
-**Reads:** `DimSchool`
-**Writes:** `DimSchool` (alter/update — `Abbreviation`)
-
-### backfill_DimShortCycle_headers.sql
-
-[sql/scripts/backfill_DimShortCycle_headers.sql](../../sql/scripts/backfill_DimShortCycle_headers.sql) · skeleton (not yet reviewed) · last change: 2026-09-17 f5c8662 feat(cycles): cycle header (DimShortCycle) + scoped-instance builder
-
-Seed DimShortCycle headers for cycles that predate the header table. 1) Give any legacy single window (CycleGroupID NULL) its own key so it becomes a standalone cycle. 2) Create a header row for every distinct CycleGroupID not yet headed, taking the name/dates/year from its instance windows (which share them).
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimShortCycle`
-**Writes:** `DimAssessmentWindow` (update — `CycleGroupID`, `LastUpdated`); `DimShortCycle` (insert — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `LastUpdated`, `SchoolYear`, `StartDate`)
-
-### backfill_adaptation_facts_live.sql
-
-[sql/scripts/backfill_adaptation_facts_live.sql](../../sql/scripts/backfill_adaptation_facts_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-24 997c48b sql(fix): diagnose + backfill empty FactStudentAdaptation on live
-
-effect: **writes-data**
-**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentAdaptation`
-**Writes:** `FactStudentAdaptation` (insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `HasAdaptation`, `IsCurrent`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
-
-### backfill_ipp_facts_live.sql
-
-[sql/scripts/backfill_ipp_facts_live.sql](../../sql/scripts/backfill_ipp_facts_live.sql) · skeleton (not yet reviewed) · last change: 2026-09-24 0610c9d sql(fix): twin IPP backfill for missing Math IPP rows on live
-
-effect: **writes-data**
-**Variables:** `@EffectiveDate` = `CAST(GETDATE() AT TIME ZONE 'UTC' AT TIME ZONE 'Atlantic Standard Time' AS DATE)`
-**Reads:** `DimGrade`, `DimProgram`, `DimStudent`, `FactStudentIPP`
-**Writes:** `FactStudentIPP` (insert — `ChangedBy`, `EffectiveEndDate`, `EffectiveStartDate`, `IsCurrent`, `IsIPP`, `LastUpdated`, `ProgramFamily`, `StudentKey`, `Subject`)
-
-### delete_test_reading_assessment.sql
-
-[sql/scripts/delete_test_reading_assessment.sql](../../sql/scripts/delete_test_reading_assessment.sql) · skeleton (not yet reviewed) · last change: 2026-09-29 fda2896 script: delete reading row by PK 8655918483806093313 (confirm SELECT + DELETE)
-
-effect: **writes-data**
-**Reads:** `DimAssessmentWindow`, `DimReadingScale`, `DimStudent`, `FactAssessmentReading`
-**Writes:** `FactAssessmentReading` (delete)
-
-### deploy_dev_cutover_loaders.sql
-
-[sql/scripts/deploy_dev_cutover_loaders.sql](../../sql/scripts/deploy_dev_cutover_loaders.sql) · skeleton (not yet reviewed) · last change: 2026-09-22 8b599cb dev â†’ main: analyst RLS scoping, reading/immersion fixes, dev ingest tooling; impersonation removed (#33)
-
-Bring the DEV staging loaders up to the LIVE "cutover" format so dev mirrors production. Live already runs the PowerSchool sqlReport CSV loaders (comma-delimited, FIELDQUOTE, FIRSTROW=2, Students*, Staff*, Sections*, Enrollments*, Co-Teachers* filenames); dev still ran the old direct-extract TAB loaders. This replaces the five dev load procs with the CSV format, pointed at the DEV lakehouse.
-
-effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
-
-### deploy_dev_loaders_workspace_identity.sql
-
-[sql/scripts/deploy_dev_loaders_workspace_identity.sql](../../sql/scripts/deploy_dev_loaders_workspace_identity.sql) · skeleton (not yet reviewed) · last change: 2026-10-06 83f1c7c sql(dev): Workspace-Identity COPY INTO loaders (test fix for #1119)
-
-TEST the Workspace-Identity fix for the #1119 COPY INTO OneLake token failure. Redeploys the five DEV staging loaders identically to deploy_dev_cutover_loaders.sql EXCEPT each COPY INTO now authorizes the OneLake source read with the WORKSPACE IDENTITY instead of the caller's (SP) passthrough token: CREDENTIAL = (IDENTITY = 'Workspace Identity') This decouples the source read from the SP's control-plane Fabric token, so it needs no token bootstrap and never lapses.
-
-effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
-
-### deploy_load_staging_procs.sql
-
-[sql/scripts/deploy_load_staging_procs.sql](../../sql/scripts/deploy_load_staging_procs.sql) · skeleton (not yet reviewed) · last change: 2026-09-01 d9e7832 Add combined deploy script for the 5 load-staging procs (DROP+GO wrapped)
-
-Strategy A loader — TRUNCATE Stg_Student and COPY INTO from the OneLake students/ folder. Decoupled from usp_MergeStudent so that the Strategy B Pipeline (Step 29) can replace this proc with a Copy activity without touching the merge logic.
-
-effect: **writes-data**
-**Writes:** `Stg_CoTeacher` (copy-into/truncate); `Stg_Enrollment` (copy-into/truncate); `Stg_Section` (copy-into/truncate); `Stg_Staff` (copy-into/truncate); `Stg_Student` (copy-into/truncate)
-
-### deploy_step14_data_quality.sql
-
-[sql/scripts/deploy_step14_data_quality.sql](../../sql/scripts/deploy_step14_data_quality.sql) · skeleton (not yet reviewed) · last change: 2026-05-11 064a719 Step 14: persist data quality runs + gate orchestrator on clean checks
-
-effect: **writes-data**
-**Variables:** `@RunTimestamp` = `GETDATE()`, `@ViolationCount`, `@CycleStart` = `GETDATE()`, `@DqViolations`
-**Reads:** `DimAssessmentWindow`, `DimGender`, `DimProgram`, `DimReadingScale`, `DimRole`, `DimSchool`, `DimSection`, `DimStaff`, `DimStudent`, `DimTerm`, `FactAssessmentReading`, `FactDataQualityAudit`, `FactEnrollment`, `FactSectionTeachers`, `FactStaffAssignment`, `StaffSchoolAccess`
-**Writes:** `FactDataQualityAudit` (insert — `CheckCategory`, `CheckName`, `Detail`, `KeyColumn`, `KeyValue`, `LastUpdated`, `RunTimestamp`, `TableName`); `FactSubmissionAudit` (insert — `LastUpdated`, `Message`, `RecordCount`, `RecordType`, `Source`, `Status`, `SubmissionTimestamp`, `SubmittedBy`)
-
-### dev_build_cycles_to_match_live_2026-10-06.sql
-
-[sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql](../../sql/scripts/dev_build_cycles_to_match_live_2026-10-06.sql) · skeleton (not yet reviewed) · last change: 2026-10-06 e8aaf21 sql(dev): build Short Cycle 1-6 (add-only, clone SC1 template); memory: #1119 setting ON
-
-Give dev the full 6-cycle set (matching LIVE's dates/structure) WITHOUT touching the data-bearing cycles. Add-only + rename. No fact re-point.
-
-effect: **writes-data**
-**Variables:** `@SC1` = `'609ba4af-8168-492e-bb55-baefbfd540d8'`, `@SC2` = `'49be285a-3dcd-46b9-b94c-560e4f2f08a8'`, `@SC3` = `'7c0f3a21-3b6e-4d82-9a14-0c3f9d2e1a33'`, `@SC4` = `'1e8b4c57-9f2a-4e63-b7d1-5a6c8e0f2b44'`, `@SC5` = `'9d2a6f84-5c1b-4a79-8e32-7b4d1c6a3e55'`, `@SC6` = `'4f7e1b93-2d8c-4f65-a1b8-3e9c7d5a2f66'`, `@By` = `'jeffrey.raine@tcrce.ca'`, `@Now` = `GETDATE()`
-**Reads:** `DimAssessmentWindow`, `DimShortCycle`
-**Writes:** `DimAssessmentWindow` (insert/update — `ActiveFlag`, `AssessmentLanguage`, `AssessmentType`, `BenchmarkMonth`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `EndDate`, `LastUpdated`, `MaxGrade`, `MinGrade`, `ProgramFamily`, `ProgramScope`, `ScaleSystem`, `SchoolYear`, `StartDate`, `WindowName`); `DimShortCycle` (insert/update — `ActiveFlag`, `CreatedBy`, `CreatedDate`, `CycleGroupID`, `DisplayName`, `EndDate`, `GraceHours`, `LastUpdated`, `SchoolYear`, `StartDate`)
 
 ### migrate_DimStudent_add_GroupKey.sql
 
