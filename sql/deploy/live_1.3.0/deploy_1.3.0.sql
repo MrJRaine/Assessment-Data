@@ -1,5 +1,5 @@
 /*******************************************************************************
- * DEPLOY BUNDLE — v1.3.0
+ * DEPLOY BUNDLE â€” v1.3.0
  * Run top-to-bottom in ONE session against the target warehouse (dev first, then live).
  * Every object is idempotent: re-running is safe (guarded ALTER/CREATE, DROP+CREATE
  * procedures/functions, guarded UPDATE). Nothing here touches student rows; the staff
@@ -19,6 +19,7 @@
  *     2.4  usp_ClearMaintenanceWindow   (lock-out/tag-out: owner or sysadmin)
  *     2.5  usp_MergeStudent             (Build C: IPP/adaptation repoint on re-version)
  *     2.6  usp_MergeStaff               (email reconciliation + write rule + role override)
+ *     2.7  usp_RunDataQualityChecks     (DQ check 16 scoped to IsCurrent=1 — pairs with the 2.6 email rename)
  *   PART 3  Reports TVFs (oversight roll-up feeds)
  *     3.1  tvf_StudentCohortReadingAll
  *     3.2  tvf_StudentCohortReadingGroup
@@ -38,7 +39,7 @@
 
 
 /*==============================================================================
-  PART 1.1 — StaffAppAccess +CanMaintain
+  PART 1.1 â€” StaffAppAccess +CanMaintain
   source: sql/scripts/migrate_StaffAppAccess_add_CanMaintain.sql
 ==============================================================================*/
 
@@ -47,9 +48,9 @@
  * Purpose: Add the CanMaintain capability column to an EXISTING (populated) StaffAppAccess table.
  *          Fabric can't ADD a NOT NULL column to a populated table, so it's BIT NULL (reads treat NULL
  *          as 0, same as the Override columns). Grants full /admin/maintenance access (Technology
- *          Services) — set/clear maintenance windows, no student-data access (1.3.0).
+ *          Services) â€” set/clear maintenance windows, no student-data access (1.3.0).
  *
- * Guard: COL_LENGTH is unsupported in Fabric (Msg 15871) — use the sys.columns guard. Separate GO
+ * Guard: COL_LENGTH is unsupported in Fabric (Msg 15871) â€” use the sys.columns guard. Separate GO
  * batch from any later reference to the new column (fabric-warehouse-sql skill items 21/22).
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
@@ -65,7 +66,7 @@ GO
 
 
 /*==============================================================================
-  PART 1.2 — StaffRoleOverride table
+  PART 1.2 â€” StaffRoleOverride table
   source: sql/security/StaffRoleOverride.sql
 ==============================================================================*/
 
@@ -75,8 +76,8 @@ GO
  *          PS has no distinct "Instructional Coach" group, so coaches come through with a generic
  *          (non-overriding) role; this table lets an admin classify a specific email as, e.g.,
  *          'Administrator'. Their SCHOOL SCOPE still DERIVES from PS (their CanChangeSchool / HomeSchool)
- *          — this only changes the role classification, so access stays derived, not hand-listed.
- * SCD Type: N/A (manual config — curate via usp_SetStaffRoleOverride)
+ *          â€” this only changes the role classification, so access stays derived, not hand-listed.
+ * SCD Type: N/A (manual config â€” curate via usp_SetStaffRoleOverride)
  * Created: 2026-10-19 (1.3.0)
  * Region: Canada East (PIIDPA compliant)
  *
@@ -85,8 +86,8 @@ GO
  *   - An override also KEEPS the person in the merge under the write-rule (they're treated as holding an
  *     overriding role), even with no section.
  *   Only the three school/region-tier roles are valid override targets (RegionalAnalyst / Administrator /
- *   SpecialistTeacher) — the roles that grant data access. (Tech Services who need ONLY the maintenance
- *   page do NOT belong here — that's the data-free StaffAppAccess.CanMaintain capability, not an RLS role.)
+ *   SpecialistTeacher) â€” the roles that grant data access. (Tech Services who need ONLY the maintenance
+ *   page do NOT belong here â€” that's the data-free StaffAppAccess.CanMaintain capability, not an RLS role.)
  *
  * Email lowercased; matched case-insensitively against the PS export email + the signed-in UPN.
  ******************************************************************************/
@@ -95,7 +96,7 @@ IF OBJECT_ID('dbo.StaffRoleOverride') IS NULL
     CREATE TABLE StaffRoleOverride (
         Email           VARCHAR(255)  NOT NULL,   -- staff UPN / email (lowercased)
         OverrideRole    VARCHAR(50)   NOT NULL,   -- 'RegionalAnalyst' | 'Administrator' | 'SpecialistTeacher'
-        Notes           VARCHAR(200)  NULL,       -- why (e.g. 'Instructional Coach — no PS role')
+        Notes           VARCHAR(200)  NULL,       -- why (e.g. 'Instructional Coach â€” no PS role')
         ActiveFlag      BIT           NOT NULL,   -- 0 retires the override without deleting the audit row
         LastUpdated     DATETIME2(0)  NOT NULL
     );
@@ -109,12 +110,12 @@ GO
 
 
 /*==============================================================================
-  PART 1.3 — DimRole admin-assistant remap
+  PART 1.3 â€” DimRole admin-assistant remap
   source: sql/scripts/migrate_DimRole_admin_assistants_to_support.sql
 ==============================================================================*/
 
 /*******************************************************************************
- * Migration: DimRole — reclassify admin assistants to SupportStaff (1.3.0)
+ * Migration: DimRole â€” reclassify admin assistants to SupportStaff (1.3.0)
  * Purpose: The DimRole seed (sql/dimensions/DimRole.sql) is a one-time CREATE+INSERT.
  *          The live/dev warehouse already holds the table, so this UPDATE applies the
  *          2026-10-19 reclassification of the four "Admin Assistant" PS groups
@@ -126,7 +127,7 @@ GO
  *
  * Effect on the merge: with the usp_MergeStaff write rule (persist a person only if
  * they hold an access role, teach a section, or carry a manual override), these groups
- * now resolve to SupportStaff (no access) and — unless they also teach — fall out of
+ * now resolve to SupportStaff (no access) and â€” unless they also teach â€” fall out of
  * Wrk_StaffPersons on the NEXT ingest, which closes out their DimStaff rows and drops
  * them from StaffSchoolAccess. No student data is affected.
  *
@@ -146,17 +147,17 @@ GO
 
 
 /*==============================================================================
-  PART 2.1 — usp_SetStaffAppAccess
+  PART 2.1 â€” usp_SetStaffAppAccess
   source: sql/procedures/usp_SetStaffAppAccess.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Procedure: usp_SetStaffAppAccess
- * Purpose: The SOLE writer of StaffAppAccess — upserts one staff email's five
+ * Purpose: The SOLE writer of StaffAppAccess â€” upserts one staff email's five
  *          app-capability flags (IsSysAdmin, CanManageCycles, CanRunIngest,
  *          CanOverrideMath, CanOverrideLiteracy). Backs the SysAdmin-only
  *          /admin/staff-access grant GUI (0.7.0). Re-checks the caller is a
- *          SysAdmin SERVER-SIDE — the page/nav gate is convenience, not the
+ *          SysAdmin SERVER-SIDE â€” the page/nav gate is convenience, not the
  *          authority, so a stale client or a direct call can't grant itself power.
  * Created: 2026-09-24
  * Region: Canada East (PIIDPA compliant)
@@ -164,13 +165,13 @@ GO
  * A SysAdmin CAN grant SysAdmin to another user (small-team bootstrap; the GUI
  * confirms first). Email is stored lowercased. Fabric has no MERGE, so this is an
  * IF EXISTS UPDATE / ELSE INSERT. A save that clears ALL five flags DELETEs the row
- * instead (removes the person from the access list — automated house-cleaning; the
+ * instead (removes the person from the access list â€” automated house-cleaning; the
  * last-sysadmin guard still applies). Every change writes a FactSubmissionAudit row.
  *
  * THROW codes:
  *   51010  a required parameter is NULL / @TargetEmail blank
  *   51050  caller is not a SysAdmin
- *   51051  would remove the LAST SysAdmin (never allowed — grant sysadmin to someone else first)
+ *   51051  would remove the LAST SysAdmin (never allowed â€” grant sysadmin to someone else first)
  ******************************************************************************/
 
 DROP PROCEDURE IF EXISTS usp_SetStaffAppAccess;
@@ -208,11 +209,11 @@ BEGIN
 
     IF COALESCE(@CallerIsSysAdmin, 0) = 0
     BEGIN
-        ;THROW 51050, 'usp_SetStaffAppAccess: caller is not a SysAdmin — cannot change app access.', 1;
+        ;THROW 51050, 'usp_SetStaffAppAccess: caller is not a SysAdmin â€” cannot change app access.', 1;
     END;
 
     -- 51051: never let a save drop the system to ZERO SysAdmins. Blocks demoting the LAST sysadmin
-    -- (the target is currently a sysadmin, is being set to non-sysadmin, and is the only one) — which
+    -- (the target is currently a sysadmin, is being set to non-sysadmin, and is the only one) â€” which
     -- would lock everyone out of access administration.
     IF @IsSysAdmin = 0
        AND EXISTS (SELECT 1 FROM StaffAppAccess WHERE LOWER(Email) = @Target AND IsSysAdmin = 1)
@@ -222,7 +223,7 @@ BEGIN
     END;
 
     -- REMOVE from the access list: a save that clears EVERY capability deletes the row (automated
-    -- house-cleaning — there is no separate delete button; you clear the roles and Save). The 51051
+    -- house-cleaning â€” there is no separate delete button; you clear the roles and Save). The 51051
     -- guard above already blocks doing this to the last sysadmin. A no-op if no row exists (e.g. a
     -- staff member who was added-by-email but never granted anything).
     IF @IsSysAdmin = 0 AND @CanManageCycles = 0 AND @CanRunIngest = 0
@@ -278,24 +279,24 @@ GO
 
 
 /*==============================================================================
-  PART 2.2 — usp_SetStaffRoleOverride
+  PART 2.2 â€” usp_SetStaffRoleOverride
   source: sql/procedures/usp_SetStaffRoleOverride.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Procedure: usp_SetStaffRoleOverride
- * Purpose: The SOLE writer of StaffRoleOverride — upserts one staff email's RLS-role
+ * Purpose: The SOLE writer of StaffRoleOverride â€” upserts one staff email's RLS-role
  *          override (the context PS can't encode, e.g. classifying an Instructional
  *          Coach as 'Administrator'). Backs the SysAdmin-only management surface.
- *          Re-checks the caller is a SysAdmin SERVER-SIDE — the page/nav gate is
+ *          Re-checks the caller is a SysAdmin SERVER-SIDE â€” the page/nav gate is
  *          convenience, not the authority.
  * Created: 2026-10-19 (1.3.0)
  * Region: Canada East (PIIDPA compliant)
  *
  * Only the three data-access role tiers are valid override targets. Setting
  * @Active = 0 (or @OverrideRole blank with an existing row) RETIRES the override in
- * place — keeps the audit trail but stops it affecting the merge. Email stored
- * lowercased. Fabric has no MERGE → IF EXISTS UPDATE / ELSE INSERT. Every change
+ * place â€” keeps the audit trail but stops it affecting the merge. Email stored
+ * lowercased. Fabric has no MERGE â†’ IF EXISTS UPDATE / ELSE INSERT. Every change
  * writes a FactSubmissionAudit row.
  *
  * Reads:  StaffAppAccess (caller sysadmin check)
@@ -342,7 +343,7 @@ BEGIN
 
     IF COALESCE(@CallerIsSysAdmin, 0) = 0
     BEGIN
-        ;THROW 51050, 'usp_SetStaffRoleOverride: caller is not a SysAdmin — cannot change role overrides.', 1;
+        ;THROW 51050, 'usp_SetStaffRoleOverride: caller is not a SysAdmin â€” cannot change role overrides.', 1;
     END;
 
     -- Upsert (Fabric has no MERGE).
@@ -378,13 +379,13 @@ GO
 
 
 /*==============================================================================
-  PART 2.3 — usp_SetMaintenanceWindow
+  PART 2.3 â€” usp_SetMaintenanceWindow
   source: sql/procedures/usp_SetMaintenanceWindow.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Procedure: usp_SetMaintenanceWindow
- * Purpose: Schedule (or reschedule) the app maintenance window — the moment T the
+ * Purpose: Schedule (or reschedule) the app maintenance window â€” the moment T the
  *          container will be swapped. Writes the single AppMaintenance row; every
  *          client poller then keys its staged banner / entry-lock / auto-save off
  *          this window + the server clock.
@@ -395,10 +396,10 @@ GO
  *   @CallerUPN      VARCHAR(255)  -- signed-in UPN (web-app/SP path); NULL -> CURRENT_USER
  *   @Scope          VARCHAR(10)   -- 'manual' (default) = full /admin/maintenance page; 'ingest' = the
  *                                    /ingest 15-min window button. Widens WHO may set (see below).
- * Permission (1.3.0 — was sysadmin-only; broadened so ingest operators + Tech Services aren't blocked):
+ * Permission (1.3.0 â€” was sysadmin-only; broadened so ingest operators + Tech Services aren't blocked):
  *   @Scope='manual'  -> IsSysAdmin OR CanMaintain
  *   @Scope='ingest'  -> IsSysAdmin OR CanMaintain OR CanRunIngest  (the ingest flow's own 15-min window)
- *   Proc reads StaffAppAccess for @Caller itself — it never trusts an app-passed capability.
+ *   Proc reads StaffAppAccess for @Caller itself â€” it never trusts an app-passed capability.
  * THROW codes:
  *   51040  caller lacks the capability for this scope
  *   51041  @MaintenanceAt is required
@@ -463,19 +464,19 @@ GO
 
 
 /*==============================================================================
-  PART 2.4 — usp_ClearMaintenanceWindow
+  PART 2.4 â€” usp_ClearMaintenanceWindow
   source: sql/procedures/usp_ClearMaintenanceWindow.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Procedure: usp_ClearMaintenanceWindow
- * Purpose: Cancel a scheduled window / post "all clear" after a swap — sets the
+ * Purpose: Cancel a scheduled window / post "all clear" after a swap â€” sets the
  *          single AppMaintenance row's MaintenanceAt back to NULL so clients drop
  *          the banner and re-enable entry immediately (no waiting for auto-expiry).
  * Params:
  *   @CallerUPN  VARCHAR(255)  -- signed-in UPN (web-app/SP path); NULL -> CURRENT_USER
  * LOCK-OUT/TAG-OUT (1.3.0): a maintenance window is "owned" by whoever opened it (AppMaintenance.SetByEmail).
- *   Only that owner — OR any sysadmin (fallback) — may clear it, so another capable user can't absent-
+ *   Only that owner â€” OR any sysadmin (fallback) â€” may clear it, so another capable user can't absent-
  *   mindedly end a window while the server is down for infra work or mid-ingest. The ingest flow's own
  *   auto-clear still works because it's the same user who opened the window.
  * THROW codes:
@@ -522,26 +523,26 @@ GO
 
 
 /*==============================================================================
-  PART 2.5 — usp_MergeStudent (Build C)
+  PART 2.5 â€” usp_MergeStudent (Build C)
   source: sql/procedures/usp_MergeStudent.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Procedure: usp_MergeStudent
  * Purpose: SCD Type 2 reconciliation from Stg_Student into DimStudent.
- *          All 14 business attributes are Type 2 triggers — any change to
+ *          All 14 business attributes are Type 2 triggers â€” any change to
  *          any of them produces a new versioned row. Also reconciles
  *          FactStudentIPP rows for students whose DimStudent.IPP = 1, creating
  *          NULL-status placeholders that teachers/admins resolve via scrIPP.
  * Created: 2026-04-30
- * Modified: 2026-05-13 — Grade_Level '13' -> 'RG' translation for Step 18
- *           2026-05-26 — Step 6 added: FactStudentIPP reconciliation. Audit
+ * Modified: 2026-05-13 â€” Grade_Level '13' -> 'RG' translation for Step 18
+ *           2026-05-26 â€” Step 6 added: FactStudentIPP reconciliation. Audit
  *                       renumbered to Step 7 and gained two IPP counters.
- *           2026-09-11 — Step 6 extended: Math IPPs (P-6, own family, single row)
+ *           2026-09-11 â€” Step 6 extended: Math IPPs (P-6, own family, single row)
  *                       + per-subject grade bands (Reading P-8, Writing P-RG,
  *                       Math P-6; PP excluded) + parallel FactStudentAdaptation
  *                       reconciliation (steps 6c/6d, keyed on DimStudent.Adap).
- *           2026-10-16 — Step 6-pre (Build C): REPOINT current FactStudentIPP /
+ *           2026-10-16 â€” Step 6-pre (Build C): REPOINT current FactStudentIPP /
  *                       FactStudentAdaptation rows to a re-versioned student's new
  *                       StudentKey (matched by the stable StudentNumber), so a
  *                       teacher-resolved IPP/adaptation PERSISTS across an SCD
@@ -550,7 +551,7 @@ GO
  *                       (6a) is unaffected; dup-guarded. See the step for detail.
  * Region: Canada East (PIIDPA compliant)
  *
- * Pipeline (set-based throughout — no row-by-row WHILE loops):
+ * Pipeline (set-based throughout â€” no row-by-row WHILE loops):
  *   1. TRUNCATE + populate Wrk_Student from Stg_Student with translations
  *      applied (Grade, SchoolID padding, DOB parse, boolean normalization,
  *      numeric casts).
@@ -563,7 +564,7 @@ GO
  *      "still here, unchanged" from "no longer in import".
  *   5. Close out current DimStudent rows whose StudentNumber is absent from
  *      this import. The PS Students export is filtered upstream to
- *      Enroll_Status IN (0, -1) (Active + Pre-Enrolled) — so absence from
+ *      Enroll_Status IN (0, -1) (Active + Pre-Enrolled) â€” so absence from
  *      the export means the student is no longer in either of those states.
  *      No replacement row is inserted: we don't know which absent state
  *      (Inactive=2 or Graduated=3) they're in, and IsCurrent=1 filters
@@ -589,7 +590,7 @@ GO
  *
  * Change detection: a row counts as CHANGED if any of the 14 Type 2 trigger
  * fields differs. NULL-safe comparison via SELECT...EXCEPT...SELECT subquery
- * (EXCEPT treats NULLs as equal — much cleaner than 14× ISNULL/CASE pairs).
+ * (EXCEPT treats NULLs as equal â€” much cleaner than 14Ã— ISNULL/CASE pairs).
  *
  * Translation rules (locked in 2026-04-29 against actual PS export;
  *                    Grade_Level '13' -> 'RG' added 2026-05-13 for Step 18):
@@ -705,7 +706,7 @@ BEGIN
     -- versioning). EXCEPT is NULL-safe. Same-day changes are handled in Step 2b:
     -- a close+insert on the same day the current row was created would set
     -- EffectiveEndDate = @EffectiveDate-1 < EffectiveStartDate (reversed window)
-    -- AND leave two same-key rows sharing today (self-overlap) — both DQ violations.
+    -- AND leave two same-key rows sharing today (self-overlap) â€” both DQ violations.
     -- ------------------------------------------------------------------------
     UPDATE d
     SET EffectiveEndDate = DATEADD(DAY, -1, @EffectiveDate),
@@ -733,7 +734,7 @@ BEGIN
     -- ------------------------------------------------------------------------
     -- Step 2b: SAME-DAY correction. Current row was created TODAY
     -- (EffectiveStartDate = @EffectiveDate), so update it IN PLACE rather than
-    -- close+insert — no spurious 0-day version, no reversed/overlapping window,
+    -- close+insert â€” no spurious 0-day version, no reversed/overlapping window,
     -- and StudentKey is preserved so FactEnrollment / FactAssessmentReading /
     -- FactStudentIPP references stay valid. (A re-run of today's ingest after a
     -- correction collapses into today's row, which is the right semantics.)
@@ -768,7 +769,7 @@ BEGIN
     -- same-day run hit Step 5's missing-close, leaving a 0-day [today, today]
     -- closed row) is back in this import. Re-open that row IN PLACE (refresh
     -- attributes, EffectiveEndDate = NULL, IsCurrent = 1) so Step 3 does NOT
-    -- insert a second current row — which would overlap the same-day closed row
+    -- insert a second current row â€” which would overlap the same-day closed row
     -- (rule D). Targets ONLY same-day 0-day closures with no surviving current
     -- row; genuine returns (closed on an earlier day) fall through to Step 3.
     -- ------------------------------------------------------------------------
@@ -857,12 +858,12 @@ BEGIN
     -- Step 6-pre (Build C, 2026-10-16): CARRY teacher-resolved IPP / Adaptation across an SCD
     -- re-version. A student whose grade/school/program changed gets a NEW StudentKey; their resolved
     -- FactStudentIPP / FactStudentAdaptation row still points at the OLD key, so step 6a would close it
-    -- and 6b insert a fresh NULL placeholder on the new key — silently discarding the teacher's answer.
+    -- and 6b insert a fresh NULL placeholder on the new key â€” silently discarding the teacher's answer.
     -- Here we REPOINT each stranded CURRENT row to its StudentNumber's current StudentKey, so step 6
     -- then recognises it as expected and KEEPS it. Scoped to students STILL flagged (IPP=1 / Adap=1):
     -- a student no longer flagged is NOT repointed, so step 6a closes their stranded row and the IPP /
     -- adaptation correctly DETACHES (the removal path is unchanged). Dup-guarded so we never create two
-    -- current rows for one (StudentKey, Subject, ProgramFamily). Going-forward only — resolutions already
+    -- current rows for one (StudentKey, Subject, ProgramFamily). Going-forward only â€” resolutions already
     -- lost to a past re-version (their resolved row is closed, current row a NULL placeholder) are not
     -- recovered here; a teacher re-resolves those. Keyed by StudentNumber (the stable business key),
     -- mirroring project_assessment_fact_scd_policy.
@@ -1226,7 +1227,7 @@ GO
 
 
 /*==============================================================================
-  PART 2.6 — usp_MergeStaff
+  PART 2.6 â€” usp_MergeStaff
   source: sql/procedures/usp_MergeStaff.sql
 ==============================================================================*/
 
@@ -1234,19 +1235,19 @@ GO
  * Procedure: usp_MergeStaff
  * Purpose: SCD Type 2 reconciliation for BOTH DimStaff (person-grain) and
  *          FactStaffAssignment (assignment-grain) in one transaction. They're
- *          tightly coupled — FactStaffAssignment needs StaffKey from the
+ *          tightly coupled â€” FactStaffAssignment needs StaffKey from the
  *          just-merged DimStaff.
  * Created: 2026-04-30
- * Modified: 2026-10-16 — Step 3.5 EMAIL-CHANGE RECONCILIATION: when a staff email is corrected in
+ * Modified: 2026-10-16 â€” Step 3.5 EMAIL-CHANGE RECONCILIATION: when a staff email is corrected in
  *           PowerSchool (per-assignment SourceSystemIDs unchanged), rename the current DimStaff row's
- *           Email IN PLACE — matched by a shared FactStaffAssignment.SourceSystemID — instead of
+ *           Email IN PLACE â€” matched by a shared FactStaffAssignment.SourceSystemID â€” instead of
  *           closing the old email into a NULL-access ghost and inserting the corrected one as a new
  *           person. 1:1-guarded; NewEmail-not-already-current guarded. Stops the growing ghost pile.
- * Modified: 2026-10-19 (1.3.0) — Step 2 WRITE RULE + ROLE OVERRIDE. A person is now persisted to
+ * Modified: 2026-10-19 (1.3.0) â€” Step 2 WRITE RULE + ROLE OVERRIDE. A person is now persisted to
  *           DimStaff ONLY when they hold a data-access PS role (RegionalAnalyst / Administrator /
  *           SpecialistTeacher), OR teach/co-teach a section this import (reads Stg_Section +
- *           Stg_CoTeacher), OR carry a manual override. Everyone else (Support Staff — which now
- *           includes admin assistants, remapped to SupportStaff in DimRole — and other null-access
+ *           Stg_CoTeacher), OR carry a manual override. Everyone else (Support Staff â€” which now
+ *           includes admin assistants, remapped to SupportStaff in DimRole â€” and other null-access
  *           non-teachers) is dropped and closed out, ending the no-access ghost pile. The new
  *           StaffRoleOverride table supplies RLS-role context PS can't encode (coaches -> Administrator);
  *           an override wins the AccessLevel but SCOPE still derives from PS (Step 6). Steps 5b/5c close
@@ -1254,38 +1255,38 @@ GO
  * Region: Canada East (PIIDPA compliant)
  * Reads (new in 1.3.0): Stg_Section, Stg_CoTeacher (teaching emails), StaffRoleOverride (role context).
  *
- * Pipeline (all set-based — no row-by-row WHILE loops):
+ * Pipeline (all set-based â€” no row-by-row WHILE loops):
  *   1. Build Wrk_StaffAssignment from Stg JOIN DimRole.
  *      Rows whose PS Group has no DimRole match are excluded and counted
- *      as a warning (the DimStaff row is still created — we know who the
+ *      as a warning (the DimStaff row is still created â€” we know who the
  *      person is, just not what role they hold).
  *   2. Build Wrk_StaffPersons by deduping Stg by lowercased Email. For each
  *      email pick the canonical row by lowest PS ID, derive IsDistrictLevel
  *      from CanChangeSchool, compute AccessLevel from Wrk_StaffAssignment
  *      (a StaffRoleOverride row wins it). Translate sentinels (HomeSchoolID
  *      '0' or '' -> NULL). WRITE RULE: persist only persons with an access role,
- *      a taught section this import, or a manual override — drop everyone else.
+ *      a taught section this import, or a manual override â€” drop everyone else.
  *   3. Detect same-email-different-fields anomalies for audit warning
  *      (per-person fields should be consistent across multi-row staff).
- *   4. DimStaff merge — 5 phases:
+ *   4. DimStaff merge â€” 5 phases:
  *      4a. Close changed-active rows (business field differs from Wrk).
  *      4b. Close missing-active rows (Email not in Wrk_StaffPersons but
  *          currently active in DimStaff).
- *      4c. Insert deactivation rows for emails closed in 4b — preserving
+ *      4c. Insert deactivation rows for emails closed in 4b â€” preserving
  *          last-known business fields, ActiveFlag=0, AccessLevel=NULL.
  *      4d. Insert active versions: NEW emails + CHANGED (closed in 4a) +
  *          RETURNING (only inactive history exists, now back).
  *      4e. Touch LastUpdated on unchanged active rows.
  *      4f. Refresh AccessLevel (Type 1 overwrite) on all current active
  *          rows from Wrk_StaffPersons.
- *   5. FactStaffAssignment merge — 4 phases:
+ *   5. FactStaffAssignment merge â€” 4 phases:
  *      5a. Close changed triples (SourceSystemID differs from Wrk for
- *          existing (StaffKey, SchoolID, RoleCode) — collision detection).
+ *          existing (StaffKey, SchoolID, RoleCode) â€” collision detection).
  *      5b. Close missing triples (current bridge row's triple not in Wrk
  *          via the current StaffKey).
  *      5c. Insert new triples (NEW + CHANGED-after-close).
  *      5d. Touch LastUpdated on unchanged triples.
- *   6. Rebuild StaffSchoolAccess — TRUNCATE + INSERT from current DimStaff
+ *   6. Rebuild StaffSchoolAccess â€” TRUNCATE + INSERT from current DimStaff
  *      (HomeSchoolID + parsed CanChangeSchool, gated on AccessLevel IS
  *      NOT NULL). Replaces the prior vw_StaffSchoolAccess view; same
  *      derivation logic, materialized so the Power BI semantic model can
@@ -1293,9 +1294,9 @@ GO
  *   7. One summary row to FactSubmissionAudit covering all tables.
  *
  * Anti-join semantics differ from DimStudent:
- *   - DimStaff: close + insert ActiveFlag=0 replacement (binary state — we
+ *   - DimStaff: close + insert ActiveFlag=0 replacement (binary state â€” we
  *     KNOW the new state is inactive, so we materialize it).
- *   - DimStudent: close-only, no replacement (multi-valued state — can't
+ *   - DimStudent: close-only, no replacement (multi-valued state â€” can't
  *     guess Inactive=2 vs Graduated=3; Pre-Enrolled=-1 is now included in
  *     the import filter so it's not part of the absent-state set).
  *   - FactStaffAssignment: close-only, no replacement (a missing triple
@@ -1307,7 +1308,7 @@ GO
  *   ID currently on file, that's the signature of an email-reuse collision
  *   (e.g. retiring teacher's first.last@tcrce.ca getting reassigned to a
  *   new hire with the same name). Close the existing row and open a new
- *   one — and the audit message flags the import for review.
+ *   one â€” and the audit message flags the import for review.
  *
  * @EffectiveDate parameter: defaults to today. Override only for backfill
  * or point-in-time replay. Used for both EffectiveStartDate of new versions
@@ -1357,7 +1358,7 @@ BEGIN
     -- ------------------------------------------------------------------------
     -- Step 1: Build Wrk_StaffAssignment (one row per Stg row with a resolved
     -- RoleCode). Rows whose PS Group has no DimRole match are excluded here
-    -- and counted as a warning — the corresponding person still gets a
+    -- and counted as a warning â€” the corresponding person still gets a
     -- DimStaff row in Step 2 (just no FactStaffAssignment row for that role).
     -- ------------------------------------------------------------------------
     TRUNCATE TABLE Wrk_StaffAssignment;
@@ -1463,7 +1464,7 @@ BEGIN
         -- Manual RLS-role CONTEXT the PS export can't encode (e.g. Instructional Coaches, who have
         -- no distinct PS role, classified as 'Administrator'). The override WINS over the PS-derived
         -- AccessLevel AND keeps the person in the merge under the write rule below. SCOPE still derives
-        -- from PS (their HomeSchool / CanChangeSchool feed StaffSchoolAccess in Step 6) — this only
+        -- from PS (their HomeSchool / CanChangeSchool feed StaffSchoolAccess in Step 6) â€” this only
         -- changes the role classification. Curated via usp_SetStaffRoleOverride; see StaffRoleOverride.
         SELECT LOWER(LTRIM(RTRIM(Email))) AS Email, OverrideRole
         FROM StaffRoleOverride
@@ -1504,14 +1505,14 @@ BEGIN
     LEFT JOIN RoleOverride  o ON o.Email = r.Email
     WHERE r.rn = 1
       -- WRITE RULE (1.3.0): persist a person ONLY when they either
-      --   (a) hold a data-access PS role — the three school/region tiers (RegionalAnalyst /
+      --   (a) hold a data-access PS role â€” the three school/region tiers (RegionalAnalyst /
       --       Administrator / SpecialistTeacher) override the requirement to teach a section, OR
       --   (b) teach / co-teach a section in this import, OR
       --   (c) carry a manual role override (coaches, etc.).
-      -- Everyone else — Support Staff (incl. admin assistants, now remapped to SupportStaff in
-      -- DimRole), and any other null-access non-teacher — is DROPPED here. On this ingest they fall
+      -- Everyone else â€” Support Staff (incl. admin assistants, now remapped to SupportStaff in
+      -- DimRole), and any other null-access non-teacher â€” is DROPPED here. On this ingest they fall
       -- out of Wrk_StaffPersons, so Steps 4b/4c close their DimStaff row + stamp a deactivation
-      -- marker (AccessLevel NULL ⇒ no StaffSchoolAccess), instead of accumulating no-access ghosts.
+      -- marker (AccessLevel NULL â‡’ no StaffSchoolAccess), instead of accumulating no-access ghosts.
       AND (
             COALESCE(a.AccessPriority, 0) >= 1                                  -- (a) overriding PS role
          OR o.Email IS NOT NULL                                                 -- (c) manual role override
@@ -1538,19 +1539,19 @@ BEGIN
     ) anom;
 
     -- ========================================================================
-    -- Step 3.5 (2026-10-16): EMAIL-CHANGE RECONCILIATION — rename in place.
+    -- Step 3.5 (2026-10-16): EMAIL-CHANGE RECONCILIATION â€” rename in place.
     -- When a staff email is corrected/changed in PowerSchool, the per-assignment PS record ids
-    -- (SourceSystemID) are UNCHANGED — only Email_Addr differs. The plain email-keyed merge would then
+    -- (SourceSystemID) are UNCHANGED â€” only Email_Addr differs. The plain email-keyed merge would then
     -- close the old email (4b) + stamp a NULL-access deactivation ghost (4c) and insert the new email as
-    -- a brand-new person (4d) — splitting one individual and growing a pile of ghosts. Here we detect
+    -- a brand-new person (4d) â€” splitting one individual and growing a pile of ghosts. Here we detect
     -- "same individual, new email" by a SHARED FactStaffAssignment.SourceSystemID and RENAME the current
-    -- DimStaff row's Email in place (StaffKey preserved → assignments / history / StaffSchoolAccess all
+    -- DimStaff row's Email in place (StaffKey preserved â†’ assignments / history / StaffSchoolAccess all
     -- follow). Steps 4-6 then treat the (renamed) email as the existing person.
     --
-    -- GUARDS: only a 1:1 (OldEmail <-> NewEmail) link renames — ambiguous many-to-one / one-to-many
+    -- GUARDS: only a 1:1 (OldEmail <-> NewEmail) link renames â€” ambiguous many-to-one / one-to-many
     -- links are left for manual review; and only when NewEmail is NOT already a current person (two
     -- distinct people, not a rename). "Same email, new account" (returning teacher) keeps the email, so
-    -- it is NOT a rename — the normal merge + 5a SourceSystemID-collision path covers it.
+    -- it is NOT a rename â€” the normal merge + 5a SourceSystemID-collision path covers it.
     -- ========================================================================
     ;WITH OldAssign AS (   -- current ACTIVE staff whose email is absent from this import + their current assignment ids
         SELECT d.StaffKey, d.Email AS OldEmail, f.SourceSystemID
@@ -1591,7 +1592,7 @@ BEGIN
 
     -- 4a. Close changed-active rows: business field differs from Wrk.
     --     Type 2 trigger fields: FirstName, LastName, Title, HomeSchoolID,
-    --     CanChangeSchool, IsDistrictLevel. ActiveFlag too — but if the row
+    --     CanChangeSchool, IsDistrictLevel. ActiveFlag too â€” but if the row
     --     is currently ActiveFlag=1 and it's still in Wrk, ActiveFlag stays 1
     --     so it never triggers here on its own. AccessLevel is excluded
     --     (Type 1).
@@ -1821,7 +1822,7 @@ BEGIN
     --     when matched via the bridge's StaffKey-resolved Email. Covers:
     --       - Assignment removed from import (person no longer at that
     --         school in that role)
-    --       - DimStaff just versioned (StaffKey changed) — old bridge row's
+    --       - DimStaff just versioned (StaffKey changed) â€” old bridge row's
     --         StaffKey points to historical version; new bridge row will
     --         be inserted under new StaffKey in 5c.
     UPDATE f
@@ -1845,7 +1846,7 @@ BEGIN
               )
            OR NOT EXISTS (                                       -- ...or the person was DROPPED by the
                   SELECT 1 FROM Wrk_StaffPersons p               -- Step-2 write rule (no access, no section,
-                  WHERE p.Email = d.Email                        -- no override) — close their assignments so
+                  WHERE p.Email = d.Email                        -- no override) â€” close their assignments so
               )                                                  -- 5c doesn't re-open them under a deactivation marker
           );
 
@@ -1949,7 +1950,7 @@ BEGIN
     ) x
     -- Only grant access to schools that actually exist and are active in DimSchool.
     -- Drops the '0000' district marker and stale CanChangeSchool/HomeSchoolID entries
-    -- for CLOSED schools that PowerSchool still lists — both would orphan the DQ check
+    -- for CLOSED schools that PowerSchool still lists â€” both would orphan the DQ check
     -- and neither is actionable (closed schools have no students; district/region access
     -- comes from the RegionalAnalyst role, not per-school rows).
     WHERE EXISTS (
@@ -2005,7 +2006,7 @@ BEGIN
                  THEN CONCAT(' | [WARN: ', CAST(@SameEmailFieldDiffs AS VARCHAR(20)), ' emails had inconsistent per-person fields across rows]')
                  ELSE '' END,
             CASE WHEN @AssignmentsClosedChanged > 0
-                 THEN CONCAT(' | [WARN: ', CAST(@AssignmentsClosedChanged AS VARCHAR(20)), ' SourceSystemID collisions — possible email reuse, review]')
+                 THEN CONCAT(' | [WARN: ', CAST(@AssignmentsClosedChanged AS VARCHAR(20)), ' SourceSystemID collisions â€” possible email reuse, review]')
                  ELSE '' END
         ),
         @StgRowCount,
@@ -2017,7 +2018,899 @@ GO
 
 
 /*==============================================================================
-  PART 3.1 — tvf_StudentCohortReadingAll
+  PART 2.7 - usp_RunDataQualityChecks
+  source: sql/procedures/usp_RunDataQualityChecks.sql
+  1.3.0: DQ check 16 (FactSectionTeachers email orphan) scoped to IsCurrent=1 - the
+  step-3.5 in-place email rename would otherwise orphan closed historical section-
+  teacher rows and halt the ingest on any teacher email correction.
+==============================================================================*/
+
+DROP PROCEDURE IF EXISTS usp_RunDataQualityChecks;
+GO
+
+CREATE PROCEDURE usp_RunDataQualityChecks
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @RunTimestamp   DATETIME2(0) = GETDATE();
+    DECLARE @ViolationCount INT;
+
+    -- ------------------------------------------------------------------------
+    -- Single set-based INSERT â€” all 52 checks UNION'd together. The wrapping
+    -- INSERT shares one @RunTimestamp value across every violation row.
+    -- ------------------------------------------------------------------------
+    INSERT INTO FactDataQualityAudit (
+        RunTimestamp, CheckCategory, CheckName, TableName, KeyColumn, KeyValue, Detail, LastUpdated
+    )
+    SELECT
+        @RunTimestamp,
+        v.CheckCategory,
+        v.CheckName,
+        v.TableName,
+        v.KeyColumn,
+        v.KeyValue,
+        v.Detail,
+        @RunTimestamp
+    FROM (
+
+        -- ====================================================================
+        -- ORPHAN CHECKS â€” fact/bridge rows referencing missing dim rows
+        -- ====================================================================
+
+        -- 01. FactEnrollment.StudentKey â†’ DimStudent.StudentKey
+        SELECT
+            CAST('Orphan' AS VARCHAR(20))                                                  AS CheckCategory,
+            CAST('FactEnrollment.StudentKey not found in DimStudent' AS VARCHAR(150))      AS CheckName,
+            CAST('FactEnrollment' AS VARCHAR(50))                                          AS TableName,
+            CAST('EnrollmentID' AS VARCHAR(50))                                            AS KeyColumn,
+            CAST(f.EnrollmentID AS VARCHAR(150))                                           AS KeyValue,
+            CAST(CONCAT('StudentKey=', CAST(f.StudentKey AS VARCHAR(20)), ' has no DimStudent row') AS VARCHAR(500)) AS Detail
+        FROM FactEnrollment f
+        LEFT JOIN DimStudent s ON s.StudentKey = f.StudentKey
+        WHERE s.StudentKey IS NULL
+
+        UNION ALL
+
+        -- 02. FactEnrollment.SectionKey â†’ DimSection.SectionKey
+        SELECT
+            'Orphan',
+            'FactEnrollment.SectionKey not found in DimSection',
+            'FactEnrollment',
+            'EnrollmentID',
+            CAST(f.EnrollmentID AS VARCHAR(150)),
+            CONCAT('SectionKey=', CAST(f.SectionKey AS VARCHAR(20)), ' has no DimSection row')
+        FROM FactEnrollment f
+        LEFT JOIN DimSection sec ON sec.SectionKey = f.SectionKey
+        WHERE sec.SectionKey IS NULL
+
+        UNION ALL
+
+        -- 03. FactStaffAssignment.StaffKey â†’ DimStaff.StaffKey
+        SELECT
+            'Orphan',
+            'FactStaffAssignment.StaffKey not found in DimStaff',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(f.StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('StaffKey=', CAST(f.StaffKey AS VARCHAR(20)), ' has no DimStaff row')
+        FROM FactStaffAssignment f
+        LEFT JOIN DimStaff d ON d.StaffKey = f.StaffKey
+        WHERE d.StaffKey IS NULL
+
+        UNION ALL
+
+        -- 04. StaffSchoolAccess.StaffKey â†’ DimStaff.StaffKey
+        SELECT
+            'Orphan',
+            'StaffSchoolAccess.StaffKey not found in DimStaff',
+            'StaffSchoolAccess',
+            'StaffSchoolAccessID',
+            CAST(ssa.StaffSchoolAccessID AS VARCHAR(150)),
+            CONCAT('StaffKey=', CAST(ssa.StaffKey AS VARCHAR(20)), ' has no DimStaff row')
+        FROM StaffSchoolAccess ssa
+        LEFT JOIN DimStaff d ON d.StaffKey = ssa.StaffKey
+        WHERE d.StaffKey IS NULL
+
+        UNION ALL
+
+        -- 05. FactAssessmentReading.StudentKey â†’ DimStudent.StudentKey
+        SELECT
+            'Orphan',
+            'FactAssessmentReading.StudentKey not found in DimStudent',
+            'FactAssessmentReading',
+            'ReadingAssessmentID',
+            CAST(f.ReadingAssessmentID AS VARCHAR(150)),
+            CONCAT('StudentKey=', CAST(f.StudentKey AS VARCHAR(20)), ' has no DimStudent row')
+        FROM FactAssessmentReading f
+        LEFT JOIN DimStudent s ON s.StudentKey = f.StudentKey
+        WHERE s.StudentKey IS NULL
+
+        UNION ALL
+
+        -- 06. FactAssessmentReading.AssessmentWindowID â†’ DimAssessmentWindow
+        SELECT
+            'Orphan',
+            'FactAssessmentReading.AssessmentWindowID not found in DimAssessmentWindow',
+            'FactAssessmentReading',
+            'ReadingAssessmentID',
+            CAST(f.ReadingAssessmentID AS VARCHAR(150)),
+            CONCAT('AssessmentWindowID=', CAST(f.AssessmentWindowID AS VARCHAR(20)), ' missing')
+        FROM FactAssessmentReading f
+        LEFT JOIN DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+        WHERE f.AssessmentWindowID IS NOT NULL
+          AND w.AssessmentWindowID IS NULL
+
+        UNION ALL
+
+        -- 07. FactAssessmentReading.ReadingScaleID â†’ DimReadingScale
+        SELECT
+            'Orphan',
+            'FactAssessmentReading.ReadingScaleID not found in DimReadingScale',
+            'FactAssessmentReading',
+            'ReadingAssessmentID',
+            CAST(f.ReadingAssessmentID AS VARCHAR(150)),
+            CONCAT('ReadingScaleID=', CAST(f.ReadingScaleID AS VARCHAR(20)), ' missing')
+        FROM FactAssessmentReading f
+        LEFT JOIN DimReadingScale r ON r.ReadingScaleID = f.ReadingScaleID
+        WHERE f.ReadingScaleID IS NOT NULL
+          AND r.ReadingScaleID IS NULL
+
+        UNION ALL
+
+        -- 08. FactAssessmentReading.EnteredByStaffKey â†’ DimStaff.StaffKey (when populated)
+        SELECT
+            'Orphan',
+            'FactAssessmentReading.EnteredByStaffKey not found in DimStaff',
+            'FactAssessmentReading',
+            'ReadingAssessmentID',
+            CAST(f.ReadingAssessmentID AS VARCHAR(150)),
+            CONCAT('EnteredByStaffKey=', CAST(f.EnteredByStaffKey AS VARCHAR(20)), ' has no DimStaff row')
+        FROM FactAssessmentReading f
+        LEFT JOIN DimStaff d ON d.StaffKey = f.EnteredByStaffKey
+        WHERE f.EnteredByStaffKey IS NOT NULL
+          AND d.StaffKey IS NULL
+
+        UNION ALL
+
+        -- 08w1. FactAssessmentWriting.StudentKey â†’ DimStudent (writing has no scale; 3 orphan checks)
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.StudentKey not found in DimStudent',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('StudentKey=', CAST(f.StudentKey AS VARCHAR(20)), ' has no DimStudent row')
+        FROM FactAssessmentWriting f
+        LEFT JOIN DimStudent s ON s.StudentKey = f.StudentKey
+        WHERE s.StudentKey IS NULL
+
+        UNION ALL
+
+        -- 08w2. FactAssessmentWriting.AssessmentWindowID â†’ DimAssessmentWindow
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.AssessmentWindowID not found in DimAssessmentWindow',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('AssessmentWindowID=', CAST(f.AssessmentWindowID AS VARCHAR(20)), ' missing')
+        FROM FactAssessmentWriting f
+        LEFT JOIN DimAssessmentWindow w ON w.AssessmentWindowID = f.AssessmentWindowID
+        WHERE f.AssessmentWindowID IS NOT NULL
+          AND w.AssessmentWindowID IS NULL
+
+        UNION ALL
+
+        -- 08w3. FactAssessmentWriting.EnteredByStaffKey â†’ DimStaff.StaffKey (when populated)
+        SELECT
+            'Orphan',
+            'FactAssessmentWriting.EnteredByStaffKey not found in DimStaff',
+            'FactAssessmentWriting',
+            'WritingAssessmentID',
+            CAST(f.WritingAssessmentID AS VARCHAR(150)),
+            CONCAT('EnteredByStaffKey=', CAST(f.EnteredByStaffKey AS VARCHAR(20)), ' has no DimStaff row')
+        FROM FactAssessmentWriting f
+        LEFT JOIN DimStaff d ON d.StaffKey = f.EnteredByStaffKey
+        WHERE f.EnteredByStaffKey IS NOT NULL
+          AND d.StaffKey IS NULL
+
+        UNION ALL
+
+        -- 09. DimStudent.SchoolID â†’ DimSchool.SchoolID
+        SELECT
+            'Orphan',
+            'DimStudent.SchoolID not found in DimSchool',
+            'DimStudent',
+            'StudentKey',
+            CAST(s.StudentKey AS VARCHAR(150)),
+            CONCAT('SchoolID=', s.SchoolID, ' not in DimSchool')
+        FROM DimStudent s
+        LEFT JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
+        WHERE s.SchoolID IS NOT NULL
+          AND sch.SchoolID IS NULL
+
+        UNION ALL
+
+        -- 10. DimSection.SchoolID â†’ DimSchool.SchoolID
+        SELECT
+            'Orphan',
+            'DimSection.SchoolID not found in DimSchool',
+            'DimSection',
+            'SectionKey',
+            CAST(sec.SectionKey AS VARCHAR(150)),
+            CONCAT('SchoolID=', sec.SchoolID, ' not in DimSchool')
+        FROM DimSection sec
+        LEFT JOIN DimSchool sch ON sch.SchoolID = sec.SchoolID
+        WHERE sec.SchoolID IS NOT NULL
+          AND sch.SchoolID IS NULL
+
+        UNION ALL
+
+        -- 11. DimStaff.HomeSchoolID â†’ DimSchool.SchoolID (when populated)
+        SELECT
+            'Orphan',
+            'DimStaff.HomeSchoolID not found in DimSchool',
+            'DimStaff',
+            'StaffKey',
+            CAST(d.StaffKey AS VARCHAR(150)),
+            CONCAT('HomeSchoolID=', d.HomeSchoolID, ' not in DimSchool')
+        FROM DimStaff d
+        LEFT JOIN DimSchool sch ON sch.SchoolID = d.HomeSchoolID
+        WHERE d.HomeSchoolID IS NOT NULL
+          AND sch.SchoolID IS NULL
+
+        UNION ALL
+
+        -- 12. DimSection.TermID â†’ DimTerm.TermID
+        SELECT
+            'Orphan',
+            'DimSection.TermID not found in DimTerm',
+            'DimSection',
+            'SectionKey',
+            CAST(sec.SectionKey AS VARCHAR(150)),
+            CONCAT('TermID=', CAST(sec.TermID AS VARCHAR(20)), ' not in DimTerm')
+        FROM DimSection sec
+        LEFT JOIN DimTerm t ON t.TermID = sec.TermID
+        WHERE t.TermID IS NULL
+
+        UNION ALL
+
+        -- 13. FactStaffAssignment.SchoolID â†’ DimSchool.SchoolID
+        --      Special case: '0000' is the district-level aggregate-row marker â€”
+        --      it's intentional and does NOT exist in DimSchool. Exclude.
+        SELECT
+            'Orphan',
+            'FactStaffAssignment.SchoolID not found in DimSchool',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(f.StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('SchoolID=', f.SchoolID, ' not in DimSchool')
+        FROM FactStaffAssignment f
+        LEFT JOIN DimSchool sch ON sch.SchoolID = f.SchoolID
+        WHERE f.SchoolID <> '0000'
+          AND sch.SchoolID IS NULL
+
+        UNION ALL
+
+        -- 14. StaffSchoolAccess.SchoolID â†’ DimSchool.SchoolID
+        --      Same '0000' aggregate-row marker exception as #13.
+        SELECT
+            'Orphan',
+            'StaffSchoolAccess.SchoolID not found in DimSchool',
+            'StaffSchoolAccess',
+            'StaffSchoolAccessID',
+            CAST(ssa.StaffSchoolAccessID AS VARCHAR(150)),
+            CONCAT('SchoolID=', ssa.SchoolID, ' not in DimSchool')
+        FROM StaffSchoolAccess ssa
+        LEFT JOIN DimSchool sch ON sch.SchoolID = ssa.SchoolID
+        WHERE ssa.SchoolID <> '0000'
+          AND sch.SchoolID IS NULL
+
+        UNION ALL
+
+        -- 15. FactSectionTeachers.SectionID â†’ some DimSection row (any version)
+        --      Bridge keys on business keys, not surrogates â€” so the check is
+        --      "does this SectionID exist anywhere in DimSection's history?"
+        SELECT
+            'Orphan',
+            'FactSectionTeachers.SectionID not found in any DimSection version',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(fst.SectionTeacherID AS VARCHAR(150)),
+            CONCAT('SectionID=', fst.SectionID, ' not in DimSection')
+        FROM FactSectionTeachers fst
+        WHERE NOT EXISTS (
+            SELECT 1 FROM DimSection sec WHERE sec.SectionID = fst.SectionID
+        )
+
+        UNION ALL
+
+        -- 16. FactSectionTeachers.TeacherEmail â†’ some DimStaff row (any version).
+        -- CURRENT rows only: TeacherEmail is a MUTABLE business key, and the 1.3.0 email-change
+        -- reconciliation (usp_MergeStaff step 3.5) renames DimStaff.Email IN PLACE â€” so after a teacher's
+        -- email is corrected, NO DimStaff version carries the OLD address, and the now-CLOSED historical
+        -- FactSectionTeachers rows that referenced it would orphan here on EVERY such correction. A closed
+        -- section-teacher row is valid history (it resolved while current); only current roster integrity
+        -- needs enforcing, so scope the check to IsCurrent=1. A genuine current orphan (a section assigned
+        -- to a teacher absent from DimStaff) is still caught.
+        SELECT
+            'Orphan',
+            'FactSectionTeachers.TeacherEmail not found in any DimStaff version',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(fst.SectionTeacherID AS VARCHAR(150)),
+            CONCAT('TeacherEmail=', fst.TeacherEmail, ' not in DimStaff')
+        FROM FactSectionTeachers fst
+        WHERE fst.IsCurrent = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM DimStaff d WHERE LOWER(d.Email) = LOWER(fst.TeacherEmail)
+        )
+
+        UNION ALL
+
+        -- ====================================================================
+        -- ISCURRENT CHECKS â€” more than one IsCurrent=1 row per business key
+        -- ====================================================================
+
+        -- 17. DimStudent: multiple current rows per StudentNumber
+        SELECT
+            'IsCurrent',
+            'DimStudent: multiple IsCurrent=1 rows for same StudentNumber',
+            'DimStudent',
+            'StudentNumber',
+            CAST(StudentNumber AS VARCHAR(150)),
+            CONCAT(CAST(COUNT(*) AS VARCHAR(10)), ' current rows (expected 1)')
+        FROM DimStudent
+        WHERE IsCurrent = 1
+        GROUP BY StudentNumber
+        HAVING COUNT(*) > 1
+
+        UNION ALL
+
+        -- 18. DimStaff: multiple current rows per Email
+        SELECT
+            'IsCurrent',
+            'DimStaff: multiple IsCurrent=1 rows for same Email',
+            'DimStaff',
+            'Email',
+            CAST(Email AS VARCHAR(150)),
+            CONCAT(CAST(COUNT(*) AS VARCHAR(10)), ' current rows (expected 1)')
+        FROM DimStaff
+        WHERE IsCurrent = 1
+        GROUP BY Email
+        HAVING COUNT(*) > 1
+
+        UNION ALL
+
+        -- 19. DimSection: multiple current rows per SectionID
+        SELECT
+            'IsCurrent',
+            'DimSection: multiple IsCurrent=1 rows for same SectionID',
+            'DimSection',
+            'SectionID',
+            CAST(SectionID AS VARCHAR(150)),
+            CONCAT(CAST(COUNT(*) AS VARCHAR(10)), ' current rows (expected 1)')
+        FROM DimSection
+        WHERE IsCurrent = 1
+        GROUP BY SectionID
+        HAVING COUNT(*) > 1
+
+        UNION ALL
+
+        -- 20. FactStaffAssignment: multiple current rows per (StaffKey, SchoolID, RoleCode)
+        SELECT
+            'IsCurrent',
+            'FactStaffAssignment: multiple IsCurrent=1 rows per (StaffKey, SchoolID, RoleCode)',
+            'FactStaffAssignment',
+            'Triple',
+            CAST(CONCAT(CAST(StaffKey AS VARCHAR(20)), '|', SchoolID, '|', RoleCode) AS VARCHAR(150)),
+            CONCAT(CAST(COUNT(*) AS VARCHAR(10)), ' current rows (expected 1)')
+        FROM FactStaffAssignment
+        WHERE IsCurrent = 1
+        GROUP BY StaffKey, SchoolID, RoleCode
+        HAVING COUNT(*) > 1
+
+        UNION ALL
+
+        -- 21. FactSectionTeachers: multiple current rows per (SectionID, TeacherEmail, TeacherRole)
+        SELECT
+            'IsCurrent',
+            'FactSectionTeachers: multiple IsCurrent=1 rows per (SectionID, TeacherEmail, TeacherRole)',
+            'FactSectionTeachers',
+            'Triple',
+            CAST(CONCAT(SectionID, '|', TeacherEmail, '|', TeacherRole) AS VARCHAR(150)),
+            CONCAT(CAST(COUNT(*) AS VARCHAR(10)), ' current rows (expected 1)')
+        FROM FactSectionTeachers
+        WHERE IsCurrent = 1
+        GROUP BY SectionID, TeacherEmail, TeacherRole
+        HAVING COUNT(*) > 1
+
+        UNION ALL
+
+        -- ====================================================================
+        -- DATE CHECKS â€” effective-window integrity on Type 2 dims and bridges
+        --   Rule A: IsCurrent=1 â‡’ EffectiveEndDate IS NULL
+        --   Rule B: IsCurrent=0 â‡’ EffectiveEndDate IS NOT NULL
+        --   Rule C: EffectiveEndDate >= EffectiveStartDate (when both populated)
+        --   Rule D: no overlapping windows for same business key
+        -- ====================================================================
+
+        -- 22. DimStudent â€” IsCurrent=1 with non-NULL EffectiveEndDate (Rule A)
+        SELECT
+            'Date',
+            'DimStudent: IsCurrent=1 row has non-NULL EffectiveEndDate (rule A)',
+            'DimStudent',
+            'StudentKey',
+            CAST(StudentKey AS VARCHAR(150)),
+            CONCAT('EffectiveEndDate=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimStudent
+        WHERE IsCurrent = 1 AND EffectiveEndDate IS NOT NULL
+
+        UNION ALL
+
+        -- 23. DimStudent â€” IsCurrent=0 with NULL EffectiveEndDate (Rule B)
+        SELECT
+            'Date',
+            'DimStudent: IsCurrent=0 row has NULL EffectiveEndDate (rule B)',
+            'DimStudent',
+            'StudentKey',
+            CAST(StudentKey AS VARCHAR(150)),
+            'IsCurrent=0 but EffectiveEndDate is NULL'
+        FROM DimStudent
+        WHERE IsCurrent = 0 AND EffectiveEndDate IS NULL
+
+        UNION ALL
+
+        -- 24. DimStudent â€” reversed effective window (Rule C)
+        SELECT
+            'Date',
+            'DimStudent: EffectiveEndDate < EffectiveStartDate (rule C)',
+            'DimStudent',
+            'StudentKey',
+            CAST(StudentKey AS VARCHAR(150)),
+            CONCAT('Start=', CAST(EffectiveStartDate AS VARCHAR(20)),
+                   ' End=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimStudent
+        WHERE EffectiveEndDate IS NOT NULL
+          AND EffectiveEndDate < EffectiveStartDate
+
+        UNION ALL
+
+        -- 25. DimStudent â€” overlapping windows for same StudentNumber (Rule D)
+        --      Treats NULL EffectiveEndDate as 9999-12-31 (open-ended). Self-join
+        --      with StudentKey ordering avoids reporting each pair twice.
+        SELECT
+            'Date',
+            'DimStudent: overlapping effective windows for same StudentNumber (rule D)',
+            'DimStudent',
+            'StudentNumber',
+            CAST(a.StudentNumber AS VARCHAR(150)),
+            CONCAT('StudentKeys ', CAST(a.StudentKey AS VARCHAR(20)), ' & ', CAST(b.StudentKey AS VARCHAR(20)),
+                   ' overlap on [', CAST(a.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(a.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'),
+                   '] vs [', CAST(b.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(b.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'), ']')
+        FROM DimStudent a
+        INNER JOIN DimStudent b
+                ON a.StudentNumber = b.StudentNumber
+               AND a.StudentKey < b.StudentKey
+        WHERE a.EffectiveStartDate <= COALESCE(b.EffectiveEndDate, '9999-12-31')
+          AND COALESCE(a.EffectiveEndDate, '9999-12-31') >= b.EffectiveStartDate
+
+        UNION ALL
+
+        -- 26. DimStaff â€” IsCurrent=1 with non-NULL EffectiveEndDate (Rule A)
+        SELECT
+            'Date',
+            'DimStaff: IsCurrent=1 row has non-NULL EffectiveEndDate (rule A)',
+            'DimStaff',
+            'StaffKey',
+            CAST(StaffKey AS VARCHAR(150)),
+            CONCAT('EffectiveEndDate=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimStaff
+        WHERE IsCurrent = 1 AND EffectiveEndDate IS NOT NULL
+
+        UNION ALL
+
+        -- 27. DimStaff â€” IsCurrent=0 with NULL EffectiveEndDate (Rule B)
+        SELECT
+            'Date',
+            'DimStaff: IsCurrent=0 row has NULL EffectiveEndDate (rule B)',
+            'DimStaff',
+            'StaffKey',
+            CAST(StaffKey AS VARCHAR(150)),
+            'IsCurrent=0 but EffectiveEndDate is NULL'
+        FROM DimStaff
+        WHERE IsCurrent = 0 AND EffectiveEndDate IS NULL
+
+        UNION ALL
+
+        -- 28. DimStaff â€” reversed effective window (Rule C)
+        SELECT
+            'Date',
+            'DimStaff: EffectiveEndDate < EffectiveStartDate (rule C)',
+            'DimStaff',
+            'StaffKey',
+            CAST(StaffKey AS VARCHAR(150)),
+            CONCAT('Start=', CAST(EffectiveStartDate AS VARCHAR(20)),
+                   ' End=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimStaff
+        WHERE EffectiveEndDate IS NOT NULL
+          AND EffectiveEndDate < EffectiveStartDate
+
+        UNION ALL
+
+        -- 29. DimStaff â€” overlapping windows for same Email (Rule D)
+        SELECT
+            'Date',
+            'DimStaff: overlapping effective windows for same Email (rule D)',
+            'DimStaff',
+            'Email',
+            CAST(a.Email AS VARCHAR(150)),
+            CONCAT('StaffKeys ', CAST(a.StaffKey AS VARCHAR(20)), ' & ', CAST(b.StaffKey AS VARCHAR(20)),
+                   ' overlap on [', CAST(a.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(a.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'),
+                   '] vs [', CAST(b.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(b.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'), ']')
+        FROM DimStaff a
+        INNER JOIN DimStaff b
+                ON a.Email = b.Email
+               AND a.StaffKey < b.StaffKey
+        WHERE a.EffectiveStartDate <= COALESCE(b.EffectiveEndDate, '9999-12-31')
+          AND COALESCE(a.EffectiveEndDate, '9999-12-31') >= b.EffectiveStartDate
+
+        UNION ALL
+
+        -- 30. DimSection â€” IsCurrent=1 with non-NULL EffectiveEndDate (Rule A)
+        SELECT
+            'Date',
+            'DimSection: IsCurrent=1 row has non-NULL EffectiveEndDate (rule A)',
+            'DimSection',
+            'SectionKey',
+            CAST(SectionKey AS VARCHAR(150)),
+            CONCAT('EffectiveEndDate=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimSection
+        WHERE IsCurrent = 1 AND EffectiveEndDate IS NOT NULL
+
+        UNION ALL
+
+        -- 31. DimSection â€” IsCurrent=0 with NULL EffectiveEndDate (Rule B)
+        SELECT
+            'Date',
+            'DimSection: IsCurrent=0 row has NULL EffectiveEndDate (rule B)',
+            'DimSection',
+            'SectionKey',
+            CAST(SectionKey AS VARCHAR(150)),
+            'IsCurrent=0 but EffectiveEndDate is NULL'
+        FROM DimSection
+        WHERE IsCurrent = 0 AND EffectiveEndDate IS NULL
+
+        UNION ALL
+
+        -- 32. DimSection â€” reversed effective window (Rule C)
+        SELECT
+            'Date',
+            'DimSection: EffectiveEndDate < EffectiveStartDate (rule C)',
+            'DimSection',
+            'SectionKey',
+            CAST(SectionKey AS VARCHAR(150)),
+            CONCAT('Start=', CAST(EffectiveStartDate AS VARCHAR(20)),
+                   ' End=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM DimSection
+        WHERE EffectiveEndDate IS NOT NULL
+          AND EffectiveEndDate < EffectiveStartDate
+
+        UNION ALL
+
+        -- 33. DimSection â€” overlapping windows for same SectionID (Rule D)
+        SELECT
+            'Date',
+            'DimSection: overlapping effective windows for same SectionID (rule D)',
+            'DimSection',
+            'SectionID',
+            CAST(a.SectionID AS VARCHAR(150)),
+            CONCAT('SectionKeys ', CAST(a.SectionKey AS VARCHAR(20)), ' & ', CAST(b.SectionKey AS VARCHAR(20)),
+                   ' overlap on [', CAST(a.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(a.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'),
+                   '] vs [', CAST(b.EffectiveStartDate AS VARCHAR(20)),
+                   ', ', COALESCE(CAST(b.EffectiveEndDate AS VARCHAR(20)), '9999-12-31'), ']')
+        FROM DimSection a
+        INNER JOIN DimSection b
+                ON a.SectionID = b.SectionID
+               AND a.SectionKey < b.SectionKey
+        WHERE a.EffectiveStartDate <= COALESCE(b.EffectiveEndDate, '9999-12-31')
+          AND COALESCE(a.EffectiveEndDate, '9999-12-31') >= b.EffectiveStartDate
+
+        UNION ALL
+
+        -- 34. FactStaffAssignment â€” IsCurrent=1 with non-NULL EffectiveEndDate
+        SELECT
+            'Date',
+            'FactStaffAssignment: IsCurrent=1 row has non-NULL EffectiveEndDate (rule A)',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('EffectiveEndDate=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM FactStaffAssignment
+        WHERE IsCurrent = 1 AND EffectiveEndDate IS NOT NULL
+
+        UNION ALL
+
+        -- 35. FactStaffAssignment â€” IsCurrent=0 with NULL EffectiveEndDate
+        SELECT
+            'Date',
+            'FactStaffAssignment: IsCurrent=0 row has NULL EffectiveEndDate (rule B)',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(StaffAssignmentID AS VARCHAR(150)),
+            'IsCurrent=0 but EffectiveEndDate is NULL'
+        FROM FactStaffAssignment
+        WHERE IsCurrent = 0 AND EffectiveEndDate IS NULL
+
+        UNION ALL
+
+        -- 36. FactStaffAssignment â€” reversed effective window
+        SELECT
+            'Date',
+            'FactStaffAssignment: EffectiveEndDate < EffectiveStartDate (rule C)',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('Start=', CAST(EffectiveStartDate AS VARCHAR(20)),
+                   ' End=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM FactStaffAssignment
+        WHERE EffectiveEndDate IS NOT NULL
+          AND EffectiveEndDate < EffectiveStartDate
+
+        UNION ALL
+
+        -- 37. FactSectionTeachers â€” IsCurrent=1 with non-NULL EffectiveEndDate
+        SELECT
+            'Date',
+            'FactSectionTeachers: IsCurrent=1 row has non-NULL EffectiveEndDate (rule A)',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(SectionTeacherID AS VARCHAR(150)),
+            CONCAT('EffectiveEndDate=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM FactSectionTeachers
+        WHERE IsCurrent = 1 AND EffectiveEndDate IS NOT NULL
+
+        UNION ALL
+
+        -- 38. FactSectionTeachers â€” IsCurrent=0 with NULL EffectiveEndDate
+        SELECT
+            'Date',
+            'FactSectionTeachers: IsCurrent=0 row has NULL EffectiveEndDate (rule B)',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(SectionTeacherID AS VARCHAR(150)),
+            'IsCurrent=0 but EffectiveEndDate is NULL'
+        FROM FactSectionTeachers
+        WHERE IsCurrent = 0 AND EffectiveEndDate IS NULL
+
+        UNION ALL
+
+        -- 39. FactSectionTeachers â€” reversed effective window
+        SELECT
+            'Date',
+            'FactSectionTeachers: EffectiveEndDate < EffectiveStartDate (rule C)',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(SectionTeacherID AS VARCHAR(150)),
+            CONCAT('Start=', CAST(EffectiveStartDate AS VARCHAR(20)),
+                   ' End=', CAST(EffectiveEndDate AS VARCHAR(20)))
+        FROM FactSectionTeachers
+        WHERE EffectiveEndDate IS NOT NULL
+          AND EffectiveEndDate < EffectiveStartDate
+
+        UNION ALL
+
+        -- 40. FactEnrollment â€” reversed enrollment dates (StartDate / EndDate are
+        --      domain dates, not SCD effective dates; rule C only)
+        SELECT
+            'Date',
+            'FactEnrollment: EndDate < StartDate',
+            'FactEnrollment',
+            'EnrollmentID',
+            CAST(EnrollmentID AS VARCHAR(150)),
+            CONCAT('Start=', CAST(StartDate AS VARCHAR(20)),
+                   ' End=', CAST(EndDate AS VARCHAR(20)))
+        FROM FactEnrollment
+        WHERE EndDate IS NOT NULL
+          AND EndDate < StartDate
+
+        UNION ALL
+
+        -- ====================================================================
+        -- REFERENCE CHECKS â€” business-key values not in their reference dim
+        -- ====================================================================
+
+        -- 41. DimStudent.ProgramCode â†’ DimProgram.ProgramCode
+        SELECT
+            'Reference',
+            'DimStudent.ProgramCode not found in DimProgram',
+            'DimStudent',
+            'StudentKey',
+            CAST(s.StudentKey AS VARCHAR(150)),
+            CONCAT('ProgramCode=', s.ProgramCode, ' not in DimProgram')
+        FROM DimStudent s
+        LEFT JOIN DimProgram p ON p.ProgramCode = s.ProgramCode
+        WHERE s.ProgramCode IS NOT NULL
+          AND p.ProgramCode IS NULL
+
+        UNION ALL
+
+        -- 42. DimStudent.Gender â†’ DimGender.GenderCode
+        SELECT
+            'Reference',
+            'DimStudent.Gender not found in DimGender',
+            'DimStudent',
+            'StudentKey',
+            CAST(s.StudentKey AS VARCHAR(150)),
+            CONCAT('Gender=', s.Gender, ' not in DimGender')
+        FROM DimStudent s
+        LEFT JOIN DimGender g ON g.GenderCode = s.Gender
+        WHERE s.Gender IS NOT NULL
+          AND g.GenderCode IS NULL
+
+        UNION ALL
+
+        -- 43. FactStaffAssignment.RoleCode â†’ DimRole.RoleCode
+        SELECT
+            'Reference',
+            'FactStaffAssignment.RoleCode not present in DimRole',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(f.StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('RoleCode=', f.RoleCode, ' not in DimRole.RoleCode')
+        FROM FactStaffAssignment f
+        WHERE NOT EXISTS (
+            SELECT 1 FROM DimRole r WHERE r.RoleCode = f.RoleCode
+        )
+
+        UNION ALL
+
+        -- 44. DimStudent.EnrollStatus must be 0 or -1 (production import filter)
+        SELECT
+            'Reference',
+            'DimStudent.EnrollStatus outside expected (0, -1)',
+            'DimStudent',
+            'StudentKey',
+            CAST(StudentKey AS VARCHAR(150)),
+            CONCAT('EnrollStatus=', CAST(EnrollStatus AS VARCHAR(10)),
+                   ' (expected 0 = Active or -1 = Pre-Enrolled)')
+        FROM DimStudent
+        WHERE EnrollStatus NOT IN (0, -1)
+
+        UNION ALL
+
+        -- ====================================================================
+        -- CONSISTENCY CHECKS â€” logical-state contradictions
+        -- ====================================================================
+
+        -- 45. DimStaff currently inactive (IsCurrent=1, ActiveFlag=0) should have
+        --      NO current FactStaffAssignment rows. The merge proc closes them
+        --      when staff go inactive (Step 5b in usp_MergeStaff). Any current
+        --      row left under an inactive person means the close didn't happen.
+        SELECT
+            'Consistency',
+            'Inactive DimStaff (ActiveFlag=0) has current FactStaffAssignment row',
+            'FactStaffAssignment',
+            'StaffAssignmentID',
+            CAST(f.StaffAssignmentID AS VARCHAR(150)),
+            CONCAT('StaffKey=', CAST(d.StaffKey AS VARCHAR(20)),
+                   ' (', d.Email, ') ActiveFlag=0 but bridge IsCurrent=1')
+        FROM FactStaffAssignment f
+        INNER JOIN DimStaff d ON d.StaffKey = f.StaffKey
+        WHERE f.IsCurrent = 1
+          AND d.IsCurrent = 1
+          AND d.ActiveFlag = 0
+
+        UNION ALL
+
+        -- 46. DimStaff inactive deactivation marker should have AccessLevel = NULL
+        --      (merge proc Step 4c sets AccessLevel to NULL when inserting the
+        --      deactivation row).
+        SELECT
+            'Consistency',
+            'DimStaff inactive row has non-NULL AccessLevel',
+            'DimStaff',
+            'StaffKey',
+            CAST(StaffKey AS VARCHAR(150)),
+            CONCAT('Email=', Email, ' ActiveFlag=0 AccessLevel=', AccessLevel)
+        FROM DimStaff
+        WHERE IsCurrent = 1
+          AND ActiveFlag = 0
+          AND AccessLevel IS NOT NULL
+
+        UNION ALL
+
+        -- 47. StaffSchoolAccess should never include staff with NULL or excluded
+        --      AccessLevel (Teacher / ProvincialAnalyst / SupportStaff / NULL).
+        --      The materialization proc filters AccessLevel IS NOT NULL, but if
+        --      that ever changes upstream, this catches it.
+        SELECT
+            'Consistency',
+            'StaffSchoolAccess contains staff whose current DimStaff AccessLevel is NULL',
+            'StaffSchoolAccess',
+            'StaffSchoolAccessID',
+            CAST(ssa.StaffSchoolAccessID AS VARCHAR(150)),
+            CONCAT('StaffKey=', CAST(ssa.StaffKey AS VARCHAR(20)),
+                   ' (', ssa.Email, ') is in StaffSchoolAccess but DimStaff.AccessLevel is NULL')
+        FROM StaffSchoolAccess ssa
+        INNER JOIN DimStaff d
+                ON d.StaffKey = ssa.StaffKey
+        WHERE d.IsCurrent = 1
+          AND d.AccessLevel IS NULL
+
+        UNION ALL
+
+        -- 48. FactSectionTeachers.TeacherEmail should always be lowercase
+        SELECT
+            'Consistency',
+            'FactSectionTeachers.TeacherEmail is not lowercase',
+            'FactSectionTeachers',
+            'SectionTeacherID',
+            CAST(SectionTeacherID AS VARCHAR(150)),
+            CONCAT('TeacherEmail=', TeacherEmail, ' (expected lowercase)')
+        FROM FactSectionTeachers
+        WHERE TeacherEmail <> LOWER(TeacherEmail)
+
+        UNION ALL
+
+        -- 49. DimStaff.Email same lowercase rule.
+        SELECT
+            'Consistency',
+            'DimStaff.Email is not lowercase',
+            'DimStaff',
+            'StaffKey',
+            CAST(StaffKey AS VARCHAR(150)),
+            CONCAT('Email=', Email, ' (expected lowercase)')
+        FROM DimStaff
+        WHERE Email <> LOWER(Email)
+
+    ) v;
+
+    SET @ViolationCount = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Clean run: write a single PASS sentinel row so the audit table itself
+    -- carries a record of every execution (not just failed ones).
+    -- ------------------------------------------------------------------------
+    IF @ViolationCount = 0
+    BEGIN
+        INSERT INTO FactDataQualityAudit (
+            RunTimestamp, CheckCategory, CheckName, TableName, KeyColumn, KeyValue, Detail, LastUpdated
+        )
+        VALUES (
+            @RunTimestamp,
+            'PASS',
+            'All checks passed',
+            NULL,
+            NULL,
+            NULL,
+            CONCAT('All 52 checks returned zero rows at ', CAST(@RunTimestamp AS VARCHAR(20))),
+            @RunTimestamp
+        );
+    END;
+
+    -- ------------------------------------------------------------------------
+    -- Result set for caller visibility (ad-hoc devs + Pipeline activity output).
+    -- Same rows just written, in stable category/name order.
+    -- ------------------------------------------------------------------------
+    SELECT *
+    FROM FactDataQualityAudit
+    WHERE RunTimestamp = @RunTimestamp
+    ORDER BY CheckCategory, CheckName, KeyValue;
+
+    RETURN @ViolationCount;
+END;
+
+GO
+
+/*==============================================================================
+  PART 3.1 â€” tvf_StudentCohortReadingAll
   source: sql/security/tvf_StudentCohortReadingAll.sql
 ==============================================================================*/
 
@@ -2027,17 +2920,17 @@ GO
  *          Mirrors tvf_StudentCohortMathAll: one row per in-scope student PER READING-RESULT LANGUAGE,
  *          carrying the measure the client rolls up (School -> Grade|Homeroom, % Meeting/Exceeding) plus
  *          the language so the display can show distinct STUDENTS vs RESULTS per language (EN/FR) + overall.
- *          Counts/measure only — NO names or student numbers (privacy; the per-group student detail loads
+ *          Counts/measure only â€” NO names or student numbers (privacy; the per-group student detail loads
  *          separately on expand, same pattern as Math).
  * Created: 2026-10-16
  * Region: Canada East (PIIDPA compliant)
  *
- * GRAIN — one row per (student x the language of a reading result they have this year):
+ * GRAIN â€” one row per (student x the language of a reading result they have this year):
  *   - a student with an EN and an FR reading result => TWO rows (ScaleSystem 'EN_Reading' / 'FR_Reading');
  *   - a student with one => ONE row; a student with NO reading result => ONE row, ScaleSystem NULL
  *     (so the tree shows them as "No data" instead of dropping them).
  *   Reading language is DERIVED from ReadingScaleID -> DimReadingScale.ScaleSystem (the reading fact has
- *   no AssessmentLanguage column — unlike writing). Dual-language reading is real: entry routes through the
+ *   no AssessmentLanguage column â€” unlike writing). Dual-language reading is real: entry routes through the
  *   section's cycle instance, whose ScaleSystem the save stores (see project_assessment_language_tracks).
  *
  * MEASURE: AchievementLevelCode is the band for THIS result's ReadingDelta (same DimAchievementLevel logic
@@ -2045,7 +2938,7 @@ GO
  *   student (not measured). The client computes % Meeting/Exceeding = rows with a Meeting-or-above band
  *   (code >= 3) / rows with ANY band; IPP / no-data are excluded from the % and shown in the hover.
  *
- * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst, per school via
+ * Scope: OVERSIGHT ONLY â€” Administrator / SpecialistTeacher / RegionalAnalyst, per school via
  *   StaffSchoolAccess (identical gate to tvf_StudentCohortMathAll / the cohort TVF oversight branch). A
  *   plain teacher gets no rows; teachers keep the flat per-student cohort list.
  *
@@ -2114,7 +3007,7 @@ RETURN
     LEFT  JOIN ReadingIPP ipp ON ipp.StudentKey = s.StudentKey
     -- one row per (student, language-with-a-result); NULL when the student has no reading result
     LEFT  JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr ON lr.StudentNumber = s.StudentNumber
-    -- Achievement band for this result's delta — same bound logic as tvf_StudentCohort (mutually exclusive
+    -- Achievement band for this result's delta â€” same bound logic as tvf_StudentCohort (mutually exclusive
     -- bounds => at most one band per delta). No delta (no result / NULL) => no band.
     LEFT  JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
@@ -2142,14 +3035,14 @@ GO
 
 
 /*==============================================================================
-  PART 3.2 — tvf_StudentCohortReadingGroup
+  PART 3.2 â€” tvf_StudentCohortReadingGroup
   source: sql/security/tvf_StudentCohortReadingGroup.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Function: tvf_StudentCohortReadingGroup  (INLINE table-valued function)
  * Purpose: READ-ONLY per-GROUP reading detail for the Reports > Reading roll-up tree (1.3.0, Slice 1b).
- *          Loaded on demand when a Grade / Homeroom node is expanded — the individual students in that
+ *          Loaded on demand when a Grade / Homeroom node is expanded â€” the individual students in that
  *          group with their LATEST reading level + achievement band PER LANGUAGE (EN/FR). One row per
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
@@ -2157,9 +3050,9 @@ GO
  * Region: Canada East (PIIDPA compliant)
  *
  * Group-scoped + @UPN-scoped: same OR-across-EXISTS gate as tvf_StudentCohortMath (oversight via
- * StaffSchoolAccess; teacher via FactSectionTeachers — kept for parity though the reading tree is
+ * StaffSchoolAccess; teacher via FactSectionTeachers â€” kept for parity though the reading tree is
  * oversight-only). @GroupKey shapes: 'GRADE:<SchoolID>:<Grade>', 'SEC:<SectionID>', else a homeroom
- * DimStudent.GroupKey — resolved exactly like tvf_StudentCohortMath. Students restricted to the selected
+ * DimStudent.GroupKey â€” resolved exactly like tvf_StudentCohortMath. Students restricted to the selected
  * Reading windows' grade span so the detail matches the roll-up's counts.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
@@ -2277,7 +3170,7 @@ GO
 
 
 /*==============================================================================
-  PART 3.3 — tvf_StudentCohortWritingAll
+  PART 3.3 â€” tvf_StudentCohortWritingAll
   source: sql/security/tvf_StudentCohortWritingAll.sql
 ==============================================================================*/
 
@@ -2287,12 +3180,12 @@ GO
  *          Writing counterpart of tvf_StudentCohortReadingAll: one row per in-scope student PER WRITING
  *          LANGUAGE, carrying the achievement band of that language's latest writing AVERAGE (for the
  *          client's % Meeting/Exceeding) + the language so the display shows distinct STUDENTS vs RESULTS
- *          per language (EN/FR) + overall. Counts/measure only — no names (the per-group detail loads
+ *          per language (EN/FR) + overall. Counts/measure only â€” no names (the per-group detail loads
  *          separately on expand).
  * Created: 2026-10-16
  * Region: Canada East (PIIDPA compliant)
  *
- * GRAIN — one row per (student x the language of a writing result they have this year):
+ * GRAIN â€” one row per (student x the language of a writing result they have this year):
  *   - FactAssessmentWriting.AssessmentLanguage IS part of the grain (unlike reading, which derives it
  *     from the scale), so a student with an English and a French writing result has TWO fact rows and
  *     gets TWO rows here ('English' / 'French'); one language => one row; no writing result => ONE row,
@@ -2303,7 +3196,7 @@ GO
  *   Client % Meeting/Exceeding = rows with code >= 3 / rows with ANY code, IPP excluded (via the flag).
  *   Average counts ONLY explicit '1'-'4' traits (SCR / '-' / NULL dropped from numerator AND denominator).
  *
- * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess.
+ * Scope: OVERSIGHT ONLY â€” Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess.
  * @CycleGroupID NULL = all current-year Writing windows; a cycle id restricts the latest-pick. Grades =
  *   the span of the selected Writing windows' MinGrade..MaxGrade.
  *
@@ -2394,14 +3287,14 @@ GO
 
 
 /*==============================================================================
-  PART 3.4 — tvf_StudentCohortWritingGroup
+  PART 3.4 â€” tvf_StudentCohortWritingGroup
   source: sql/security/tvf_StudentCohortWritingGroup.sql
 ==============================================================================*/
 
 /*******************************************************************************
  * Function: tvf_StudentCohortWritingGroup  (INLINE table-valued function)
  * Purpose: READ-ONLY per-GROUP writing detail for the Reports > Writing roll-up tree (1.3.0, Slice 2).
- *          Loaded when a Grade / Homeroom node is expanded — the individual students in that group with
+ *          Loaded when a Grade / Homeroom node is expanded â€” the individual students in that group with
  *          their LATEST writing FOUR TRAIT scores + average + achievement band, PER LANGUAGE (EN/FR).
  *          One row per (student x writing language) + a NULL-language row for a student with no writing
  *          result. The client renders one row per (student, language) with the four traits in COIL order.
