@@ -1,5 +1,5 @@
 ---
-name: project_prelaunch_queue
+name: project_feature_ideas_and_backlog
 description: Release-triaged work queue. LIVE through 0.6.0 (2026-09-22). Forward triage 1.0 → post-launch → post-1.0 set by the user 2026-09-18 — respect those calls; do not re-litigate or re-order. Keep current per feedback_keep_memories_current.
 metadata:
   node_type: memory
@@ -80,6 +80,11 @@ we're not blocked and it's not our queue item.)*
 
 # Post-1.0
 
+- **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
+  roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
+  **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
+  (`loadGroup`) for all branches simultaneously, hammering Fabric. Collapse is free (client-state only —
+  clear `openSchools`/`openNodes`; keep the loaded `blocks` cached so re-expanding is instant).
 - **Design/aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0")*. Flag a11y in passing, collect
   here, do NOT stop to fix. Math cell marks are already AA-compliant. **Reusable technique:** SC 1.4.11
   wants 3:1 against ADJACENT colours, not the page — a fill too light to pass alone works if a

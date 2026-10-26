@@ -6,7 +6,7 @@ metadata:
 ---
 
 Design worked through with the user 2026-09-21 (talk-through; nothing built). Sits under
-[[project_math_assessment_model]]; the split-pacing + carry-forward lines in [[project_prelaunch_queue]]
+[[project_math_assessment_model]]; the split-pacing + carry-forward lines in [[project_feature_ideas_and_backlog]]
 point here. GOAL: get the DB STRUCTURE right now (before large data volume needs migrating) so the actual
 features are later just TVF/USP + client, per the user. The leadership GUI + resolution logic are post-1.0.
 

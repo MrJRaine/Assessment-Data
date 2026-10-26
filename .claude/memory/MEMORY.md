@@ -111,7 +111,7 @@
 - [Maintenance Mode (BUILT dev/0.5.0)](project_maintenance_mode.md) — graceful poll-based lockout for emergency container swaps: AppMaintenance row + set/clear procs + /api/status; staged banner→lock→auto-save→down overlay; sysadmin one-click Clear + sign-in on overlay. Fabric: no TINYINT; ;THROW needs BEGIN…END.
 
 ## Backlog / wishlist (NOT built)
-- [Release Work Queue](project_prelaunch_queue.md) — triaged queue. OPEN near-term: maintenance/ingest dev dry-run. Forward: areas meeting/exceeding report, IPP auto-pair, writing-cohort re-scope → math reporting, split-grade pacing, linked-task carry-forward → a11y sweep, dark mode. Prune as items ship.
+- [Feature Ideas & Backlog](project_feature_ideas_and_backlog.md) — triaged queue. OPEN near-term: maintenance/ingest dev dry-run. Forward: areas meeting/exceeding report, IPP auto-pair, writing-cohort re-scope → math reporting, split-grade pacing, linked-task carry-forward → a11y sweep, dark mode. Prune as items ship.
 - [Subject↔Course Dim (QoL)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Perf/Load QoL Backlog (POST-v1.1)](project_perf_qol_backlog.md) — batch the per-student save loop, cache static lookups, parallelise roster awaits, don't poll hidden tabs. Not launch-blocking.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.

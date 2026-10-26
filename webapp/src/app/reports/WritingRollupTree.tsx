@@ -177,7 +177,7 @@ function WritingDetail({ rows, traits, lang, summarizeBy }: { rows: WritingGroup
             style={hasResult && r.achievementHexColorTint ? { background: r.achievementHexColorTint } : undefined}>
           {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
         </td>
-        <td className="stu" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
+        <td className="ach" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
           {hasResult ? (r.achievementName ?? <span className="muted">—</span>) : (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
         </td>
       </tr>
@@ -194,7 +194,7 @@ function WritingDetail({ rows, traits, lang, summarizeBy }: { rows: WritingGroup
             <WSortHead label="Lang" col="lang" sort={sort} onSort={click} />
             {traits.map((t) => <WSortHead key={t.key} label={t.label} col={t.key} sort={sort} onSort={click} />)}
             <WSortHead label="Avg" col="avg" sort={sort} onSort={click} />
-            <WSortHead label="Achievement" col="achievement" sort={sort} onSort={click} />
+            <WSortHead label="Achievement" col="achievement" sort={sort} onSort={click} className="ach" />
           </tr>
         </thead>
         <tbody>

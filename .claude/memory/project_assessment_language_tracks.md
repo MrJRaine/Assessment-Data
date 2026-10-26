@@ -99,4 +99,4 @@ data level with no entry-side work (user, 2026-10-16); it's just not yet common 
 - Possible companion (see [[project_math_split_pacing_model]] self-containment ethos): freeze `ScaleSystem`
   directly on `FactAssessmentReading` for clean export, rather than resolving via ReadingScaleID.
 
-Related: [[project_prelaunch_queue]], [[project_reading_scale_design]].
+Related: [[project_feature_ideas_and_backlog]], [[project_reading_scale_design]].

@@ -43,7 +43,10 @@ function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
       return <td className="rpct none" title={t}>—</td>
     }
     const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
-    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${ippNote}`}>{m.toFixed(2)}</td>
+    const meanEN = stat.countEN > 0 ? (stat.sumEN / stat.countEN).toFixed(2) : '—'
+    const meanFR = stat.countFR > 0 ? (stat.sumFR / stat.countFR).toFixed(2) : '—'
+    const enfr = `\nEN ${meanEN} (${stat.countEN}) · FR ${meanFR} (${stat.countFR})`
+    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${enfr}${ippNote}`}>{m.toFixed(2)}</td>
   }
   const p = pctOf(stat.meet, stat.band)
   if (p == null) {
@@ -51,7 +54,8 @@ function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
     return <td className="rpct none" title={t}>—</td>
   }
   const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
-  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${ippNote}`}>{fmtPct(p)}</td>
+  const enfr = `\nEN ${stat.meetEN}/${stat.bandEN} · FR ${stat.meetFR}/${stat.bandFR}`
+  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${enfr}${ippNote}`}>{fmtPct(p)}</td>
 }
 
 // Generic School → Grade/Homeroom → (expand) student-detail roll-up. The subject wrapper supplies the

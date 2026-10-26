@@ -123,7 +123,16 @@ export const pctOf = (meet: number, band: number): number | null => (band === 0 
 // A rolled-up measure over a set of students (one per column in the writing roll-up): both the
 // % Meeting/Exceeding inputs (meet/band) AND the Mean inputs (sum/count), so a client toggle can switch
 // between them without re-querying. IPP results are excluded (not measured) and counted in ippExcluded.
-export interface MeasureStat { meet: number; band: number; sum: number; count: number; ippExcluded: number }
+export interface MeasureStat {
+  meet: number; band: number; sum: number; count: number; ippExcluded: number
+  // Per-language breakdown for the hover tooltip (parity with reading's Counts). EN = English results.
+  meetEN: number; bandEN: number; sumEN: number; countEN: number
+  meetFR: number; bandFR: number; sumFR: number; countFR: number
+}
+const zeroStat = (): MeasureStat => ({
+  meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0,
+  meetEN: 0, bandEN: 0, sumEN: 0, countEN: 0, meetFR: 0, bandFR: 0, sumFR: 0, countFR: 0,
+})
 export interface Measure {
   key: string
   label: string
@@ -132,15 +141,18 @@ export interface Measure {
 
 // One writing trait's roll-up: band/count over scored results (1–4), meet over score >= Meeting, mean via sum.
 export function traitMeasure(students: RollupStudent[], lang: LangFilter, key: WritingTraitKey): MeasureStat {
-  const st: MeasureStat = { meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0 }
+  const st = zeroStat()
   for (const s of students) {
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
     for (const r of rs) {
       const v = r.traits?.[key]
       if (v == null) continue
       if (s.ipp) { st.ippExcluded++; continue }
+      const meets = v >= MEETING_MIN
       st.band++; st.count++; st.sum += v
-      if (v >= MEETING_MIN) st.meet++
+      if (meets) st.meet++
+      if (r.en) { st.bandEN++; st.countEN++; st.sumEN += v; if (meets) st.meetEN++ }
+      else      { st.bandFR++; st.countFR++; st.sumFR += v; if (meets) st.meetFR++ }
     }
   }
   return st
@@ -148,14 +160,21 @@ export function traitMeasure(students: RollupStudent[], lang: LangFilter, key: W
 
 // The "average" column: meet/band from the average BAND (code), mean from the average SCORE.
 export function avgMeasure(students: RollupStudent[], lang: LangFilter): MeasureStat {
-  const st: MeasureStat = { meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0 }
+  const st = zeroStat()
   for (const s of students) {
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
     for (const r of rs) {
       if (r.code == null && r.avgScore == null) continue
       if (s.ipp) { if (r.code != null) st.ippExcluded++; continue }
-      if (r.code != null) { st.band++; if (r.code >= MEETING_MIN) st.meet++ }
-      if (r.avgScore != null) { st.count++; st.sum += r.avgScore }
+      if (r.code != null) {
+        const meets = r.code >= MEETING_MIN
+        st.band++; if (meets) st.meet++
+        if (r.en) { st.bandEN++; if (meets) st.meetEN++ } else { st.bandFR++; if (meets) st.meetFR++ }
+      }
+      if (r.avgScore != null) {
+        st.count++; st.sum += r.avgScore
+        if (r.en) { st.countEN++; st.sumEN += r.avgScore } else { st.countFR++; st.sumFR += r.avgScore }
+      }
     }
   }
   return st

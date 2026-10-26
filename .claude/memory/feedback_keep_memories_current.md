@@ -28,7 +28,7 @@ wasting the user's time. "This memory is stale" is a DEFECT I created, not a cav
 - **One source of truth per fact.** Cross-link instead of duplicating; duplicated facts drift
   out of sync and one copy goes stale.
 - **Prune running lists as items ship.** Mark DONE inline and remove long-dead detail from
-  queues like [[project_prelaunch_queue]]; a release that is fully live is history, not backlog.
+  queues like [[project_feature_ideas_and_backlog]]; a release that is fully live is history, not backlog.
 - **Never proceed on a note you suspect is stale.** Verify against current code/state and correct
   the note first — don't act on it and don't just flag it.
 - **"What's outstanding?" = queue PLUS a code scan.** Known-deferred work often lives as a code
