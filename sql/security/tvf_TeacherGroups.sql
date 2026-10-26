@@ -1,5 +1,11 @@
 /*******************************************************************************
  * Function: tvf_TeacherGroups  (INLINE table-valued function)
+ * Modified: 2026-10-23 — card SchoolName now comes from the SECTION's own SchoolID
+ *           (DimSection->DimSchool), not MAX over the enrolled students' CURRENT home
+ *           school. A student who transferred OUT but is kept in the window roster used
+ *           to flip a section's card to the wrong school via MAX of student schools
+ *           (e.g. a CHES math section showing "Hillcrest Academy"). Carries sec.SchoolID
+ *           through VisibleSections -> SectionStudents and joins DimSchool at the top.
  * Purpose: Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT
  *          (NOT a single instance). You pick a Cycle, not an instance — a SCoR's
  *          Reading work is ONE card on /enter, and this resolves the sections
@@ -101,7 +107,7 @@ RETURN
         -- TAUGHT: the caller's own sections, ANY AccessLevel (dual-role fix).
         SELECT DISTINCT
             CAST('Taught' AS VARCHAR(10)) AS Scope,
-            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            sec.SectionKey, sec.SectionID, sec.SchoolID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
             ca.Language
         FROM Caller c
         CROSS JOIN Wins win
@@ -126,7 +132,7 @@ RETURN
         -- the schools they cover via StaffSchoolAccess.
         SELECT DISTINCT
             CAST('Oversight' AS VARCHAR(10)),
-            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            sec.SectionKey, sec.SectionID, sec.SchoolID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
             ca.Language
         FROM Caller c
         CROSS JOIN Wins win
@@ -157,9 +163,9 @@ RETURN
     -- student who matches several instances — e.g. a dual-language writer — to ONE per section.
     SectionStudents AS (
         SELECT DISTINCT
-            vs.Scope, vs.SectionID, vs.SectionNumber, vs.CourseName, vs.CourseCode, vs.Language,
+            vs.Scope, vs.SectionID, vs.SchoolID, vs.SectionNumber, vs.CourseName, vs.CourseCode, vs.Language,
             win.AssessmentWindowID,   -- WHICH instance this student is assessed under (see SectionWindows)
-            scur.StudentKey, scur.StudentNumber, scur.Grade, sch.SchoolName
+            scur.StudentKey, scur.StudentNumber, scur.Grade
         FROM VisibleSections vs
         CROSS JOIN Wins win
         -- A (2026-10-13): match enrolment by the STABLE SectionID across ALL section versions (window
@@ -173,7 +179,6 @@ RETURN
         INNER JOIN DimSection esec ON esec.SectionKey = e.SectionKey AND esec.SectionID = vs.SectionID
         INNER JOIN DimStudent sany ON sany.StudentKey = e.StudentKey
         INNER JOIN DimStudent scur ON scur.StudentNumber = sany.StudentNumber AND scur.IsCurrent = 1
-        LEFT  JOIN DimSchool  sch  ON sch.SchoolID   = scur.SchoolID
         INNER JOIN DimGrade   sg   ON sg.GradeCode   = scur.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = win.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = win.MaxGrade
@@ -274,7 +279,9 @@ RETURN
         MAX(ss.Language)      AS Language,     -- drives the client's language headings + multi-select gate
         MAX(ss.CourseCode)    AS CourseCode,
         MAX(stn.TeacherNames) AS TeacherNames, -- whose class this is (shown on Oversight cards)
-        MAX(ss.SchoolName)    AS SchoolName,
+        MAX(sch.SchoolName)   AS SchoolName,   -- the SECTION's own school, NOT the students' current school
+                                               -- (a transferred-out student kept in the window roster used
+                                               --  to flip the label via MAX of student schools)
         MAX(ss.Grade)         AS Grade,
         MAX(gg.Grades)        AS Grades,
         MAX(sw.WindowIDs)     AS WindowIDs,   -- cycle instance(s) behind this card; roster routes saves by it
@@ -282,6 +289,7 @@ RETURN
         COUNT(DISTINCT es.StudentNumber) AS EnteredStudentCount,   -- "started" (>=1 result) for Math; the single result for R/W
         COUNT(DISTINCT md.StudentNumber) AS DoneStudentCount        -- Math only: >80% of grade's benchmark-month tasks marked (0 for R/W)
     FROM SectionStudents ss
+    LEFT JOIN DimSchool sch           ON sch.SchoolID = ss.SchoolID   -- card school = the section's school
     LEFT JOIN SectionTeacherNames stn ON stn.SectionID = ss.SectionID
     LEFT JOIN EnteredStudents es      ON es.StudentNumber = ss.StudentNumber
     LEFT JOIN MathDone md             ON md.StudentNumber = ss.StudentNumber

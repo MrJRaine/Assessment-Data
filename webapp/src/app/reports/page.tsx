@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { ToggleLink } from '@/components/ToggleLink'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import {
@@ -109,12 +109,12 @@ export default async function StudentsPage({
   // standalone above the cohort table on the Student-list view.
   const viewToggle = (
     <div className="subject-toggle" role="tablist" aria-label="Report view" style={{ margin: 0 }}>
-      <Link href={viewHref('summary')} className={view === 'summary' ? 'toggle-on' : 'toggle'}>
+      <ToggleLink href={viewHref('summary')} className={view === 'summary' ? 'toggle-on' : 'toggle'}>
         Summary
-      </Link>
-      <Link href={viewHref('list')} className={view === 'list' ? 'toggle-on' : 'toggle'}>
+      </ToggleLink>
+      <ToggleLink href={viewHref('list')} className={view === 'list' ? 'toggle-on' : 'toggle'}>
         Student list
-      </Link>
+      </ToggleLink>
     </div>
   )
 
@@ -123,18 +123,18 @@ export default async function StudentsPage({
       <PageHeader title={reportTitle} />
       <div className="report-top-row">
         <div className="subject-toggle" style={{ margin: 0 }}>
-          <Link href="/reports" className={!isWriting ? 'toggle-on' : 'toggle'}>
+          <ToggleLink href="/reports" className={!isWriting ? 'toggle-on' : 'toggle'}>
             Reading
-          </Link>
-          <Link href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
+          </ToggleLink>
+          <ToggleLink href="/reports?subject=writing" className={isWriting ? 'toggle-on' : 'toggle'}>
             Writing
-          </Link>
-          <Link href="/reports/math" className="toggle">
+          </ToggleLink>
+          <ToggleLink href="/reports/math" className="toggle">
             Math
-          </Link>
-          <Link href="/reports/rwm" className="toggle">
+          </ToggleLink>
+          <ToggleLink href="/reports/rwm" className="toggle">
             RWM
-          </Link>
+          </ToggleLink>
         </div>
         {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       </div>

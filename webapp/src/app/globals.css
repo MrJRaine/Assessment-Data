@@ -100,6 +100,14 @@ a { color: inherit; text-decoration: none; }
   display: inline-block; animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Inline pending spinner shown by <ToggleLink> (router.push + useTransition) while a report toggle's
+   force-dynamic navigation is in flight — instant click feedback. currentColor so it reads on both the
+   active (white) and inactive (muted) toggle. */
+.toggle-spin {
+  display: inline-block; width: 0.7rem; height: 0.7rem; margin-left: 0.4rem; vertical-align: -1px;
+  border-radius: 50%; border: 2px solid transparent; border-top-color: currentColor;
+  animation: spin 0.6s linear infinite;
+}
 
 /* cards */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
@@ -507,7 +515,12 @@ a { color: inherit; text-decoration: none; }
 .mghead .gc { color: var(--muted); font-size: .85rem; }
 .mscroll { overflow: auto; max-height: 68vh; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .mgrid { border-collapse: separate; border-spacing: 0; }
-.mgrid th, .mgrid td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+/* Row separators are drawn with an inset box-shadow on EVERY cell (not a border-bottom): under
+   border-collapse: separate the 1px border-bottom drops unpredictably at sub-pixel row positions and
+   is painted over on the sticky columns. A box-shadow paints on each cell's own layer, so the line
+   survives everywhere AND every column's separator sits at the same position (keeps them aligned).
+   The border-bottom stays (transparent) only to preserve row heights; the right border is unaffected. */
+.mgrid th, .mgrid td { border-right: 1px solid var(--border); border-bottom: 1px solid transparent; box-shadow: inset 0 -1px 0 var(--border); }
 .mgrid thead th { position: sticky; top: 0; z-index: 3; background: var(--bg); font-size: .78rem; color: var(--muted); font-weight: 600; padding: .45rem .35rem; text-align: center; vertical-align: bottom; }
 .mgrid thead th.col-task { text-align: left; }
 .mgrid .col-task { position: sticky; left: 0; z-index: 2; background: var(--card); width: 300px; min-width: 300px; max-width: 300px; text-align: left; padding: .4rem .55rem; vertical-align: top; }
@@ -547,7 +560,7 @@ a { color: inherit; text-decoration: none; }
 .mgrid tr.unitrow th.col-task .chev { color: var(--muted); margin-right: .3rem; font-size: .72rem; display: inline-block; width: .8rem; }
 .mgrid tr.unitrow td, .mgrid tr.unitrow .col-pct { background: #e7edf1; }
 .mgrid tr.unitrow td { text-align: center; padding: .3rem .15rem; }
-.mgrid .stu { width: 84px; min-width: 84px; max-width: 84px; }
+.mgrid .stu { width: 84px; min-width: 84px; max-width: 84px; padding: .4rem .3rem; vertical-align: top; }
 .mgrid thead th.stu { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mgrid td.cell { padding: 0; text-align: center; }
 /* Reports read-only matrix: give the sticky roll-up cell a solid ground (heat classes override it),

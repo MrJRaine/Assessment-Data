@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState, type ReactNode } from 'react'
 import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, type Measure, buildSchools, traitMeasure, avgMeasure, gradeRank } from './rollupModel'
+import { type RollupStudent, type LangFilter, type SummarizeBy, type Measure, buildSchools, traitMeasure, avgMeasure, gradeRank } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -71,7 +71,7 @@ export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: 
       showAll={showAll}
       loadGroup={loadWritingGroup}
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
-      renderDetail={(groupRows, lang) => <WritingDetail rows={groupRows} traits={traits} lang={lang} />}
+      renderDetail={(groupRows, lang, summarizeBy) => <WritingDetail rows={groupRows} traits={traits} lang={lang} summarizeBy={summarizeBy} />}
       viewToggle={viewToggle}
       measures={measures}
     />
@@ -95,10 +95,10 @@ function TraitScoreCell({ value }: { value: string | null }) {
   return <td className="stu">{value}</td>
 }
 
-type WSortKey = 'student' | 'grade' | 'lang' | 'avg' | WritingTraitKey
+type WSortKey = 'student' | 'grade' | 'homeroom' | 'lang' | 'avg' | 'achievement' | WritingTraitKey
 type WSortState = { key: WSortKey; dir: 'asc' | 'desc' }
-// A per-result sort SPLITS a student's stacked rows; a demographic sort (student/grade) keeps them merged.
-const PER_RESULT_W: ReadonlySet<WSortKey> = new Set<WSortKey>(['lang', 'avg', 'ideas', 'organization', 'language', 'conventions'])
+// A per-result sort SPLITS a student's stacked rows; a demographic sort (student/grade/homeroom) keeps them merged.
+const PER_RESULT_W: ReadonlySet<WSortKey> = new Set<WSortKey>(['lang', 'avg', 'achievement', 'ideas', 'organization', 'language', 'conventions'])
 const langRankW = (l: string | null) => (l === 'English' ? 0 : l === 'French' ? 1 : 2)
 
 function WSortHead({ label, col, sort, onSort, className = 'stu' }: { label: string; col: WSortKey; sort: WSortState; onSort: (k: WSortKey) => void; className?: string }) {
@@ -106,19 +106,22 @@ function WSortHead({ label, col, sort, onSort, className = 'stu' }: { label: str
   return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
 }
 
-function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter }) {
+function WritingDetail({ rows, traits, lang, summarizeBy }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter; summarizeBy: SummarizeBy }) {
   const [sort, setSort] = useState<WSortState>({ key: 'student', dir: 'asc' })
   const filtered = lang === 'All' ? rows : rows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French'))
   if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
-  // Grade column only when the group spans >1 grade (redundant under a grade node; useful for a split homeroom).
-  const showGrade = new Set(filtered.map((r) => r.grade)).size > 1
+  // The node already pins one axis: a Grade node drills to Homeroom; a Homeroom node drills to Grade.
+  // (Neither repeats School — the drill is always inside one school.)
+  const demoAxis: 'grade' | 'homeroom' = summarizeBy === 'Grade' ? 'homeroom' : 'grade'
 
   const val = (r: WritingGroupRow, k: WSortKey): string | number | null => {
     switch (k) {
       case 'student': return `${r.lastName}, ${r.firstName}`.toLowerCase()
       case 'grade': return gradeRank(r.grade ?? '')
+      case 'homeroom': return r.homeroom
       case 'lang': return r.assessmentLanguage // 'English' | 'French' | null
       case 'avg': return r.avgScore
+      case 'achievement': return r.achievementCode
       default: return traitNum(scoreFor(r, k)) // one of the four trait keys
     }
   }
@@ -153,6 +156,7 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
 
   const renderRow = (r: WritingGroupRow, showDemo: boolean, span: number) => {
     const noResult = r.assessmentLanguage == null
+    const hasResult = r.avgScore != null
     return (
       <tr key={`${r.studentNumber}:${r.assessmentLanguage ?? 'none'}`}>
         {showDemo ? (
@@ -161,7 +165,7 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
               <Link href={`/reports/${r.studentKey}?subject=writing`} className="back-link">{r.lastName}, {r.firstName}</Link>
               {r.writingIPP ? <span className="tsub" title="Writing IPP — excluded from % Meeting/Exceeding">IPP</span> : null}
             </th>
-            {showGrade ? <td className="stu" rowSpan={span}>{r.grade ?? '—'}</td> : null}
+            <td className="stu" rowSpan={span}>{(demoAxis === 'homeroom' ? r.homeroom : r.grade) ?? '—'}</td>
           </>
         ) : null}
         <td className="stu">{langShort(r.assessmentLanguage)}</td>
@@ -169,9 +173,12 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
           noResult ? <td className="stu" key={t.key}><span className="muted">—</span></td>
             : <TraitScoreCell key={t.key} value={scoreFor(r, t.key)} />,
         )}
-        <td className="stu" style={r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}
-            title={r.achievementName ?? undefined}>
+        <td className="stu" title={r.achievementName ?? undefined}
+            style={hasResult && r.achievementHexColorTint ? { background: r.achievementHexColorTint } : undefined}>
           {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
+        </td>
+        <td className="stu" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
+          {hasResult ? (r.achievementName ?? <span className="muted">—</span>) : (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
         </td>
       </tr>
     )
@@ -183,10 +190,11 @@ function WritingDetail({ rows, traits, lang }: { rows: WritingGroupRow[]; traits
         <thead>
           <tr>
             <WSortHead label="Student" col="student" sort={sort} onSort={click} className="col-task" />
-            {showGrade ? <WSortHead label="Grade" col="grade" sort={sort} onSort={click} /> : null}
+            <WSortHead label={demoAxis === 'homeroom' ? 'Homeroom' : 'Grade'} col={demoAxis} sort={sort} onSort={click} />
             <WSortHead label="Lang" col="lang" sort={sort} onSort={click} />
             {traits.map((t) => <WSortHead key={t.key} label={t.label} col={t.key} sort={sort} onSort={click} />)}
             <WSortHead label="Avg" col="avg" sort={sort} onSort={click} />
+            <WSortHead label="Achievement" col="achievement" sort={sort} onSort={click} />
           </tr>
         </thead>
         <tbody>

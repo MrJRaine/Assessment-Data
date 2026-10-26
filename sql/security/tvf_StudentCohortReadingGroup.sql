@@ -115,6 +115,9 @@ RETURN
         drb.ExpectedMinLevel      AS ExpectedMinLevel, -- expected benchmark range for THIS result's language
         drb.ExpectedMaxLevel      AS ExpectedMaxLevel,
         expMin.LevelOrder         AS ExpectedMinOrder, -- order of ExpectedMinLevel (for sorting the Expected column)
+        sp.StartingLevelCode      AS JuneReadingLevel,  -- prior-June starting level (same language); parity with the flat list
+        CASE WHEN lr.LevelOrder IS NOT NULL AND jrs.LevelOrder IS NOT NULL
+             THEN lr.LevelOrder - jrs.LevelOrder END AS DiffFromPrevJune,  -- signed growth since prior June
         dal.AchievementLevelCode  AS AchievementLevelCode,
         dal.AchievementLevelName  AS AchievementLevelName,
         dal.HexColor              AS AchievementHexColor,
@@ -134,6 +137,11 @@ RETURN
     LEFT JOIN DimReadingScale expMin
            ON expMin.LevelCode  = drb.ExpectedMinLevel
           AND expMin.ScaleSystem = lr.ScaleSystem
+    -- Prior-June starting point for THIS result's language (mirrors tvf_StudentCohort) → Diff from Prev June.
+    LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
+           ON sp.StudentNumber = gs.StudentNumber AND sp.ScaleSystem = lr.ScaleSystem
+    LEFT JOIN DimReadingScale jrs
+           ON jrs.LevelCode = sp.StartingLevelCode AND jrs.ScaleSystem = lr.ScaleSystem
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
           AND lr.ReadingDelta IS NOT NULL

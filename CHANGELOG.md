@@ -141,6 +141,13 @@ with `0.3.0`, so earlier detail is approximate.
 >   The multiple baseline rows are expected, not a bug: the prior-year seed is aggregated per school, so a
 >   student who changed schools last year legitimately has one row per school — the view now resolves a
 >   single starting point from them (newest in-system result first, else a deterministic pick of the seed).
+> - **2026-10-23 — A Data-Entry class card could show the wrong school.** A class card on the choose-a-group
+>   screen took its school name from the enrolled students rather than the section itself, so if a student
+>   who had since transferred to another school was still on the class's entry roster, the card could show
+>   *that* student's new school instead of the school the class is actually at (seen live: a Clark's Harbour
+>   math section showing "Hillcrest Academy"). The card now always shows the section's own school. Rosters
+>   and counts are unchanged — only the displayed school label. SQL: `sql/security/tvf_TeacherGroups.sql`
+>   (function redeploy only; no app change).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and
