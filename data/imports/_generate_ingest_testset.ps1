@@ -81,7 +81,13 @@ if ($Format -eq 'Cutover') {
 }
 
 # --- fixed values ---
-$ELEM = '0716'; $JR = '0079'; $SR = '1178'
+# Elementary = Hillcrest Academy (0079, actually elementary); Junior = Shelburne Regional High (0716, 7-8
+# here by choice though it's a full 7-12 in reality); Senior = Yarmouth Consolidated Memorial High (1178).
+# Flipped from the original (which had elem at the high school and JH at the elementary school).
+$ELEM = '0079'; $JR = '0716'; $SR = '1178'
+# Additional schools (2 of each tier): Clark's Harbour Elementary (elem), Barrington Municipal High (full
+# 7-12 secondary — gives a 2nd school at every secondary band so Reading/Writing TCRCE go multi-school too).
+$ELEM2 = '0511'; $SEC2 = '0167'
 $TERM = '3500'                 # Year-Long 2025-2026 (DimTerm seed)
 $DENR = '09/02/2025'; $DLEFT = '06/30/2026'
 
@@ -110,14 +116,40 @@ function Get-Program($tier,$stream) {
 
 $birthYear = @{ 'P'=2020; '1'=2019; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
 
-$firsts = @('Avery','Blake','Casey','Devon','Emery','Finley','Gray','Harper','Indy','Jules','Kai','Lane','Marlow','Nico','Oakley','Parker','Quinn','Reese','Sage','Tatum','Uri','Vale','Wren','Xen','Yael','Zion','Ari','Bell','Cove','Dale')
-$lasts  = @('Ash','Birch','Cedar','Dune','Elm','Frost','Glen','Hollow','Isle','Juniper','Kestrel','Larch','Moss','North','Onyx','Pike','Quill','Reed','Slate','Thorn','Rowan','Wolfe','Yarrow','Brook','Crane','Dell','Fern','Gale','Heath','Iris')
+# 50 x 50 = 2500 unique (first,last) pairs — more than the whole dev population, so every student gets a
+# UNIQUE name (no more 17 "Ash, Avery"s). Pairing below cycles first every student, last every 50.
+$firsts = @('Avery','Blake','Casey','Devon','Emery','Finley','Gray','Harper','Indy','Jules','Kai','Lane','Marlow','Nico','Oakley','Parker','Quinn','Reese','Sage','Tatum','Uri','Vale','Wren','Xen','Yael','Zion','Ari','Bell','Cove','Dale','Eden','Flynn','Gael','Hollis','Ira','Jory','Keir','Lior','Milan','Noor','Odin','Perry','Rory','Sasha','Teo','Wynn','Xavi','Yuki','Zane','Remy')
+$lasts  = @('Ash','Birch','Cedar','Dune','Elm','Frost','Glen','Hollow','Isle','Juniper','Kestrel','Larch','Moss','North','Onyx','Pike','Quill','Reed','Slate','Thorn','Rowan','Wolfe','Yarrow','Brook','Crane','Dell','Fern','Gale','Heath','Iris','Marsh','Nash','Orchard','Peak','Ridge','Shoal','Tide','Vane','Willow','Ember','Finch','Grove','Hart','Lark','Meade','Sparrow','Bramble','Clover','Dover','Quince')
 
 # -----------------------------------------------------------------------------
 # CLASS DEFINITIONS  (Sections carry an explicit teacher email; elementary uses
 # the class teacher on both sections, Jr/Sr split ELA vs FLA by tier teacher.)
 # -----------------------------------------------------------------------------
 function Sec($subj,$code,$teacher) { @{ Subj=$subj; Code=$code; Teacher=$teacher } }
+
+# Class builders for the ADDED schools — unique codes/labels/teacher emails via $tag/$tpfx so they don't
+# collide with the base schools. Elementary: one teacher per class on both sections. Secondary: ONE ELA +
+# ONE FLA teacher for the whole school, so the ELA teacher spans JH (7/8) AND SH (10/11) English — the
+# cross-band-teacher test case.
+function New-ElemClasses($school,$tag,$tpfx) {
+    $out = @()
+    foreach ($sm in @(@{St='EN';Lit='ELA'},@{St='EI';Lit='FLA'})) {
+        foreach ($d in @(@{L='STR-P';C='P';G=[ordered]@{'P'=20}},@{L='STR-1';C='1';G=[ordered]@{'1'=20}},@{L='STR-4';C='4';G=[ordered]@{'4'=20}},@{L='STR-5';C='5';G=[ordered]@{'5'=20}},@{L='SPL-P1';C='P1';G=[ordered]@{'P'=10;'1'=10}},@{L='SPL-45';C='45';G=[ordered]@{'4'=10;'5'=10}})) {
+            $t = "$tpfx.$($sm.St.ToLower()).$($d.C.ToLower())@tcrce.ca"
+            $out += @{ Label="$($d.L)-$($sm.St)-$tag"; Tier='ELEM'; School=$school; Stream=$sm.St; Grades=$d.G; Sections=@((Sec 'MAT' "MAT-$($d.C)-$($sm.St)-$tag" $t),(Sec $sm.Lit "$($sm.Lit)-$($d.C)-$($sm.St)-$tag" $t)) }
+        }
+    }
+    return $out
+}
+function New-SecClasses($school,$tag,$tpfx) {
+    $ela = "$tpfx.ela@tcrce.ca"; $fla = "$tpfx.fla@tcrce.ca"
+    $out = @()
+    $bands = @(@{L='STR-7';C='7';T='JR';G=[ordered]@{'7'=20}},@{L='STR-8';C='8';T='JR';G=[ordered]@{'8'=20}},@{L='SPL-78';C='78';T='JR';G=[ordered]@{'7'=10;'8'=10}},@{L='STR-10';C='10';T='SR';G=[ordered]@{'10'=20}},@{L='STR-11';C='11';T='SR';G=[ordered]@{'11'=20}},@{L='SPL-1011';C='1011';T='SR';G=[ordered]@{'10'=10;'11'=10}})
+    foreach ($d in $bands) { $out += @{ Label="$($d.L)-EN-$tag"; Tier=$d.T; School=$school; Stream='EN'; Grades=$d.G; Sections=@((Sec 'ELA' "ELA-$($d.C)-EN-$tag" $ela)) } }
+    foreach ($d in $bands) { $out += @{ Label="$($d.L)-EI-$tag"; Tier=$d.T; School=$school; Stream='EI'; Grades=$d.G; Sections=@((Sec 'FLA' "FLA-$($d.C)-EI-$tag" $fla),(Sec 'ELA' "ELA-$($d.C)-EI-$tag" $ela)) } }
+    $out += @{ Label="SPL-78-LI-$tag"; Tier='JR'; School=$school; Stream='LI'; Grades=[ordered]@{'7'=10;'8'=10}; Sections=@((Sec 'FLA' "FLA-78-LI-$tag" $fla),(Sec 'ELA' "ELA-78-LI-$tag" $ela)) }
+    return $out
+}
 
 $classes = @(
     # ---- Elementary English (school 0716): 1 teacher/class, Math + ELA ----
@@ -159,6 +191,8 @@ $classes = @(
     @{ Label='STR-11-EI';   Tier='SR'; School=$SR; Stream='EI'; Grades=[ordered]@{'11'=20};          Sections=@((Sec 'FLA' 'FLA-11-EI'   'teach.sr.fla@tcrce.ca'),(Sec 'ELA' 'ELA-11-EI'   'teach.sr.ela@tcrce.ca')) }
     @{ Label='SPL-1011-EI'; Tier='SR'; School=$SR; Stream='EI'; Grades=[ordered]@{'10'=10;'11'=10};  Sections=@((Sec 'FLA' 'FLA-1011-EI' 'teach.sr.fla@tcrce.ca'),(Sec 'ELA' 'ELA-1011-EI' 'teach.sr.ela@tcrce.ca')) }
 )
+# Add the two extra schools (2 of each tier): CHES elementary + BMHS full 7-12 secondary.
+$classes = $classes + (New-ElemClasses $ELEM2 'CHES' 'teach.ches') + (New-SecClasses $SEC2 'BMHS' 'teach.bmhs')
 
 # course_name (human label) from subject + code
 function Course-Name($subj,$code) {
@@ -203,7 +237,7 @@ foreach ($c in $classes) {
         for ($k = 0; $k -lt $n; $k++) {
             $studentNum++; $studentDcid++
             $first  = $firsts[$i % $firsts.Count]
-            $last   = $lasts[($i * 7) % $lasts.Count]
+            $last   = $lasts[[math]::Floor($i / $firsts.Count) % $lasts.Count]  # unique pair: first cycles each student, last every 50
             $middle = if ($i % 4 -eq 0) { $firsts[($i * 3) % $firsts.Count] } else { '' }
             $gl     = Get-GradeLevel $g
             $by     = $birthYear[$g]
@@ -246,6 +280,16 @@ foreach ($t in ($elemTeachers + $tierTeachers)) {
     $staffId++
     $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $staffId) -join $DELIM
 }
+# Teachers for the ADDED schools (CHES/BMHS), Group 47 — derived from their section teacher emails so
+# every referenced teacher exists (names generated; the BMHS ELA teacher is the cross-band 7-12 case).
+$addedTeachers = [ordered]@{}
+foreach ($c in $classes) { if ($c.School -eq $ELEM2 -or $c.School -eq $SEC2) { foreach ($s in $c.Sections) { if (-not $addedTeachers.Contains($s.Teacher)) { $addedTeachers[$s.Teacher] = $c.School } } } }
+$ti = 0
+foreach ($em in $addedTeachers.Keys) {
+    $staffId++
+    $staffRows += @($em, $firsts[(30 + $ti) % $firsts.Count], $lasts[(33 + $ti) % $lasts.Count], 'Teacher', $addedTeachers[$em], $addedTeachers[$em], '', '47', $staffId) -join $DELIM
+    $ti++
+}
 # Regional itinerant — same person, one row per school (multi-row grain test)
 $itinEmail = 'itinerant.region@tcrce.ca'
 $canChange = "$ELEM;$JR;$SR"
@@ -255,28 +299,29 @@ foreach ($sch in @($ELEM,$JR,$SR)) {
 }
 
 # School administrators — one per school (Group 33 = Principal/VP -> Administrator; school-level RLS)
-$adminNames = @(@('Reed','Marchand'), @('Quinn','Delacroix'), @('Sol','Beaumont'))
-$adminSchools = @($ELEM, $JR, $SR)
+$adminNames = @(@('Reed','Marchand'), @('Quinn','Delacroix'), @('Sol','Beaumont'), @('Wren','Hartley'), @('Lior','Beaudry'))
+$adminSchools = @($ELEM, $JR, $SR, $ELEM2, $SEC2)
 for ($a = 0; $a -lt $adminSchools.Count; $a++) {
     $staffId++
     $sch = $adminSchools[$a]
     $staffRows += @("principal.$sch@tcrce.ca", $adminNames[$a][0], $adminNames[$a][1], 'Principal', $sch, $sch, '', '33', $staffId) -join $DELIM
 }
-# Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over the 3 test schools)
+# Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over ALL 5 test schools)
+$allSchools = "$ELEM;$JR;$SR;$ELEM2;$SEC2"
 $staffId++
-$staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $ELEM, $ELEM, "$ELEM;$JR;$SR", '41', $staffId) -join $DELIM
+$staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $ELEM, $ELEM, $allSchools, '41', $staffId) -join $DELIM
 # Project lead's own account, as a region-wide RegionalAnalyst, so they can sign in and test on dev as themselves.
 $staffId++
-$staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, "$ELEM;$JR;$SR", '41', $staffId) -join $DELIM
+$staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, $allSchools, '41', $staffId) -join $DELIM
 
 # -----------------------------------------------------------------------------
 # Co-Teachers (sqlReport: comma-delimited, CRLF, quote the "Last, First" name)
 # Itinerant supports one section per tier.
 # -----------------------------------------------------------------------------
 $coTargets = @(
-    @{ School='Test School 0716'; Course='MAT-P1-EN';   SectionID=$codeToSection['MAT-P1-EN'] },
-    @{ School='Test School 0079'; Course='FLA-78-LI';   SectionID=$codeToSection['FLA-78-LI'] },
-    @{ School='Test School 1178'; Course='FLA-1011-EI'; SectionID=$codeToSection['FLA-1011-EI'] }
+    @{ School="Test School $ELEM"; Course='MAT-P1-EN';   SectionID=$codeToSection['MAT-P1-EN'] },
+    @{ School="Test School $JR";   Course='FLA-78-LI';   SectionID=$codeToSection['FLA-78-LI'] },
+    @{ School="Test School $SR";   Course='FLA-1011-EI'; SectionID=$codeToSection['FLA-1011-EI'] }
 )
 $coTeacherRows = @()
 foreach ($ct in $coTargets) {
@@ -336,7 +381,8 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 "Generated ingest test set [Format=$Format]:"
 "  students     : {0} rows" -f $studentRows.Count
-"  staff        : {0} rows ({1} teachers + itinerant x3 + 3 principals + 2 regional analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count)
+"  staff        : {0} rows ({1} base + {2} added-school teachers + itinerant x3 + {3} principals + 2 analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count), $addedTeachers.Count, $adminSchools.Count
+"  schools      : {0} ({1} elementary + {2} secondary)" -f 5, 2, 3
 "  sections     : {0} rows" -f $sectionRows.Count
 "  enrollments  : {0} rows" -f $enrollRows.Count
 "  co-teachers  : {0} rows" -f $coTeacherRows.Count
