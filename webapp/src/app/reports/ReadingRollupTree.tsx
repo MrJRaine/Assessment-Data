@@ -178,7 +178,7 @@ function ReadingDetail({ rows, lang, summarizeBy }: { rows: ReadingGroupRow[]; l
         <td className="stu muted">{fmtExp(r)}</td>
         <td className="stu">{hasResult && r.delta != null ? signed(r.delta) : miss}</td>
         <td className="stu">{r.diffJune != null ? signed(r.diffJune) : miss}</td>
-        <td className="stu" style={hasResult && r.achColor ? { color: r.achColor, fontWeight: 600 } : undefined}>
+        <td className="ach" style={hasResult && r.achColor ? { color: r.achColor, fontWeight: 600 } : undefined}>
           {hasResult ? (r.achName ?? miss) : (r.ipp ? 'IPP' : miss)}
         </td>
       </tr>
@@ -197,7 +197,7 @@ function ReadingDetail({ rows, lang, summarizeBy }: { rows: ReadingGroupRow[]; l
             <SortHead label="Expected" col="expected" sort={sort} onSort={click} />
             <SortHead label="Diff from Expected" col="diff" sort={sort} onSort={click} />
             <SortHead label="Diff from Prev June" col="diffJune" sort={sort} onSort={click} />
-            <SortHead label="Achievement" col="achievement" sort={sort} onSort={click} />
+            <SortHead label="Achievement" col="achievement" sort={sort} onSort={click} className="ach" />
           </tr>
         </thead>
         <tbody>
