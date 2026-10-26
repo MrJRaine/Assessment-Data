@@ -1440,7 +1440,7 @@ tangents — dredged up the SETTLED "math gets no re-record checkbox" decision (
 captured by the cell edit), and described 0.5.0 as unshipped when 0.5.0/0.5.1/0.6.0 were all live. Root cause:
 append-only memory. New rule **[[feedback_keep_memories_current]]**: update/DELETE a memory at its SOURCE the
 moment its item ships or reverses; record provenance; one source of truth; prune running lists; never act on a
-note you suspect is stale. Rewrote **[[project_prelaunch_queue]]** to current (0.6.0 live; math re-record
+note you suspect is stale. Rewrote **[[project_feature_ideas_and_backlog]]** to current (0.6.0 live; math re-record
 settled-out; math-outcomes framework RESOLVED not parked; group-picker perf `tvf_TeacherGroups` + connection
 pre-warm TIED at lowest priority; `J020`-refs cleanup lowest priority). Deferred: a one-time **memory
 consistency audit** (findings list before editing). Git-workflow reminders re-applied: mandatory main→dev
@@ -1883,7 +1883,7 @@ still in development).
 - StudentNumber is the identity, never the mutable StudentKey (the 2026-10-13 durable fix) — I kept reaching for StudentKey; corrected.
 - "continuing with X next" then stopping = don't narrate, just work.
 
-**Other backlog:** persistent per-USER preferences (server-side, post-1.0) added to [[project_prelaunch_queue]]. MEMORY.md approaching the 24.4KB read cap — compaction deferred.
+**Other backlog:** persistent per-USER preferences (server-side, post-1.0) added to [[project_feature_ideas_and_backlog]]. MEMORY.md approaching the 24.4KB read cap — compaction deferred.
 
 ## Session 2026-10-22 — v1.3.0 dev testing: dual-language verified, drill parity closed, toggle feedback, grid CSS
 

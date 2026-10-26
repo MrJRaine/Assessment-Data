@@ -1,5 +1,5 @@
 ---
-name: project_prelaunch_queue
+name: project_feature_ideas_and_backlog
 description: Release-triaged work queue. LIVE through 0.6.0 (2026-09-22). Forward triage 1.0 → post-launch → post-1.0 set by the user 2026-09-18 — respect those calls; do not re-litigate or re-order. Keep current per feedback_keep_memories_current.
 metadata:
   node_type: memory

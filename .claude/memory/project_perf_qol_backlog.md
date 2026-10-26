@@ -59,7 +59,7 @@ real cycles, then apply these, then re-measure — the before/after pair is *mor
 a single reading, and the pool ceiling gets dialled in over the same window. Just record which build a
 given measurement came from.
 
-Related: [[project_capacity_rightsizing_intent]], [[project_prelaunch_queue]], [[project_dark_mode]] (other post-1.0 QoL).
+Related: [[project_capacity_rightsizing_intent]], [[project_feature_ideas_and_backlog]], [[project_dark_mode]] (other post-1.0 QoL).
 
 ## Connection cold start — MEASURED 2026-09-18, decision DEFERRED
 
