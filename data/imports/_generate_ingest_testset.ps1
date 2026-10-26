@@ -88,8 +88,12 @@ $ELEM = '0079'; $JR = '0716'; $SR = '1178'
 # Additional schools (2 of each tier): Clark's Harbour Elementary (elem), Barrington Municipal High (full
 # 7-12 secondary — gives a 2nd school at every secondary band so Reading/Writing TCRCE go multi-school too).
 $ELEM2 = '0511'; $SEC2 = '0167'
-$TERM = '3500'                 # Year-Long 2025-2026 (DimTerm seed)
-$DENR = '09/02/2025'; $DLEFT = '06/30/2026'
+$TERM = '3500'                 # Year-Long (DimTerm seed) — term id is cosmetic for roster resolution
+                               # (the roster TVFs match enrolment DATE overlap vs the cycle window, not term).
+# Enrolment dates = the CURRENT school year, computed at generate time, so a fresh ingest always lands
+# ACTIVE enrolments and NEVER needs rollforward_enrollment_dev.sql. (Sept-onward => this year; else prior.)
+$syStart = if ((Get-Date).Month -ge 9) { (Get-Date).Year } else { (Get-Date).Year - 1 }
+$DENR = "09/02/$syStart"; $DLEFT = "06/30/$($syStart + 1)"
 
 foreach ($topic in @("students","staff","sections","section-teachers","enrollments")) {
     $folder = Join-Path $basePath $topic
