@@ -24,13 +24,22 @@ students in your scope" everywhere → run `grant_dev_projectlead_access.sql` (r
 StaffSchoolAccess + sysadmin). Diagnose with `diag_cohort_scope_dev.sql` (per-user cohort row counts +
 who holds StaffSchoolAccess).
 
-**FIX for half of that pair, at the SOURCE (2026-10-06):** the dev ingest CSV
-`data/imports/enrollments/EnrollmentsExport.csv` was shifted +1 year (all 880 rows
-`09/02/2025→09/02/2026`, `06/30/2026→06/30/2027`) so a fresh ingest now lands **current** rosters for
-school year 2026-27 — **`rollforward_enrollment_dev.sql` is no longer needed after ingest** (keep it only
-if the calendar later crosses past 2027-06-30; then re-shift the CSV instead). Only EnrollmentsExport
-carries school-year dates: `StudentsExport.DOB` (real birth dates) and mathtasks `AssessmentMonth` (month
-bins) were deliberately NOT shifted. **The access-grant half is separate and still required after a
-re-ingest** — `grant_dev_projectlead_access.sql` is IDENTITY-driven (project-lead email omitted from the
-synthetic `StaffExport` → anti-join deactivation), not date-driven, so the CSV shift does not touch it.
-(Could be killed too by adding the project-lead to StaffExport — not done, scope/mechanism differs.)
+**ROOT-CAUSE FIX for half of that pair, in the GENERATOR (2026-10-25):** the enrolment dates are no
+longer hardcoded (and no longer a one-time CSV shift). `data/imports/_generate_ingest_testset.ps1` now
+computes the CURRENT school year at generation time:
+`$syStart = if ((Get-Date).Month -ge 9) { (Get-Date).Year } else { (Get-Date).Year - 1 }` →
+`$DENR = "09/02/$syStart"`, `$DLEFT = "06/30/$($syStart + 1)"`. So every regen emits enrolments current
+for whatever year you run it — **a fresh regen+ingest never needs `rollforward_enrollment_dev.sql`
+again**, at any future date. Only EnrollmentsExport carries school-year dates: `StudentsExport.DOB` (real
+birth dates) and mathtasks `AssessmentMonth` (month bins) are deliberately left alone.
+
+`rollforward_enrollment_dev.sql` now has ONE narrow remaining use: data ALREADY LOADED on dev from an
+OLDER generator run (hardcoded 2025-26 dates) — a quick in-place `+1yr` UPDATE to avoid a full
+regen+re-ingest. Prefer a fresh regen+ingest; keep the rollforward only as the shortcut for stale
+already-loaded rows.
+
+**The access-grant half is separate and still required after a re-ingest** —
+`grant_dev_projectlead_access.sql` is IDENTITY-driven (project-lead email omitted from the synthetic
+`StaffExport` → anti-join deactivation), not date-driven, so neither the generator fix nor a rollforward
+touches it. (Could be killed too by adding the project-lead to StaffExport — not done, scope/mechanism
+differs.)

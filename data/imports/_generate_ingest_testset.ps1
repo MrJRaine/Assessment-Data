@@ -241,7 +241,10 @@ foreach ($c in $classes) {
         for ($k = 0; $k -lt $n; $k++) {
             $studentNum++; $studentDcid++
             $first  = $firsts[$i % $firsts.Count]
-            $last   = $lasts[[math]::Floor($i / $firsts.Count) % $lasts.Count]  # unique pair: first cycles each student, last every 50
+            # Surname advances EVERY student (no 50-long same-surname runs that would mask a last-name
+            # sort bug): index by (block + i). With equal pools this is (floor(i/N)+i) % N = (block+first)%N,
+            # so each block of 50 walks a different diagonal and every (first,last) pair stays unique.
+            $last   = $lasts[([math]::Floor($i / $firsts.Count) + $i) % $lasts.Count]
             $middle = if ($i % 4 -eq 0) { $firsts[($i * 3) % $firsts.Count] } else { '' }
             $gl     = Get-GradeLevel $g
             $by     = $birthYear[$g]
