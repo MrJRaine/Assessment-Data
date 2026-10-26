@@ -49,6 +49,7 @@
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 - [IT Modifies SPs + COPY INTO Auth](reference_it_modifies_sps_and_copyinto_auth.md) — when sign-in/ingest breaks and OUR code didn't change that path, check the Entra side FIRST (IT changes app regs/SPs/tenant settings without notice). Fabric COPY INTO from OneLake = caller-passthrough, no Managed Identity (Msg 13838); #1119 closed via a Workspace-Identity CREDENTIAL workaround (root cause unresolved, not pursued).
 - [Read .xlsx + Check Logs First](reference_read_xlsx_and_check_logs_first.md) — when the user says "we did this before", search the archive/transcripts for the ACTUAL method before reconstructing. E.g. read a `.xlsx` WITHOUT Excel via PowerShell OOXML-unzip → dump to text → Read. COPY INTO path: spaces LITERAL, never `%20`.
+- [Dev Generator Cutover Format](reference_dev_generator_cutover_format.md) — ALWAYS run `_generate_ingest_testset.ps1 -Format Cutover`; the Legacy default emits `AssessmentData*.text` the loaders' `Students*`/`Enrollments*` globs don't match → silent 0-row COPY INTO (DQ still "passes" on empty). Its clean step wipes the good `.csv` on any default regen, so pass the flag EVERY regen.
 
 ## Architecture / infrastructure
 - [Web App → Fabric Connection](project_webapp_fabric_connection.md) — mssql@12 (tedious 19), token via @azure/identity, serverExternalPackages + ship node_modules. Proven 2026-06-19.
