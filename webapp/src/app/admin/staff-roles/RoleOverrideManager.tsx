@@ -5,11 +5,12 @@ import { setRoleOverride, findStaff } from './actions'
 import { OVERRIDE_ROLES, type OverrideRole } from './constants'
 import type { StaffRoleOverrideRow } from '@/lib/data'
 
-// Friendly labels for the three role tiers (the stored codes are terse).
+// Friendly labels for the override roles (the stored codes are terse).
 const ROLE_LABEL: Record<OverrideRole, string> = {
   Administrator: 'Administrator',
   RegionalAnalyst: 'Regional Analyst',
   SpecialistTeacher: 'Specialist Teacher',
+  Maintenance: 'Tech Services (Maintenance)',
 }
 
 export default function RoleOverrideManager({ overrides }: { overrides: StaffRoleOverrideRow[] }) {
