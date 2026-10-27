@@ -4,25 +4,24 @@
  * DEV-FIRST: run on dev, test, THEN live. Idempotent (DROP-IF-EXISTS + CREATE + GRANT per proc).
  * Run top-to-bottom.
  *
- * SUPERSEDES the earlier same-day cut of this file (which split work across a separate
- * usp_ApplyRoleOverrides "Apply now" wrapper). That wrapper fired the FULL staff merge for a 2-3 email
- * change (a main-battle-tank-for-a-fly), and granted the flag at Save BEFORE any system check. Both are
- * corrected here: there is NO Apply step and NO flag-before-check.
+ * SUPERSEDES the earlier same-day cut (which split work across a separate usp_ApplyRoleOverrides
+ * "Apply now" wrapper). That wrapper fired the FULL staff merge for a 2-3 email change, and granted the
+ * flag at Save BEFORE any system check. Both corrected here: NO Apply step, NO flag-before-check.
  *
- * WHAT CHANGED vs the earlier cut:
- *   - usp_ApplyRoleOverrides is DROPPED (Part 0) - it was deployed to dev by the earlier cut.
- *   - usp_SetStaffRoleOverride is now the SINGLE action behind Save: it records the override AND
- *     provisions THAT ONE EMAIL in place (no global re-merge, no StaffSchoolAccess TRUNCATE-all), granting
- *     the maintenance flag ONLY AFTER checking the staged PS snapshot + DimStaff:
- *       Maintenance, not in PS -> placeholder DimStaff row (audit/log ID) -> grant flag.
- *       Maintenance, in PS     -> grant flag -> migrate off the list (audit note + delete the override).
- *       Data-access, in PS     -> set AccessLevel + rebuild that email's StaffSchoolAccess rows.
- *       Data-access, not in PS -> held (saved; the next ingest applies it).
- *       Retire (@Active=0)      -> revoke that email's access; clear an override-granted flag.
- *   - usp_MergeStaff is UNCHANGED from the prior cut (included here for a self-contained live apply): its
- *     maintenance handling (placeholder UNION, write-rule condition (d) on CanMaintain, Step 6b migration)
- *     runs at INGEST time, so a normal ingest maintains placeholder rows and migrates anyone who turns up
- *     in a later PS export. The flag is already set at Save, so (d)'s CanMaintain check is satisfied.
+ * usp_SetStaffRoleOverride is the SINGLE action behind Save: it records (or retires) the override AND
+ * provisions THAT ONE EMAIL in place (no global re-merge, no StaffSchoolAccess TRUNCATE-all), granting
+ * the maintenance flag ONLY AFTER checking the staged PS snapshot + DimStaff:
+ *   Maintenance, not in PS -> placeholder DimStaff row (audit/log ID) -> grant flag.
+ *   Maintenance, in PS     -> grant flag -> migrate off the list (audit note + delete the override).
+ *   Data-access, in PS     -> set AccessLevel + rebuild that email's StaffSchoolAccess rows.
+ *   Data-access, not in PS -> held (saved; the next ingest applies it).
+ *   Retire (@Active=0)      -> revoke that email's access AND DELETE the override row (drops from the list,
+ *                             same as clearing a person from Staff Access — not a lingering inactive row);
+ *                             clear an override-granted flag. Audit trail stays in FactSubmissionAudit.
+ *
+ * usp_MergeStaff is UNCHANGED from the prior cut (included for a self-contained live apply): its
+ * maintenance handling (placeholder UNION, write-rule condition (d) on CanMaintain, Step 6b migration)
+ * runs at INGEST time. The flag is already set at Save, so (d)'s CanMaintain check is satisfied.
  *
  * READS/WRITES (net):
  *   usp_SetStaffRoleOverride  reads  StaffAppAccess, Stg_Staff, DimStaff, DimSchool
@@ -74,10 +73,13 @@ GO
  *   - Data-access role, IN PS     -> set AccessLevel (Type 1) on their current DimStaff row + rebuild
  *                                    THAT EMAIL's StaffSchoolAccess rows (home + changeable schools).
  *   - Data-access role, NOT in PS -> held: the override is saved; the next ingest applies it (note returned).
- *   - Retire (@Active = 0)        -> revoke: drop that email's StaffSchoolAccess + null its DimStaff
- *                                    AccessLevel. Moving off Maintenance clears the override-granted flag.
- * The flag is therefore NEVER granted before the identity/system check. Returns one row (Message, Migrated)
- * for the UI — Message is a migration/held note or NULL; Migrated = 1 when the row left this list.
+ *   - Retire (@Active = 0)        -> revoke (drop that email's StaffSchoolAccess + null its DimStaff
+ *                                    AccessLevel) AND DELETE the override row — same as clearing a person
+ *                                    from Staff Access; it leaves the list, not a lingering inactive row.
+ *                                    Moving off Maintenance clears the override-granted flag.
+ * The flag is therefore NEVER granted before the identity/system check. Returns one row (Message, Removed)
+ * for the UI — Message is a migration/held note or NULL; Removed = 1 when the row left this list (migration
+ * or retire).
  *
  * Reads:  StaffAppAccess (caller sysadmin check), Stg_Staff, DimStaff, DimSchool
  * Writes: StaffRoleOverride, DimStaff (placeholder insert / AccessLevel), StaffSchoolAccess (per-email),
@@ -109,7 +111,7 @@ BEGIN
     DECLARE @IsActive         BIT = COALESCE(@Active, 1);
     DECLARE @CallerIsSysAdmin BIT = 0;
     DECLARE @Note             VARCHAR(400) = NULL;   -- migration/held note surfaced to the UI
-    DECLARE @Migrated         BIT = 0;               -- 1 => the row left this list (UI drops it)
+    DECLARE @Removed          BIT = 0;               -- 1 => the row left this list (migrated or retired) — UI drops it
 
     -- 51010: target required; role must be one of the four whenever the override is active.
     IF NULLIF(@Target, '') IS NULL
@@ -190,7 +192,7 @@ BEGIN
         IF @InStaging = 1
         BEGIN
             SET @Note = CONCAT(@Target, ' was found in the PowerSchool data and will now appear on the Staff Access list instead of Role Overrides.');
-            SET @Migrated = 1;
+            SET @Removed = 1;
             INSERT INTO FactSubmissionAudit (RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message, RecordCount, LastUpdated)
             VALUES ('MaintenanceMigration', 'WebApp', @CallerEmail, @Now, 'Accepted', @Note, 1, @Now);
             DELETE FROM StaffRoleOverride WHERE LOWER(Email) = @Target;
@@ -257,11 +259,16 @@ BEGIN
     END
     ELSE
     BEGIN
-        -- Retire (@Active = 0): revoke any access this override granted. The next ingest recomputes the
-        -- person's state from PS (a data-access override reverts to their PS-derived role, i.e. none for a coach).
+        -- Retire (@Active = 0): revoke access AND REMOVE the override row entirely — same as Staff Access,
+        -- where clearing a person drops them from the list rather than leaving a lingering inactive row.
+        -- The audit trail lives in FactSubmissionAudit, so nothing is lost; re-add by email to restore.
+        -- The next ingest recomputes PS-derived state (a data-access override reverts to its PS role —
+        -- none for a coach, so they fall out unless they teach).
         DELETE FROM StaffSchoolAccess WHERE LOWER(Email) = @Target;
         UPDATE DimStaff SET AccessLevel = NULL, LastUpdated = @Now
         WHERE LOWER(Email) = @Target AND IsCurrent = 1 AND ActiveFlag = 1;
+        DELETE FROM StaffRoleOverride WHERE LOWER(Email) = @Target;
+        SET @Removed = 1;
     END
 
     -- Teardown: clear an OVERRIDE-granted maintenance flag when the person is no longer an active
@@ -280,7 +287,7 @@ BEGIN
          1, @Now);
 
     -- One row for the UI: a note (migration/held) or NULL, and whether the row left this list.
-    SELECT @Note AS Message, @Migrated AS Migrated;
+    SELECT @Note AS Message, @Removed AS Removed;
 END;
 GO
 

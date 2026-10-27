@@ -24,10 +24,13 @@
  *   - Data-access role, IN PS     -> set AccessLevel (Type 1) on their current DimStaff row + rebuild
  *                                    THAT EMAIL's StaffSchoolAccess rows (home + changeable schools).
  *   - Data-access role, NOT in PS -> held: the override is saved; the next ingest applies it (note returned).
- *   - Retire (@Active = 0)        -> revoke: drop that email's StaffSchoolAccess + null its DimStaff
- *                                    AccessLevel. Moving off Maintenance clears the override-granted flag.
- * The flag is therefore NEVER granted before the identity/system check. Returns one row (Message, Migrated)
- * for the UI — Message is a migration/held note or NULL; Migrated = 1 when the row left this list.
+ *   - Retire (@Active = 0)        -> revoke (drop that email's StaffSchoolAccess + null its DimStaff
+ *                                    AccessLevel) AND DELETE the override row — same as clearing a person
+ *                                    from Staff Access; it leaves the list, not a lingering inactive row.
+ *                                    Moving off Maintenance clears the override-granted flag.
+ * The flag is therefore NEVER granted before the identity/system check. Returns one row (Message, Removed)
+ * for the UI — Message is a migration/held note or NULL; Removed = 1 when the row left this list (migration
+ * or retire).
  *
  * Reads:  StaffAppAccess (caller sysadmin check), Stg_Staff, DimStaff, DimSchool
  * Writes: StaffRoleOverride, DimStaff (placeholder insert / AccessLevel), StaffSchoolAccess (per-email),
@@ -59,7 +62,7 @@ BEGIN
     DECLARE @IsActive         BIT = COALESCE(@Active, 1);
     DECLARE @CallerIsSysAdmin BIT = 0;
     DECLARE @Note             VARCHAR(400) = NULL;   -- migration/held note surfaced to the UI
-    DECLARE @Migrated         BIT = 0;               -- 1 => the row left this list (UI drops it)
+    DECLARE @Removed          BIT = 0;               -- 1 => the row left this list (migrated or retired) — UI drops it
 
     -- 51010: target required; role must be one of the four whenever the override is active.
     IF NULLIF(@Target, '') IS NULL
@@ -140,7 +143,7 @@ BEGIN
         IF @InStaging = 1
         BEGIN
             SET @Note = CONCAT(@Target, ' was found in the PowerSchool data and will now appear on the Staff Access list instead of Role Overrides.');
-            SET @Migrated = 1;
+            SET @Removed = 1;
             INSERT INTO FactSubmissionAudit (RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message, RecordCount, LastUpdated)
             VALUES ('MaintenanceMigration', 'WebApp', @CallerEmail, @Now, 'Accepted', @Note, 1, @Now);
             DELETE FROM StaffRoleOverride WHERE LOWER(Email) = @Target;
@@ -207,11 +210,16 @@ BEGIN
     END
     ELSE
     BEGIN
-        -- Retire (@Active = 0): revoke any access this override granted. The next ingest recomputes the
-        -- person's state from PS (a data-access override reverts to their PS-derived role, i.e. none for a coach).
+        -- Retire (@Active = 0): revoke access AND REMOVE the override row entirely — same as Staff Access,
+        -- where clearing a person drops them from the list rather than leaving a lingering inactive row.
+        -- The audit trail lives in FactSubmissionAudit, so nothing is lost; re-add by email to restore.
+        -- The next ingest recomputes PS-derived state (a data-access override reverts to its PS role —
+        -- none for a coach, so they fall out unless they teach).
         DELETE FROM StaffSchoolAccess WHERE LOWER(Email) = @Target;
         UPDATE DimStaff SET AccessLevel = NULL, LastUpdated = @Now
         WHERE LOWER(Email) = @Target AND IsCurrent = 1 AND ActiveFlag = 1;
+        DELETE FROM StaffRoleOverride WHERE LOWER(Email) = @Target;
+        SET @Removed = 1;
     END
 
     -- Teardown: clear an OVERRIDE-granted maintenance flag when the person is no longer an active
@@ -230,7 +238,7 @@ BEGIN
          1, @Now);
 
     -- One row for the UI: a note (migration/held) or NULL, and whether the row left this list.
-    SELECT @Note AS Message, @Migrated AS Migrated;
+    SELECT @Note AS Message, @Removed AS Removed;
 END;
 GO
 

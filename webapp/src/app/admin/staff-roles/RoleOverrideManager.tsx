@@ -90,7 +90,7 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
       msg += `\n\nApplying: ${activating.map((r) => `${r.name} → ${ROLE_LABEL[r.overrideRole as OverrideRole] ?? r.overrideRole}`).join(', ')}.`
     }
     if (retiring.length > 0) {
-      msg += `\n\nRetiring (access revoked now; reverts to their PowerSchool role): ${retiring.map((r) => r.name).join(', ')}.`
+      msg += `\n\nRemoving (access revoked now, dropped from the list; reverts to their PowerSchool role): ${retiring.map((r) => r.name).join(', ')}.`
     }
     msg += '\n\nSave these changes?'
     if (!confirm(msg)) return
@@ -115,8 +115,8 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
             delete n[r.email]
             return n
           })
-          // A migrated row (Maintenance found in PS) has left this list — drop it from the grid.
-          if (res.migrated) setRows((rs) => rs.filter((x) => x.email !== r.email))
+          // A removed row (retired, or Maintenance found in PS and migrated) has left this list — drop it.
+          if (res.removed) setRows((rs) => rs.filter((x) => x.email !== r.email))
         } else {
           errs.push(`${r.name}: ${res.message ?? 'failed'}`)
         }
@@ -207,7 +207,7 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
         <p className="muted">No role overrides yet. Add someone by email below.</p>
       ) : (
         <p className="muted small" style={{ marginTop: '0.75rem' }}>
-          Tip: to stop an override, uncheck <strong>Active</strong> and Save — the person reverts to their PowerSchool role.
+          Tip: to stop an override, uncheck <strong>Active</strong> and Save — the override is removed (the person reverts to their PowerSchool role). Re-add them by email to restore it.
         </p>
       )}
       <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
