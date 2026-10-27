@@ -57,11 +57,13 @@ export function useMaintenanceControls(): MaintenanceControls {
 export default function MaintenanceProvider({
   children,
   isSysAdmin = false,
+  canMaintain = false,
   canRunIngest = false,
   authSlot = null,
 }: {
   children: React.ReactNode
   isSysAdmin?: boolean
+  canMaintain?: boolean // Technology Services — full maintenance control (1.3.0)
   canRunIngest?: boolean
   authSlot?: React.ReactNode // AuthArea (sign in / sign out), rendered on the down overlay
 }) {
@@ -224,21 +226,30 @@ export default function MaintenanceProvider({
   // where the nav is covered. Optimistically drop the local window so it lifts instantly for the
   // sysadmin; the server row is nulled and every other client picks it up on the next poll.
   const [clearing, startClear] = useTransition()
+  // LOTO: a non-owner's clear is refused server-side (THROW 51042). Surface that message by the button —
+  // otherwise the click looks like it did nothing.
+  const [clearError, setClearError] = useState<string | null>(null)
   const clearNow = useCallback(() => {
+    setClearError(null)
     startClear(async () => {
       try {
         const res = await clearMaintenance()
         if (res.ok) {
           windowRef.current = { atMs: null, message: null, offsetMs: windowRef.current.offsetMs }
           recompute()
+        } else {
+          setClearError(res.error ?? 'This maintenance window is locked by whoever opened it — only they or a system administrator can clear it.')
         }
       } catch {
         /* leave state as-is; the poller will reconcile */
+        setClearError('Couldn’t clear maintenance — please try again.')
       }
     })
   }, [recompute])
 
-  const admin = isSysAdmin ? { onClear: clearNow, clearing } : null
+  // Clear control shows for a sysadmin OR a maintenance-capable user; the server still enforces LOTO
+  // (only the window's opener or a sysadmin can actually clear it) and returns a friendly message if not.
+  const admin = isSysAdmin || canMaintain ? { onClear: clearNow, clearing, error: clearError } : null
 
   // Pages that EXIST to run maintenance are not covered by it — otherwise the documented procedure
   // (schedule -> wait -> run the ingest) is impossible: the window lands, the overlay covers /ingest,
@@ -268,7 +279,7 @@ export default function MaintenanceProvider({
             message={state.message}
             admin={admin}
             authSlot={authSlot}
-            links={{ ingest: canRunIngest, maintenance: isSysAdmin }}
+            links={{ ingest: canRunIngest, maintenance: isSysAdmin || canMaintain }}
           />
         ) : null}
       </Ctx.Provider>
@@ -276,7 +287,7 @@ export default function MaintenanceProvider({
   )
 }
 
-type AdminClear = { onClear: () => void; clearing: boolean } | null
+type AdminClear = { onClear: () => void; clearing: boolean; error: string | null } | null
 
 function MaintenanceDown({
   message,
@@ -295,9 +306,14 @@ function MaintenanceDown({
         <h1>We&rsquo;ll be right back</h1>
         <p>{message || 'The SCoR Dashboard is being updated. Please check back in a few minutes — this page will return automatically.'}</p>
         {admin ? (
-          <button className="btn" style={{ marginTop: '1.25rem' }} disabled={admin.clearing} onClick={admin.onClear}>
-            {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}
-          </button>
+          <>
+            <button className="btn" style={{ marginTop: '1.25rem' }} disabled={admin.clearing} onClick={admin.onClear}>
+              {admin.clearing ? 'Clearing…' : 'Clear maintenance now'}
+            </button>
+            {admin.error ? (
+              <p role="alert" style={{ marginTop: '0.75rem', color: 'var(--danger)' }}>{admin.error}</p>
+            ) : null}
+          </>
         ) : null}
 
         {/* A way OUT of the overlay to the pages that work during maintenance — gated the same way
@@ -381,6 +397,7 @@ function MaintenanceBanner({ state, admin }: { state: MaintenanceState; admin: A
           {admin.clearing ? 'Clearing…' : 'Clear now'}
         </button>
       ) : null}
+      {admin?.error ? <span className="maint-clear-error" style={{ marginLeft: '0.5rem' }}>{admin.error}</span> : null}
     </div>
   )
 }

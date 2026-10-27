@@ -4,6 +4,8 @@
 - [Project: Session Archive](project_session_archive.md) — ARCHIVE, do NOT auto-read; verbatim session log (2026-04 → 06-08). Open only to recover history.
 
 ## How I work with this user (feedback)
+- [Batch Builds During Review Bursts](feedback_batch_builds.md) — don't rebuild/relaunch/commit after every bullet of feedback; accumulate edits and do ONE build cycle when the user says done.
+- [Imp Container First](feedback_imp_container_first.md) — when the user is testing via impersonation, build `-imp` + relaunch awdev-impersonation FIRST (it's what they view); awdev (:3001) after or skip.
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML/reads against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over.
 - [RLS Review: Verify Every Role Branch](feedback_rls_review_verify_per_role.md) — check each role's scoping against the documented design (DimRole/StaffSchoolAccess) across the WHOLE surface; a region-wide branch is a red flag; never assert an access claim unverified or double down when challenged.
 - [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — never hand over run-now SQL with a `<placeholder>`; substitute real values or DECLARE them at the top. An empty result = suspect the parameters first.
@@ -48,6 +50,7 @@
 - [gh CLI Token via Git Credential](reference_gh_cli_token_via_git.md) — try the obvious override before declaring blocked (borrow git credential; GIT_TERMINAL_PROMPT).
 - [IT Modifies SPs + COPY INTO Auth](reference_it_modifies_sps_and_copyinto_auth.md) — when sign-in/ingest breaks and OUR code didn't change that path, check the Entra side FIRST (IT changes app regs/SPs/tenant settings without notice). Fabric COPY INTO from OneLake = caller-passthrough, no Managed Identity (Msg 13838); #1119 closed via a Workspace-Identity CREDENTIAL workaround (root cause unresolved, not pursued).
 - [Read .xlsx + Check Logs First](reference_read_xlsx_and_check_logs_first.md) — when the user says "we did this before", search the archive/transcripts for the ACTUAL method before reconstructing. E.g. read a `.xlsx` WITHOUT Excel via PowerShell OOXML-unzip → dump to text → Read. COPY INTO path: spaces LITERAL, never `%20`.
+- [Dev Generator Cutover Format](reference_dev_generator_cutover_format.md) — ALWAYS run `_generate_ingest_testset.ps1 -Format Cutover`; the Legacy default emits `AssessmentData*.text` the loaders' `Students*`/`Enrollments*` globs don't match → silent 0-row COPY INTO (DQ still "passes" on empty). Its clean step wipes the good `.csv` on any default regen, so pass the flag EVERY regen.
 
 ## Architecture / infrastructure
 - [Web App → Fabric Connection](project_webapp_fabric_connection.md) — mssql@12 (tedious 19), token via @azure/identity, serverExternalPackages + ship node_modules. Proven 2026-06-19.
@@ -110,7 +113,7 @@
 - [Maintenance Mode (BUILT dev/0.5.0)](project_maintenance_mode.md) — graceful poll-based lockout for emergency container swaps: AppMaintenance row + set/clear procs + /api/status; staged banner→lock→auto-save→down overlay; sysadmin one-click Clear + sign-in on overlay. Fabric: no TINYINT; ;THROW needs BEGIN…END.
 
 ## Backlog / wishlist (NOT built)
-- [Release Work Queue](project_prelaunch_queue.md) — triaged queue. OPEN near-term: maintenance/ingest dev dry-run. Forward: areas meeting/exceeding report, IPP auto-pair, writing-cohort re-scope → math reporting, split-grade pacing, linked-task carry-forward → a11y sweep, dark mode. Prune as items ship.
+- [Feature Ideas & Backlog](project_feature_ideas_and_backlog.md) — triaged queue. OPEN near-term: maintenance/ingest dev dry-run. Forward: areas meeting/exceeding report, IPP auto-pair, writing-cohort re-scope → math reporting, split-grade pacing, linked-task carry-forward → a11y sweep, dark mode. Prune as items ship.
 - [Subject↔Course Dim (QoL)](project_subject_course_dim.md) — course-code→subject Dim; filter/scope group-picker sections.
 - [Perf/Load QoL Backlog (POST-v1.1)](project_perf_qol_backlog.md) — batch the per-student save loop, cache static lookups, parallelise roster awaits, don't poll hidden tabs. Not launch-blocking.
 - [Dark Mode (POST-1.0 QoL)](project_dark_mode.md) — 2nd palette + hardcoded-color audit + trigger; DB achievement colors the design question. ~½ day system-only.

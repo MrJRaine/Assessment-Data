@@ -16,11 +16,12 @@ function toSqlUtc(d: Date): string {
   return d.toISOString().slice(0, 19).replace('T', ' ')
 }
 
-async function assertSysAdmin(): Promise<string> {
+// Full maintenance-page access = CanMaintain (Technology Services) OR sysadmin. (1.3.0 — was sysadmin-only.)
+async function assertMaintainer(): Promise<string> {
   const upn = await getCurrentUpn()
   // fresh: authorization must never come from a cached capability — see lib/identityCache.
   const caps = await getCallerCapabilities(upn, { fresh: true })
-  if (!caps.isSysAdmin) throw new Error('Not authorized.')
+  if (!caps.canMaintain && !caps.isSysAdmin) throw new Error('Not authorized.')
   return upn
 }
 
@@ -28,7 +29,7 @@ async function assertSysAdmin(): Promise<string> {
 export async function startMaintenance(minutes: number, message: string): Promise<MaintActionResult> {
   let upn: string
   try {
-    upn = await assertSysAdmin()
+    upn = await assertMaintainer()
   } catch {
     return { ok: false, error: 'Not authorized.' }
   }
@@ -40,6 +41,7 @@ export async function startMaintenance(minutes: number, message: string): Promis
       MaintenanceAt: toSqlUtc(at),
       Message: message.trim() || null,
       CallerUPN: upn,
+      Scope: 'manual',
     })
     revalidatePath('/admin/maintenance')
     return { ok: true }
@@ -48,11 +50,12 @@ export async function startMaintenance(minutes: number, message: string): Promis
   }
 }
 
-/** Cancel a scheduled window / post "all clear" after a swap. */
+/** Cancel a scheduled window / post "all clear" after a swap. The window is LOCKED to whoever opened it
+ *  (or any sysadmin) — a non-owner gets a friendly "locked by …" message from usp_ClearMaintenanceWindow. */
 export async function clearMaintenance(): Promise<MaintActionResult> {
   let upn: string
   try {
-    upn = await assertSysAdmin()
+    upn = await assertMaintainer()
   } catch {
     return { ok: false, error: 'Not authorized.' }
   }

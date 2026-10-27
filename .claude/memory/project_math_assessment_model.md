@@ -23,7 +23,7 @@ one; the sheet's Term 2/3 were half-revised, ignore them):
 a per-row box to re-record an IDENTICAL level/score as a genuine new dated data point; math does NOT.
 Math is binary, so the only meaningful change is **no → yes** (not-yet → can-do), which the cell edit
 already captures — there is no identical-value re-record case, and math teachers have far more to
-evaluate. `MathRosterEntry.tsx` intentionally has no such checkbox. (See [[project_prelaunch_queue]].)
+evaluate. `MathRosterEntry.tsx` intentionally has no such checkbox. (See [[project_feature_ideas_and_backlog]].)
 
 **Cadence:** Math rides the SAME region-wide **Short Cycles** as Reading/Writing —
 NO separate term cadence (the exemplar's Term 1/2/3 split was just spreadsheet

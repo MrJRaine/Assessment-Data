@@ -13,6 +13,13 @@
  *                       + per-subject grade bands (Reading P-8, Writing P-RG,
  *                       Math P-6; PP excluded) + parallel FactStudentAdaptation
  *                       reconciliation (steps 6c/6d, keyed on DimStudent.Adap).
+ *           2026-10-16 — Step 6-pre (Build C): REPOINT current FactStudentIPP /
+ *                       FactStudentAdaptation rows to a re-versioned student's new
+ *                       StudentKey (matched by the stable StudentNumber), so a
+ *                       teacher-resolved IPP/adaptation PERSISTS across an SCD
+ *                       re-version instead of resetting to a NULL placeholder.
+ *                       Scoped to still-flagged students (IPP=1/Adap=1) so removal
+ *                       (6a) is unaffected; dup-guarded. See the step for detail.
  * Region: Canada East (PIIDPA compliant)
  *
  * Pipeline (set-based throughout — no row-by-row WHILE loops):
@@ -98,6 +105,8 @@ BEGIN
     DECLARE @IPPRowsCreated  INT = 0;   -- FactStudentIPP rows inserted with IsIPP = NULL
     DECLARE @AdapRowsClosed  INT = 0;   -- FactStudentAdaptation rows closed because no longer applicable
     DECLARE @AdapRowsCreated INT = 0;   -- FactStudentAdaptation rows inserted with HasAdaptation = NULL
+    DECLARE @IPPRowsRepointed  INT = 0; -- FactStudentIPP current rows repointed to a re-versioned StudentKey (Build C, 2026-10-16)
+    DECLARE @AdapRowsRepointed INT = 0; -- FactStudentAdaptation current rows repointed (Build C, 2026-10-16)
     DECLARE @SameDayUpdated  INT = 0;   -- Current rows updated IN PLACE (same-day correction; no new version)
     DECLARE @SameDayRevived  INT = 0;   -- Same-day-closed rows re-opened IN PLACE on same-day return (no overlap)
 
@@ -315,6 +324,48 @@ BEGIN
       AND w.StudentNumber IS NULL;
 
     SET @MissingClosed = @@ROWCOUNT;
+
+    -- ------------------------------------------------------------------------
+    -- Step 6-pre (Build C, 2026-10-16): CARRY teacher-resolved IPP / Adaptation across an SCD
+    -- re-version. A student whose grade/school/program changed gets a NEW StudentKey; their resolved
+    -- FactStudentIPP / FactStudentAdaptation row still points at the OLD key, so step 6a would close it
+    -- and 6b insert a fresh NULL placeholder on the new key — silently discarding the teacher's answer.
+    -- Here we REPOINT each stranded CURRENT row to its StudentNumber's current StudentKey, so step 6
+    -- then recognises it as expected and KEEPS it. Scoped to students STILL flagged (IPP=1 / Adap=1):
+    -- a student no longer flagged is NOT repointed, so step 6a closes their stranded row and the IPP /
+    -- adaptation correctly DETACHES (the removal path is unchanged). Dup-guarded so we never create two
+    -- current rows for one (StudentKey, Subject, ProgramFamily). Going-forward only — resolutions already
+    -- lost to a past re-version (their resolved row is closed, current row a NULL placeholder) are not
+    -- recovered here; a teacher re-resolves those. Keyed by StudentNumber (the stable business key),
+    -- mirroring project_assessment_fact_scd_policy.
+    -- ------------------------------------------------------------------------
+    UPDATE fsi
+    SET StudentKey = cur.StudentKey, LastUpdated = GETDATE()
+    FROM FactStudentIPP fsi
+    INNER JOIN DimStudent oldv ON oldv.StudentKey   = fsi.StudentKey                               -- version the row points at
+    INNER JOIN DimStudent cur  ON cur.StudentNumber = oldv.StudentNumber AND cur.IsCurrent = 1      -- current version of that student
+    WHERE fsi.IsCurrent = 1
+      AND fsi.StudentKey <> cur.StudentKey            -- only stranded rows (not already on the current key)
+      AND cur.IPP = 1                                  -- still flagged: a de-flagged student falls through to 6a's close
+      AND NOT EXISTS (SELECT 1 FROM FactStudentIPP x   -- never create a second current row for the triple
+                      WHERE x.StudentKey = cur.StudentKey AND x.Subject = fsi.Subject
+                        AND x.ProgramFamily = fsi.ProgramFamily AND x.IsCurrent = 1);
+
+    SET @IPPRowsRepointed = @@ROWCOUNT;
+
+    UPDATE fsa
+    SET StudentKey = cur.StudentKey, LastUpdated = GETDATE()
+    FROM FactStudentAdaptation fsa
+    INNER JOIN DimStudent oldv ON oldv.StudentKey   = fsa.StudentKey
+    INNER JOIN DimStudent cur  ON cur.StudentNumber = oldv.StudentNumber AND cur.IsCurrent = 1
+    WHERE fsa.IsCurrent = 1
+      AND fsa.StudentKey <> cur.StudentKey
+      AND cur.Adap = 1
+      AND NOT EXISTS (SELECT 1 FROM FactStudentAdaptation x
+                      WHERE x.StudentKey = cur.StudentKey AND x.Subject = fsa.Subject
+                        AND x.ProgramFamily = fsa.ProgramFamily AND x.IsCurrent = 1);
+
+    SET @AdapRowsRepointed = @@ROWCOUNT;
 
     -- ------------------------------------------------------------------------
     -- Step 6a: Close FactStudentIPP rows whose (StudentKey, Subject,
@@ -629,9 +680,11 @@ BEGIN
             CAST(@TouchedRows     AS VARCHAR(20)), ' unchanged | ',
             CAST(@MissingClosed   AS VARCHAR(20)), ' deactivated (missing from import)',
             ' || FactStudentIPP: ',
+            CAST(@IPPRowsRepointed AS VARCHAR(20)), ' repointed (re-version carry) | ',
             CAST(@IPPRowsCreated  AS VARCHAR(20)), ' rows created (NULL) | ',
             CAST(@IPPRowsClosed   AS VARCHAR(20)), ' rows closed (no longer applicable)',
             ' || FactStudentAdaptation: ',
+            CAST(@AdapRowsRepointed AS VARCHAR(20)), ' repointed | ',
             CAST(@AdapRowsCreated AS VARCHAR(20)), ' rows created (NULL) | ',
             CAST(@AdapRowsClosed  AS VARCHAR(20)), ' rows closed (no longer applicable)'
         ),

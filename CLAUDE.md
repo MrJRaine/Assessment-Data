@@ -123,6 +123,7 @@ The `.claude/skills/` directory contains six project-local skills. The harness d
 | `.claude/skills/regional-assessment-platform.md` | Any work touching the data model, SCD logic, RLS, or architecture decisions for this platform |
 | `.claude/skills/power-apps-canvas-build.md` | Any Power Apps work — screens, YAML sources in `powerapps/sources/`, Power Fx formulas, pack/unpack |
 | `.claude/skills/fabric-warehouse-sql.md` | Any time you write, review, or debug T-SQL that will run in `Assessment_Warehouse` (Fabric Warehouse has significant T-SQL limitations vs. standard SQL Server) |
+| `.claude/skills/dev-containers.md` | Any time you build/typecheck the webapp image or launch/restart the local podman containers (awlive :3000, awdev :3001, awdev-impersonation :3002) — includes the image-build typecheck |
 
 ## Full Technical Reference
 

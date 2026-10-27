@@ -16,6 +16,27 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.3.0',
+    date: '2026-10-27',
+    kind: 'feature',
+    summary:
+      'Teachers now get the same school → grade/homeroom math summary administrators see, for their own students, with a Grade/Homeroom toggle.',
+  },
+  {
+    version: '1.3.0',
+    date: '2026-10-20',
+    kind: 'feature',
+    summary:
+      'Writing data entry now lists the four traits in COIL order — Conventions, Organization, Ideas, Language — by default. If you prefer the previous IOLC order, use the COIL / IOLC switch just above the grid on the right; your choice is remembered on this device.',
+  },
+  {
+    version: '1.3.0',
+    date: '2026-10-20',
+    kind: 'feature',
+    summary:
+      'School administrators and regional staff now get a Reading and Writing summary that rolls up by school, then grade or homeroom, showing the share of students Meeting or Exceeding (English and French shown separately). Open any grade or homeroom to see its students. Regional staff also get an all-schools (TCRCE) total and an All / English / French filter.',
+  },
+  {
     version: '1.2.0',
     date: '2026-10-12',
     kind: 'fix',

@@ -5,7 +5,22 @@
  *          tightly coupled — FactStaffAssignment needs StaffKey from the
  *          just-merged DimStaff.
  * Created: 2026-04-30
+ * Modified: 2026-10-16 — Step 3.5 EMAIL-CHANGE RECONCILIATION: when a staff email is corrected in
+ *           PowerSchool (per-assignment SourceSystemIDs unchanged), rename the current DimStaff row's
+ *           Email IN PLACE — matched by a shared FactStaffAssignment.SourceSystemID — instead of
+ *           closing the old email into a NULL-access ghost and inserting the corrected one as a new
+ *           person. 1:1-guarded; NewEmail-not-already-current guarded. Stops the growing ghost pile.
+ * Modified: 2026-10-19 (1.3.0) — Step 2 WRITE RULE + ROLE OVERRIDE. A person is now persisted to
+ *           DimStaff ONLY when they hold a data-access PS role (RegionalAnalyst / Administrator /
+ *           SpecialistTeacher), OR teach/co-teach a section this import (reads Stg_Section +
+ *           Stg_CoTeacher), OR carry a manual override. Everyone else (Support Staff — which now
+ *           includes admin assistants, remapped to SupportStaff in DimRole — and other null-access
+ *           non-teachers) is dropped and closed out, ending the no-access ghost pile. The new
+ *           StaffRoleOverride table supplies RLS-role context PS can't encode (coaches -> Administrator);
+ *           an override wins the AccessLevel but SCOPE still derives from PS (Step 6). Steps 5b/5c close
+ *           and withhold assignments for dropped persons so none strand under a deactivation marker.
  * Region: Canada East (PIIDPA compliant)
+ * Reads (new in 1.3.0): Stg_Section, Stg_CoTeacher (teaching emails), StaffRoleOverride (role context).
  *
  * Pipeline (all set-based — no row-by-row WHILE loops):
  *   1. Build Wrk_StaffAssignment from Stg JOIN DimRole.
@@ -14,8 +29,10 @@
  *      person is, just not what role they hold).
  *   2. Build Wrk_StaffPersons by deduping Stg by lowercased Email. For each
  *      email pick the canonical row by lowest PS ID, derive IsDistrictLevel
- *      from CanChangeSchool, compute AccessLevel from Wrk_StaffAssignment.
- *      Translate sentinels (HomeSchoolID '0' or '' -> NULL).
+ *      from CanChangeSchool, compute AccessLevel from Wrk_StaffAssignment
+ *      (a StaffRoleOverride row wins it). Translate sentinels (HomeSchoolID
+ *      '0' or '' -> NULL). WRITE RULE: persist only persons with an access role,
+ *      a taught section this import, or a manual override — drop everyone else.
  *   3. Detect same-email-different-fields anomalies for audit warning
  *      (per-person fields should be consistent across multi-row staff).
  *   4. DimStaff merge — 5 phases:
@@ -93,6 +110,7 @@ BEGIN
     DECLARE @PersonsInsertedInactive  INT = 0;   -- Deactivation inserts (== ClosedMissing)
     DECLARE @PersonsTouched           INT = 0;
     DECLARE @AccessLevelUpdated       INT = 0;
+    DECLARE @MaintenanceMigrated      INT = 0;   -- Maintenance overrides retired because the email turned up in PS (moved to Staff Access)
     -- FactStaffAssignment counters
     DECLARE @AssignmentsClosedChanged INT = 0;   -- SourceSystemID collision
     DECLARE @AssignmentsClosedMissing INT = 0;
@@ -100,6 +118,8 @@ BEGIN
     DECLARE @AssignmentsTouched       INT = 0;
     -- StaffSchoolAccess counter
     DECLARE @SsaRowCount              INT = 0;
+    -- Email-change reconciliation counter (2026-10-16)
+    DECLARE @EmailsReconciled         INT = 0;   -- DimStaff rows renamed in place (corrected email, same individual)
 
     SELECT @StgRowCount = COUNT(*) FROM Stg_Staff;
 
@@ -194,6 +214,30 @@ BEGIN
             END) AS AccessPriority
         FROM Wrk_StaffAssignment
         GROUP BY Email
+    ),
+    TeachingEmails AS (
+        -- Every email that teaches or co-teaches a section in THIS import. usp_RunFullIngestCycle
+        -- loads ALL staging (Student/Staff/Section/Enrollment/CoTeacher) BEFORE any merge, so
+        -- Stg_Section / Stg_CoTeacher are fully populated when usp_MergeStaff runs. Same email
+        -- derivation the section-teacher merge uses (lowercased, trimmed, blanks dropped).
+        SELECT LOWER(LTRIM(RTRIM(Email_Addr))) AS Email
+        FROM Stg_Section
+        WHERE NULLIF(LTRIM(RTRIM(Email_Addr)), '') IS NOT NULL
+        UNION
+        SELECT LOWER(LTRIM(RTRIM(Email))) AS Email
+        FROM Stg_CoTeacher
+        WHERE NULLIF(LTRIM(RTRIM(Email)), '') IS NOT NULL
+    ),
+    RoleOverride AS (
+        -- Manual RLS-role CONTEXT the PS export can't encode (e.g. Instructional Coaches, who have
+        -- no distinct PS role, classified as 'Administrator'). The override WINS over the PS-derived
+        -- AccessLevel AND keeps the person in the merge under the write rule below. SCOPE still derives
+        -- from PS (their HomeSchool / CanChangeSchool feed StaffSchoolAccess in Step 6) — this only
+        -- changes the role classification. Curated via usp_SetStaffRoleOverride; see StaffRoleOverride.
+        SELECT LOWER(LTRIM(RTRIM(Email))) AS Email, OverrideRole
+        FROM StaffRoleOverride
+        WHERE ActiveFlag = 1
+          AND OverrideRole IN ('RegionalAnalyst', 'Administrator', 'SpecialistTeacher')
     )
     INSERT INTO Wrk_StaffPersons (
         Email, FirstName, LastName, Title, HomeSchoolID, CanChangeSchool,
@@ -214,15 +258,52 @@ BEGIN
             WHEN r.CanChangeSchool LIKE '%;0;%' THEN CAST(1 AS BIT)
             ELSE CAST(0 AS BIT)
         END AS IsDistrictLevel,
-        CASE
-            WHEN a.AccessPriority = 3 THEN 'RegionalAnalyst'
-            WHEN a.AccessPriority = 2 THEN 'Administrator'
-            WHEN a.AccessPriority = 1 THEN 'SpecialistTeacher'
-            ELSE NULL
-        END AS AccessLevel
+        -- AccessLevel: a manual role override WINS over the PS-derived tier; else the PS tier; else NULL.
+        COALESCE(
+            o.OverrideRole,
+            CASE
+                WHEN a.AccessPriority = 3 THEN 'RegionalAnalyst'
+                WHEN a.AccessPriority = 2 THEN 'Administrator'
+                WHEN a.AccessPriority = 1 THEN 'SpecialistTeacher'
+                ELSE NULL
+            END
+        ) AS AccessLevel
     FROM RankedStg r
     LEFT JOIN AccessByEmail a ON a.Email = r.Email
-    WHERE r.rn = 1;
+    LEFT JOIN RoleOverride  o ON o.Email = r.Email
+    WHERE r.rn = 1
+      -- WRITE RULE (1.3.0): persist a person ONLY when they either
+      --   (a) hold a data-access PS role — the three school/region tiers (RegionalAnalyst /
+      --       Administrator / SpecialistTeacher) override the requirement to teach a section, OR
+      --   (b) teach / co-teach a section in this import, OR
+      --   (c) carry a manual role override (coaches, etc.).
+      -- Everyone else — Support Staff (incl. admin assistants, now remapped to SupportStaff in
+      -- DimRole), and any other null-access non-teacher — is DROPPED here. On this ingest they fall
+      -- out of Wrk_StaffPersons, so Steps 4b/4c close their DimStaff row + stamp a deactivation
+      -- marker (AccessLevel NULL ⇒ no StaffSchoolAccess), instead of accumulating no-access ghosts.
+      AND (
+            COALESCE(a.AccessPriority, 0) >= 1                                  -- (a) overriding PS role
+         OR o.Email IS NOT NULL                                                 -- (c) manual role override
+         OR EXISTS (SELECT 1 FROM TeachingEmails t WHERE t.Email = r.Email)     -- (b) teaches a section
+         OR EXISTS (SELECT 1 FROM StaffAppAccess sa                             -- (d) a maintenance user — keep for the audit ID
+                    WHERE LOWER(sa.Email) = r.Email AND sa.CanMaintain = 1)     --     (e.g. an in-PS Tech-Services SupportStaff the write rule would otherwise drop)
+      )
+
+    UNION ALL
+    -- (1.3.0) Capability-only 'Maintenance' overrides for people NOT in this PS export: create a minimal
+    -- DimStaff row so their maintenance actions have a StaffKey to log against. AccessLevel NULL => no
+    -- student data (excluded from StaffSchoolAccess in Step 6). Kept across ingests while the override is
+    -- active (it re-adds them here each run). A Maintenance override whose email IS in the export keeps the
+    -- person's real PS role via the path above and is migrated off the list in Step 6b. We only have their
+    -- email, so a generic name placeholder (DimStaff.FirstName/LastName are NOT NULL); replaced by the real
+    -- PS name if/when they appear in the export.
+    SELECT
+        LOWER(LTRIM(RTRIM(mo.Email))), 'Tech Services', 'Maintenance', 'Tech Services (Maintenance)',
+        NULL, NULL, CAST(0 AS BIT), NULL
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND NOT EXISTS (SELECT 1 FROM RankedStg r2
+                      WHERE r2.Email = LOWER(LTRIM(RTRIM(mo.Email))) AND r2.rn = 1);
 
     SET @PersonsStaged = @@ROWCOUNT;
 
@@ -242,6 +323,54 @@ BEGIN
             OR COUNT(DISTINCT ISNULL(HomeSchoolID, ''))    > 1
             OR COUNT(DISTINCT ISNULL(CanChangeSchool, '')) > 1
     ) anom;
+
+    -- ========================================================================
+    -- Step 3.5 (2026-10-16): EMAIL-CHANGE RECONCILIATION — rename in place.
+    -- When a staff email is corrected/changed in PowerSchool, the per-assignment PS record ids
+    -- (SourceSystemID) are UNCHANGED — only Email_Addr differs. The plain email-keyed merge would then
+    -- close the old email (4b) + stamp a NULL-access deactivation ghost (4c) and insert the new email as
+    -- a brand-new person (4d) — splitting one individual and growing a pile of ghosts. Here we detect
+    -- "same individual, new email" by a SHARED FactStaffAssignment.SourceSystemID and RENAME the current
+    -- DimStaff row's Email in place (StaffKey preserved → assignments / history / StaffSchoolAccess all
+    -- follow). Steps 4-6 then treat the (renamed) email as the existing person.
+    --
+    -- GUARDS: only a 1:1 (OldEmail <-> NewEmail) link renames — ambiguous many-to-one / one-to-many
+    -- links are left for manual review; and only when NewEmail is NOT already a current person (two
+    -- distinct people, not a rename). "Same email, new account" (returning teacher) keeps the email, so
+    -- it is NOT a rename — the normal merge + 5a SourceSystemID-collision path covers it.
+    -- ========================================================================
+    ;WITH OldAssign AS (   -- current ACTIVE staff whose email is absent from this import + their current assignment ids
+        SELECT d.StaffKey, d.Email AS OldEmail, f.SourceSystemID
+        FROM DimStaff d
+        INNER JOIN FactStaffAssignment f ON f.StaffKey = d.StaffKey AND f.IsCurrent = 1
+        WHERE d.IsCurrent = 1 AND d.ActiveFlag = 1
+          AND NULLIF(LTRIM(RTRIM(f.SourceSystemID)), '') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM Wrk_StaffPersons w WHERE w.Email = d.Email)
+    ),
+    NewAssign AS (   -- incoming emails NOT already a current person + their assignment ids
+        SELECT w.Email AS NewEmail, w.SourceSystemID
+        FROM Wrk_StaffAssignment w
+        WHERE NULLIF(LTRIM(RTRIM(w.SourceSystemID)), '') IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM DimStaff d WHERE d.Email = w.Email AND d.IsCurrent = 1)
+    ),
+    LinkedPairs AS (   -- old <-> new linked by a shared per-assignment PS id
+        SELECT DISTINCT oa.StaffKey, oa.OldEmail, na.NewEmail
+        FROM OldAssign oa
+        INNER JOIN NewAssign na ON na.SourceSystemID = oa.SourceSystemID
+    ),
+    Unambiguous AS (   -- keep only 1:1 links (one OldEmail <-> one NewEmail)
+        SELECT lp.StaffKey, lp.OldEmail, lp.NewEmail
+        FROM LinkedPairs lp
+        WHERE lp.OldEmail IN (SELECT OldEmail FROM LinkedPairs GROUP BY OldEmail HAVING COUNT(DISTINCT NewEmail) = 1)
+          AND lp.NewEmail IN (SELECT NewEmail FROM LinkedPairs GROUP BY NewEmail HAVING COUNT(DISTINCT OldEmail) = 1)
+    )
+    UPDATE d
+    SET Email = u.NewEmail, LastUpdated = GETDATE()
+    FROM DimStaff d
+    INNER JOIN Unambiguous u ON u.StaffKey = d.StaffKey
+    WHERE d.IsCurrent = 1 AND d.ActiveFlag = 1;
+
+    SET @EmailsReconciled = @@ROWCOUNT;
 
     -- ========================================================================
     -- Step 4: DimStaff merge
@@ -501,6 +630,10 @@ BEGIN
                   SELECT 1 FROM DimSchool sch
                   WHERE sch.SchoolID = f.SchoolID AND sch.ActiveFlag = 1
               )
+           OR NOT EXISTS (                                       -- ...or the person was DROPPED by the
+                  SELECT 1 FROM Wrk_StaffPersons p               -- Step-2 write rule (no access, no section,
+                  WHERE p.Email = d.Email                        -- no override) — close their assignments so
+              )                                                  -- 5c doesn't re-open them under a deactivation marker
           );
 
     SET @AssignmentsClosedMissing = @@ROWCOUNT;
@@ -523,6 +656,10 @@ BEGIN
     -- the DimSchool FK check in the DQ gate. AccessLevel is already computed upstream from
     -- the UNfiltered Wrk_StaffAssignment, so district-level roles still resolve their access.
     WHERE EXISTS (SELECT 1 FROM DimSchool sch WHERE sch.SchoolID = w.SchoolID AND sch.ActiveFlag = 1)
+      -- Only for persons we actually persisted in Step 2. A person dropped by the write rule has a
+      -- current DimStaff row that is a deactivation marker (IsCurrent=1, ActiveFlag=0); without this
+      -- guard 5c would insert a live assignment under that marker. Their old triples were closed in 5b.
+      AND EXISTS (SELECT 1 FROM Wrk_StaffPersons p WHERE p.Email = w.Email)
       AND NOT EXISTS (
         SELECT 1
         FROM FactStaffAssignment f
@@ -610,6 +747,32 @@ BEGIN
     SET @SsaRowCount = @@ROWCOUNT;
 
     -- ========================================================================
+    -- Step 6b (1.3.0): Maintenance-override MIGRATION. A 'Maintenance' override exists only to carry the
+    -- CanMaintain capability for someone NOT in PowerSchool (with a DimStaff audit row from the Step-2
+    -- union). If that email now appears IN this PS export, they DO have an account — their CanMaintain was
+    -- set when the override was created and persists, and the write rule keeps them (Step 2, condition d).
+    -- So retire the override (Staff Access is its proper home) and audit a per-person note the UI surfaces.
+    -- Audit BEFORE the delete so the emails are still present.
+    -- ========================================================================
+    INSERT INTO FactSubmissionAudit (RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message, RecordCount, LastUpdated)
+    SELECT 'MaintenanceMigration', 'usp_MergeStaff', 'system', @RunStart, 'Accepted',
+           CONCAT(LOWER(LTRIM(RTRIM(mo.Email))),
+                  ' was found in the PowerSchool data and will now appear on the Staff Access list instead of Role Overrides.'),
+           1, GETDATE()
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND EXISTS (SELECT 1 FROM Stg_Staff s
+                  WHERE LOWER(LTRIM(RTRIM(s.Email_Addr))) = LOWER(LTRIM(RTRIM(mo.Email))));
+
+    DELETE mo
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND EXISTS (SELECT 1 FROM Stg_Staff s
+                  WHERE LOWER(LTRIM(RTRIM(s.Email_Addr))) = LOWER(LTRIM(RTRIM(mo.Email))));
+
+    SET @MaintenanceMigrated = @@ROWCOUNT;
+
+    -- ========================================================================
     -- Step 7: Audit. One summary row covering all tables.
     -- ========================================================================
     INSERT INTO FactSubmissionAudit (
@@ -629,6 +792,7 @@ BEGIN
         CONCAT(
             'usp_MergeStaff: ',
             CAST(@StgRowCount AS VARCHAR(20)), ' staff rows staged | ',
+            CAST(@EmailsReconciled AS VARCHAR(20)), ' email(s) reconciled in place (corrected address) | ',
             'DimStaff: ',
                 CAST(@PersonsStaged           AS VARCHAR(20)), ' persons | ',
                 CAST(@PersonsInsertedActive   AS VARCHAR(20)), ' active inserts (new+changed+returning) | ',
@@ -647,6 +811,9 @@ BEGIN
                 CAST(@AssignmentsTouched       AS VARCHAR(20)), ' touched || ',
             'StaffSchoolAccess: ',
                 CAST(@SsaRowCount AS VARCHAR(20)), ' rows rebuilt',
+            CASE WHEN @MaintenanceMigrated > 0
+                 THEN CONCAT(' || Maintenance: ', CAST(@MaintenanceMigrated AS VARCHAR(20)), ' override(s) migrated to Staff Access (found in PS)')
+                 ELSE '' END,
             CASE WHEN @UnknownGroupRows > 0
                  THEN CONCAT(' | [WARN: ', CAST(@UnknownGroupRows AS VARCHAR(20)), ' rows had unknown PS Group, no FactStaffAssignment row created]')
                  ELSE '' END,

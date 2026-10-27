@@ -9,6 +9,29 @@ Fabric Warehouse is NOT standard SQL Server. It rejects many common T-SQL constr
 
 ---
 
+## Pre-flight checklist — scan EVERY warehouse query against this before handing it over
+
+The user runs all SQL and reports back, so a construct that errors costs a whole round trip. Before linking
+any `.sql`, grep it for these recurring killers (each has full detail below):
+
+- [ ] **`SUM(CASE WHEN EXISTS (SELECT …))`** or any aggregate wrapping a subquery → Msg 130. Flag per-row in a CTE, then aggregate the plain column.
+- [ ] **`'literal ' + col`** (literal space next to a VARCHAR column) → space silently trimmed. Use `CONCAT('literal', ' ', col)`.
+- [ ] **`OUTPUT` clause** (`INSERT…OUTPUT`) → unsupported. Re-`SELECT` after the write.
+- [ ] **`#temp` / `DECLARE @t TABLE` / `CURSOR` / `MERGE`** → unsupported/unreliable. Repeat the derivation inline or use `IF EXISTS`→UPDATE/INSERT.
+- [ ] **bare `;THROW` as an `IF` body** → Msg 102. Wrap in `BEGIN … END`.
+- [ ] **`LIKE` on names** → binary collation, CASE-SENSITIVE. `UPPER(col) LIKE '%…%'` or match on an ID.
+- [ ] **`TRY_CAST('-'/'+' AS INT)` returns 0, not NULL** → gate on an explicit value allow-list (`col IN ('1','2','3','4')`).
+- [ ] **`NEWID()` in a `CROSS APPLY (VALUES …)`** → folded to one value per query. Seed from `HASHBYTES(per-row-col + salt)`.
+- [ ] **`DEFAULT`/`PK`/`FK`/`CHECK`/`UNIQUE`/`CREATE INDEX`/`NVARCHAR`/`TINYINT`/`INT IDENTITY`** in CREATE TABLE → all unsupported (see table below).
+- [ ] **`ADD COLUMN` + reference to it in the same batch** → parser fails Msg 207. Split into separate batches; guard idempotent ADD with `sys.columns` (not `COL_LENGTH`).
+- [ ] **`USERPRINCIPALNAME()`** in T-SQL → use `CURRENT_USER` (DAX RLS still uses `USERPRINCIPALNAME()`).
+- [ ] **`COPY INTO`**: no `ENCODING`; needs `ROWTERMINATOR='0x0D'` for PS extracts; path is literal (spaces, not `%20`); verify with `SELECT COUNT(*) FROM Stg_*`.
+- [ ] Uncertain a function exists in Fabric (e.g. `STRING_AGG`, `EOMONTH`, `FORMAT`, `DATEFROMPARTS`)? Don't gamble — rewrite without it or confirm first.
+
+Scalar subqueries in the SELECT list (`(SELECT COUNT(*) …)`) ARE fine — it's an aggregate *wrapping* a subquery that's rejected.
+
+---
+
 ## CREATE TABLE — What Is NOT Supported
 
 | Construct | What to do instead |
@@ -382,6 +405,14 @@ Scalar subqueries in the SELECT list (`(SELECT COUNT(*) FROM ...)`) are fine —
     `Msg 207 Invalid column name`. Use the pattern the repo's migrations already use:
     `IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dbo.T') AND name = 'Col') ALTER TABLE dbo.T ADD Col …;` then `GO`.
     (2026-10-13, StudentNumber durable-fix Stage 1.)
+
+22. **A module's stored definition (`sys.sql_modules.definition` / `OBJECT_DEFINITION`) begins at `CREATE` — a
+    leading header comment is NOT stored.** Our deploy files put a `/* header */` block then `DROP … IF EXISTS; GO`
+    then `CREATE …`; the header is a separate batch (and even in the same batch, text before `CREATE` is dropped),
+    so it never lands in the stored definition. Consequence: a "is this patch deployed?" check that greps the live
+    definition for a marker string must use a marker that lives **inside the module body (after `CREATE`)**, never one
+    from the file header — a header marker yields a false MISSING even when the object IS deployed.
+    (2026-10-16, A+B card-fix deploy-verification diag — first version false-negatived 2 of 6 objects.)
 
 ## NEWID() in a CROSS APPLY is folded to ONE value per query (2026-09-22)
 

@@ -13,7 +13,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
   // StaffAppAccess allowlist (their pages and actions enforce it server-side); hide those nav items
   // for anyone without the capability so they aren't dead ends. "/" is public, so an unauthenticated
   // visitor has no UPN -> default to no capabilities.
-  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
+  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false, canMaintain: false }
   let authed = false
   let capsError = false
   try {
@@ -33,7 +33,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
 
   return (
     <>
-      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
+      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canMaintain={caps.canMaintain} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
       <header className="header">
         {/* The brand lockup is the way home — standard convention, and the only home affordance now
             that the landing page has no nav entry of its own. */}
@@ -43,7 +43,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           <img src="/logo.png" alt="Tri-County Regional Centre for Education" className="brand-logo" />
           <span className="brand-app">The SCoR Dashboard</span>
         </Link>
-        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin} showStaffAccess={caps.isSysAdmin} />
+        <Nav showCycles={caps.canManageCycles} showIngest={caps.canRunIngest} showMaintenance={caps.isSysAdmin || caps.canMaintain} showStaffAccess={caps.isSysAdmin} />
         <div className="auth">
           <AuthArea />
         </div>

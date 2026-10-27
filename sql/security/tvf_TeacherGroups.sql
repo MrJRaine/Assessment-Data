@@ -1,5 +1,11 @@
 /*******************************************************************************
  * Function: tvf_TeacherGroups  (INLINE table-valued function)
+ * Modified: 2026-10-23 — card SchoolName now comes from the SECTION's own SchoolID
+ *           (DimSection->DimSchool), not MAX over the enrolled students' CURRENT home
+ *           school. A student who transferred OUT but is kept in the window roster used
+ *           to flip a section's card to the wrong school via MAX of student schools
+ *           (e.g. a CHES math section showing "Hillcrest Academy"). Carries sec.SchoolID
+ *           through VisibleSections -> SectionStudents and joins DimSchool at the top.
  * Purpose: Choose-a-group resolution for Data Entry, keyed on the CYCLE + SUBJECT
  *          (NOT a single instance). You pick a Cycle, not an instance — a SCoR's
  *          Reading work is ONE card on /enter, and this resolves the sections
@@ -43,6 +49,13 @@
  *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
  *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
  *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
+ *          2026-10-13b — SECTION-STABLE + CURRENT-TEACHER (finishes the roster-body fix in the card layer).
+ *          (A) Sections resolve to their CURRENT version and students match enrolment by the stable
+ *          SectionID across ALL section versions (not the version in force on the window EndDate), so a
+ *          re-versioned section no longer strands a CLOSED cycle's card to ~0. (B) The Taught scope now
+ *          gates on the CURRENT teacher assignment (FactSectionTeachers.IsCurrent=1): the current teacher
+ *          of a section sees every cycle back to the start of the year; a departed teacher no longer does.
+ *          ApplicableStudentCount dedupes by StudentNumber. Mirrors usp_RebuildRosterMembership.
  * Region: Canada East (PIIDPA compliant)
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted.
@@ -94,16 +107,19 @@ RETURN
         -- TAUGHT: the caller's own sections, ANY AccessLevel (dual-role fix).
         SELECT DISTINCT
             CAST('Taught' AS VARCHAR(10)) AS Scope,
-            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            sec.SectionKey, sec.SectionID, sec.SchoolID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
             ca.Language
         FROM Caller c
         CROSS JOIN Wins win
+        -- B (2026-10-13): CURRENT assignment — the current teacher of a section sees EVERY cycle of the
+        -- year for it (closed ones included), and a departed teacher no longer does. Was as-of-EndDate,
+        -- which stranded the current teacher off closed cycles after a mid-year reassignment.
         INNER JOIN FactSectionTeachers fst
-                ON LOWER(fst.TeacherEmail) = c.Email
-               AND win.EffectiveDate BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
+                ON LOWER(fst.TeacherEmail) = c.Email AND fst.IsCurrent = 1
+        -- A (2026-10-13): CURRENT section version (SectionID is the stable identity). Was as-of-EndDate,
+        -- which picked a pre-reversion SectionKey for closed cycles.
         INNER JOIN DimSection sec
-                ON sec.SectionID = fst.SectionID
-               AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+                ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
         INNER JOIN DimCourseAssessment ca
                 ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
         WHERE ((@AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
@@ -116,14 +132,13 @@ RETURN
         -- the schools they cover via StaffSchoolAccess.
         SELECT DISTINCT
             CAST('Oversight' AS VARCHAR(10)),
-            sec.SectionKey, sec.SectionID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
+            sec.SectionKey, sec.SectionID, sec.SchoolID, sec.SectionNumber, sec.CourseName, sec.CourseCode,
             ca.Language
         FROM Caller c
         CROSS JOIN Wins win
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
         INNER JOIN DimSection sec
-                ON sec.SchoolID = ssa.SchoolID
-               AND win.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+                ON sec.SchoolID = ssa.SchoolID AND sec.IsCurrent = 1   -- A (2026-10-13): current section version
         INNER JOIN DimCourseAssessment ca
                 ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
         -- Both oversight roles (Administrator / RegionalAnalyst) are scoped to the
@@ -148,21 +163,26 @@ RETURN
     -- student who matches several instances — e.g. a dual-language writer — to ONE per section.
     SectionStudents AS (
         SELECT DISTINCT
-            vs.Scope, vs.SectionID, vs.SectionNumber, vs.CourseName, vs.CourseCode, vs.Language,
+            vs.Scope, vs.SectionID, vs.SchoolID, vs.SectionNumber, vs.CourseName, vs.CourseCode, vs.Language,
             win.AssessmentWindowID,   -- WHICH instance this student is assessed under (see SectionWindows)
-            s.StudentKey, s.StudentNumber, s.Grade, sch.SchoolName
+            scur.StudentKey, scur.StudentNumber, scur.Grade
         FROM VisibleSections vs
         CROSS JOIN Wins win
+        -- A (2026-10-13): match enrolment by the STABLE SectionID across ALL section versions (window
+        -- dates for date-overlap only), so a re-versioned section doesn't strand a closed cycle's
+        -- students. No ActiveFlag filter — a student enrolled during the window but since departed stays
+        -- (paper backfill). Student resolves to CURRENT by StudentNumber; DISTINCT collapses dups.
+        -- Mirrors usp_RebuildRosterMembership.
         INNER JOIN FactEnrollment e
-                ON e.SectionKey  = vs.SectionKey
-               AND e.StartDate  <= win.WindowEndDate
+                ON e.StartDate  <= win.WindowEndDate
                AND (e.EndDate IS NULL OR e.EndDate >= win.WindowStartDate)
-        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
-        LEFT  JOIN DimSchool  sch  ON sch.SchoolID   = s.SchoolID
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+        INNER JOIN DimSection esec ON esec.SectionKey = e.SectionKey AND esec.SectionID = vs.SectionID
+        INNER JOIN DimStudent sany ON sany.StudentKey = e.StudentKey
+        INNER JOIN DimStudent scur ON scur.StudentNumber = sany.StudentNumber AND scur.IsCurrent = 1
+        INNER JOIN DimGrade   sg   ON sg.GradeCode   = scur.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = win.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = win.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+        INNER JOIN DimProgram dp   ON dp.ProgramCode = scur.ProgramCode
         WHERE (win.AssessmentLanguage IS NULL OR vs.Language IS NULL OR vs.Language = win.AssessmentLanguage)
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (win.ProgramFamily IS NULL OR dp.ProgramFamily = win.ProgramFamily)
@@ -259,14 +279,17 @@ RETURN
         MAX(ss.Language)      AS Language,     -- drives the client's language headings + multi-select gate
         MAX(ss.CourseCode)    AS CourseCode,
         MAX(stn.TeacherNames) AS TeacherNames, -- whose class this is (shown on Oversight cards)
-        MAX(ss.SchoolName)    AS SchoolName,
+        MAX(sch.SchoolName)   AS SchoolName,   -- the SECTION's own school, NOT the students' current school
+                                               -- (a transferred-out student kept in the window roster used
+                                               --  to flip the label via MAX of student schools)
         MAX(ss.Grade)         AS Grade,
         MAX(gg.Grades)        AS Grades,
         MAX(sw.WindowIDs)     AS WindowIDs,   -- cycle instance(s) behind this card; roster routes saves by it
-        COUNT(DISTINCT ss.StudentKey) AS ApplicableStudentCount,
+        COUNT(DISTINCT ss.StudentNumber) AS ApplicableStudentCount,
         COUNT(DISTINCT es.StudentNumber) AS EnteredStudentCount,   -- "started" (>=1 result) for Math; the single result for R/W
         COUNT(DISTINCT md.StudentNumber) AS DoneStudentCount        -- Math only: >80% of grade's benchmark-month tasks marked (0 for R/W)
     FROM SectionStudents ss
+    LEFT JOIN DimSchool sch           ON sch.SchoolID = ss.SchoolID   -- card school = the section's school
     LEFT JOIN SectionTeacherNames stn ON stn.SectionID = ss.SectionID
     LEFT JOIN EnteredStudents es      ON es.StudentNumber = ss.StudentNumber
     LEFT JOIN MathDone md             ON md.StudentNumber = ss.StudentNumber

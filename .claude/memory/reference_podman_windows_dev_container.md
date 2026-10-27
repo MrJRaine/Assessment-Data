@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-22T19:42:46.949Z
+  modified: 2026-10-16T19:19:44.947Z
 ---
 
 Running the `webapp/` container locally on a Windows machine with rootless podman (WSL backend). Verified on a fresh laptop 2026-09-04.
@@ -42,3 +42,5 @@ building, running and inspecting the *app* (logs, `/api/health`, env vars) — n
 the warehouse.
 
 **Container-only machine constraints:** a machine set up just to run the container may have **no local `node` and no `gh`**. So: typecheck/lint by running the image build (`next build` runs both — a build that reaches COMMIT passed); `git push` still works via Git Credential Manager (see [[reference_gh_cli_token_via_git]]).
+
+**Typecheck = the image build. Don't improvise a host-mount `tsc`.** The webapp has no host `node`, so to check types run the normal `podman build … webapp` (its `next build` step typechecks) — that's the hundreds-of-times path. A quick `podman run -v <host>:/app node … tsc --noEmit` CAN work (tsc is pure JS, uses the repo's own typescript), but under **Git Bash the `-v`/`-w` args get MSYS path-mangled** (`/app` → `C:/Program Files/Git/app`, workdir-not-found); if you ever do mount, prefix the command with `MSYS_NO_PATHCONV=1` and pass a Windows `C:\…:/app` volume. Default to the image build. (2026-10-16 — flailed on this; don't repeat.)

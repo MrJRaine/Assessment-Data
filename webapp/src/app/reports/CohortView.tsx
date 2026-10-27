@@ -2,7 +2,10 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import type { CohortStudent, AchievementBand } from '@/lib/data'
+import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
+import CohortCharts from './CohortCharts'
+import { traitsInOrder, type WritingTraitKey } from '@/lib/writingTraits'
+import { useTraitOrder, TraitOrderToggle } from '@/components/TraitOrderToggle'
 
 // Distinct, order-preserving helper.
 function distinct<T>(xs: T[]): T[] {
@@ -50,7 +53,25 @@ function triMatch(sel: Tri, v: boolean | null): boolean {
 // (reading) or the numeric average (writing). Strings are lowercased so sorting is case-insensitive.
 type SortKey =
   | 'student' | 'lastName' | 'firstName' | 'studentNumber'
-  | 'grade' | 'homeroom' | 'school' | 'level' | 'expected' | 'diffExpected' | 'diffJune' | 'achievement'
+  | 'grade' | 'homeroom' | 'school' | 'language' | 'level' | 'expected' | 'diffExpected' | 'diffJune' | 'achievement'
+  | 'tIdeas' | 'tOrganization' | 'tLanguage' | 'tConventions'
+
+// Per-RESULT sort keys (one value per language row). Sorting by one of these SPLITS a dual-language
+// student's stacked rows so each sorts independently; any other key (demographic) keeps them stacked
+// with the demographics merged. `language` is per-result too.
+const PER_RESULT_KEYS: ReadonlySet<SortKey> = new Set<SortKey>([
+  'language', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement',
+  'tIdeas', 'tOrganization', 'tLanguage', 'tConventions',
+])
+// Within a stacked student, English on top, French below, a NULL-language (unassessed) row last.
+const langOrder = (l: string | null) => (l === 'English' ? 0 : l === 'French' ? 1 : 2)
+
+// A writing trait score string ('1'-'4'/'SCR'/'-'/null) → its numeric value, else null (sorts blank/last).
+function traitScoreNum(v: string | null): number | null {
+  if (v == null || v === 'SCR' || v === '-') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
 
 function sortVal(s: CohortStudent, key: SortKey): number | string | null {
   const lc = (v: string | null) => (v == null ? null : v.toLowerCase())
@@ -71,8 +92,22 @@ function sortVal(s: CohortStudent, key: SortKey): number | string | null {
     // IPP / unresolved (unconfirmed-IPP) students show no achievement band, so they must not sort by
     // a stray code — null sorts them blank (to the bottom), treating unconfirmed IPPs like IPPs.
     case 'achievement': return s.chartEligible ? s.achievementCode : null
+    case 'language': return s.assessmentLanguage // 'English' < 'French'; null sorts last
+    case 'tIdeas': return traitScoreNum(s.ideasScore)
+    case 'tOrganization': return traitScoreNum(s.organizationScore)
+    case 'tLanguage': return traitScoreNum(s.languageScore)
+    case 'tConventions': return traitScoreNum(s.conventionsScore)
     default: return null
   }
+}
+
+// Writing-trait column → its sort key + score accessor, so the four trait columns render in the active
+// COIL/IOLC order.
+const TRAIT_SORTKEY: Record<WritingTraitKey, SortKey> = {
+  ideas: 'tIdeas', organization: 'tOrganization', language: 'tLanguage', conventions: 'tConventions',
+}
+function traitScoreOf(s: CohortStudent, k: WritingTraitKey): string | null {
+  return k === 'ideas' ? s.ideasScore : k === 'organization' ? s.organizationScore : k === 'language' ? s.languageScore : s.conventionsScore
 }
 
 type SortSpec = { key: SortKey; dir: 'asc' | 'desc' }
@@ -84,7 +119,7 @@ const DEFAULT_ORDER: SortSpec[] = [
   { key: 'lastName', dir: 'asc' }, { key: 'firstName', dir: 'asc' }, { key: 'studentNumber', dir: 'asc' },
 ]
 // Keys with a clickable header (the ▲/▼ indicator + highlight show on these).
-const SORTABLE_HEADERS: SortKey[] = ['student', 'grade', 'homeroom', 'school', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement']
+const SORTABLE_HEADERS: SortKey[] = ['student', 'grade', 'homeroom', 'school', 'language', 'level', 'expected', 'diffExpected', 'diffJune', 'achievement', 'tIdeas', 'tOrganization', 'tLanguage', 'tConventions']
 
 // Compare by an ordered spec; NULL/blank always sorts LAST regardless of direction; ties fall through.
 function multiCmp(a: CohortStudent, b: CohortStudent, spec: SortSpec[]): number {
@@ -100,38 +135,40 @@ function multiCmp(a: CohortStudent, b: CohortStudent, spec: SortSpec[]): number 
   return 0
 }
 
-// Last 6 month buckets ending with the current month (oldest first).
-function monthBuckets(now: Date): { label: string; nextMonthStart: Date }[] {
-  const out: { label: string; nextMonthStart: Date }[] = []
-  const fmt = new Intl.DateTimeFormat('en-CA', { month: 'short' })
-  for (let i = 5; i >= 0; i--) {
-    const start = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const next = new Date(now.getFullYear(), now.getMonth() - i + 1, 1)
-    out.push({ label: fmt.format(start), nextMonthStart: next })
-  }
-  return out
-}
-
 export default function CohortView({
   cohort,
   bands,
+  cycles,
   subject = 'Reading',
   assessableRange = null,
+  trendCohort,
+  showCharts = true,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
+  cycles: ReportCycle[]
   subject?: 'Reading' | 'Writing'
   // Grade-order range of students actually assessed for this subject (e.g. Reading = P–8), from the
   // window metadata. When set, the "Assessable grades only" toggle (default ON) narrows the table +
   // total to this range. null = no scope known → toggle hidden, all students shown.
   assessableRange?: { minOrder: number; maxOrder: number } | null
+  // All-cycles cohort for the by-cycle trend (independent of the cycle selector). Falls back to `cohort`
+  // when not supplied (i.e. when no cycle is selected, both are the same dataset).
+  trendCohort?: CohortStudent[]
+  // Oversight renders the charts once at the page top (from the roll-up feed), so the in-view copy is
+  // suppressed there; teachers keep them inside the cohort view.
+  showCharts?: boolean
 }) {
+  const isWriting = subject === 'Writing'
+  // Writing student list shows the four trait scores as sortable columns, in the COIL/IOLC order the
+  // viewer picks (shared toggle with the roster + writing report).
+  const [traitMode, setTraitMode] = useTraitOrder()
+  const writingTraits = useMemo(() => traitsInOrder(traitMode), [traitMode])
   // Achievement bands ordered by code (1..4); used for chart colours/legend + the filter.
   const orderedBands = useMemo(
     () => [...bands].sort((a, b) => Number(a.code) - Number(b.code)),
     [bands],
   )
-  const bandByCode = useMemo(() => new Map(orderedBands.map((b) => [Number(b.code), b])), [orderedBands])
 
   // Option lists derived from the (already RLS-scoped) cohort.
   const grades = useMemo(
@@ -309,14 +346,15 @@ export default function CohortView({
     [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
   )
 
-  // Total (the M in "N of M"): the assessable population when the toggle is ON, else the full cohort.
-  const baseTotal = useMemo(
-    () =>
-      assessableOnly && assessableRange
-        ? cohort.filter((s) => s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder).length
-        : cohort.length,
-    [cohort, assessableOnly, assessableRange],
-  )
+  // Counts are per-STUDENT (the cohort has one row per student x language now; a dual-language student
+  // must count once). Total (the M in "N of M"): distinct assessable students when the toggle is ON.
+  const baseTotal = useMemo(() => {
+    const base = assessableOnly && assessableRange
+      ? cohort.filter((s) => s.gradeOrder != null && s.gradeOrder >= assessableRange.minOrder && s.gradeOrder <= assessableRange.maxOrder)
+      : cohort
+    return new Set(base.map((s) => s.studentNumber)).size
+  }, [cohort, assessableOnly, assessableRange])
+  const matchCount = useMemo(() => new Set(filtered.map((s) => s.studentNumber)).size, [filtered])
 
   // Display order: a clicked column as the PRIMARY key, then DEFAULT_ORDER as the tiebreak (so the
   // table is always deterministic); with no click, just DEFAULT_ORDER.
@@ -325,65 +363,108 @@ export default function CohortView({
     return [...filtered].sort((a, b) => multiCmp(a, b, spec))
   }, [filtered, sortKey, sortDir])
 
-  // Chart-eligible subset (IPP / unresolved students excluded from aggregate stats).
-  const chartRows = useMemo(() => filtered.filter((s) => s.chartEligible), [filtered])
+  // MERGE mode (demographic sort / default): a student's language rows stay together with the
+  // demographic cells merged (rowSpan). SPLIT mode (a per-result sort): rows sort independently, flat.
+  const mergeMode = sortKey == null || !PER_RESULT_KEYS.has(sortKey)
+  const groups = useMemo(() => {
+    if (!mergeMode) return null
+    const byNum = new Map<string, CohortStudent[]>()
+    const order: string[] = []
+    for (const s of sorted) {
+      let g = byNum.get(s.studentNumber)
+      if (!g) { g = []; byNum.set(s.studentNumber, g); order.push(s.studentNumber) }
+      g.push(s)
+    }
+    // English on top, French below, NULL-language (unassessed) last.
+    return order.map((n) => byNum.get(n)!.slice().sort((a, b) => langOrder(a.assessmentLanguage) - langOrder(b.assessmentLanguage)))
+  }, [sorted, mergeMode])
 
-  // Donut: current achievement distribution over assessed, chart-eligible students.
-  const donut = useMemo(() => {
-    const assessed = chartRows.filter((s) => s.achievementCode != null)
-    const counts = new Map<number, number>()
-    for (const s of assessed) counts.set(s.achievementCode!, (counts.get(s.achievementCode!) ?? 0) + 1)
-    const total = assessed.length
-    let acc = 0
-    const slices = orderedBands.map((b) => {
-      const code = Number(b.code)
-      const count = counts.get(code) ?? 0
-      const startPct = total ? (acc / total) * 100 : 0
-      acc += count
-      const endPct = total ? (acc / total) * 100 : 0
-      return {
-        code,
-        name: b.name,
-        color: b.hexColor,
-        count,
-        pct: total ? (count / total) * 100 : 0,
-        startPct,
-        endPct,
-      }
-    })
-    const gradient = total
-      ? slices
-          .filter((s) => s.count > 0)
-          .map((s) => `${s.color} ${s.startPct.toFixed(2)}% ${s.endPct.toFixed(2)}%`)
-          .join(', ')
-      : 'var(--border) 0% 100%'
-    return { slices, total, gradient }
-  }, [chartRows, orderedBands])
+  const langShort = (l: string | null) => (l === 'English' ? 'EN' : l === 'French' ? 'FR' : <span className="muted">—</span>)
+  // Render one (student x language) row. showDemo renders the merged demographic cells (rowSpan) on the
+  // first row of a stacked student; the other rows omit them. "-" = expected but not yet assessed (a shown
+  // language with no result); muted "—" = not applicable / no value.
+  function renderRow(s: CohortStudent, showDemo: boolean, demoRowSpan: number) {
+    const measured = s.chartEligible
+    const hasResult = s.mostRecentLevelCode != null
+    const pend = s.assessmentLanguage != null && !hasResult // expected, awaiting a result
+    const miss = pend ? <>-</> : <span className="muted">—</span>
+    return (
+      <tr key={`${s.studentNumber}:${s.assessmentLanguage ?? 'none'}`}>
+        {showDemo ? (
+          <>
+            <td rowSpan={demoRowSpan}>
+              <Link href={`/reports/${s.studentKey}${subject === 'Writing' ? '?subject=writing' : ''}`} className="back-link">
+                {s.lastName}, {s.firstName}
+              </Link>
+            </td>
+            <td rowSpan={demoRowSpan}>{s.grade ?? '—'}</td>
+            <td rowSpan={demoRowSpan}>{s.homeroom ?? <span className="muted">—</span>}</td>
+            <td rowSpan={demoRowSpan}>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
+          </>
+        ) : null}
+        <td>{langShort(s.assessmentLanguage)}</td>
+        {isWriting
+          ? writingTraits.map((t) => {
+              const v = traitScoreOf(s, t.key)
+              return <td key={t.key}>{hasResult ? (v ?? <span className="muted">—</span>) : miss}</td>
+            })
+          : null}
+        {/* Level (reading) / Avg (writing) — cell tinted by the achievement band (uniform block). */}
+        <td style={measured && s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
+          {hasResult ? s.mostRecentLevelCode : miss}
+        </td>
+        {subject === 'Reading' ? (
+          <td>
+            {measured && s.expectedMin && s.expectedMax
+              ? (s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`)
+              : <span className="muted">—</span>}
+          </td>
+        ) : null}
+        {subject === 'Reading' ? (
+          <td style={{ textAlign: 'center' }}>
+            {!measured || s.mostRecentDelta == null ? miss : (
+              <strong style={{ color: s.mostRecentDelta > 0 ? '#137333' : s.mostRecentDelta < 0 ? '#a50e0e' : 'inherit' }}>
+                {s.mostRecentDelta > 0 ? `+${s.mostRecentDelta}` : s.mostRecentDelta}
+              </strong>
+            )}
+          </td>
+        ) : null}
+        {subject === 'Reading' ? (
+          <td style={{ textAlign: 'center' }}>
+            {s.diffFromPrevJune == null ? <span className="muted">—</span> : (
+              <strong style={{ color: s.diffFromPrevJune > 0 ? '#137333' : s.diffFromPrevJune < 0 ? '#a50e0e' : 'inherit' }}>
+                {s.diffFromPrevJune > 0 ? `+${s.diffFromPrevJune}` : s.diffFromPrevJune}
+              </strong>
+            )}
+          </td>
+        ) : null}
+        <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
+          {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
+        </td>
+      </tr>
+    )
+  }
 
-  // 6-month bar: cumulative most-recent achievement as-of each month end.
-  const months = useMemo(() => {
-    const buckets = monthBuckets(new Date())
-    const maxCode = 4
-    return buckets.map((bk) => {
-      const counts: Record<number, number> = {}
-      for (let c = 1; c <= maxCode; c++) counts[c] = 0
-      let total = 0
-      for (const s of chartRows) {
-        if (!s.mostRecentDate || s.achievementCode == null) continue
-        if (new Date(s.mostRecentDate) < bk.nextMonthStart) {
-          counts[s.achievementCode] = (counts[s.achievementCode] ?? 0) + 1
-          total++
-        }
-      }
-      return { label: bk.label, counts, total }
-    })
-  }, [chartRows])
-  const monthMax = useMemo(() => Math.max(1, ...months.map((m) => m.total)), [months])
+  // Chart feeds (shared CohortCharts component). The DONUT reflects the current filters/cycle (chart-
+  // eligible subset of what's in view); the by-cycle TREND is independent of the cycle selector, so it's
+  // fed from the all-cycles `trendCohort` (falling back to `cohort` when no cycle is selected).
+  const donutRows = useMemo(
+    () => filtered.filter((s) => s.chartEligible).map((s) => ({ code: s.achievementCode })),
+    [filtered],
+  )
+  const trendRows = useMemo(
+    () =>
+      (trendCohort ?? cohort)
+        .filter((s) => s.chartEligible)
+        .map((s) => ({ code: s.achievementCode, date: s.mostRecentDate })),
+    [trendCohort, cohort],
+  )
 
   return (
     <>
       <div className="cohort-bar">
-        <span className="muted">{filtered.length} of {baseTotal} students match</span>
+        <span className="muted">{matchCount} of {baseTotal} students match</span>
+        {isWriting ? <TraitOrderToggle mode={traitMode} onChange={setTraitMode} /> : null}
         {assessableRange ? (
           <label className="assessable-toggle" title={`Show only the grades that participate in ${subject} — the rest don't take part, so they'd only pad the total.`}>
             <input type="checkbox" checked={assessableOnly} onChange={(e) => setAssessableOnly(e.target.checked)} />
@@ -552,64 +633,7 @@ export default function CohortView({
         </div>
       ) : null}
 
-      <div className="cohort-charts">
-        <div className="chart-card">
-          <div className="chart-title">Current achievement distribution</div>
-          <div className="donut-wrap">
-            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
-              <div className="donut-hole">
-                <div className="donut-total">{donut.total}</div>
-                <div className="donut-label">ASSESSED</div>
-              </div>
-            </div>
-            <ul className="donut-legend">
-              {donut.slices.map((s) => (
-                <li key={s.code}>
-                  <span className="swatch" style={{ background: s.color }} />
-                  <span className="legend-name">{s.name}</span>
-                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {donut.total === 0 ? <div className="muted chart-empty">No assessed, chart-eligible students match.</div> : null}
-        </div>
-
-        <div className="chart-card">
-          <div className="chart-title">Achievement by month (last 6 months)</div>
-          <div className="monthbars">
-            {months.map((m) => (
-              <div key={m.label} className="monthbar">
-                <div className="monthbar-stack">
-                  {[1, 2, 3, 4].map((c) => {
-                    const v = m.counts[c] ?? 0
-                    if (!v) return null
-                    const band = bandByCode.get(c)
-                    const h = (v / monthMax) * 100
-                    return (
-                      <div
-                        key={c}
-                        className="monthbar-seg"
-                        style={{ height: `${h}%`, background: band?.hexColor ?? 'var(--border)' }}
-                        title={`${band?.name ?? c}: ${v}`}
-                      />
-                    )
-                  })}
-                </div>
-                <div className="monthbar-label">{m.label}</div>
-              </div>
-            ))}
-          </div>
-          <ul className="bar-legend">
-            {orderedBands.map((b) => (
-              <li key={b.code}>
-                <span className="swatch" style={{ background: b.hexColor }} />
-                {b.name}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
+      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
 
       {filtered.length === 0 ? (
         <div className="notice notice-empty">
@@ -623,6 +647,14 @@ export default function CohortView({
               <th className={thCls('grade')} onClick={() => onSort('grade')}>Grade{caret('grade')}</th>
               <th className={thCls('homeroom')} onClick={() => onSort('homeroom')}>Homeroom{caret('homeroom')}</th>
               <th className={thCls('school')} onClick={() => onSort('school')}>School{caret('school')}</th>
+              <th className={thCls('language')} onClick={() => onSort('language')}>Lang{caret('language')}</th>
+              {isWriting
+                ? writingTraits.map((t) => (
+                    <th key={t.key} className={thCls(TRAIT_SORTKEY[t.key])} onClick={() => onSort(TRAIT_SORTKEY[t.key])}>
+                      {t.label}{caret(TRAIT_SORTKEY[t.key])}
+                    </th>
+                  ))
+                : null}
               <th className={thCls('level')} onClick={() => onSort('level')}>{subject === 'Writing' ? 'Avg' : 'Level'}{caret('level')}</th>
               {subject === 'Reading' ? (
                 <th className={thCls('expected')} onClick={() => onSort('expected')}>Expected{caret('expected')}</th>
@@ -641,62 +673,9 @@ export default function CohortView({
             </tr>
           </thead>
           <tbody>
-            {sorted.map((s) => {
-              // IPP / unresolved students aren't measured against benchmarks — no achievement
-              // tint or band (their reading level still shows). chartEligible = no IPP or IsIPP=0.
-              const measured = s.chartEligible
-              return (
-                <tr key={s.studentKey} style={measured && s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
-                  <td>
-                    <Link href={`/reports/${s.studentKey}${subject === 'Writing' ? '?subject=writing' : ''}`} className="back-link">
-                      {s.lastName}, {s.firstName}
-                    </Link>
-                  </td>
-                  <td>{s.grade ?? '—'}</td>
-                  <td>{s.homeroom ?? <span className="muted">—</span>}</td>
-                  <td>{s.schoolAbbreviation ?? s.schoolId ?? '—'}</td>
-                  <td>{s.mostRecentLevelCode ?? <span className="muted">—</span>}</td>
-                  {subject === 'Reading' ? (
-                    <td>
-                      {/* IPP / unresolved students (!measured) have no benchmark target, so blank the Expected range. */}
-                      {measured && s.expectedMin && s.expectedMax ? (
-                        s.expectedMin === s.expectedMax ? s.expectedMin : `${s.expectedMin}–${s.expectedMax}`
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                  ) : null}
-                  {subject === 'Reading' ? (
-                    <td style={{ textAlign: 'center' }}>
-                      {/* Diff from Expected = the latest score's signed distance from its benchmark (ReadingDelta).
-                          IPP / unresolved students (!measured) are NOT compared to the expected benchmark, so
-                          they show no value — the row's achievement column already marks them "IPP". */}
-                      {!measured || s.mostRecentDelta == null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <strong style={{ color: s.mostRecentDelta > 0 ? '#137333' : s.mostRecentDelta < 0 ? '#a50e0e' : 'inherit' }}>
-                          {s.mostRecentDelta > 0 ? `+${s.mostRecentDelta}` : s.mostRecentDelta}
-                        </strong>
-                      )}
-                    </td>
-                  ) : null}
-                  {subject === 'Reading' ? (
-                    <td style={{ textAlign: 'center' }}>
-                      {s.diffFromPrevJune == null ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <strong style={{ color: s.diffFromPrevJune > 0 ? '#137333' : s.diffFromPrevJune < 0 ? '#a50e0e' : 'inherit' }}>
-                          {s.diffFromPrevJune > 0 ? `+${s.diffFromPrevJune}` : s.diffFromPrevJune}
-                        </strong>
-                      )}
-                    </td>
-                  ) : null}
-                  <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
-                    {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
-                  </td>
-                </tr>
-              )
-            })}
+            {mergeMode && groups
+              ? groups.flatMap((g) => g.map((s, i) => renderRow(s, i === 0, g.length)))
+              : sorted.map((s) => renderRow(s, true, 1))}
           </tbody>
         </table>
       )}

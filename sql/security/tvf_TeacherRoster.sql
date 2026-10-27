@@ -105,8 +105,7 @@ RETURN
            OR EXISTS (SELECT 1 FROM FactSectionTeachers fst   -- teacher, ANY role (dual-role keeps theirs)
                       WHERE fst.SectionID = m.SectionID
                         AND LOWER(fst.TeacherEmail) = c.Email
-                        AND m.WindowEffectiveDate BETWEEN fst.EffectiveStartDate
-                                                      AND COALESCE(fst.EffectiveEndDate, '9999-12-31'))
+                        AND fst.IsCurrent = 1)   -- B (2026-10-13): CURRENT teacher sees every cycle (was as-of-EndDate)
     ),
     -- Latest reading entry per (student, window). Multiple dated entries per window are now
     -- allowed (ongoing-assessment model), so the roster shows the MOST RECENT one -- without this

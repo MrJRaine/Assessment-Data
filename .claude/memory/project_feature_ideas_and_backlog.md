@@ -1,11 +1,11 @@
 ---
-name: project_prelaunch_queue
+name: project_feature_ideas_and_backlog
 description: Release-triaged work queue. LIVE through 0.6.0 (2026-09-22). Forward triage 1.0 → post-launch → post-1.0 set by the user 2026-09-18 — respect those calls; do not re-litigate or re-order. Keep current per feedback_keep_memories_current.
 metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-09-22T21:07:21.574Z
+  modified: 2026-10-27T18:43:07.416Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -80,12 +80,54 @@ we're not blocked and it's not our queue item.)*
 
 # Post-1.0
 
+- **LOTO sysadmin-override confirm dialog** *(user 2026-10-27, QoL/safety)*. When a **sysadmin** clears a
+  maintenance window they did **not** open, prompt a confirm first naming the owner — e.g. "You are
+  cancelling a maintenance window set by user: XYZ" (XYZ = `AppMaintenance.SetByEmail`). Fires ONLY on the
+  sysadmin-override case (caller is sysadmin AND caller ≠ owner); the owner clearing their own window, and
+  the ingest auto-clear, get no prompt. LOTO itself ships in 1.3.0 ([[project_maintenance_mode]]); this is
+  the "are you sure you're breaking someone else's lock" guardrail on top. **Impl hook:** the client clear
+  paths (`MaintenanceControl.clear`, `MaintenanceProvider.clearNow`) don't currently know the owner email —
+  `/api/status` returns only `maintenanceAt`/`serverNow`/`message`, so surface `SetByEmail` (and whether the
+  viewer is the owner) there first, then gate the `confirm()` on it.
+- **Maintainer-only lockout reason field** *(user 2026-10-27, QoL/ops comms)*. On the maintenance page, a
+  field where whoever opens a window records WHY it's locked (e.g. "Fabric server being migrated — no DB
+  alterations"), **visible only to other maintenance-flagged staff** (CanMaintain / sysadmin), so peers
+  understand the lock without tracking the opener down. **DISTINCT from the public `AppMaintenance.Message`**
+  (the banner/overlay text every user sees) — this is an INTERNAL note. **Impl hook:** add a column to
+  `AppMaintenance` (e.g. `MaintainerNote`); `usp_SetMaintenanceWindow` takes it; render it only to a
+  maintainer — do NOT put it in the public `/api/status` payload (it would leak to teachers); gate it
+  server-side (separate maintainer-only read, or include only when the viewer is CanMaintain/sysadmin).
+  Pairs with the owner-naming lock message (shipped 1.3.0) and the sysadmin-override confirm dialog (above).
+  See [[project_maintenance_mode]].
+- **Read-only Coach role (view-only entry unless flagged)** *(user 2026-10-27)*. A new role that follows the
+  **Administrator** access pattern (school-scoped visibility via `StaffSchoolAccess` — sees the same data an
+  Administrator sees for their schools) with ONE difference: on the **data-entry** pages they can **view but
+  not edit/save** — every cycle behaves as if **locked (view-only)** for them — UNLESS granted an
+  **edit-override flag**, which un-gates editing. Refines today's stop-gap where a coach is classified as
+  `Administrator` via a role override (which currently gives them FULL entry edit); this gives coaches their
+  own role with read-only entry by default. **Impl hooks:** add the role to the AccessLevel/override taxonomy
+  (new value, e.g. `Coach`, Administrator-equivalent for RLS/StaffSchoolAccess — see [[project_assessment_platform]]
+  RLS taxonomy and the "Coaches role" open decision there); the entry UI's edit/save gate must force view-only
+  for the role regardless of cycle state (the entry grids already compute a per-cycle locked/view-only state —
+  extend that so `Coach` + no edit-flag = locked); add the per-user edit-override flag (a capability on
+  `StaffAppAccess`, same shape as `CanMaintain`, or a flag on the override) that lifts the lock. Pairs with the
+  role-override work shipped in 1.3.0 ([[project_assessment_language_tracks]] has the course-based WRITE-scoping
+  precedent for gating entry).
+- **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
+  roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
+  **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
+  (`loadGroup`) for all branches simultaneously, hammering Fabric. Collapse is free (client-state only —
+  clear `openSchools`/`openNodes`; keep the loaded `blocks` cached so re-expanding is instant).
 - **Design/aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0")*. Flag a11y in passing, collect
   here, do NOT stop to fix. Math cell marks are already AA-compliant. **Reusable technique:** SC 1.4.11
   wants 3:1 against ADJACENT colours, not the page — a fill too light to pass alone works if a
   sufficient-contrast EDGE **≥ 1px rendered** defines the shape (a sub-pixel stroke antialiases away and
   the fill silently carries the ratio; a checker can't see this). Chasing the fill colour can't work.
 - **Dark mode** *(user: "1.2 or later")*. Full scoping in [[project_dark_mode]].
+- **Persistent per-USER preferences (server-side)** *(user 2026-10-20: "QoL for down the road; per-browser is fine for now")*.
+  UI prefs (COIL/IOLC trait order via `useTraitOrder` → localStorage key `writingTraitOrder`; later others)
+  are per-BROWSER today. Move to a per-UPN store so a preference follows the user across devices. Would need
+  a small prefs table + read/write path (SP-scoped) + a load on sign-in. Low priority; don't build until asked.
 
 ---
 

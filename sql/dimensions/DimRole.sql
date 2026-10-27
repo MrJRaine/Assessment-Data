@@ -20,6 +20,13 @@
  *                       only AccessLevel-branching case in the SchoolAdmins
  *                       DAX RLS — Administrator and remaining SpecialistTeacher
  *                       now have identical staff-visibility rules.
+ *           2026-10-19 (1.3.0) - Reclassified RoleNumbers 11, 13, 17, 20 (the four
+ *                       "Admin Assistant" groups) from Administrator to SupportStaff.
+ *                       Admin assistants no longer receive app access. Combined with
+ *                       the usp_MergeStaff write rule (persist only access-roles,
+ *                       section-teachers, or manual overrides), they fall out of the
+ *                       merge and their DimStaff rows close out on the next ingest.
+ *                       Migration for the existing warehouse: migrate_DimRole_admin_assistants_to_support.sql.
  * Region: Canada East (PIIDPA compliant)
  ******************************************************************************/
 
@@ -33,8 +40,9 @@
 --                         for historical continuity), this RoleCode no longer
 --                         includes anyone who actually teaches. Get school-level
 --                         RLS via StaffSchoolAccess.
---   'Administrator'     — Principals, VPs, admin assistants. School-level RLS
---                         via StaffSchoolAccess.
+--   'Administrator'     — Principals, VPs. School-level RLS via StaffSchoolAccess.
+--                         (Admin assistants were reclassified to SupportStaff on
+--                         2026-10-19 — they no longer have app access; see note below.)
 --   'RegionalAnalyst'   — TCRCE board-level: superintendent, board directors,
 --                         board admin, board services. Multi-school RLS via
 --                         StaffSchoolAccess (board scope).
@@ -85,16 +93,16 @@ VALUES
     (8,  'Unused 8',                                              NULL,                0, GETDATE()),
     (9,  'DoE PS Admin',                                          'ProvincialAnalyst', 1, GETDATE()),
     (10, 'Board PS Admin',                                        'RegionalAnalyst',   1, GETDATE()),
-    (11, 'Admin Assistants Only (PS admin and scheduling)',       'Administrator',     1, GETDATE()),
+    (11, 'Admin Assistants Only (PS admin and scheduling)',       'SupportStaff',      1, GETDATE()),
     (12, 'Registrar/Counsellor',                                  'SpecialistTeacher', 1, GETDATE()),
-    (13, 'Admin Assistant - Level 2 (Non-Scheduling)',            'Administrator',     1, GETDATE()),
+    (13, 'Admin Assistant - Level 2 (Non-Scheduling)',            'SupportStaff',      1, GETDATE()),
     (14, 'Adult High School PS Admin',                            'Administrator',     1, GETDATE()),
     (15, 'INTL Admin',                                            'Administrator',     1, GETDATE()),
     (16, 'CSAP Translator',                                       'SupportStaff',      1, GETDATE()),
-    (17, 'Admin Assistant - Level 3 (Limited Access)',            'Administrator',     1, GETDATE()),
+    (17, 'Admin Assistant - Level 3 (Limited Access)',            'SupportStaff',      1, GETDATE()),
     (18, 'NA - 18',                                               NULL,                0, GETDATE()),
     (19, 'Registrar (without Counsellor Admin notes)',            'SpecialistTeacher', 1, GETDATE()),
-    (20, 'Admin Assistant - Level 2 (Reports and Alert)',         'Administrator',     1, GETDATE()),
+    (20, 'Admin Assistant - Level 2 (Reports and Alert)',         'SupportStaff',      1, GETDATE()),
     (21, 'Counselor - Level 1 (Walk-In Scheduling)',              'SpecialistTeacher', 1, GETDATE()),
     (22, 'IB, O2, and Co-op Coordinators',                        'Teacher',           1, GETDATE()),
     (23, 'Counselor - Level 2 (Non-Scheduling)',                  'SpecialistTeacher', 1, GETDATE()),

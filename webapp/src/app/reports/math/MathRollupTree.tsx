@@ -78,7 +78,7 @@ function RollupCell({ t, sticky }: { t: Tally; sticky?: boolean }) {
   )
 }
 
-export default function MathRollupTree({ rows, cycle }: { rows: MathRollupRow[]; cycle: string | null }) {
+export default function MathRollupTree({ rows, cycle, showAll = false }: { rows: MathRollupRow[]; cycle: string | null; showAll?: boolean }) {
   const { schools, unitNames } = useMemo(() => {
     const byKey = new Map<string, TreeStudent>()
     const unitOrder = new Map<string, number>()
@@ -226,6 +226,45 @@ export default function MathRollupTree({ rows, cycle }: { rows: MathRollupRow[];
             </tr>
           </thead>
           <tbody>
+            {showAll && schools.length > 1
+              ? (() => {
+                  const allStudents = schools.flatMap((s) => s.students)
+                  const tOpen = openSchools.has('__TCRCE__')
+                  const ts = summarize(allStudents, unitNames, blankMode)
+                  const byGrade = new Map<string, TreeStudent[]>()
+                  for (const s of allStudents) byGrade.set(s.grade, [...(byGrade.get(s.grade) ?? []), s])
+                  const grades = [...byGrade.entries()]
+                    .map(([grade, students]) => ({ grade, students }))
+                    .sort((a, b) => (GRADE_ORDER[a.grade] ?? 99) - (GRADE_ORDER[b.grade] ?? 99))
+                  return (
+                    <Fragment key="__TCRCE__">
+                      <tr className="tnode lvl1 tcrce">
+                        <th className="col-task" onClick={() => toggleSchool('__TCRCE__')}>
+                          <span className="tchev">{tOpen ? '▾' : '▸'}</span>TCRCE<span className="tsub">all schools</span>
+                        </th>
+                        <td className="rn">{ts.n}</td>
+                        <RollupCell t={ts.overall} />
+                        {unitNames.map((u) => <RollupCell key={u} t={ts.units[u]} />)}
+                      </tr>
+                      {tOpen
+                        ? grades.map((g) => {
+                            const gs = summarize(g.students, unitNames, blankMode)
+                            return (
+                              <tr className="tnode lvl2" key={`__TCRCE__:${g.grade}`}>
+                                <th className="col-task">
+                                  <span className="tchev" style={{ visibility: 'hidden' }}>▸</span>{gradeLabel(g.grade)}
+                                </th>
+                                <td className="rn">{gs.n}</td>
+                                <RollupCell t={gs.overall} />
+                                {unitNames.map((u) => <RollupCell key={u} t={gs.units[u]} />)}
+                              </tr>
+                            )
+                          })
+                        : null}
+                    </Fragment>
+                  )
+                })()
+              : null}
             {schools.map((sch) => {
               const open = openSchools.has(sch.id)
               const s = summarize(sch.students, unitNames, blankMode)

@@ -11,11 +11,12 @@ const CAPS: { key: keyof StaffAccessRow; label: string }[] = [
   { key: 'canRunIngest', label: 'Run Ingest' },
   { key: 'canOverrideMath', label: 'Math Override' },
   { key: 'canOverrideLiteracy', label: 'Literacy Override' },
+  { key: 'canMaintain', label: 'Maintenance' },
 ]
 
 // A row with no capabilities at all -> a Save removes them from the access list (house-cleaning).
 const isEmptyRow = (r: StaffAccessRow) =>
-  !r.isSysAdmin && !r.canManageCycles && !r.canRunIngest && !r.canOverrideMath && !r.canOverrideLiteracy
+  !r.isSysAdmin && !r.canManageCycles && !r.canRunIngest && !r.canOverrideMath && !r.canOverrideLiteracy && !r.canMaintain
 
 export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAccessRow[]; selfUpn: string }) {
   const [rows, setRows] = useState<StaffAccessRow[]>(staff)
@@ -27,6 +28,9 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
   // toggles + Saves (the DB row is created on that first Save, not on add).
   const [addEmail, setAddEmail] = useState('')
   const [addMsg, setAddMsg] = useState<string | null>(null)
+  // Explicit "don't search" choice — add an email that isn't a current staff record (e.g. Technology
+  // Services who aren't in PowerSchool). Off by default so a typo'd real email is still caught.
+  const [addExternal, setAddExternal] = useState(false)
 
   function addStaff() {
     const email = addEmail.trim()
@@ -37,7 +41,7 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
     }
     setAddMsg(null)
     startTransition(async () => {
-      const res = await findStaff(email)
+      const res = await findStaff(email, addExternal)
       if (!res.ok || !res.staff) {
         setAddMsg(res.message ?? 'Not found.')
         return
@@ -55,11 +59,17 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
         canRunIngest: false,
         canOverrideMath: false,
         canOverrideLiteracy: false,
+        canMaintain: false,
       }
       setRows((rs) => [newRow, ...rs]) // top of the list so it's visible
       setDirty((d) => ({ ...d, [s.email]: true })) // dirty -> Save enabled; Save creates the DB row
       setAddEmail('')
-      setAddMsg(`Added ${s.name} — set their roles and click Save.`)
+      setAddExternal(false)
+      setAddMsg(
+        res.known
+          ? `Added ${s.name} — set their roles and click Save.`
+          : `Added ${s.email} (not a current staff record) — set their roles and click Save.`,
+      )
     })
   }
 
@@ -103,6 +113,7 @@ export default function StaffAccessManager({ staff, selfUpn }: { staff: StaffAcc
           canRunIngest: r.canRunIngest,
           canOverrideMath: r.canOverrideMath,
           canOverrideLiteracy: r.canOverrideLiteracy,
+          canMaintain: r.canMaintain,
         })
         if (res.ok) {
           setDirty((d) => {

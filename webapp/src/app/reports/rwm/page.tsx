@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { ToggleLink } from '@/components/ToggleLink'
 import { PageHeader, ErrorNote, EmptyState } from '@/components/ui'
 import { getCurrentUpn } from '@/lib/auth'
 import { getStudentCohortRWM, getReportCycles, type RWMStudent, type ReportCycle } from '@/lib/data'
@@ -31,10 +31,10 @@ export default async function RwmReportsPage({
     <>
       <PageHeader title="Reports" subtitle="RWM — how many of Reading · Writing · Math each student is currently meeting or exceeding" />
       <div className="subject-toggle">
-        <Link href="/reports" className="toggle">Reading</Link>
-        <Link href="/reports?subject=writing" className="toggle">Writing</Link>
-        <Link href="/reports/math" className="toggle">Math</Link>
-        <Link href="/reports/rwm" className="toggle-on">RWM</Link>
+        <ToggleLink href="/reports" className="toggle">Reading</ToggleLink>
+        <ToggleLink href="/reports?subject=writing" className="toggle">Writing</ToggleLink>
+        <ToggleLink href="/reports/math" className="toggle">Math</ToggleLink>
+        <ToggleLink href="/reports/rwm" className="toggle-on">RWM</ToggleLink>
       </div>
       <p className="muted small" style={{ margin: '0 0 1rem' }}>
         Primary–5 only. A student&apos;s score counts Reading, Writing, and Math where their most-recent

@@ -350,7 +350,14 @@ BEGIN
 
         UNION ALL
 
-        -- 16. FactSectionTeachers.TeacherEmail → some DimStaff row (any version)
+        -- 16. FactSectionTeachers.TeacherEmail → some DimStaff row (any version).
+        -- CURRENT rows only: TeacherEmail is a MUTABLE business key, and the 1.3.0 email-change
+        -- reconciliation (usp_MergeStaff step 3.5) renames DimStaff.Email IN PLACE — so after a teacher's
+        -- email is corrected, NO DimStaff version carries the OLD address, and the now-CLOSED historical
+        -- FactSectionTeachers rows that referenced it would orphan here on EVERY such correction. A closed
+        -- section-teacher row is valid history (it resolved while current); only current roster integrity
+        -- needs enforcing, so scope the check to IsCurrent=1. A genuine current orphan (a section assigned
+        -- to a teacher absent from DimStaff) is still caught.
         SELECT
             'Orphan',
             'FactSectionTeachers.TeacherEmail not found in any DimStaff version',
@@ -359,7 +366,8 @@ BEGIN
             CAST(fst.SectionTeacherID AS VARCHAR(150)),
             CONCAT('TeacherEmail=', fst.TeacherEmail, ' not in DimStaff')
         FROM FactSectionTeachers fst
-        WHERE NOT EXISTS (
+        WHERE fst.IsCurrent = 1
+          AND NOT EXISTS (
             SELECT 1 FROM DimStaff d WHERE LOWER(d.Email) = LOWER(fst.TeacherEmail)
         )
 

@@ -24,6 +24,12 @@
  *          ARE teachers -> Data Entry only for the sections they teach, via the FactSectionTeachers
  *          route; they keep whole-school VIEW in Reports and whole-school Programming, which use
  *          other TVFs). Oversight entry = Administrator / RegionalAnalyst only.
+ *          2026-10-13b — SECTION-STABLE + CURRENT-TEACHER (matches tvf_TeacherGroups / the roster rebuild).
+ *          TeacherStudents + AdminStudents now resolve sections to their CURRENT version and match
+ *          enrolment by the stable SectionID across ALL section versions (window dates for overlap only),
+ *          so a re-versioned section no longer strands a CLOSED cycle's /enter card counts. The teacher
+ *          route gates on the CURRENT assignment (FactSectionTeachers.IsCurrent=1): the current teacher
+ *          sees every cycle back to year-start. Counts dedupe by StudentNumber (student resolves to current).
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an inline TVF (not a proc): reads should be QUERYABLE -- the app does
@@ -78,19 +84,16 @@ RETURN
         WHERE w.ActiveFlag = 1
     ),
     TeacherStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.Grade
+        SELECT wed.AssessmentWindowID, scur.StudentKey, scur.StudentNumber, scur.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
+        -- B (2026-10-13): CURRENT assignment — the current teacher sees every cycle of the year for their
+        -- current sections (closed ones too); a departed teacher no longer does. Was as-of-EndDate.
         INNER JOIN FactSectionTeachers fst
-                ON LOWER(fst.TeacherEmail) = c.Email
-               AND wed.EffectiveDate BETWEEN fst.EffectiveStartDate AND COALESCE(fst.EffectiveEndDate, '9999-12-31')
+                ON LOWER(fst.TeacherEmail) = c.Email AND fst.IsCurrent = 1
+        -- A (2026-10-13): CURRENT section version (stable SectionID). Was as-of-EndDate.
         INNER JOIN DimSection sec
-                ON sec.SectionID = fst.SectionID
-               AND wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
-        INNER JOIN FactEnrollment e
-                ON e.SectionKey  = sec.SectionKey
-               AND e.StartDate  <= wed.EndDate
-               AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+                ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
         -- The section's COURSE has to be one we assess for this subject, and in the instance's
         -- language. Without this a teacher whose only literacy course is ELA still got a French
         -- Reading card (their immersion students matched it by program), which then opened an empty
@@ -100,11 +103,18 @@ RETURN
                AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
                  OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
                AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
-        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+        -- A (2026-10-13): enrolment matched by the stable SectionID across ALL section versions (window
+        -- dates for overlap only); student resolves to CURRENT by StudentNumber.
+        INNER JOIN FactEnrollment e
+                ON e.StartDate  <= wed.EndDate
+               AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
+        INNER JOIN DimSection esec ON esec.SectionKey = e.SectionKey AND esec.SectionID = sec.SectionID
+        INNER JOIN DimStudent sany ON sany.StudentKey = e.StudentKey
+        INNER JOIN DimStudent scur ON scur.StudentNumber = sany.StudentNumber AND scur.IsCurrent = 1
+        INNER JOIN DimGrade   sg   ON sg.GradeCode   = scur.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+        INNER JOIN DimProgram dp   ON dp.ProgramCode = scur.ProgramCode
         -- Teacher route: plain teachers AND SpecialistTeacher (2026-10-13 — specialists enter only the
         -- sections they teach, so they need this route now that the oversight route excludes them).
         WHERE (c.AccessLevel IS NULL OR c.AccessLevel = 'SpecialistTeacher')
@@ -119,27 +129,28 @@ RETURN
     -- instance. RegionalAnalyst is gated the SAME way — NO region-wide branch; a region-wide analyst
     -- simply has every building in their list. Mirrors tvf_TeacherGroups' Oversight path.
     AdminStudents AS (
-        SELECT wed.AssessmentWindowID, s.StudentKey, s.StudentNumber, s.Grade
+        SELECT wed.AssessmentWindowID, scur.StudentKey, scur.StudentNumber, scur.Grade
         FROM Caller c
         CROSS JOIN WindowEffectiveDates wed
         INNER JOIN StaffSchoolAccess ssa ON ssa.StaffKey = c.StaffKey
         INNER JOIN DimSection sec
-                ON sec.SchoolID = ssa.SchoolID
-               AND wed.EffectiveDate BETWEEN sec.EffectiveStartDate AND COALESCE(sec.EffectiveEndDate, '9999-12-31')
+                ON sec.SchoolID = ssa.SchoolID AND sec.IsCurrent = 1   -- A (2026-10-13): current section version
         INNER JOIN DimCourseAssessment ca
                 ON ca.CourseCode = sec.CourseCode AND ca.ActiveFlag = 1
                AND ((wed.AssessmentType IN ('Reading', 'Writing') AND ca.Kind = 'Literacy')
                  OR (wed.AssessmentType = 'Math'                  AND ca.Kind = 'Math'))
                AND (wed.AssessmentLanguage IS NULL OR ca.Language IS NULL OR ca.Language = wed.AssessmentLanguage)
+        -- A (2026-10-13): enrolment matched by the stable SectionID across ALL section versions; student current.
         INNER JOIN FactEnrollment e
-                ON e.SectionKey  = sec.SectionKey
-               AND e.StartDate  <= wed.EndDate
+                ON e.StartDate  <= wed.EndDate
                AND (e.EndDate IS NULL OR e.EndDate >= wed.StartDate)
-        INNER JOIN DimStudent s ON s.StudentKey = e.StudentKey
-        INNER JOIN DimGrade   sg   ON sg.GradeCode   = s.Grade
+        INNER JOIN DimSection esec ON esec.SectionKey = e.SectionKey AND esec.SectionID = sec.SectionID
+        INNER JOIN DimStudent sany ON sany.StudentKey = e.StudentKey
+        INNER JOIN DimStudent scur ON scur.StudentNumber = sany.StudentNumber AND scur.IsCurrent = 1
+        INNER JOIN DimGrade   sg   ON sg.GradeCode   = scur.Grade
         INNER JOIN DimGrade   wmin ON wmin.GradeCode = wed.MinGrade
         INNER JOIN DimGrade   wmax ON wmax.GradeCode = wed.MaxGrade
-        INNER JOIN DimProgram dp   ON dp.ProgramCode = s.ProgramCode
+        INNER JOIN DimProgram dp   ON dp.ProgramCode = scur.ProgramCode
         WHERE c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
           AND sg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
           AND (wed.ProgramFamily IS NULL OR dp.ProgramFamily = wed.ProgramFamily)
@@ -232,12 +243,12 @@ RETURN
         wed.CycleName,      -- header name for that collapsed card (instance names differ per scope)
         wed.WindowStatus,
         wed.GraceEndsAt,    -- when a Closed (in-grace) window flips to Locked; drives the "N left" countdown
-        COUNT(DISTINCT a.StudentKey) AS ApplicableStudentCount,
+        COUNT(DISTINCT a.StudentNumber) AS ApplicableStudentCount,
         -- Entered if the student has a result on ANY instance of this cycle+subject (see CycleEntered),
         -- so a result on a sibling-language instance still counts and the card matches the group picker.
-        COUNT(DISTINCT CASE WHEN ce.StudentNumber IS NOT NULL THEN a.StudentKey END) AS EnteredStudentCount,
+        COUNT(DISTINCT CASE WHEN ce.StudentNumber IS NOT NULL THEN a.StudentNumber END) AS EnteredStudentCount,
         -- Math "done" (0.6.4): >80% of the student's benchmark-month tasks marked. 0 for Reading/Writing.
-        COUNT(DISTINCT CASE WHEN mdn.StudentNumber IS NOT NULL THEN a.StudentKey END) AS DoneStudentCount
+        COUNT(DISTINCT CASE WHEN mdn.StudentNumber IS NOT NULL THEN a.StudentNumber END) AS DoneStudentCount
     FROM WindowEffectiveDates wed
     INNER JOIN ApplicableStudents a ON a.AssessmentWindowID = wed.AssessmentWindowID
     LEFT JOIN CycleEntered ce

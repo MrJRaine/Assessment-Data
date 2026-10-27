@@ -84,6 +84,9 @@ export default function RosterEntry({
   // Staged IPP confirmations: studentKey -> chosen value. Committed on Save (not per click), so
   // the screen never freezes mid-click; clicking the chosen value again un-stages it.
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
+  // Resolved IPP confirmations this session (studentKey -> isIPP), set once a Save succeeds. Overrides
+  // the server's ippNeedsConfirmation so the row flips to the entry fields / IPP badge without a refresh.
+  const [confirmedIpp, setConfirmedIpp] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
   // Grace-lock: when the cycle is locked, the grid is read-only. An override-holder can flip it back
@@ -200,6 +203,12 @@ export default function RosterEntry({
           for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
           return next
         })
+        // Remember what resolved so the gate flips to the fields/badge immediately (no refresh needed).
+        setConfirmedIpp((prev) => {
+          const next = { ...prev }
+          for (const k of ippKeys) if (!erroredKeys.has(k)) next[k] = ippSel[k]
+          return next
+        })
         markSaved() // at T-5 the next save is what locks input
         if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
         // Optimistic: baseline just updated to the saved levels, so Current + Since June + Diff
@@ -226,7 +235,7 @@ export default function RosterEntry({
             </>
           ) : (
             <>
-              <strong>This cycle is locked (view only).</strong> The grace period for late entry has ended.{' '}
+              <strong>This cycle is locked (view only).</strong>{' '}
               {canOverride && (
                 <button type="button" className="btn-ghost" onClick={() => setOverride(true)}>
                   Override lock for this group
@@ -283,8 +292,9 @@ export default function RosterEntry({
         <tbody>
           {roster.filter(sg.isShown).map((s) => {
             const selId = sel[s.studentKey] ?? ''
-            const needsConfirm = s.ippNeedsConfirmation
-            const isIPP = s.ippStatus === true
+            const resolvedIpp = s.studentKey in confirmedIpp
+            const needsConfirm = s.ippNeedsConfirmation && !resolvedIpp
+            const isIPP = s.ippStatus === true || confirmedIpp[s.studentKey] === true
             const ippStaged = s.studentKey in ippSel
             const dirty = isChecked(s.studentKey) || ippStaged
             // IPP students and unresolved gates carry no achievement colour/delta (mirrors the app).

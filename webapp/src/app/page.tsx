@@ -16,7 +16,7 @@ export default async function Home() {
   // "/" is public, so there may be no signed-in user (not yet signed in) — getCurrentUpn
   // throws in that case; fall back to no welcome line rather than erroring the landing page.
   let welcome: string | undefined
-  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false }
+  let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false, canMaintain: false }
   try {
     const upn = await getCurrentUpn()
     // First name only for the welcome line (friendlyName gives "Jeffrey Raine" -> "Jeffrey").
@@ -53,7 +53,7 @@ export default async function Home() {
       {/* Administration — cycle setup, PowerSchool ingest, and maintenance windows. The whole section
           (heading included) appears only if the caller holds at least one of these capabilities, so a
           teacher never sees an admin heading or an empty grid. */}
-      {(caps.canManageCycles || caps.canRunIngest || caps.isSysAdmin) ? (
+      {(caps.canManageCycles || caps.canRunIngest || caps.isSysAdmin || caps.canMaintain) ? (
         <section className="window-section home-admin">
           <h2 className="section-heading">Admin Tools</h2>
           <div className="card-grid">
@@ -73,11 +73,11 @@ export default async function Home() {
                 cta="Run ingest"
               />
             ) : null}
-            {caps.isSysAdmin ? (
+            {caps.isSysAdmin || caps.canMaintain ? (
               <CardLink
                 href="/admin/maintenance"
                 title="Maintenance"
-                desc="Schedule or clear a maintenance window before a deploy or data refresh — teachers' work is saved before the app pauses. System administrators only."
+                desc="Schedule or clear a maintenance window before a deploy, data refresh, or server work — teachers' work is saved before the app pauses."
                 cta="Open maintenance"
               />
             ) : null}
@@ -87,6 +87,14 @@ export default async function Home() {
                 title="Staff Access"
                 desc="Grant app capabilities to staff — cycle management, ingest, and the grace-lock overrides. System administrators only."
                 cta="Manage access"
+              />
+            ) : null}
+            {caps.isSysAdmin ? (
+              <CardLink
+                href="/admin/staff-roles"
+                title="Role Overrides"
+                desc="Classify staff the PowerSchool export can't — e.g. Instructional Coaches as Administrator for their schools. System administrators only."
+                cta="Manage roles"
               />
             ) : null}
           </div>

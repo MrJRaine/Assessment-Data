@@ -100,6 +100,14 @@ a { color: inherit; text-decoration: none; }
   display: inline-block; animation: spin 0.7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Inline pending spinner shown by <ToggleLink> (router.push + useTransition) while a report toggle's
+   force-dynamic navigation is in flight — instant click feedback. currentColor so it reads on both the
+   active (white) and inactive (muted) toggle. */
+.toggle-spin {
+  display: inline-block; width: 0.7rem; height: 0.7rem; margin-left: 0.4rem; vertical-align: -1px;
+  border-radius: 50%; border: 2px solid transparent; border-top-color: currentColor;
+  animation: spin 0.6s linear infinite;
+}
 
 /* cards */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
@@ -169,12 +177,29 @@ a { color: inherit; text-decoration: none; }
 
 /* Reading | Writing subject toggle (cohort + detail) */
 .subject-toggle { display: inline-flex; gap: 0.25rem; margin: 0.25rem 0 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }
-.subject-toggle a { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); }
+.subject-toggle a { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); }
 .subject-toggle a:hover { color: var(--ink); }
 .subject-toggle a.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
-.subject-toggle button { padding: 0.35rem 0.95rem; border-radius: 6px; font-size: 0.9rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; }
+.subject-toggle button { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
 .subject-toggle button:hover { color: var(--ink); }
 .subject-toggle button.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
+/* Entry-grid toolbar: small-group filter on the left, trait-order toggle on the right. */
+.entry-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 0.25rem 0 0.5rem; }
+.trait-order-toggle { display: inline-flex; align-items: center; gap: 0.25rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem 0.3rem; }
+.trait-order-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.15rem; }
+.trait-order-toggle button { padding: 0.25rem 0.7rem; border-radius: 6px; font-size: 0.85rem; color: var(--muted); border: none; background: none; cursor: pointer; font-family: inherit; }
+.trait-order-toggle button:hover { color: var(--ink); }
+.trait-order-toggle button.toggle-on { background: var(--primary); color: #fff; font-weight: 600; }
+/* One-time notice about the COIL/IOLC reorder — sits below the toolbar, above the grid header. */
+.trait-order-note { color: var(--danger); margin: 0 0 0.75rem; font-size: 0.9rem; line-height: 1.4; }
+/* TCRCE all-schools roll-up row (region-wide reports) — set it apart from the per-school rows. */
+.mgrid .tnode.tcrce > th.col-task { font-weight: 700; }
+.mgrid .tnode.tcrce { border-top: 2px solid var(--border); }
+/* Reports: subject toggle + cycle selector share one row (reclaims vertical space above the table). */
+.report-top-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin: 0.25rem 0 0.9rem; }
+.report-top-row .cycle-selector { margin: 0; }
+/* The Summary/Student-list switch sits at the start of the roll-up toolbar. */
+.mtoolbar-view { display: inline-flex; margin-right: 0.75rem; }
 .cycle-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; margin: 0 0 1.1rem; }
 .cycle-label { font-size: 0.75rem; color: var(--muted); font-weight: 700; margin-right: 0.3rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .cycle-btn { padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.85rem; color: var(--muted); background: var(--card); white-space: nowrap; }
@@ -420,8 +445,10 @@ a { color: inherit; text-decoration: none; }
 /* ---- Math roster entry (student x task mastery matrix) ---- */
 .math-entry { margin-top: 0; }
 .math-entry .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.mtoolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
+.mtoolbar { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-bottom: 0.7rem; }
 .math-entry .spacer { flex: 1; }
+/* A label + its toggle wrap together as one unit, so the caption never orphans from its buttons. */
+.mtoolbar-pair { display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
 .linkbtn { border: none; background: none; color: var(--primary-hover); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
 .btn-ghost.editing { border-color: var(--primary); color: var(--primary-hover); background: #e3f2f9; }
 .mlegend { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0 0 0.7rem; font-size: .8rem; color: var(--muted); align-items: center; }
@@ -446,7 +473,12 @@ a { color: inherit; text-decoration: none; }
 .mghead .gc { color: var(--muted); font-size: .85rem; }
 .mscroll { overflow: auto; max-height: 68vh; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .mgrid { border-collapse: separate; border-spacing: 0; }
-.mgrid th, .mgrid td { border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); }
+/* Row separators are drawn with an inset box-shadow on EVERY cell (not a border-bottom): under
+   border-collapse: separate the 1px border-bottom drops unpredictably at sub-pixel row positions and
+   is painted over on the sticky columns. A box-shadow paints on each cell's own layer, so the line
+   survives everywhere AND every column's separator sits at the same position (keeps them aligned).
+   The border-bottom stays (transparent) only to preserve row heights; the right border is unaffected. */
+.mgrid th, .mgrid td { border-right: 1px solid var(--border); border-bottom: 1px solid transparent; box-shadow: inset 0 -1px 0 var(--border); }
 .mgrid thead th { position: sticky; top: 0; z-index: 3; background: var(--bg); font-size: .78rem; color: var(--muted); font-weight: 600; padding: .45rem .35rem; text-align: center; vertical-align: bottom; }
 .mgrid thead th.col-task { text-align: left; }
 .mgrid .col-task { position: sticky; left: 0; z-index: 2; background: var(--card); width: 300px; min-width: 300px; max-width: 300px; text-align: left; padding: .4rem .55rem; vertical-align: top; }
@@ -486,7 +518,10 @@ a { color: inherit; text-decoration: none; }
 .mgrid tr.unitrow th.col-task .chev { color: var(--muted); margin-right: .3rem; font-size: .72rem; display: inline-block; width: .8rem; }
 .mgrid tr.unitrow td, .mgrid tr.unitrow .col-pct { background: #e7edf1; }
 .mgrid tr.unitrow td { text-align: center; padding: .3rem .15rem; }
-.mgrid .stu { width: 84px; min-width: 84px; max-width: 84px; }
+.mgrid .stu { width: 84px; min-width: 84px; max-width: 84px; padding: .4rem .3rem; vertical-align: top; }
+/* Achievement-name column: size to the longest band name (e.g. "Not Yet Meeting", "Approaching") on one
+   line instead of the fixed 84px .stu width, which clipped/overflowed long names and truncated the header. */
+.mgrid .ach { white-space: nowrap; width: auto; min-width: 96px; max-width: none; padding: .4rem .35rem; vertical-align: top; }
 .mgrid thead th.stu { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mgrid td.cell { padding: 0; text-align: center; }
 /* Reports read-only matrix: give the sticky roll-up cell a solid ground (heat classes override it),
@@ -574,6 +609,13 @@ a { color: inherit; text-decoration: none; }
 .mtree tr.tnode th.col-task { cursor: pointer; }
 .mtree tr.lvl1 th.col-task { font-weight: 700; }
 .mtree tr.lvl2 th.col-task { padding-left: 1.7rem; font-weight: 500; }
+.mtree tr.lvl3 th.col-task { padding-left: 3rem; font-weight: 500; }
+/* Sortable headers in the per-group student detail (reading roll-up). */
+.mgrid th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.mgrid th.sortable:hover { color: var(--primary); }
+/* Grouped two-row header (English / French over Reading Level · Expected · Diff). */
+.mgrid th.grp-head { text-align: center; font-weight: 700; }
+.mgrid .grp-sep { border-left: 1px solid var(--border); }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }
