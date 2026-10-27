@@ -56,16 +56,16 @@ export async function findStaff(
 /** Save one staff member's role override. usp_SetStaffRoleOverride records the override AND provisions
  *  that one email in place (grants the maintenance flag only after the staging/DimStaff check, applies a
  *  data-access role for someone already in PS, migrates a found-in-PS Maintenance override onto Staff
- *  Access) — so there is no separate Apply step. Uses query() to read the returned (Message, Migrated):
- *  `note` is a migration/held message to surface; `migrated` means the row left this list. */
+ *  Access) — so there is no separate Apply step. Uses query() to read the returned (Message, Removed):
+ *  `note` is a migration/held message to surface; `removed` means the row left this list (retired or migrated). */
 export async function setRoleOverride(
   u: RoleOverrideUpdate,
-): Promise<{ ok: boolean; message?: string; note?: string; migrated?: boolean }> {
+): Promise<{ ok: boolean; message?: string; note?: string; removed?: boolean }> {
   try {
     const upn = await assertSysAdmin()
     if (!u.email?.trim()) throw new UserError('A staff email is required.')
     if (!OVERRIDE_ROLES.includes(u.overrideRole)) throw new UserError('Choose a valid override role.')
-    const rows = await query<{ Message: string | null; Migrated: boolean | number }>(
+    const rows = await query<{ Message: string | null; Removed: boolean | number }>(
       'EXEC dbo.usp_SetStaffRoleOverride @TargetEmail = @TargetEmail, @OverrideRole = @OverrideRole, @Notes = @Notes, @Active = @Active, @CallerUPN = @CallerUPN',
       {
         TargetEmail: u.email.trim(),
@@ -84,7 +84,7 @@ export async function setRoleOverride(
     return {
       ok: true,
       note: row?.Message ?? undefined,
-      migrated: Boolean(row?.Migrated),
+      removed: Boolean(row?.Removed),
     }
   } catch (e) {
     return { ok: false, message: toUserMessage(e) }

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-27T16:26:04.120Z
+  modified: 2026-10-27T17:55:16.428Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -89,6 +89,16 @@ we're not blocked and it's not our queue item.)*
   paths (`MaintenanceControl.clear`, `MaintenanceProvider.clearNow`) don't currently know the owner email —
   `/api/status` returns only `maintenanceAt`/`serverNow`/`message`, so surface `SetByEmail` (and whether the
   viewer is the owner) there first, then gate the `confirm()` on it.
+- **Maintainer-only lockout reason field** *(user 2026-10-27, QoL/ops comms)*. On the maintenance page, a
+  field where whoever opens a window records WHY it's locked (e.g. "Fabric server being migrated — no DB
+  alterations"), **visible only to other maintenance-flagged staff** (CanMaintain / sysadmin), so peers
+  understand the lock without tracking the opener down. **DISTINCT from the public `AppMaintenance.Message`**
+  (the banner/overlay text every user sees) — this is an INTERNAL note. **Impl hook:** add a column to
+  `AppMaintenance` (e.g. `MaintainerNote`); `usp_SetMaintenanceWindow` takes it; render it only to a
+  maintainer — do NOT put it in the public `/api/status` payload (it would leak to teachers); gate it
+  server-side (separate maintainer-only read, or include only when the viewer is CanMaintain/sysadmin).
+  Pairs with the owner-naming lock message (shipped 1.3.0) and the sysadmin-override confirm dialog (above).
+  See [[project_maintenance_mode]].
 - **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
   roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
   **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
