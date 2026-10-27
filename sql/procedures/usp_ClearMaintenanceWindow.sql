@@ -10,7 +10,8 @@
  *   mindedly end a window while the server is down for infra work or mid-ingest. The ingest flow's own
  *   auto-clear still works because it's the same user who opened the window.
  * THROW codes:
- *   51042  caller is neither the window's owner nor a sysadmin (window is locked)
+ *   51042  caller is neither the window's owner nor a sysadmin (window is locked) — message NAMES the
+ *          owner's email so a blocked non-sysadmin can find them when no sysadmin is available
  * SECURITY: owner/sysadmin-gated in-proc (defense in depth). Region: Canada East. Created 2026-09-16.
  *   Modified 2026-10-19 (LOTO: owner-or-sysadmin instead of sysadmin-only).
  ******************************************************************************/
@@ -33,7 +34,12 @@ BEGIN
 
     IF COALESCE(@IsSys, 0) = 0 AND (@OpenedBy IS NULL OR @OpenedBy <> @Caller)
     BEGIN
-        ;THROW 51042, 'This maintenance window is locked by whoever opened it — only they or a system administrator can clear it.', 1;
+        -- Name the owner (staff work email — public, not PII) so a blocked non-sysadmin can track them
+        -- down when a window is stuck and no sysadmin is on hand.
+        DECLARE @LockMsg VARCHAR(400) = CONCAT(
+            'This maintenance window is locked by ', COALESCE(@OpenedBy, 'whoever opened it'),
+            ' — only they or a system administrator can clear it.');
+        ;THROW 51042, @LockMsg, 1;
     END;
 
     UPDATE AppMaintenance
