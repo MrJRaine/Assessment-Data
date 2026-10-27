@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-27T17:55:16.428Z
+  modified: 2026-10-27T18:43:07.416Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -99,6 +99,20 @@ we're not blocked and it's not our queue item.)*
   server-side (separate maintainer-only read, or include only when the viewer is CanMaintain/sysadmin).
   Pairs with the owner-naming lock message (shipped 1.3.0) and the sysadmin-override confirm dialog (above).
   See [[project_maintenance_mode]].
+- **Read-only Coach role (view-only entry unless flagged)** *(user 2026-10-27)*. A new role that follows the
+  **Administrator** access pattern (school-scoped visibility via `StaffSchoolAccess` — sees the same data an
+  Administrator sees for their schools) with ONE difference: on the **data-entry** pages they can **view but
+  not edit/save** — every cycle behaves as if **locked (view-only)** for them — UNLESS granted an
+  **edit-override flag**, which un-gates editing. Refines today's stop-gap where a coach is classified as
+  `Administrator` via a role override (which currently gives them FULL entry edit); this gives coaches their
+  own role with read-only entry by default. **Impl hooks:** add the role to the AccessLevel/override taxonomy
+  (new value, e.g. `Coach`, Administrator-equivalent for RLS/StaffSchoolAccess — see [[project_assessment_platform]]
+  RLS taxonomy and the "Coaches role" open decision there); the entry UI's edit/save gate must force view-only
+  for the role regardless of cycle state (the entry grids already compute a per-cycle locked/view-only state —
+  extend that so `Coach` + no edit-flag = locked); add the per-user edit-override flag (a capability on
+  `StaffAppAccess`, same shape as `CanMaintain`, or a flag on the override) that lifts the lock. Pairs with the
+  role-override work shipped in 1.3.0 ([[project_assessment_language_tracks]] has the course-based WRITE-scoping
+  precedent for gating entry).
 - **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
   roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
   **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
