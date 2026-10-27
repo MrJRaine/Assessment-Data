@@ -17,6 +17,13 @@ export interface PatchNote {
 export const PATCH_NOTES: PatchNote[] = [
   {
     version: '1.3.0',
+    date: '2026-10-27',
+    kind: 'feature',
+    summary:
+      'Teachers now get the same school → grade/homeroom math summary administrators see, for their own students, with a Grade/Homeroom toggle.',
+  },
+  {
+    version: '1.3.0',
     date: '2026-10-20',
     kind: 'feature',
     summary:

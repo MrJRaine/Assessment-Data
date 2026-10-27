@@ -19,7 +19,9 @@ with `0.3.0`, so earlier detail is approximate.
   blocking ingest operators mid-process), and a new **Maintenance** capability (`StaffAppAccess.CanMaintain`)
   gives **Technology Services** the full `/admin/maintenance` page with no student-data access. A window is
   now **owned by whoever opened it** — only that person **or a sysadmin** can clear it, so no one ends a
-  window while the server is down for infra work or mid-ingest. SQL: `migrate_StaffAppAccess_add_CanMaintain`
+  window while the server is down for infra work or mid-ingest. A blocked clear now **names who holds the
+  window** (their work email) so another Technology Services member knows whom to reach when no sysadmin is
+  on hand. SQL: `migrate_StaffAppAccess_add_CanMaintain`
   + redeploy `usp_SetMaintenanceWindow` (scope-based gate), `usp_ClearMaintenanceWindow` (LOTO),
   `usp_SetStaffAppAccess` (new flag). Grant the capability at `/admin/staff-access`.
 - **Role overrides for staff the PowerSchool export can't classify.** A new sysadmin screen
@@ -29,8 +31,14 @@ with `0.3.0`, so earlier detail is approximate.
   PowerSchool. The override changes only the *role*; the *schools* still come from PowerSchool, so access
   stays derived. People are added **by email** — a current staff record isn't required, so a coach already
   excluded from active staff (or not yet in PowerSchool) can still be listed. (Same for the Maintenance
-  capability on `/admin/staff-access` — Technology Services needn't be in PowerSchool.) SQL: new
-  `StaffRoleOverride` table + `usp_SetStaffRoleOverride`; read by `usp_MergeStaff`.
+  capability on `/admin/staff-access` — Technology Services needn't be in PowerSchool.) A new **Maintenance**
+  role on this screen grants the maintenance flag **and a logging identity** to Technology Services without a
+  PowerSchool record. **Saving now provisions each person in place immediately** (no wait for the next
+  ingest): a not-yet-in-PowerSchool person gets a placeholder staff record so their actions can be logged;
+  someone found in PowerSchool is **migrated onto the Staff Access list** instead. **Retiring an override
+  removes it from the list** (the person reverts to their PowerSchool role; re-add by email to restore)
+  rather than lingering as inactive. SQL: new `StaffRoleOverride` table + `usp_SetStaffRoleOverride` — now the
+  single Save action (per-email provisioning; the interim "Apply" wrapper is dropped); read by `usp_MergeStaff`.
 
 ### Changed
 - **Staff ingest now only keeps people who need an account.** A person is written to the staff directory
@@ -85,6 +93,11 @@ with `0.3.0`, so earlier detail is approximate.
 - **Language-of-assessment filter** (Slice 4) on the Reading + Writing roll-ups: an **All / English / French**
   toggle that narrows the whole view — counts, % Meeting/Exceeding, and the student detail — to the chosen
   language (a specific language drops students with no result in it). Completes the 1.3.0 reports rebuild.
+- **Math report — teachers get the roll-up tree too.** Teachers now see the **same School → (Grade or
+  Homeroom) tree** as oversight roles, scoped to their **own Primary–5 students**, with the *Summarize by*
+  toggle — replacing the card picker, which listed a homeroom card **and** a redundant grade card for the
+  same class (a holdover from before math had a consistent scale across windows/grades; a grade isn't a
+  class). SQL: `tvf_StudentCohortMathAll` gains a *taught* scope (the caller's own section students).
 
 ### Changed
 - **Writing entry grid shows the four traits in COIL order by default** (Conventions, Organization,
