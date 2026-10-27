@@ -2,7 +2,7 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { getCallerCapabilities, lookupStaffByEmail } from '@/lib/data'
-import { execProc, query } from '@/lib/db'
+import { query } from '@/lib/db'
 import { toUserMessage, UserError } from '@/lib/errors'
 import { invalidateAllIdentities } from '@/lib/identityCache'
 import { revalidatePath } from 'next/cache'
@@ -53,48 +53,39 @@ export async function findStaff(
   }
 }
 
-/** Upsert one staff member's role override (via usp_SetStaffRoleOverride). */
-export async function setRoleOverride(u: RoleOverrideUpdate): Promise<{ ok: boolean; message?: string }> {
+/** Save one staff member's role override. usp_SetStaffRoleOverride records the override AND provisions
+ *  that one email in place (grants the maintenance flag only after the staging/DimStaff check, applies a
+ *  data-access role for someone already in PS, migrates a found-in-PS Maintenance override onto Staff
+ *  Access) — so there is no separate Apply step. Uses query() to read the returned (Message, Migrated):
+ *  `note` is a migration/held message to surface; `migrated` means the row left this list. */
+export async function setRoleOverride(
+  u: RoleOverrideUpdate,
+): Promise<{ ok: boolean; message?: string; note?: string; migrated?: boolean }> {
   try {
     const upn = await assertSysAdmin()
     if (!u.email?.trim()) throw new UserError('A staff email is required.')
     if (!OVERRIDE_ROLES.includes(u.overrideRole)) throw new UserError('Choose a valid override role.')
-    await execProc('usp_SetStaffRoleOverride', {
-      TargetEmail: u.email.trim(),
-      OverrideRole: u.overrideRole,
-      Notes: u.notes?.trim() || null,
-      Active: u.active,
-      CallerUPN: upn,
-    })
-    // The target's effective role changes on the next ingest; clear identity caches so the app's own
+    const rows = await query<{ Message: string | null; Migrated: boolean | number }>(
+      'EXEC dbo.usp_SetStaffRoleOverride @TargetEmail = @TargetEmail, @OverrideRole = @OverrideRole, @Notes = @Notes, @Active = @Active, @CallerUPN = @CallerUPN',
+      {
+        TargetEmail: u.email.trim(),
+        OverrideRole: u.overrideRole,
+        Notes: u.notes?.trim() || null,
+        Active: u.active,
+        CallerUPN: upn,
+      },
+    )
+    // The target's effective role/flag may change immediately; clear identity caches so the app's own
     // nav/gates don't serve a stale capability within the hour TTL. Rare action, full clear is cheap.
     invalidateAllIdentities()
     revalidatePath('/admin/staff-roles')
-    return { ok: true }
-  } catch (e) {
-    return { ok: false, message: toUserMessage(e) }
-  }
-}
-
-/** "Apply now" — re-run the staff merge against the already-staged PowerSchool export (no re-upload, no
- *  student/section/enrolment merge) so saved overrides take effect in seconds: a coach found in staging
- *  gets their Administrator role, a not-in-PS Maintenance override gets its DimStaff audit row + flag, and
- *  a Maintenance override whose email IS in staging is migrated off this list onto Staff Access. Returns
- *  the migration notes this run produced so the UI can tell the SysAdmin who moved.
- *  Uses query() (not execProc): the wrapper's final SELECT returns the migration-note rows. */
-export async function applyOverrides(): Promise<{ ok: boolean; messages?: string[]; message?: string }> {
-  try {
-    const upn = await assertSysAdmin()
-    const rows = await query<{ Message: string }>(
-      'EXEC dbo.usp_ApplyRoleOverrides @CallerUPN = @upn',
-      { upn },
-    )
-    // The merge may have changed effective roles (coach -> Administrator, Maintenance granted/migrated);
-    // clear identity caches so nav/gates don't serve a stale capability within the hour TTL.
-    invalidateAllIdentities()
-    revalidatePath('/admin/staff-roles')
     revalidatePath('/admin/staff-access')
-    return { ok: true, messages: rows.map((r) => r.Message).filter(Boolean) }
+    const row = rows[0]
+    return {
+      ok: true,
+      note: row?.Message ?? undefined,
+      migrated: Boolean(row?.Migrated),
+    }
   } catch (e) {
     return { ok: false, message: toUserMessage(e) }
   }
