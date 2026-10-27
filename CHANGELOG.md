@@ -42,6 +42,14 @@ with `0.3.0`, so earlier detail is approximate.
   any coaches/overrides *before* the first ingest after this deploys, or they're dropped with everyone else.
 
 ### Fixed
+- **Math tasks display in the section's language, not the student's.** A math class showed its tasks and
+  answer keys in whichever language each *student's program* implied, so an English math section that
+  carried a French-Immersion student (e.g. a mid-cycle transfer kept in the roster) rendered **French** task
+  text for the whole class. Math task language now follows the **section's course** (immersion math →
+  French, otherwise English), so a section is one consistent language regardless of individual students'
+  programs — in both Data Entry and the Math reports. SQL: populate `DimCourseAssessment.Language` for math
+  + redeploy `tvf_TeacherRosterMath` and `tvf_StudentCohortMath`
+  (`sql/deploy/live_1.3.0/deploy_math_task_language_2026-10-27.sql`).
 - **Corrected staff emails no longer spawn "ghost" accounts.** When a staff email was fixed in
   PowerSchool, the ingest treated the corrected address as a brand-new person and left the old one as a
   no-access ghost (an ever-growing pile). The ingest now recognises it's the same individual — via the
