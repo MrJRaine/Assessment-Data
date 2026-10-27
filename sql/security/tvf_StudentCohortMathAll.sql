@@ -12,9 +12,10 @@
  * Created: 2026-10-12
  * Region: Canada East (PIIDPA compliant)
  *
- * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst, per school via
- * StaffSchoolAccess (identical to tvf_StudentCohortMath's oversight branch). A plain teacher
- * gets no rows; teachers keep the card picker. Math = Primary..Grade 5 (grade 6 not ready 2026-27).
+ * Scope: OVERSIGHT (Administrator / SpecialistTeacher / RegionalAnalyst, per school via
+ * StaffSchoolAccess) OR TAUGHT (a plain teacher's own students, via FactSectionTeachers) — so
+ * /reports/math renders the same roll-up tree for teachers (2026-10-27). Formerly oversight-only, which
+ * returned a teacher no rows and sent them to the card picker — now retired. Math = Primary..Grade 5 (grade 6 not ready 2026-27).
  *
  * Counting matches MathCohortView: a cell is the student's LATEST result per task across the
  * selected math window(s) (@CycleGroupID NULL = all current-year math windows). A student whose
@@ -95,9 +96,20 @@ RETURN
           AND lm.rn = 1
     WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
       AND g.GradeOrder BETWEEN 0 AND 5   -- Math P..5 (grade 6 not ready 2026-27)
-      AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
+      AND (
+          -- OVERSIGHT: the schools the caller covers via StaffSchoolAccess.
+          EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
                   WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
                     AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
+          -- TAUGHT: a plain teacher sees their OWN students in the tree — anyone enrolled in a current
+          -- section they teach. Lets /reports/math render the same roll-up (Grade/Homeroom toggle) for
+          -- teachers instead of a card picker. A teaching-admin matches via either arm.
+       OR EXISTS (SELECT 1 FROM FactSectionTeachers fst
+                  INNER JOIN DimSection sec ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
+                  INNER JOIN FactEnrollment e ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
+                  WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1
+                    AND e.StudentKey = s.StudentKey)
+      )
     GROUP BY s.StudentKey, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID, sch.SchoolName, ipp.IsIPP, t.UnitName
 );
 GO
