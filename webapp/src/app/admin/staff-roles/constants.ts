@@ -8,5 +8,3 @@
 // StaffRoleOverride's allowed values and usp_SetStaffRoleOverride's 51010 guard.
 export const OVERRIDE_ROLES = ['Administrator', 'RegionalAnalyst', 'SpecialistTeacher', 'Maintenance'] as const
 export type OverrideRole = (typeof OVERRIDE_ROLES)[number]
-// Capability-only override roles (no data access, no merge scope) — handled differently on Apply.
-export const CAPABILITY_ONLY_ROLES: readonly OverrideRole[] = ['Maintenance']
