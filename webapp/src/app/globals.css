@@ -405,6 +405,12 @@ a { color: inherit; text-decoration: none; }
 
 /* dev-only impersonation bar (amber so it is unmistakably a dev tool; never shown in entra/live) */
 .dev-impersonate {
+  /* Sit ABOVE the maintenance down-overlay (z-index 1000, opaque, full-viewport) so a sysadmin who has
+     impersonated a locked-out teacher can still switch back and clear the window — the whole reason this
+     bar lives OUTSIDE MaintenanceProvider. Without this the expanded bar paints behind the overlay and
+     "disappears". Sticky top:0 keeps it reachable no matter the scroll position. (Dev-only; the collapsed
+     FAB already carries z-index 1001.) */
+  position: sticky; top: 0; z-index: 1001;
   display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem;
   padding: 0.4rem 1rem; font-size: 0.85rem;
   background: #fff7e6; color: #7a5900; border-bottom: 1px solid #f0d68a;
