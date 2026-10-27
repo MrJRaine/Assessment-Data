@@ -33,7 +33,7 @@ BEGIN
 
     IF COALESCE(@IsSys, 0) = 0 AND (@OpenedBy IS NULL OR @OpenedBy <> @Caller)
     BEGIN
-        ;THROW 51042, 'usp_ClearMaintenanceWindow: this maintenance window is locked by the user who opened it; only they or a sysadmin can clear it.', 1;
+        ;THROW 51042, 'This maintenance window is locked by whoever opened it — only they or a system administrator can clear it.', 1;
     END;
 
     UPDATE AppMaintenance
