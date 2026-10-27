@@ -86,4 +86,13 @@ INSERT INTO DimCourseAssessment (CourseCode, Language, Kind, ActiveFlag, Notes, 
     ('MTH166IM',NULL,'Math',1,'Math P-6',GETDATE()),('MAT4IMIP',NULL,'Math',1,'Math P-6',GETDATE()),
     ('MAT5IMIP',NULL,'Math',1,'Math P-6',GETDATE()),('MAT6IMIP',NULL,'Math',1,'Math P-6',GETDATE());
 
+-- Math task-display language (2026-10-27): a math section renders its tasks in its COURSE's language, not
+-- the student's program (an all-English math section carrying one stray French-Immersion student was
+-- showing French). Immersion math course codes end in 'IM' or 'IMIP'; everything else is English. Read by
+-- tvf_TeacherRosterMath / tvf_StudentCohortMath. This is NOT a literacy EN/FR language — StudentExpectedAssessment
+-- still excludes Math by AssessmentType, so it does not create dual-language expected rows.
+UPDATE DimCourseAssessment
+SET Language = CASE WHEN CourseCode LIKE '%IMIP' OR CourseCode LIKE '%IM' THEN 'French' ELSE 'English' END
+WHERE Kind = 'Math';
+
 SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessment GROUP BY Language, Kind ORDER BY Kind, Language;

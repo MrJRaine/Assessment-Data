@@ -9,6 +9,29 @@ Fabric Warehouse is NOT standard SQL Server. It rejects many common T-SQL constr
 
 ---
 
+## Pre-flight checklist — scan EVERY warehouse query against this before handing it over
+
+The user runs all SQL and reports back, so a construct that errors costs a whole round trip. Before linking
+any `.sql`, grep it for these recurring killers (each has full detail below):
+
+- [ ] **`SUM(CASE WHEN EXISTS (SELECT …))`** or any aggregate wrapping a subquery → Msg 130. Flag per-row in a CTE, then aggregate the plain column.
+- [ ] **`'literal ' + col`** (literal space next to a VARCHAR column) → space silently trimmed. Use `CONCAT('literal', ' ', col)`.
+- [ ] **`OUTPUT` clause** (`INSERT…OUTPUT`) → unsupported. Re-`SELECT` after the write.
+- [ ] **`#temp` / `DECLARE @t TABLE` / `CURSOR` / `MERGE`** → unsupported/unreliable. Repeat the derivation inline or use `IF EXISTS`→UPDATE/INSERT.
+- [ ] **bare `;THROW` as an `IF` body** → Msg 102. Wrap in `BEGIN … END`.
+- [ ] **`LIKE` on names** → binary collation, CASE-SENSITIVE. `UPPER(col) LIKE '%…%'` or match on an ID.
+- [ ] **`TRY_CAST('-'/'+' AS INT)` returns 0, not NULL** → gate on an explicit value allow-list (`col IN ('1','2','3','4')`).
+- [ ] **`NEWID()` in a `CROSS APPLY (VALUES …)`** → folded to one value per query. Seed from `HASHBYTES(per-row-col + salt)`.
+- [ ] **`DEFAULT`/`PK`/`FK`/`CHECK`/`UNIQUE`/`CREATE INDEX`/`NVARCHAR`/`TINYINT`/`INT IDENTITY`** in CREATE TABLE → all unsupported (see table below).
+- [ ] **`ADD COLUMN` + reference to it in the same batch** → parser fails Msg 207. Split into separate batches; guard idempotent ADD with `sys.columns` (not `COL_LENGTH`).
+- [ ] **`USERPRINCIPALNAME()`** in T-SQL → use `CURRENT_USER` (DAX RLS still uses `USERPRINCIPALNAME()`).
+- [ ] **`COPY INTO`**: no `ENCODING`; needs `ROWTERMINATOR='0x0D'` for PS extracts; path is literal (spaces, not `%20`); verify with `SELECT COUNT(*) FROM Stg_*`.
+- [ ] Uncertain a function exists in Fabric (e.g. `STRING_AGG`, `EOMONTH`, `FORMAT`, `DATEFROMPARTS`)? Don't gamble — rewrite without it or confirm first.
+
+Scalar subqueries in the SELECT list (`(SELECT COUNT(*) …)`) ARE fine — it's an aggregate *wrapping* a subquery that's rejected.
+
+---
+
 ## CREATE TABLE — What Is NOT Supported
 
 | Construct | What to do instead |

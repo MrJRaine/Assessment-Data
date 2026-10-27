@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { AchievementBand, ReportCycle } from '@/lib/data'
 
 // Shared top-of-report charts for Reading/Writing (1.3.0): the achievement-distribution donut and the
@@ -29,6 +30,15 @@ export default function CohortCharts({
 }) {
   const orderedBands = useMemo(() => [...bands].sort((a, b) => Number(a.code) - Number(b.code)), [bands])
   const bandByCode = useMemo(() => new Map(orderedBands.map((b) => [Number(b.code), b])), [orderedBands])
+
+  // The donut RESPECTS the cycle selector, so its title must too — a static "Current" misreads when a
+  // specific cycle is selected and the count changes. "Current" = no ?cycle param (lifetime most-recent);
+  // otherwise the selected cycle's name (matched by CycleGroupID, same param CycleSelector writes).
+  const selectedCycleId = useSearchParams().get('cycle')
+  const scopeLabel = useMemo(
+    () => cycles.find((c) => c.cycleGroupId === selectedCycleId)?.name ?? 'Current',
+    [cycles, selectedCycleId],
+  )
 
   // Donut: achievement distribution over ASSESSED rows (a band assigned → code != null; IPP / unresolved /
   // no-result are null and excluded, matching the roll-up's % Meeting/Exceeding denominator).
@@ -77,7 +87,7 @@ export default function CohortCharts({
   return (
     <div className="cohort-charts">
       <div className="chart-card">
-        <div className="chart-title">Current achievement distribution</div>
+        <div className="chart-title">{scopeLabel} achievement distribution</div>
         <div className="donut-wrap">
           <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
             <div className="donut-hole">

@@ -48,7 +48,11 @@ with `0.3.0`, so earlier detail is approximate.
   per-assignment PowerSchool id, which is unchanged by an email correction — and **renames the account in
   place** (1:1-guarded; won't merge two genuinely different people). SQL: redeploy `usp_MergeStaff`
   (step 3.5). A one-time, review-first cleanup (`sql/scripts/cleanup_staff_email_ghosts_2026-10-16.sql`)
-  closes the ghosts already on the books, leaving genuine departures alone.
+  closes the ghosts already on the books, leaving genuine departures alone. **Also** redeploy
+  `usp_RunDataQualityChecks` (DQ check 16 now scoped to `IsCurrent=1`): because the rename is in place, a
+  teacher's *closed* historical section-teacher rows would otherwise orphan against the vanished old email
+  and halt the next ingest — scoping the orphan check to current rows exempts valid history while still
+  catching genuine current orphans.
 - **IPP / adaptation confirmations no longer reset when a student's record changes.** A teacher's
   IPP/adaptation answer was tied to the student's internal versioned key; when PowerSchool re-sent the
   student with a changed grade/school/program (a new version), the answer was dropped and the student
@@ -148,6 +152,14 @@ with `0.3.0`, so earlier detail is approximate.
 >   math section showing "Hillcrest Academy"). The card now always shows the section's own school. Rosters
 >   and counts are unchanged — only the displayed school label. SQL: `sql/security/tvf_TeacherGroups.sql`
 >   (function redeploy only; no app change).
+> - **2026-10-27 — Math tasks showed in the wrong language for a mixed-program class.** The math entry grid
+>   and math reports rendered each task in whichever language the *student's program* implied, so an English
+>   math section carrying a single French-Immersion student (e.g. a mid-cycle transfer kept on the class's
+>   window roster) showed **French** task text and answer keys to the whole class. Math task language now
+>   follows the **section's course** (immersion math → French, else English), so a class is one consistent
+>   language regardless of individual students' programs. SQL:
+>   `sql/deploy/live_1.3.0/deploy_math_task_language_2026-10-27.sql` (populate `DimCourseAssessment.Language`
+>   for math → rebuild membership → redeploy `tvf_TeacherRosterMath` + `tvf_StudentCohortMath`; no app change).
 
 ### Added
 - **Math reports — oversight roll-up tree (replaces the card picker for admins, specialists and

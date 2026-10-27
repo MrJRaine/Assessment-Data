@@ -170,11 +170,11 @@ WHERE w.CycleGroupID = @SC1CGID AND f.EnteredByStaffKey = @SeedStaff;
 ),
 SM AS (SELECT ScaleSystem, MAX(LevelOrder) AS MaxLvlOrd FROM dbo.DimReadingScale GROUP BY ScaleSystem)
 INSERT INTO dbo.FactAssessmentReading
-    (StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, LevelCode,
+    (StudentKey, StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta, LevelCode,
      ExpectedMinLevelCode, ExpectedMaxLevelCode, AssessmentDate, EnteredByStaffKey,
      SubmissionTimestamp, LastUpdated)
 SELECT
-    s.StudentKey, w.AssessmentWindowID, sc.ReadingScaleID,
+    s.StudentKey, s.StudentNumber, w.AssessmentWindowID, sc.ReadingScaleID,
     CASE WHEN o.ord < rb.MinOrd THEN o.ord - rb.MinOrd
          WHEN o.ord > rb.MaxOrd THEN o.ord - rb.MaxOrd ELSE 0 END,
     sc.LevelCode, rb.ExpectedMinLevel, rb.ExpectedMaxLevel,
@@ -217,18 +217,18 @@ WHERE s.IsCurrent = 1 AND s.Grade <> 'P'
 ),
 SM AS (SELECT ScaleSystem, MAX(LevelOrder) AS MaxLvlOrd FROM dbo.DimReadingScale GROUP BY ScaleSystem),
 Half AS (
-    SELECT s.StudentKey, s.Grade, s.ProgramCode,
+    SELECT s.StudentKey, s.StudentNumber, s.Grade, s.ProgramCode,
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
     WHERE s.IsCurrent = 1
 )
 INSERT INTO dbo.FactAssessmentReading
-    (StudentKey, AssessmentWindowID, ReadingScaleID, ReadingDelta, LevelCode,
+    (StudentKey, StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta, LevelCode,
      ExpectedMinLevelCode, ExpectedMaxLevelCode, AssessmentDate, EnteredByStaffKey,
      SubmissionTimestamp, LastUpdated)
 SELECT
-    h.StudentKey, w.AssessmentWindowID, sc.ReadingScaleID,
+    h.StudentKey, h.StudentNumber, w.AssessmentWindowID, sc.ReadingScaleID,
     CASE WHEN o.ord < rb.MinOrd THEN o.ord - rb.MinOrd
          WHEN o.ord > rb.MaxOrd THEN o.ord - rb.MaxOrd ELSE 0 END,
     sc.LevelCode, rb.ExpectedMinLevel, rb.ExpectedMaxLevel,
@@ -264,11 +264,11 @@ WHERE h.HalfBucket = 1
 --     bell draw around level 2, clamped 1..4. One row per writing instance.
 -- ============================================================================
 INSERT INTO dbo.FactAssessmentWriting
-    (StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
+    (StudentKey, StudentNumber, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
      LanguageScore, ConventionsScore, WritingAverage, AssessmentDate, EnteredByStaffKey,
      SubmissionTimestamp, LastUpdated)
 SELECT
-    s.StudentKey, w.AssessmentWindowID, w.AssessmentLanguage,
+    s.StudentKey, s.StudentNumber, w.AssessmentWindowID, w.AssessmentLanguage,
     ti.v, torg.v, tl.v, CONVERT(VARCHAR(10), tc.v),
     CONVERT(DECIMAL(4,2), (ti.v + torg.v + tl.v + tc.v) / 4.0),
     @JuneDate, @SeedStaff, SYSUTCDATETIME(), SYSUTCDATETIME()
@@ -293,18 +293,18 @@ WHERE s.IsCurrent = 1 AND s.Grade <> 'P'
 
 -- WRITING — SHORT CYCLE 1 (half of each homeroom)
 ;WITH Half AS (
-    SELECT s.StudentKey, s.Grade, s.ProgramCode,
+    SELECT s.StudentKey, s.StudentNumber, s.Grade, s.ProgramCode,
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
     WHERE s.IsCurrent = 1
 )
 INSERT INTO dbo.FactAssessmentWriting
-    (StudentKey, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
+    (StudentKey, StudentNumber, AssessmentWindowID, AssessmentLanguage, IdeasScore, OrganizationScore,
      LanguageScore, ConventionsScore, WritingAverage, AssessmentDate, EnteredByStaffKey,
      SubmissionTimestamp, LastUpdated)
 SELECT
-    h.StudentKey, w.AssessmentWindowID, w.AssessmentLanguage,
+    h.StudentKey, h.StudentNumber, w.AssessmentWindowID, w.AssessmentLanguage,
     ti.v, torg.v, tl.v, CONVERT(VARCHAR(10), tc.v),
     CONVERT(DECIMAL(4,2), (ti.v + torg.v + tl.v + tc.v) / 4.0),
     @SC1Date, @SeedStaff, SYSUTCDATETIME(), SYSUTCDATETIME()
@@ -336,14 +336,14 @@ WHERE h.HalfBucket = 1
 --     (StudentKey, MathTaskKey) so a student's per-task pattern varies but is stable.
 -- ============================================================================
 ;WITH Half AS (
-    SELECT s.StudentKey, s.Grade, s.ProgramCode,
+    SELECT s.StudentKey, s.StudentNumber, s.Grade, s.ProgramCode,
            NTILE(2) OVER (PARTITION BY COALESCE(NULLIF(s.Homeroom, ''), CONCAT(s.SchoolID, '|', s.Grade))
                           ORDER BY s.StudentKey) AS HalfBucket
     FROM dbo.DimStudent s
     WHERE s.IsCurrent = 1
 ),
 MStud AS (
-    SELECT h.StudentKey, h.Grade,
+    SELECT h.StudentKey, h.StudentNumber, h.Grade,
            CASE WHEN rate.v < 0.05 THEN 0.05 WHEN rate.v > 0.98 THEN 0.98 ELSE rate.v END AS Rate
     FROM Half h
     JOIN dbo.DimProgram p ON p.ProgramCode = h.ProgramCode
@@ -361,10 +361,10 @@ MStud AS (
       AND cg.GradeOrder BETWEEN wmin.GradeOrder AND wmax.GradeOrder
 )
 INSERT INTO dbo.FactAssessmentMath
-    (StudentKey, AssessmentWindowID, MathTaskKey, Result, AssessmentDate,
+    (StudentKey, StudentNumber, AssessmentWindowID, MathTaskKey, Result, AssessmentDate,
      EnteredByStaffKey, SubmissionTimestamp, LastUpdated)
 SELECT
-    ms.StudentKey, w.AssessmentWindowID, mt.MathTaskKey,
+    ms.StudentKey, ms.StudentNumber, w.AssessmentWindowID, mt.MathTaskKey,
     CASE WHEN (((CONVERT(BIGINT,SUBSTRING(bt.h,1,8))%100000)+100000)%100000)/100000.0 < ms.Rate
          THEN CONVERT(BIT,1) ELSE CONVERT(BIT,0) END,
     @SC1Date, @SeedStaff, SYSUTCDATETIME(), SYSUTCDATETIME()
