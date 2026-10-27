@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-20T16:29:10.364Z
+  modified: 2026-10-27T16:26:04.120Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -80,6 +80,15 @@ we're not blocked and it's not our queue item.)*
 
 # Post-1.0
 
+- **LOTO sysadmin-override confirm dialog** *(user 2026-10-27, QoL/safety)*. When a **sysadmin** clears a
+  maintenance window they did **not** open, prompt a confirm first naming the owner — e.g. "You are
+  cancelling a maintenance window set by user: XYZ" (XYZ = `AppMaintenance.SetByEmail`). Fires ONLY on the
+  sysadmin-override case (caller is sysadmin AND caller ≠ owner); the owner clearing their own window, and
+  the ingest auto-clear, get no prompt. LOTO itself ships in 1.3.0 ([[project_maintenance_mode]]); this is
+  the "are you sure you're breaking someone else's lock" guardrail on top. **Impl hook:** the client clear
+  paths (`MaintenanceControl.clear`, `MaintenanceProvider.clearNow`) don't currently know the owner email —
+  `/api/status` returns only `maintenanceAt`/`serverNow`/`message`, so surface `SetByEmail` (and whether the
+  viewer is the owner) there first, then gate the `confirm()` on it.
 - **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
   roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
   **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load

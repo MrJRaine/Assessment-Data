@@ -503,7 +503,10 @@ BEGIN
 
     IF COALESCE(@IsSys, 0) = 0 AND (@OpenedBy IS NULL OR @OpenedBy <> @Caller)
     BEGIN
-        ;THROW 51042, 'This maintenance window is locked by whoever opened it — only they or a system administrator can clear it.', 1;
+        DECLARE @LockMsg VARCHAR(400) = CONCAT(
+            'This maintenance window is locked by ', COALESCE(@OpenedBy, 'whoever opened it'),
+            ' — only they or a system administrator can clear it.');
+        ;THROW 51042, @LockMsg, 1;
     END;
 
     UPDATE AppMaintenance
