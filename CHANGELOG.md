@@ -11,7 +11,7 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [Unreleased]
+## [1.3.0] — 2026-10-27
 
 ### Added
 - **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
