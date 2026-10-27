@@ -2,7 +2,7 @@
 
 import { getCurrentUpn } from '@/lib/auth'
 import { getCallerCapabilities, lookupStaffByEmail } from '@/lib/data'
-import { execProc } from '@/lib/db'
+import { execProc, query } from '@/lib/db'
 import { toUserMessage, UserError } from '@/lib/errors'
 import { invalidateAllIdentities } from '@/lib/identityCache'
 import { revalidatePath } from 'next/cache'
@@ -71,6 +71,30 @@ export async function setRoleOverride(u: RoleOverrideUpdate): Promise<{ ok: bool
     invalidateAllIdentities()
     revalidatePath('/admin/staff-roles')
     return { ok: true }
+  } catch (e) {
+    return { ok: false, message: toUserMessage(e) }
+  }
+}
+
+/** "Apply now" — re-run the staff merge against the already-staged PowerSchool export (no re-upload, no
+ *  student/section/enrolment merge) so saved overrides take effect in seconds: a coach found in staging
+ *  gets their Administrator role, a not-in-PS Maintenance override gets its DimStaff audit row + flag, and
+ *  a Maintenance override whose email IS in staging is migrated off this list onto Staff Access. Returns
+ *  the migration notes this run produced so the UI can tell the SysAdmin who moved.
+ *  Uses query() (not execProc): the wrapper's final SELECT returns the migration-note rows. */
+export async function applyOverrides(): Promise<{ ok: boolean; messages?: string[]; message?: string }> {
+  try {
+    const upn = await assertSysAdmin()
+    const rows = await query<{ Message: string }>(
+      'EXEC dbo.usp_ApplyRoleOverrides @CallerUPN = @upn',
+      { upn },
+    )
+    // The merge may have changed effective roles (coach -> Administrator, Maintenance granted/migrated);
+    // clear identity caches so nav/gates don't serve a stale capability within the hour TTL.
+    invalidateAllIdentities()
+    revalidatePath('/admin/staff-roles')
+    revalidatePath('/admin/staff-access')
+    return { ok: true, messages: rows.map((r) => r.Message).filter(Boolean) }
   } catch (e) {
     return { ok: false, message: toUserMessage(e) }
   }

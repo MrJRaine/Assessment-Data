@@ -110,6 +110,7 @@ BEGIN
     DECLARE @PersonsInsertedInactive  INT = 0;   -- Deactivation inserts (== ClosedMissing)
     DECLARE @PersonsTouched           INT = 0;
     DECLARE @AccessLevelUpdated       INT = 0;
+    DECLARE @MaintenanceMigrated      INT = 0;   -- Maintenance overrides retired because the email turned up in PS (moved to Staff Access)
     -- FactStaffAssignment counters
     DECLARE @AssignmentsClosedChanged INT = 0;   -- SourceSystemID collision
     DECLARE @AssignmentsClosedMissing INT = 0;
@@ -284,7 +285,25 @@ BEGIN
             COALESCE(a.AccessPriority, 0) >= 1                                  -- (a) overriding PS role
          OR o.Email IS NOT NULL                                                 -- (c) manual role override
          OR EXISTS (SELECT 1 FROM TeachingEmails t WHERE t.Email = r.Email)     -- (b) teaches a section
-      );
+         OR EXISTS (SELECT 1 FROM StaffAppAccess sa                             -- (d) a maintenance user — keep for the audit ID
+                    WHERE LOWER(sa.Email) = r.Email AND sa.CanMaintain = 1)     --     (e.g. an in-PS Tech-Services SupportStaff the write rule would otherwise drop)
+      )
+
+    UNION ALL
+    -- (1.3.0) Capability-only 'Maintenance' overrides for people NOT in this PS export: create a minimal
+    -- DimStaff row so their maintenance actions have a StaffKey to log against. AccessLevel NULL => no
+    -- student data (excluded from StaffSchoolAccess in Step 6). Kept across ingests while the override is
+    -- active (it re-adds them here each run). A Maintenance override whose email IS in the export keeps the
+    -- person's real PS role via the path above and is migrated off the list in Step 6b. We only have their
+    -- email, so a generic name placeholder (DimStaff.FirstName/LastName are NOT NULL); replaced by the real
+    -- PS name if/when they appear in the export.
+    SELECT
+        LOWER(LTRIM(RTRIM(mo.Email))), 'Tech Services', 'Maintenance', 'Tech Services (Maintenance)',
+        NULL, NULL, CAST(0 AS BIT), NULL
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND NOT EXISTS (SELECT 1 FROM RankedStg r2
+                      WHERE r2.Email = LOWER(LTRIM(RTRIM(mo.Email))) AND r2.rn = 1);
 
     SET @PersonsStaged = @@ROWCOUNT;
 
@@ -728,6 +747,32 @@ BEGIN
     SET @SsaRowCount = @@ROWCOUNT;
 
     -- ========================================================================
+    -- Step 6b (1.3.0): Maintenance-override MIGRATION. A 'Maintenance' override exists only to carry the
+    -- CanMaintain capability for someone NOT in PowerSchool (with a DimStaff audit row from the Step-2
+    -- union). If that email now appears IN this PS export, they DO have an account — their CanMaintain was
+    -- set when the override was created and persists, and the write rule keeps them (Step 2, condition d).
+    -- So retire the override (Staff Access is its proper home) and audit a per-person note the UI surfaces.
+    -- Audit BEFORE the delete so the emails are still present.
+    -- ========================================================================
+    INSERT INTO FactSubmissionAudit (RecordType, Source, SubmittedBy, SubmissionTimestamp, Status, Message, RecordCount, LastUpdated)
+    SELECT 'MaintenanceMigration', 'usp_MergeStaff', 'system', @RunStart, 'Accepted',
+           CONCAT(LOWER(LTRIM(RTRIM(mo.Email))),
+                  ' was found in the PowerSchool data and will now appear on the Staff Access list instead of Role Overrides.'),
+           1, GETDATE()
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND EXISTS (SELECT 1 FROM Stg_Staff s
+                  WHERE LOWER(LTRIM(RTRIM(s.Email_Addr))) = LOWER(LTRIM(RTRIM(mo.Email))));
+
+    DELETE mo
+    FROM StaffRoleOverride mo
+    WHERE mo.ActiveFlag = 1 AND mo.OverrideRole = 'Maintenance'
+      AND EXISTS (SELECT 1 FROM Stg_Staff s
+                  WHERE LOWER(LTRIM(RTRIM(s.Email_Addr))) = LOWER(LTRIM(RTRIM(mo.Email))));
+
+    SET @MaintenanceMigrated = @@ROWCOUNT;
+
+    -- ========================================================================
     -- Step 7: Audit. One summary row covering all tables.
     -- ========================================================================
     INSERT INTO FactSubmissionAudit (
@@ -766,6 +811,9 @@ BEGIN
                 CAST(@AssignmentsTouched       AS VARCHAR(20)), ' touched || ',
             'StaffSchoolAccess: ',
                 CAST(@SsaRowCount AS VARCHAR(20)), ' rows rebuilt',
+            CASE WHEN @MaintenanceMigrated > 0
+                 THEN CONCAT(' || Maintenance: ', CAST(@MaintenanceMigrated AS VARCHAR(20)), ' override(s) migrated to Staff Access (found in PS)')
+                 ELSE '' END,
             CASE WHEN @UnknownGroupRows > 0
                  THEN CONCAT(' | [WARN: ', CAST(@UnknownGroupRows AS VARCHAR(20)), ' rows had unknown PS Group, no FactStaffAssignment row created]')
                  ELSE '' END,

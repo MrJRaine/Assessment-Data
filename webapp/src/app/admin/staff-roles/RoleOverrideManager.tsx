@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { setRoleOverride, findStaff } from './actions'
-import { OVERRIDE_ROLES, type OverrideRole } from './constants'
+import { setRoleOverride, findStaff, applyOverrides } from './actions'
+import { OVERRIDE_ROLES, CAPABILITY_ONLY_ROLES, type OverrideRole } from './constants'
 import type { StaffRoleOverrideRow } from '@/lib/data'
 
-// Friendly labels for the three role tiers (the stored codes are terse).
+// Friendly labels for the override roles (the stored codes are terse).
 const ROLE_LABEL: Record<OverrideRole, string> = {
   Administrator: 'Administrator',
   RegionalAnalyst: 'Regional Analyst',
   SpecialistTeacher: 'Specialist Teacher',
+  Maintenance: 'Tech Services (Maintenance)',
 }
 
 export default function RoleOverrideManager({ overrides }: { overrides: StaffRoleOverrideRow[] }) {
@@ -20,6 +21,10 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
   const [filter, setFilter] = useState('')
   const [addEmail, setAddEmail] = useState('')
   const [addMsg, setAddMsg] = useState<string | null>(null)
+  // Result of the last "Apply now" (re-run the merge against staged PS data): a one-line status plus any
+  // migration notes (someone moved from this list to Staff Access).
+  const [applyMsg, setApplyMsg] = useState<string | null>(null)
+  const [applyNotes, setApplyNotes] = useState<string[]>([])
   // Explicit "don't search" choice — add an email that isn't a current staff record (e.g. a coach already
   // excluded from active staff, or someone not yet in PowerSchool). Off by default so a typo is caught.
   const [addExternal, setAddExternal] = useState(false)
@@ -74,14 +79,23 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
     if (dirtyRows.length === 0) return
     const activating = dirtyRows.filter((r) => r.active)
     const retiring = dirtyRows.filter((r) => !r.active)
-    // Overrides are applied by the staff merge, so nothing changes until the next data ingest — which is
-    // also when each person's school-level access is derived from PowerSchool and can be verified. Make
-    // that explicit before saving so no one expects access to appear immediately.
+    // Data-access overrides (Administrator / Regional Analyst / Specialist Teacher) are applied by the
+    // staff merge, so they take effect on the next data ingest — OR immediately if you click "Apply now"
+    // below — which is when each person's school-level access is derived from PowerSchool and can be
+    // verified. Capability-only overrides (Tech Services / Maintenance) grant the maintenance flag the
+    // moment you Save, with no ingest needed. Make that explicit before saving.
+    const dataAccess = dirtyRows.filter((r) => !CAPABILITY_ONLY_ROLES.includes(r.overrideRole as OverrideRole))
     let msg =
-      'Role override changes take effect on the NEXT data ingest — that is when each person’s school-level ' +
-      'access is derived from PowerSchool and can be verified. They are not effective immediately.'
+      'Data-access overrides (Administrator / Regional Analyst / Specialist Teacher) take effect on the ' +
+      'NEXT data ingest — or immediately if you click “Apply now” after saving — which is when each ' +
+      'person’s school-level access is derived from PowerSchool and can be verified. Tech Services ' +
+      '(Maintenance) grants the maintenance flag the moment you Save, no ingest needed.'
+    if (dataAccess.length === 0) {
+      msg =
+        'Tech Services (Maintenance) grants the maintenance flag the moment you Save — no ingest needed.'
+    }
     if (activating.length > 0) {
-      msg += `\n\nApplying: ${activating.map((r) => `${r.name} → ${r.overrideRole}`).join(', ')}.`
+      msg += `\n\nApplying: ${activating.map((r) => `${r.name} → ${ROLE_LABEL[r.overrideRole as OverrideRole] ?? r.overrideRole}`).join(', ')}.`
     }
     if (retiring.length > 0) {
       msg += `\n\nRetiring (revert to their PowerSchool role): ${retiring.map((r) => r.name).join(', ')}.`
@@ -116,6 +130,41 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
     })
   }
 
+  // "Apply now" — re-run the staff merge against the staged PowerSchool export so saved data-access
+  // overrides take effect in seconds instead of waiting for the next ingest. Confirm first: it reaches
+  // into the warehouse, and a coach not yet in PS is simply held for a future ingest (no error).
+  function applyNow() {
+    // Apply uses what is SAVED, not what is on screen — warn if there are unsaved edits so they aren't
+    // surprised that a just-typed override didn't apply.
+    if (dirtyRows.length > 0) {
+      if (!confirm('You have unsaved changes — Apply uses only SAVED overrides. Save first for them to count. Apply the saved overrides now anyway?'))
+        return
+    } else if (
+      !confirm(
+        'Apply all active role overrides now? This re-runs the staff merge against the most recent ' +
+          'PowerSchool data already in the system (no new upload). Overrides for people found in that ' +
+          'data take effect immediately; a coach not yet in PowerSchool is held for a future ingest.',
+      )
+    ) {
+      return
+    }
+    setApplyMsg(null)
+    setApplyNotes([])
+    startTransition(async () => {
+      const res = await applyOverrides()
+      if (!res.ok) {
+        setApplyMsg(res.message ?? 'Apply failed.')
+        return
+      }
+      setApplyNotes(res.messages ?? [])
+      setApplyMsg(
+        res.messages && res.messages.length > 0
+          ? `Applied. ${res.messages.length} override(s) migrated to the Staff Access list:`
+          : 'Applied — overrides are now in effect for everyone found in the PowerSchool data.',
+      )
+    })
+  }
+
   const shown = rows.filter(
     (r) => !filter || r.name.toLowerCase().includes(filter.toLowerCase()) || r.email.toLowerCase().includes(filter.toLowerCase()),
   )
@@ -124,7 +173,9 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
     <>
       <p className="muted small" style={{ margin: '0 0 1rem' }}>
         An override changes only the staff member&apos;s <strong>role classification</strong>. Their school scope still
-        derives from PowerSchool (their home / changeable schools), and it takes effect on the next ingest.
+        derives from PowerSchool (their home / changeable schools), and a data-access override takes effect on the next
+        ingest — or immediately via <strong>Apply now</strong> below. <strong>Tech Services (Maintenance)</strong> is a
+        capability-only override: it grants the maintenance flag the moment you Save, with no data access and no ingest needed.
       </p>
       <input
         type="text"
@@ -232,6 +283,40 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
         />
         This person isn’t in the system yet (skip the staff lookup — for Instructional Coaches and others not yet in PowerSchool)
       </label>
+
+      {/* Apply now — re-run the staff merge against staged PS data so data-access overrides take effect
+          in seconds instead of waiting for the next ingest. */}
+      <div
+        style={{
+          marginTop: '1.5rem',
+          paddingTop: '1rem',
+          borderTop: '1px solid var(--border, #d0d0d0)',
+          display: 'flex',
+          gap: '0.5rem',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
+        <button className="btn" onClick={applyNow} disabled={pending}>
+          {pending ? 'Applying…' : 'Apply now'}
+        </button>
+        <span className="muted small" style={{ maxWidth: '46ch' }}>
+          Re-runs the staff merge against the most recent PowerSchool data already in the system — saved
+          data-access overrides take effect immediately instead of waiting for the next ingest.
+        </span>
+      </div>
+      {applyMsg ? (
+        <div className="save-result" style={{ marginTop: '0.75rem' }}>
+          {applyMsg}
+          {applyNotes.length > 0 ? (
+            <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem' }}>
+              {applyNotes.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </>
   )
 }
