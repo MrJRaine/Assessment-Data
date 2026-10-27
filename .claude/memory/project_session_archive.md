@@ -1927,3 +1927,28 @@ Full day of v1.3.0 dev acceptance testing. Everything committed/pushed to `dev` 
 **End-of-session dev data state:** 1000 students / 5 schools / unique surnames / current-year enrolments; demo results + dual-language sentinel seeded; StaffExport carries the 7.2 (Pat Willow `.0`) and 7.4 (Robin Sorrel id 82050) edits, reflected in dev.
 
 **Next:** §8 (maintenance/LOTO, app-only), §9 (write rule + role overrides + admin-assistant remap, ingest-driven), §10 (regression smoke), then a 1.3.0 LIVE deploy. Pre-live: consolidate the 1.3.0 SQL into one ordered idempotent bundle (ordering bit us twice — tint revert + the DQ proc add); rebuild awdev for the donut fix.
+
+---
+
+## Session 2026-10-27 — v1.3.0 SHIPPED TO LIVE (release ritual + cutover)
+
+Finished v1.3.0 testing (§8–§10), built the remaining features the user called for, cut over to live, and ran the full release ritual.
+
+**Features built/fixed this session (all on dev then live):**
+- **Maintenance role** (capability-only override on `/admin/staff-roles`, carries `CanMaintain`). Design churned a lot before landing: FIRST cut split Save (set flag) from a separate `usp_ApplyRoleOverrides` "Apply now" wrapper that fired the FULL staff merge — user rightly called it "a tank for a fly" AND flagged the flag was granted BEFORE any system check. Reworked to **Save-does-everything, per-email, scoped**: `usp_SetStaffRoleOverride` records the override + provisions that one email (placeholder DimStaff for not-in-PS, migrate-to-Staff-Access for found-in-PS, AccessLevel+StaffSchoolAccess for a coach, held for a not-in-PS coach), flag granted ONLY after the staging/DimStaff check; `usp_ApplyRoleOverrides` DROPPED. Then: **retire = DELETE from list** (not a lingering inactive row), `Migrated`→`Removed` flag.
+- **LOTO**: the blocked-non-owner clear showed NO error (overlay/banner swallowed `res.error`) — surfaced it; then the message was made to NAME the owner's email (so a blocked non-sysadmin can find them with no sysadmin around).
+- **Math reports → teachers get the roll-up tree** (not the card picker). The card picker showed BOTH a homeroom card and a redundant grade card for the same class ("Primary is not a class"). Routed teachers to `MathRollupTree`; `tvf_StudentCohortMathAll` gained a TAUGHT scope (own section students). Card-picker path (`tvf_MathCohortGroups`/`getMathCohortGroups`) now unused — left for cleanup.
+- **IPP confirm flip** (Reading+Writing entry): after confirming an IPP + Save, the prompt lingered until refresh. Optimistic `confirmedIpp` session map overrides `s.ippNeedsConfirmation`. REGRESSION-REPAIR (worked before, reverted) → git-history only, NOT public changelog, per [[feedback_changelog_as_you_go]].
+- **dev-impersonation bug**: switching to a locked-out teacher made the whole impersonation bar vanish — the expanded `.dev-impersonate` had no z-index, so the maintenance overlay (z 1000) covered it. Added `position:sticky; top:0; z-index:1001`. dev-impersonation-only.
+
+**Testing**: §1–§7 were signed off pre-session. This session: §8 (LOTO) + §9 (role overrides, Maintenance role, retire=delete, gating — 9.1 DimRole verify, 9.5/9.5b/9.6/9.7, C1–C4) + §10 smoke all signed off. **9.2–9.4 DEFERRED post-live** (no SupportStaff/admin-assistant in the dev generator).
+
+**Changelog/patchNotes brought current** (user caught it was behind): CHANGELOG [Unreleased]→[1.3.0], patchNotes got the teacher-facing math-tree entry (IPP-confirm excluded as a regression-repair; IPP/adaptation-persistence left out per user). Footer version bumped `1.3.0-dev`→`1.3.0`.
+
+**Cutover**: consolidated the loose increments into one `deploy_1.3.0.sql` (PART 4 = the 10-27 folds; base already had the 10-20/10-22 reports increments). User ran it on live + swapped the prod container (tar `assessment-webapp-1.3.0.tar`, 404M, from the **clean `:1.3.0`** image — NOT `:1.3.0-imp`; the user stopped a dangerously-worded step and I proved 0 vs 11 bypass refs). Release ritual: dev→main `0ef2e27`, tag `v1.3.0`, gh release (token via git credential), back-merge, imp reconcile `80d307c` (clean).
+
+**Process frustrations this session (user corrections → memories):** rebuild the **imp** container FIRST when the user tests via impersonation ([[feedback_imp_container_first]]); STOP and ask clarifying questions instead of charging off on assumptions (repeatedly — reinforces [[feedback_troubleshooting_method]]); forgot to rebuild containers after a commit (left What's New stale); kept re-asking for go on obvious fixes.
+
+**Backlog added** ([[project_feature_ideas_and_backlog]]): LOTO sysadmin-override confirm dialog, maintainer-only lockout-reason field, read-only Coach role (Administrator-pattern but view-only entry unless flagged).
+
+**End-of-session state:** v1.3.0 LIVE + verified by user ("deploy is good"). dev==main @ 0ef2e27. Local containers on 1.3.0/1.3.0-imp; prod on :1.3.0. Dev data: ~1000 students, demo results seeded.
