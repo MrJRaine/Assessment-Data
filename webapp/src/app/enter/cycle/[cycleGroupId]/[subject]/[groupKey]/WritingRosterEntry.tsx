@@ -113,6 +113,9 @@ export default function WritingRosterEntry({
   const [sel, setSel] = useState(baselineFromProps)
   // Staged writing-IPP confirmations, committed on Save (like the reading grid); re-click un-stages.
   const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
+  // Resolved IPP confirmations this session (studentKey -> isIPP), set once a Save succeeds. Overrides
+  // the server's ippNeedsConfirmation so the row flips to the trait fields / IPP badge without a refresh.
+  const [confirmedIpp, setConfirmedIpp] = useState<Record<string, boolean>>({})
   const [pending, startTransition] = useTransition()
   const [result, setResult] = useState<SaveSummary | null>(null)
   // Grace-lock: read-only when locked; an override-holder can flip it on for THIS group with a
@@ -238,6 +241,12 @@ export default function WritingRosterEntry({
           for (const k of ippKeys) if (!erroredKeys.has(k)) delete next[k]
           return next
         })
+        // Remember what resolved so the gate flips to the fields/badge immediately (no refresh needed).
+        setConfirmedIpp((prev) => {
+          const next = { ...prev }
+          for (const k of ippKeys) if (!erroredKeys.has(k)) next[k] = ippSel[k]
+          return next
+        })
         markSaved() // at T-5 the next save is what locks input
         if (override) setOverride(false) // grace-override is ONE-SHOT: re-lock after the save reports back
       } catch {
@@ -311,8 +320,9 @@ export default function WritingRosterEntry({
           {roster.filter(sg.isShown).map((s) => {
             const cur = sel[s.studentKey]
             const excluded = exclOf(s.studentKey)
-            const needsConfirm = s.ippNeedsConfirmation
-            const isIPP = s.ippStatus === true
+            const resolvedIpp = s.studentKey in confirmedIpp
+            const needsConfirm = s.ippNeedsConfirmation && !resolvedIpp
+            const isIPP = s.ippStatus === true || confirmedIpp[s.studentKey] === true
             const ippStaged = s.studentKey in ippSel
             const dirty = isChecked(s.studentKey) || ippStaged
             const avg = avgOf(cur, excluded)
