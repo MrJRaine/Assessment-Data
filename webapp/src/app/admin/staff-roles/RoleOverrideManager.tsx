@@ -220,6 +220,18 @@ export default function RoleOverrideManager({ overrides }: { overrides: StaffRol
           </button>
         </div>
       </div>
+      <label className="muted small" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.5rem' }}>
+        <input
+          type="checkbox"
+          checked={addExternal}
+          disabled={pending}
+          onChange={(e) => {
+            setAddExternal(e.target.checked)
+            setAddMsg(null)
+          }}
+        />
+        This person isn’t in the system yet (skip the staff lookup — for Instructional Coaches and others not yet in PowerSchool)
+      </label>
     </>
   )
 }
