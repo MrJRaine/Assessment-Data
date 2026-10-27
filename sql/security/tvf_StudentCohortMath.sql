@@ -47,11 +47,24 @@ RETURN
     -- The group's students, current + P-6, intersected with the caller's SCOPE.
     GroupStudents AS (
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
-               s.SchoolID, sch.SchoolName, p.ProgramFamily
+               s.SchoolID, sch.SchoolName, p.ProgramFamily, ml.MathSectionLanguage
         FROM DimStudent s
         INNER JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
         INNER JOIN DimGrade   g  ON g.GradeCode   = s.Grade
         LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
+        -- Task text language = the student's MATH SECTION's COURSE language (DimCourseAssessment.Language),
+        -- NOT their program: a student physically in an English math section sees English tasks even if FI
+        -- (fixes an all-English section flipping to French for one FI student in its roster). A student's
+        -- math sections are one language, so MAX(Language) over them is that language. 2026-10-27.
+        LEFT JOIN (
+            SELECT e.StudentKey, MAX(ca.Language) AS MathSectionLanguage
+            FROM FactEnrollment e
+            INNER JOIN DimSection sec ON sec.SectionKey = e.SectionKey AND sec.IsCurrent = 1
+            INNER JOIN DimCourseAssessment ca ON ca.CourseCode = sec.CourseCode
+                                             AND ca.Kind = 'Math' AND ca.ActiveFlag = 1
+            WHERE e.ActiveFlag = 1
+            GROUP BY e.StudentKey
+        ) ml ON ml.StudentKey = s.StudentKey
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND g.GradeOrder BETWEEN 0 AND 5  -- Math P..5 (grade 6 not ready 2026-27)
           -- group membership by @GroupKey shape
           AND (
@@ -110,8 +123,9 @@ RETURN
         t.QuestionNumber,
         t.DisplayOrder,
         t.OutcomeCode,
-        -- Description in the student's family language (FI -> FR w/ EN fallback), like the entry roster.
-        CASE WHEN gs.ProgramFamily = 'French Immersion'
+        -- Description in the student's MATH SECTION's course language (FR immersion -> FR w/ EN fallback),
+        -- NOT their program — matches the entry roster so a cross-program student can't flip the text.
+        CASE WHEN gs.MathSectionLanguage = 'French'
              THEN COALESCE(t.TaskDescriptionFR, t.TaskDescriptionEN)
              ELSE t.TaskDescriptionEN END AS TaskDescription,
         lm.Result           AS ExistingResult,   -- BIT: latest 0/1, or NULL if never marked

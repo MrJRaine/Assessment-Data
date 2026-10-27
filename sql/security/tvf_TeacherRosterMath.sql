@@ -22,8 +22,10 @@
  * Region: Canada East (PIIDPA compliant)
  *
  * Task selection: DimMathTask WHERE GradeCode = student.Grade AND AssessmentMonth = the cycle's
- *   benchmark/dominant month AND ActiveFlag = 1. Description/answer key chosen by program (FI -> FR
- *   text, falling back to EN until FR is seeded).
+ *   benchmark/dominant month AND ActiveFlag = 1. Description/answer key language = the SECTION's COURSE
+ *   language (SectionRosterMembership.SectionLanguage from DimCourseAssessment: 'French' = immersion math
+ *   -> FR text, else EN), NOT the student's program — a math section is one course/one language, so a stray
+ *   cross-program student in the roster no longer flips the task text (2026-10-27).
  * SECURITY: trusts @UPN; SELECT granted to the SP only. Role logic mirrors tvf_TeacherRoster.
  ******************************************************************************/
 
@@ -66,7 +68,7 @@ RETURN
     Membership AS (
         SELECT m.AssessmentWindowID, m.SectionID, m.SchoolID, m.GroupKey, m.WindowEffectiveDate,
                m.StudentKey, m.StudentNumber, m.FirstName, m.LastName, m.Grade, m.Homeroom,
-               m.SchoolName, m.ProgramFamily
+               m.SchoolName, m.ProgramFamily, m.SectionLanguage
         FROM SectionRosterMembership m
         WHERE m.AssessmentWindowID = CAST(@AssessmentWindowID AS BIGINT)
           AND (',' + @GroupKeys + ',') LIKE ('%,' + m.GroupKey + ',%')
@@ -74,7 +76,7 @@ RETURN
     StudentGroups AS (
         SELECT DISTINCT
             m.AssessmentWindowID, m.StudentKey, m.StudentNumber, m.FirstName, m.LastName,
-            m.Grade, m.Homeroom, m.SchoolName, m.ProgramFamily, m.GroupKey
+            m.Grade, m.Homeroom, m.SchoolName, m.ProgramFamily, m.SectionLanguage, m.GroupKey
         FROM Membership m
         CROSS JOIN Caller c
         WHERE (c.AccessLevel IN ('Administrator', 'RegionalAnalyst')   -- NOT SpecialistTeacher: entry = own sections only (2026-10-13)
@@ -112,12 +114,16 @@ RETURN
         mt.QuestionNumber,
         mt.DisplayOrder,
         mt.OutcomeCode,
-        -- Program picks the language of the task text (one task key, two descriptions).
-        CASE WHEN sg.ProgramFamily = 'French Immersion'
+        -- The SECTION's COURSE language picks the task text (one task key, two descriptions) — NOT the
+        -- student's program. A math section IS one course/one language; keying on the student's program
+        -- showed FRENCH to an all-English math class that happened to carry a single French-Immersion
+        -- student in its window roster (SectionLanguage = DimCourseAssessment.Language via the course;
+        -- 'French' = immersion math, else English). COALESCE guards a course not yet language-mapped.
+        CASE WHEN sg.SectionLanguage = 'French'
              THEN COALESCE(mt.TaskDescriptionFR, mt.TaskDescriptionEN)
              ELSE mt.TaskDescriptionEN END AS TaskDescription,
         -- Answer key follows the task's language (the FR answer key shows with the FR task text).
-        CASE WHEN sg.ProgramFamily = 'French Immersion'
+        CASE WHEN sg.SectionLanguage = 'French'
              THEN COALESCE(mt.AnswerKeyFR, mt.AnswerKey)
              ELSE mt.AnswerKey END AS AnswerKey,
         fam.Result            AS ExistingResult,          -- BIT: latest 0/1, or NULL if never marked
