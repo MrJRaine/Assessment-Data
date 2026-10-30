@@ -34,6 +34,15 @@ with `0.3.0`, so earlier detail is approximate.
 >   cleanly (identical logic, stowaway statement gone) and recreating the shipped function; the bundle
 >   and the source file are corrected so a re-run can't re-introduce it. SQL:
 >   `sql/deploy/live_1.3.0/hotfix_math_tree_restore_2026-10-30.sql`.
+> - **2026-10-30 — Restoring a dropped person via Role Overrides no longer duplicates their staff
+>   record.** The staff-ingest write rule (1.3.0) deactivates people who no longer need an account by
+>   stamping a *marker* record. The Role Overrides **Save** — used the same day to restore two coaches the
+>   first post-release ingest had dropped — checked only for an *active* record, so it inserted a fresh
+>   one **beside** the marker: two current records per person, and the next ingest attached an assignment
+>   to the inactive one, failing the data-quality gate (3 violations). The Save now revives the marker in
+>   place (or closes an older one first), mirroring the ingest's own same-day rules; a one-time repair
+>   removed the duplicates and the following live ingest ran clean end to end. SQL: redeploy
+>   `usp_SetStaffRoleOverride` + `sql/scripts/fix_dimstaff_dup_current_2026-10-30.sql` (generic repair).
 
 ### Added
 - **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
