@@ -29,6 +29,13 @@
  *                       "closed window" block (51031) was removed. The 51017 date
  *                       gate upper bound is now MIN(today, window EndDate) so a
  *                       late entry is dated inside that window's month.
+ * Modified: 2026-10-30 — SECTION-SCHOOL BINDING on the 51011 student resolution:
+ *                       a late entry for a student who has left the section now
+ *                       binds to the DimStudent version at the SECTION's school
+ *                       (inferred from Teacher/SectionRosterMembership), so the
+ *                       result stays attributed to the school where it was
+ *                       recorded instead of following the student's transfer.
+ *                       Non-movers resolve unchanged; fallback = old behavior.
  * Modified: 2026-10-06 — 51014 is now INSTANCE-based, not program-based. The entered
  *                       scale is validated against the cycle INSTANCE's ScaleSystem
  *                       (COALESCE(window.ScaleSystem, program-family fallback)),
@@ -280,16 +287,63 @@ BEGIN
     END;
 
     -- =========================================================================
-    -- Layer 2 — 51011: student resolves via effective-date join on AssessmentDate
+    -- Layer 2 — 51011: student resolves to the SCD version the entry BELONGS to.
+    -- SECTION-SCHOOL BINDING (2026-10-30 — restores the documented design):
+    -- entry always happens through a section roster, and a departed student is
+    -- deliberately kept on that roster for late/paper entry — so the result must
+    -- bind to the student version from when they sat in the section, NOT the
+    -- version in force on @AssessmentDate (which, after a transfer, attributes
+    -- the result to the NEW school and moves history with the student). The
+    -- section's school is inferred from the caller's roster for this window
+    -- (TeacherRosterMembership — the same membership the entry roster showed),
+    -- else from the section-keyed base when the student sits at exactly ONE
+    -- school for this window. Resolution = the LATEST DimStudent version at or
+    -- before @AssessmentDate AT THAT SCHOOL; a non-mover resolves identically
+    -- to the plain effective-date join. No inferable school, or no version at
+    -- it (e.g. a date before a transfer-in) -> legacy effective-date join.
     -- =========================================================================
-    SELECT TOP 1
-        @StudentKey         = s.StudentKey,
-        @StudentGrade       = s.Grade,
-        @StudentProgramCode = s.ProgramCode
-    FROM DimStudent s
-    WHERE s.StudentNumber = @StudentNumber
-      AND @AssessmentDate BETWEEN s.EffectiveStartDate
-                              AND COALESCE(s.EffectiveEndDate, '9999-12-31');
+    DECLARE @SectionSchoolID VARCHAR(10);
+
+    SELECT @SectionSchoolID = CASE WHEN MIN(trm.SchoolID) = MAX(trm.SchoolID)
+                                   THEN MIN(trm.SchoolID) END
+    FROM TeacherRosterMembership trm
+    WHERE trm.TeacherEmail = @CallerEmail
+      AND trm.AssessmentWindowID = @AssessmentWindowID_BI
+      AND trm.StudentNumber = @StudentNumber;
+
+    IF @SectionSchoolID IS NULL
+    BEGIN
+        SELECT @SectionSchoolID = CASE WHEN MIN(srm.SchoolID) = MAX(srm.SchoolID)
+                                       THEN MIN(srm.SchoolID) END
+        FROM SectionRosterMembership srm
+        WHERE srm.AssessmentWindowID = @AssessmentWindowID_BI
+          AND srm.StudentNumber = @StudentNumber;
+    END;
+
+    IF @SectionSchoolID IS NOT NULL
+    BEGIN
+        SELECT TOP 1
+            @StudentKey         = s.StudentKey,
+            @StudentGrade       = s.Grade,
+            @StudentProgramCode = s.ProgramCode
+        FROM DimStudent s
+        WHERE s.StudentNumber = @StudentNumber
+          AND s.SchoolID = @SectionSchoolID
+          AND s.EffectiveStartDate <= @AssessmentDate
+        ORDER BY s.EffectiveStartDate DESC;
+    END;
+
+    IF @StudentKey IS NULL
+    BEGIN
+        SELECT TOP 1
+            @StudentKey         = s.StudentKey,
+            @StudentGrade       = s.Grade,
+            @StudentProgramCode = s.ProgramCode
+        FROM DimStudent s
+        WHERE s.StudentNumber = @StudentNumber
+          AND @AssessmentDate BETWEEN s.EffectiveStartDate
+                                  AND COALESCE(s.EffectiveEndDate, '9999-12-31');
+    END;
 
     IF @StudentKey IS NULL
     BEGIN
