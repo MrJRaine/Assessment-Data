@@ -79,8 +79,41 @@ WHERE marker.IsCurrent = 1 AND marker.ActiveFlag = 0
                 AND act.IsCurrent = 1 AND act.ActiveFlag = 1);
 
 -- ---------------------------------------------------------------------------
--- PART 4 — VERIFY: all three counts must be 0 (they mirror the DQ checks
--- that failed the gate).
+-- PART 3b (added after the 15:23 DQ re-fail) — a marker that started the SAME
+-- DAY as the Save's replacement row closes as a 0-day window [d, d], which
+-- still SHARES that day with the replacement's [d, ∞) — rule D correctly
+-- flags the overlap. Such a marker is an error corrected within the day, not
+-- real history, so it must be DELETED, not closed. The ActiveFlag=0 +
+-- StartDate=EndDate shape exists ONLY via this repair (the merge's own
+-- legitimate 0-day closures keep ActiveFlag=1), so the predicate is safe.
+-- Delete the assignment rows under those marker keys FIRST (they were created
+-- under the duplicate today and re-closed above — spurious too; deleting the
+-- marker would otherwise orphan them), then the markers themselves.
+-- ---------------------------------------------------------------------------
+DELETE f
+FROM FactStaffAssignment f
+INNER JOIN DimStaff marker ON marker.StaffKey = f.StaffKey
+WHERE marker.ActiveFlag = 0 AND marker.IsCurrent = 0
+  AND marker.EffectiveEndDate = marker.EffectiveStartDate
+  AND EXISTS (SELECT 1 FROM DimStaff act
+              WHERE LOWER(act.Email) = LOWER(marker.Email)
+                AND act.StaffKey <> marker.StaffKey
+                AND act.EffectiveStartDate = marker.EffectiveStartDate
+                AND act.ActiveFlag = 1);
+
+DELETE marker
+FROM DimStaff marker
+WHERE marker.ActiveFlag = 0 AND marker.IsCurrent = 0
+  AND marker.EffectiveEndDate = marker.EffectiveStartDate
+  AND EXISTS (SELECT 1 FROM DimStaff act
+              WHERE LOWER(act.Email) = LOWER(marker.Email)
+                AND act.StaffKey <> marker.StaffKey
+                AND act.EffectiveStartDate = marker.EffectiveStartDate
+                AND act.ActiveFlag = 1);
+
+-- ---------------------------------------------------------------------------
+-- PART 4 — VERIFY: all four counts must be 0 (the first three mirror the DQ
+-- checks that failed the gate; the fourth replays rule D across ALL versions).
 -- ---------------------------------------------------------------------------
 SELECT
     (SELECT COUNT(*) FROM (SELECT LOWER(Email) AS E FROM DimStaff
@@ -90,4 +123,8 @@ SELECT
      WHERE f.IsCurrent = 1 AND d.IsCurrent = 1 AND d.ActiveFlag = 0)                        AS CurrentFsaOnInactive,
     (SELECT COUNT(*) FROM DimStaff a
      INNER JOIN DimStaff b ON LOWER(a.Email) = LOWER(b.Email) AND a.StaffKey < b.StaffKey
-     WHERE a.IsCurrent = 1 AND b.IsCurrent = 1)                                             AS OverlappingCurrentPairs;
+     WHERE a.IsCurrent = 1 AND b.IsCurrent = 1)                                             AS OverlappingCurrentPairs,
+    (SELECT COUNT(*) FROM DimStaff a
+     INNER JOIN DimStaff b ON LOWER(a.Email) = LOWER(b.Email) AND a.StaffKey < b.StaffKey
+     WHERE a.EffectiveStartDate <= COALESCE(b.EffectiveEndDate, '9999-12-31')
+       AND b.EffectiveStartDate <= COALESCE(a.EffectiveEndDate, '9999-12-31'))              AS OverlappingWindowPairsRuleD;
