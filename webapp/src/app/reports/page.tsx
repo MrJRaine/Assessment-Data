@@ -60,19 +60,26 @@ export default async function StudentsPage({
     cycles = await getReportCycles()
     bands = await getAchievementLevels()
     if (oversight) {
-      // Roll-up feed: cycle-scoped (donut + tree). The trend is cycle-INDEPENDENT, so pull an all-cycles
-      // copy too — but only when a cycle is actually selected; otherwise they're identical (one read).
-      if (!isWriting) {
-        rollup = await getReadingCohortAll(upn, cycle)
-        rollupAll = cycle == null ? rollup : await getReadingCohortAll(upn, null)
-      } else {
-        writingRollup = await getWritingCohortAll(upn, cycle)
-        writingRollupAll = cycle == null ? writingRollup : await getWritingCohortAll(upn, null)
-      }
-      // The flat student list is a second view, loaded only when selected.
       if (view === 'list') {
+        // Student-list view: the charts are CohortView's own, fed from the FILTERED rows (2026-10-30 fix —
+        // the page-top roll-up-fed charts ignored the list's filter chips, so the donut/trend sat frozen
+        // while the table filtered). The roll-up feed isn't rendered here, so don't fetch it.
         cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
         assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading', cycle)
+        // By-cycle trend is cycle-independent: all-cycles copy (reuse `cohort` when no cycle is selected).
+        trendCohort = cycle == null
+          ? undefined
+          : isWriting ? await getStudentCohortWriting(upn, null) : await getStudentCohort(upn, null)
+      } else {
+        // Summary view — roll-up feed: cycle-scoped (donut + tree). The trend is cycle-INDEPENDENT, so pull
+        // an all-cycles copy too — but only when a cycle is actually selected; otherwise identical (one read).
+        if (!isWriting) {
+          rollup = await getReadingCohortAll(upn, cycle)
+          rollupAll = cycle == null ? rollup : await getReadingCohortAll(upn, null)
+        } else {
+          writingRollup = await getWritingCohortAll(upn, cycle)
+          writingRollupAll = cycle == null ? writingRollup : await getWritingCohortAll(upn, null)
+        }
       }
     } else {
       cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
@@ -142,10 +149,6 @@ export default async function StudentsPage({
         <ErrorNote message={error} />
       ) : oversight ? (
         <>
-          {/* Two charts on top of BOTH views: donut follows the cycle selector; the by-cycle trend is
-              independent of it (always the full year). The Summary/Student-list toggle rides inside the
-              roll-up toolbar on Summary, and standalone above the table on the list view. */}
-          <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} />
           {view === 'list' ? (
             <>
               <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
@@ -155,7 +158,8 @@ export default async function StudentsPage({
                   hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
                 />
               ) : (
-                // Charts render at the page top for oversight, so suppress CohortView's own copy.
+                // CohortView renders its OWN charts here, fed from the FILTERED rows — the donut and trend
+                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them).
                 <CohortView
                   key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
                   cohort={cohort}
@@ -163,11 +167,18 @@ export default async function StudentsPage({
                   cycles={cycles}
                   subject={isWriting ? 'Writing' : 'Reading'}
                   assessableRange={assessableRange}
-                  showCharts={false}
+                  trendCohort={trendCohort}
                 />
               )}
             </>
-          ) : isWriting ? (
+          ) : (
+            <>
+              {/* Summary view: the two page-top charts ride the roll-up feed — donut follows the cycle
+                  selector; the by-cycle trend is independent of it (always the full year). */}
+              <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} />
+            </>
+          )}
+          {view === 'list' ? null : isWriting ? (
             <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           ) : (
             <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
