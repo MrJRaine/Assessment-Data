@@ -13,6 +13,19 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [1.3.0] — 2026-10-27
 
+> **Server-side patches since 1.3.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
+> - **2026-10-30 — Students who left a class no longer appear in later cycles.** A student who leaves
+>   during a cycle deliberately stays on *that* cycle's entry roster (the teacher may have paper results
+>   to enter) — but they were also showing up in every *later* cycle through the end of the year. Cause:
+>   PowerSchool records the *scheduled* exit date (term/year end) on an enrolment, so when a student's
+>   enrolment vanished from the export (transfer out, mid-year drop) the ingest closed it but left that
+>   future exit date in place, and the roster keeps students by date overlap. The ingest now stamps the
+>   actual close date when it closes a vanished enrolment, and a one-time repair corrected the 3258
+>   live enrolment rows closed this way since September (then rebuilt the rosters). Students keep their
+>   place in the cycle they left during; they drop off every cycle after it. SQL:
+>   `sql/procedures/usp_MergeEnrollment.sql` (step 5 redeploy) +
+>   `sql/scripts/fix_enrollment_close_dates_2026-10-30.sql` (one-time repair + roster rebuild).
+
 ### Added
 - **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
   longer sysadmin-only: the `/ingest` **15-minute** button now works for anyone with **Run Ingest** (it was
