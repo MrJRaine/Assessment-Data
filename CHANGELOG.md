@@ -25,6 +25,15 @@ with `0.3.0`, so earlier detail is approximate.
 >   place in the cycle they left during; they drop off every cycle after it. SQL:
 >   `sql/procedures/usp_MergeEnrollment.sql` (step 5 redeploy) +
 >   `sql/scripts/fix_enrollment_close_dates_2026-10-30.sql` (one-time repair + roster rebuild).
+> - **2026-10-30 — Math reports restored ("Couldn't load data" for everyone).** A 1.3.0 **deploy defect**:
+>   the staff-merge procedure's source file ended without a `GO` batch separator, so when the release
+>   bundle was assembled the next section's `DROP FUNCTION … tvf_StudentCohortMathAll` statement was
+>   compiled *into the procedure's body*. The bundle still created the function afterwards, so math
+>   reports worked at cutover — but **every ingest after that silently deleted it**, and the math tree
+>   failed for all users once the first post-release ingest ran. Fixed by redeploying the procedure
+>   cleanly (identical logic, stowaway statement gone) and recreating the shipped function; the bundle
+>   and the source file are corrected so a re-run can't re-introduce it. SQL:
+>   `sql/deploy/live_1.3.0/hotfix_math_tree_restore_2026-10-30.sql`.
 
 ### Added
 - **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no
