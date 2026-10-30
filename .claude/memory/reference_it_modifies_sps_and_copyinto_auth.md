@@ -85,3 +85,14 @@ cycle: who (`CallerUPN`), when, **App vs FabricSQL** (`@Source`), and rows loade
 has no OneLake-token dependency change here — it's purely logging. Co-teacher skip was removed at the
 same time (co-teachers always load); `@SkipCoTeachers` is a deprecated no-op kept only for pre-1.1.0
 container compat.
+
+## 2026-10-30 additions (same lane: the identity side moves under us)
+- **PS GROUP changes count too:** the project lead's PS group was changed SIS-side 40→34
+  (RegionalAnalyst→Administrator) with no notice — derived access faithfully demoted them (TCRCE
+  roll-up row gone, scope shrank). When someone "loses" report scope and our code didn't change,
+  check their PS group against the DimRole seed FIRST. Remedy: SIS restores the group (overrides
+  only fix the ROLE; scope stays PS-derived).
+- **Fabric-editor token nuisance (uncaptured):** EXEC usp_RunFullIngestCycle from the Fabric SQL
+  editor intermittently fails on the FIRST attempt with a token auth error and succeeds on retry
+  (seen twice 2026-10-30). The app/SP path doesn't show it. Next occurrence: capture the exact
+  Msg number + first line before retrying, THEN diagnose; until then treat as transient.

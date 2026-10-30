@@ -446,8 +446,11 @@ export default function CohortView({
   }
 
   // Chart feeds (shared CohortCharts component). The DONUT reflects the current filters/cycle (chart-
-  // eligible subset of what's in view); the by-cycle TREND is independent of the cycle selector, so it's
-  // fed from the all-cycles `trendCohort` (falling back to `cohort` when no cycle is selected).
+  // eligible subset of what's in view); the by-cycle TREND is independent of the CYCLE selector (always
+  // the full year, fed from the all-cycles `trendCohort`, falling back to `cohort` when no cycle is
+  // selected) but DOES follow the demographic filter chips (2026-10-30 fix — it ignored them, so the
+  // trend sat frozen while the table filtered). The ACHIEVEMENT chip is deliberately excluded from the
+  // trend: it describes the current result's band, and applying it to historical rows would misread.
   const donutRows = useMemo(
     () => filtered.filter((s) => s.chartEligible).map((s) => ({ code: s.achievementCode })),
     [filtered],
@@ -455,9 +458,10 @@ export default function CohortView({
   const trendRows = useMemo(
     () =>
       (trendCohort ?? cohort)
-        .filter((s) => s.chartEligible)
+        .filter((s) => matchExcept(s, 'ach') && inAssessable(s) && s.chartEligible)
         .map((s) => ({ code: s.achievementCode, date: s.mostRecentDate })),
-    [trendCohort, cohort],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trendCohort, cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, assessableOnly, assessableRange],
   )
 
   return (

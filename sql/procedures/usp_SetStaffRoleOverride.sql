@@ -10,6 +10,10 @@
  *           usp_ApplyRoleOverrides (now retired). The flag is granted ONLY AFTER the staging/DimStaff
  *           check, and only the target email's rows are touched (no global re-merge, no StaffSchoolAccess
  *           TRUNCATE-all). The full merge still carries the maintenance handling for INGEST time.
+ * Modified: 2026-10-30 — DEACTIVATION-MARKER handling before provisioning: restoring someone the write
+ *           rule just dropped no longer inserts a duplicate current row beside their marker (same-day
+ *           marker revived in place, earlier marker closed first — mirrors usp_MergeStaff 4c-prime /
+ *           4c-prime2). Live remediation: sql/scripts/fix_dimstaff_dup_current_2026-10-30.sql.
  * Region: Canada East (PIIDPA compliant)
  *
  * Valid override targets: the three data-access tiers (Administrator / RegionalAnalyst /
@@ -105,6 +109,31 @@ BEGIN
     -- The two checks all provisioning keys off: are they in the last-staged PS snapshot, and do they
     -- already have a current active identity row?
     DECLARE @InStaging    BIT = CASE WHEN EXISTS (SELECT 1 FROM Stg_Staff s WHERE LOWER(LTRIM(RTRIM(s.Email_Addr))) = @Target) THEN 1 ELSE 0 END;
+
+    -- ------------------------------------------------------------------------
+    -- DEACTIVATION-MARKER HANDLING (2026-10-30): a person the write rule just dropped sits on a current
+    -- MARKER row (IsCurrent=1, ActiveFlag=0). @HasCurrentDim (current AND active) reads that as "no row",
+    -- so the provisioning below INSERTed a second current row beside the marker — two IsCurrent=1 rows,
+    -- overlapping windows, and the next merge hung assignments off the inactive key (live DQ failure,
+    -- 2026-10-30). Mirror usp_MergeStaff's marker semantics BEFORE the @HasCurrentDim check, but only
+    -- when this save actually provisions (Maintenance always; a data-access role only when staged — a
+    -- held save must not churn rows):
+    --   - a marker from an EARLIER day is CLOSED (the insert below then opens a clean version);
+    --   - a SAME-DAY marker is REVIVED in place (4c-prime), and the normal has-a-row path applies.
+    -- ------------------------------------------------------------------------
+    IF @IsActive = 1 AND (@Role = 'Maintenance' OR @InStaging = 1)
+    BEGIN
+        UPDATE DimStaff
+        SET EffectiveEndDate = DATEADD(DAY, -1, @Today), IsCurrent = 0, LastUpdated = @Now
+        WHERE LOWER(Email) = @Target AND IsCurrent = 1 AND ActiveFlag = 0
+          AND EffectiveStartDate < @Today;
+
+        UPDATE DimStaff
+        SET ActiveFlag = 1, LastUpdated = @Now
+        WHERE LOWER(Email) = @Target AND IsCurrent = 1 AND ActiveFlag = 0
+          AND EffectiveStartDate = @Today;
+    END;
+
     DECLARE @HasCurrentDim BIT = CASE WHEN EXISTS (SELECT 1 FROM DimStaff d WHERE LOWER(d.Email) = @Target AND d.IsCurrent = 1 AND d.ActiveFlag = 1) THEN 1 ELSE 0 END;
 
     -- ========================= scoped provisioning (this email only) =========================

@@ -10,10 +10,18 @@
  *           language ('English'/'French'), so the latest-pick partitions by (StudentNumber,
  *           AssessmentLanguage). IDENTITY = StudentNumber throughout; demographics from the CURRENT
  *           DimStudent by StudentNumber.
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohort (see its
+ *           header + tvf_StudentCohortReadingAll for the full rationale), CYCLE-SCOPED: with a cycle
+ *           selected, a student WITH a writing result in it takes their demographics from the frozen
+ *           DimStudent version of their MOST RECENT writing result in that cycle (one attribution per
+ *           student) and the scope gate follows the ATTRIBUTED school; students with no result in the
+ *           cycle stay current students. With NO cycle (the "Current" view) everything anchors on the
+ *           current version, as before. Names + the emitted StudentKey (detail link) prefer the CURRENT
+ *           version; WritingIPP no longer requires a current DimStudent join.
  * Region: Canada East (PIIDPA compliant)
  *
- * @CycleGroupID: NULL = lifetime most-recent per language ("Current"); a cycle id scopes BOTH the
- *   latest-pick AND the expected set to that cycle. SECURITY: SELECT granted to the SP alone.
+ * @CycleGroupID: NULL = lifetime most-recent per language ("Current"); a cycle id scopes the
+ *   latest-pick, the expected set AND the attribution to that cycle. SECURITY: SELECT granted to the SP alone.
  ******************************************************************************/
 
 DROP FUNCTION IF EXISTS dbo.tvf_StudentCohortWriting;
@@ -25,28 +33,6 @@ AS
 RETURN
 (
     WITH
-    Scope AS (
-        SELECT
-            s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID, s.ProgramCode,
-            s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous, s.Homeroom,
-            sg.GradeOrder, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation, p.ProgramFamily
-        FROM DimStudent s
-        JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
-        JOIN DimGrade   sg ON sg.GradeCode  = s.Grade
-        LEFT JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
-        WHERE s.IsCurrent = 1
-          AND s.EnrollStatus IN (0, -1)
-          AND (
-                EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
-                          AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
-             OR EXISTS (SELECT 1
-                        FROM FactSectionTeachers fst
-                        JOIN DimSection sec ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
-                        JOIN FactEnrollment e ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
-                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = s.StudentKey)
-          )
-    ),
     Expected AS (
         SELECT DISTINCT StudentNumber, Language
         FROM StudentExpectedAssessment
@@ -56,7 +42,8 @@ RETURN
     -- Latest writing per (StudentNumber, AssessmentLanguage) + its average over the SCORED traits
     -- (only '1'-'4' count; SCR / '-' / NULL drop from BOTH numerator and denominator).
     LatestWriting AS (
-        SELECT faw.StudentNumber, faw.AssessmentLanguage, faw.AssessmentWindowID, faw.AssessmentDate,
+        SELECT faw.StudentNumber, faw.StudentKey AS FactStudentKey, faw.AssessmentLanguage,
+               faw.AssessmentWindowID, faw.AssessmentDate,
                faw.IdeasScore, faw.OrganizationScore, faw.LanguageScore, faw.ConventionsScore,
                CAST(
                    (COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
@@ -69,7 +56,11 @@ RETURN
                           + (CASE WHEN faw.ConventionsScore  IN ('1','2','3','4') THEN 1 ELSE 0 END), 0)
                    AS DECIMAL(5,2)) AS AvgScore,
                ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber, faw.AssessmentLanguage
-                                  ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
+                                  ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn,
+               -- rnAny ranks across BOTH languages: the student's single most recent writing result in
+               -- scope, whose frozen StudentKey is the student's ATTRIBUTION for a cycle-scoped call.
+               ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber
+                                  ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rnAny
         FROM FactAssessmentWriting faw
         WHERE @CycleGroupID IS NULL
            OR faw.AssessmentWindowID IN (
@@ -77,10 +68,55 @@ RETURN
                 WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Writing' AND w.ActiveFlag = 1)
     ),
     LW AS (SELECT * FROM LatestWriting WHERE rn = 1),
+    -- WHO appears + WHICH DimStudent version supplies the demographics (cycle-scoped attribution).
+    AttrBase AS (
+        -- cycle selected, assessed: the frozen version of the student's most recent result in the cycle
+        SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.SchoolID,
+               fv.ProgramCode, fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous, fv.Homeroom
+        FROM LatestWriting lt
+        INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
+        WHERE lt.rnAny = 1 AND @CycleGroupID IS NOT NULL
+        UNION ALL
+        -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID,
+               s.ProgramCode, s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous, s.Homeroom
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND (@CycleGroupID IS NULL
+               OR NOT EXISTS (SELECT 1 FROM LatestWriting lt2 WHERE lt2.StudentNumber = s.StudentNumber))
+    ),
+    -- Students in the caller's scope — the ATTRIBUTED version, identity = StudentNumber.
+    Scope AS (
+        SELECT
+            COALESCE(cur.StudentKey, a.StudentKey) AS StudentKey,   -- detail link only (prefer the live record)
+            a.StudentNumber,
+            COALESCE(cur.FirstName, a.FirstName)   AS FirstName,    -- current name when one exists;
+            COALESCE(cur.LastName,  a.LastName)    AS LastName,     -- frozen name for district leavers
+            a.Grade, a.SchoolID, a.ProgramCode,
+            a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous, a.Homeroom,
+            sg.GradeOrder, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation, p.ProgramFamily
+        FROM AttrBase a
+        JOIN DimProgram p  ON p.ProgramCode = a.ProgramCode
+        JOIN DimGrade   sg ON sg.GradeCode  = a.Grade
+        LEFT JOIN DimSchool  sch ON sch.SchoolID = a.SchoolID
+        LEFT JOIN DimStudent cur ON cur.StudentNumber = a.StudentNumber AND cur.IsCurrent = 1
+        WHERE (
+                EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
+                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = a.SchoolID
+                          AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
+             OR EXISTS (SELECT 1
+                        FROM FactSectionTeachers fst
+                        JOIN DimSection sec ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
+                        JOIN FactEnrollment e ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
+                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = a.StudentKey)
+          )
+    ),
+    -- No IsCurrent filter on the DimStudent hop (2026-10-30): the hop only translates
+    -- StudentKey -> StudentNumber, so a district leaver's IPP row resolves too.
     WritingIPP AS (
         SELECT ds.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
         FROM FactStudentIPP fsi
-        JOIN DimStudent ds ON ds.StudentKey = fsi.StudentKey AND ds.IsCurrent = 1
+        JOIN DimStudent ds ON ds.StudentKey = fsi.StudentKey
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Writing'
         GROUP BY ds.StudentNumber
     ),

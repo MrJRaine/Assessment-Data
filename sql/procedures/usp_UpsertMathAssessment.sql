@@ -6,6 +6,9 @@
  *          3-layer validation + ongoing-assessment (dated-history) upsert, but
  *          the value is a BIT and there is no benchmark/delta.
  * Created: 2026-09-03
+ * Modified: 2026-10-30 — SECTION-SCHOOL BINDING on the 51011 student resolution
+ *          (late entry for a departed student binds to the version at the
+ *          section's school; see usp_UpsertReadingAssessment for rationale).
  * Region: Canada East (PIIDPA compliant)
  *
  * Grain = (StudentKey, AssessmentWindowID, MathTaskKey, AssessmentDate). A NEW
@@ -172,11 +175,48 @@ BEGIN
         ;THROW 51017, 'usp_UpsertMathAssessment: @AssessmentDate is outside this window''s range [StartDate, min(today, EndDate)].', 1;
     END;
 
-    -- 51011: student resolves via effective-date join on AssessmentDate
-    SELECT TOP 1 @StudentKey = s.StudentKey, @StudentGrade = s.Grade
-    FROM DimStudent s
-    WHERE s.StudentNumber = @StudentNumber
-      AND @AssessmentDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31');
+    -- 51011: student resolves to the SCD version the entry BELONGS to — SECTION-
+    -- SCHOOL BINDING (2026-10-30; full rationale in usp_UpsertReadingAssessment).
+    -- A late entry for a departed student binds to the version at the SECTION's
+    -- school (inferred from the caller's roster membership, else the section base
+    -- when the student sits at exactly ONE school this window), so the result
+    -- stays with the school where it was recorded. Non-movers resolve unchanged;
+    -- no inferable school or no version at it -> legacy effective-date join.
+    DECLARE @SectionSchoolID VARCHAR(10);
+
+    SELECT @SectionSchoolID = CASE WHEN MIN(trm.SchoolID) = MAX(trm.SchoolID)
+                                   THEN MIN(trm.SchoolID) END
+    FROM TeacherRosterMembership trm
+    WHERE trm.TeacherEmail = @CallerEmail
+      AND trm.AssessmentWindowID = @AssessmentWindowID_BI
+      AND trm.StudentNumber = @StudentNumber;
+
+    IF @SectionSchoolID IS NULL
+    BEGIN
+        SELECT @SectionSchoolID = CASE WHEN MIN(srm.SchoolID) = MAX(srm.SchoolID)
+                                       THEN MIN(srm.SchoolID) END
+        FROM SectionRosterMembership srm
+        WHERE srm.AssessmentWindowID = @AssessmentWindowID_BI
+          AND srm.StudentNumber = @StudentNumber;
+    END;
+
+    IF @SectionSchoolID IS NOT NULL
+    BEGIN
+        SELECT TOP 1 @StudentKey = s.StudentKey, @StudentGrade = s.Grade
+        FROM DimStudent s
+        WHERE s.StudentNumber = @StudentNumber
+          AND s.SchoolID = @SectionSchoolID
+          AND s.EffectiveStartDate <= @AssessmentDate
+        ORDER BY s.EffectiveStartDate DESC;
+    END;
+
+    IF @StudentKey IS NULL
+    BEGIN
+        SELECT TOP 1 @StudentKey = s.StudentKey, @StudentGrade = s.Grade
+        FROM DimStudent s
+        WHERE s.StudentNumber = @StudentNumber
+          AND @AssessmentDate BETWEEN s.EffectiveStartDate AND COALESCE(s.EffectiveEndDate, '9999-12-31');
+    END;
 
     IF @StudentKey IS NULL
     BEGIN

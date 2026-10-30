@@ -41,6 +41,13 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # OPEN — near-term (not release-bound)
 
+- **Write-rule rescue path for NOT-in-export coach-role overrides (gap found 2026-10-30).** usp_MergeStaff
+  Step 2's not-in-staging rescue UNION covers ONLY `Maintenance` overrides — an active
+  Administrator/RegionalAnalyst/SpecialistTeacher override for someone absent from the PS staff export is
+  re-dropped by EVERY ingest (the Save can restore them only while they're in the latest staging). Fix =
+  widen the UNION — but it needs a USER scope decision first: a not-in-PS RegionalAnalyst would have the
+  role with NO PS-derived schools (empty StaffSchoolAccess) — synthesize all-schools scope, or require a
+  PS record for region-wide access?
 - **Maintenance + ingest end-to-end dry-run on dev.** The lockout + ingest flow ship in the containers
   but have never been run start-to-finish. Prove on dev (schedule → land → `/enter` locks while
   `/ingest` + `/admin/maintenance` stay usable → clear) BEFORE any live use.
