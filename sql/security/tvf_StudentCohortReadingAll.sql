@@ -8,13 +8,14 @@
  *          separately on expand, same pattern as Math).
  * Created: 2026-10-16
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION (restores the documented design; server-side
- *          patch under 1.3.0). A row WITH a result now attributes School/Grade/Homeroom from the
- *          RESULT's frozen DimStudent version (fact.StudentKey — the version in force when it was
- *          recorded), NOT the student's current version — so a student transfer no longer moves their
- *          recorded history to the new school, and a student who left the district keeps their recorded
- *          results in the cycles where they were assessed. A student with NO result in scope still
- *          shows from their CURRENT version (current school, "No data"), current+enrolled only.
- *          The access gate follows the ATTRIBUTED school. Non-movers are unchanged (frozen = current).
+ *          patch under 1.3.0), CYCLE-SCOPED: when @CycleGroupID is set, a row WITH a result attributes
+ *          School/Grade/Homeroom from the RESULT's frozen DimStudent version (fact.StudentKey — the
+ *          version in force when it was recorded), NOT the student's current version — so a transfer
+ *          no longer moves recorded history to the new school, and a district leaver keeps their
+ *          recorded results in the cycles where they were assessed; a student with NO result in that
+ *          cycle shows from their CURRENT version ("No data", current+enrolled only), and the access
+ *          gate follows the ATTRIBUTED school. With NO cycle selected (the "Current" view) everything
+ *          anchors on the CURRENT version, as before. Non-movers are unchanged (frozen = current).
  * Region: Canada East (PIIDPA compliant)
  *
  * GRAIN — one row per (student x the language of a reading result they have this year):
@@ -88,22 +89,34 @@ RETURN
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
         GROUP BY dsi.StudentNumber
     ),
-    -- ATTRIBUTED base: assessed rows come from the RESULT's frozen student version (school/grade/
-    -- homeroom as recorded — includes movers' old-school rows and district leavers); unassessed
-    -- rows are CURRENT, enrolled students with no reading result in scope ("No data" at their
-    -- current school). A non-mover's frozen version IS their current version — identical output.
+    -- ATTRIBUTION IS CYCLE-SCOPED: with a cycle selected, an assessed row attributes to the RESULT's
+    -- frozen student version (the school/grade/homeroom that recorded it — includes movers' old-school
+    -- rows and district leavers); with NO cycle selected (the "Current" view) every row anchors on the
+    -- CURRENT version, as before — the current view reflects the schools as they are today. A
+    -- non-mover's frozen version IS their current version — identical output either way.
     Base AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
                lr.ScaleSystem, lr.AssessmentDate, lr.ReadingDelta
         FROM LatestReading lr
         INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
-        WHERE lr.rn = 1
+        WHERE lr.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
+        -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
                CAST(NULL AS VARCHAR(20)), CAST(NULL AS DATE), CAST(NULL AS INT)
         FROM DimStudent s
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        WHERE @CycleGroupID IS NOT NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM LatestReading lr2 WHERE lr2.StudentNumber = s.StudentNumber)
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               lr3.ScaleSystem, lr3.AssessmentDate, lr3.ReadingDelta
+        FROM DimStudent s
+        LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
     )
     SELECT
         CAST(b.StudentKey AS VARCHAR(20)) AS StudentKey,

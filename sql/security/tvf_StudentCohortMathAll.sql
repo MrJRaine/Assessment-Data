@@ -11,13 +11,14 @@
  *          (~students x units) and carries no names / student numbers.
  * Created: 2026-10-12
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with the reading/writing All TVFs
- *          (see tvf_StudentCohortReadingAll's header for the full rationale). A student WITH math
- *          results in scope attributes School/Grade/Homeroom from the frozen DimStudent version of
- *          their MOST RECENT math result in scope (ONE attribution per student — the task matrix never
- *          splits across schools), so transfers don't move recorded history and district leavers keep
- *          their recorded cycles. Students with NO math result stay current, enrolled students at their
- *          current school. The oversight gate follows the ATTRIBUTED school; the TAUGHT arm stays
- *          current-roster. Non-movers are unchanged (frozen = current).
+ *          (see tvf_StudentCohortReadingAll's header for the full rationale), CYCLE-SCOPED: with a
+ *          cycle selected, a student WITH math results in it attributes School/Grade/Homeroom from the
+ *          frozen DimStudent version of their MOST RECENT math result in scope (ONE attribution per
+ *          student — the task matrix never splits across schools), so transfers don't move recorded
+ *          history and district leavers keep their recorded cycles; students with NO math result stay
+ *          current, enrolled students. With no cycle (the "Current" view) everyone anchors on the
+ *          current version, as before. The oversight gate follows the ATTRIBUTED school; the TAUGHT
+ *          arm stays current-roster. Non-movers are unchanged (frozen = current).
  * Region: Canada East (PIIDPA compliant)
  *
  * Scope: OVERSIGHT (Administrator / SpecialistTeacher / RegionalAnalyst, per school via
@@ -91,18 +92,22 @@ RETURN
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Math'
         GROUP BY dsi.StudentNumber
     ),
-    -- ATTRIBUTED base: assessed students from their latest result's frozen version; unassessed
-    -- students are CURRENT, enrolled students with no math result in scope.
+    -- ATTRIBUTION IS CYCLE-SCOPED: with a cycle selected, assessed students attribute from their
+    -- latest result's frozen version and unassessed students are CURRENT, enrolled students; with NO
+    -- cycle (the "Current" view) everyone anchors on the current version, as before.
     AttrStudents AS (
+        -- cycle selected, assessed: attributed by the latest result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID
         FROM LatestMathTouch lt
         INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
-        WHERE lt.rn = 1
+        WHERE lt.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
+        -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-          AND NOT EXISTS (SELECT 1 FROM LatestMathTouch lt2 WHERE lt2.StudentNumber = s.StudentNumber)
+          AND (@CycleGroupID IS NULL
+               OR NOT EXISTS (SELECT 1 FROM LatestMathTouch lt2 WHERE lt2.StudentNumber = s.StudentNumber))
     )
     SELECT
         CAST(a.StudentKey AS VARCHAR(20)) AS StudentKey,

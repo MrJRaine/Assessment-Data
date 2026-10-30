@@ -14,10 +14,22 @@
  *           throughout (stack / dedupe / fact + expected joins) — never the mutable StudentKey
  *           (project_assessment_fact_scd_policy). Demographics come from the CURRENT DimStudent by
  *           StudentNumber, one consistent set per student.
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION (server-side patch under 1.3.0; full rationale
+ *           in tvf_StudentCohortReadingAll), CYCLE-SCOPED: with a cycle selected, a student WITH a
+ *           reading result in it takes their demographics (School/Grade/Homeroom/program/flags) from
+ *           the frozen DimStudent version of their MOST RECENT reading result in that cycle — ONE
+ *           attribution per student, so the client's per-student stacking keeps one consistent
+ *           demographic set — and the scope gate follows the ATTRIBUTED school; movers stop dragging
+ *           recorded history to the new school and district leavers stay listed in the cycles they
+ *           were assessed in. Students with no result in the cycle stay current students. With NO
+ *           cycle (the "Current" view) everything anchors on the current version, as before. Display
+ *           names prefer the CURRENT version (frozen for leavers); the emitted StudentKey (detail link
+ *           only) prefers the CURRENT version so the link lands on the live record. ReadingIPP no
+ *           longer requires a current DimStudent join (a leaver's IPP row resolves too).
  * Region: Canada East (PIIDPA compliant)
  *
- * @CycleGroupID: NULL = lifetime most-recent reading per language ("Current"); a cycle id scopes BOTH
- *   the latest-result pick AND the expected-language set to that cycle. Callers pass both args.
+ * @CycleGroupID: NULL = lifetime most-recent reading per language ("Current"); a cycle id scopes the
+ *   latest-result pick, the expected-language set AND the attribution to that cycle. Callers pass both args.
  * SECURITY: trusts a truthful @UPN; SELECT granted to the SP alone (the client never supplies the UPN).
  * ORDER BY omitted — the caller sorts.
  ******************************************************************************/
@@ -31,27 +43,66 @@ AS
 RETURN
 (
     WITH
-    -- Students in the caller's scope — CURRENT version, identity = StudentNumber.
+    -- Latest reading per (StudentNumber, ScaleSystem). Cycle-scoped when a cycle is selected.
+    LatestReading AS (
+        SELECT far.StudentNumber, far.StudentKey AS FactStudentKey, drs.ScaleSystem,
+               far.AssessmentWindowID, far.AssessmentDate,
+               far.ReadingDelta, drs.LevelCode, drs.LevelOrder,
+               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
+                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn,
+               -- rnAny ranks across BOTH languages: the student's single most recent reading result in
+               -- scope, whose frozen StudentKey is the student's ATTRIBUTION for a cycle-scoped call.
+               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber
+                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rnAny
+        FROM FactAssessmentReading far
+        JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
+        WHERE @CycleGroupID IS NULL
+           OR far.AssessmentWindowID IN (
+                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1)
+    ),
+    LR AS (SELECT * FROM LatestReading WHERE rn = 1),
+    -- WHO appears + WHICH DimStudent version supplies the demographics (cycle-scoped attribution).
+    AttrBase AS (
+        -- cycle selected, assessed: the frozen version of the student's most recent result in the cycle
+        SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.SchoolID,
+               fv.ProgramCode, fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous, fv.Homeroom
+        FROM LatestReading lt
+        INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
+        WHERE lt.rnAny = 1 AND @CycleGroupID IS NOT NULL
+        UNION ALL
+        -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID,
+               s.ProgramCode, s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous, s.Homeroom
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND (@CycleGroupID IS NULL
+               OR NOT EXISTS (SELECT 1 FROM LatestReading lt2 WHERE lt2.StudentNumber = s.StudentNumber))
+    ),
+    -- Students in the caller's scope — the ATTRIBUTED version, identity = StudentNumber.
     Scope AS (
         SELECT
-            s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID, s.ProgramCode,
-            s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous, s.Homeroom,
+            COALESCE(cur.StudentKey, a.StudentKey) AS StudentKey,   -- detail link only (prefer the live record)
+            a.StudentNumber,
+            COALESCE(cur.FirstName, a.FirstName)   AS FirstName,    -- current name when one exists;
+            COALESCE(cur.LastName,  a.LastName)    AS LastName,     -- frozen name for district leavers
+            a.Grade, a.SchoolID, a.ProgramCode,
+            a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous, a.Homeroom,
             sg.GradeOrder, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation, p.ProgramFamily
-        FROM DimStudent s
-        JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
-        JOIN DimGrade   sg ON sg.GradeCode  = s.Grade
-        LEFT JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
-        WHERE s.IsCurrent = 1
-          AND s.EnrollStatus IN (0, -1)
-          AND (
+        FROM AttrBase a
+        JOIN DimProgram p  ON p.ProgramCode = a.ProgramCode
+        JOIN DimGrade   sg ON sg.GradeCode  = a.Grade
+        LEFT JOIN DimSchool  sch ON sch.SchoolID = a.SchoolID
+        LEFT JOIN DimStudent cur ON cur.StudentNumber = a.StudentNumber AND cur.IsCurrent = 1
+        WHERE (
                 EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
+                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = a.SchoolID
                           AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
              OR EXISTS (SELECT 1
                         FROM FactSectionTeachers fst
                         JOIN DimSection sec ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
                         JOIN FactEnrollment e ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
-                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = s.StudentKey)
+                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = a.StudentKey)
           )
     ),
     -- Effective benchmark month per reading window (BenchmarkMonth, else dominant calendar month).
@@ -71,25 +122,13 @@ RETURN
         WHERE AssessmentType = 'Reading'
           AND (@CycleGroupID IS NULL OR CycleGroupID = @CycleGroupID)
     ),
-    -- Latest reading per (StudentNumber, ScaleSystem). Cycle-scoped when a cycle is selected.
-    LatestReading AS (
-        SELECT far.StudentNumber, drs.ScaleSystem, far.AssessmentWindowID, far.AssessmentDate,
-               far.ReadingDelta, drs.LevelCode, drs.LevelOrder,
-               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
-                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
-        FROM FactAssessmentReading far
-        JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE @CycleGroupID IS NULL
-           OR far.AssessmentWindowID IN (
-                SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
-                WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1)
-    ),
-    LR AS (SELECT * FROM LatestReading WHERE rn = 1),
     -- Per-student reading IPP (any family), by StudentNumber. HasRow distinguishes N/A from Unresolved.
+    -- No IsCurrent filter on the DimStudent hop (2026-10-30): a leaver's IPP row points at a non-current
+    -- version; the hop only translates StudentKey -> StudentNumber, and the GROUP BY keeps one row.
     ReadingIPP AS (
         SELECT ds.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
         FROM FactStudentIPP fsi
-        JOIN DimStudent ds ON ds.StudentKey = fsi.StudentKey AND ds.IsCurrent = 1
+        JOIN DimStudent ds ON ds.StudentKey = fsi.StudentKey
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
         GROUP BY ds.StudentNumber
     ),

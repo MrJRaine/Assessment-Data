@@ -8,13 +8,14 @@
  *          and rolls up class % / per-student averages for the colour-coding + charts.
  * Created: 2026-09-24
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortMathAll
- *          (see tvf_StudentCohortReadingAll's header for the full rationale). A student WITH math
- *          results in scope attributes School/Grade/Homeroom (and so their @GroupKey membership) from
- *          the frozen DimStudent version of their MOST RECENT math result in scope (one attribution
- *          per student); students with no math result stay current students. The oversight gate
- *          follows the ATTRIBUTED school; the teacher arm stays current-roster. Display names come
- *          from the CURRENT version when one exists (frozen for district leavers). MathIPP + the
- *          section-language lookup are keyed by StudentNumber (frozen keys predate repointing).
+ *          (see tvf_StudentCohortReadingAll's header for the full rationale), CYCLE-SCOPED: with a
+ *          cycle selected, a student WITH math results in it attributes School/Grade/Homeroom (and so
+ *          their @GroupKey membership) from the frozen DimStudent version of their MOST RECENT math
+ *          result in scope (one attribution per student) and the oversight gate follows the ATTRIBUTED
+ *          school; students with no math result stay current students. With no cycle ("Current" view)
+ *          everyone anchors on the current version, as before. Display names come from the CURRENT
+ *          version when one exists (frozen for district leavers). MathIPP + the section-language
+ *          lookup are keyed by StudentNumber (frozen keys predate repointing).
  * Region: Canada East (PIIDPA compliant)
  *
  * Group-scoped (a whole school/region matrix would be unusable) + @UPN-scoped: the same
@@ -60,20 +61,24 @@ RETURN
         FROM FactAssessmentMath fm
         WHERE fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
     ),
-    -- ATTRIBUTED rows: assessed students from their latest result's frozen version; unassessed
-    -- students current (mirrors tvf_StudentCohortMathAll so drill rows agree with roll-up counts).
+    -- ATTRIBUTION IS CYCLE-SCOPED (mirrors tvf_StudentCohortMathAll so drill rows agree with roll-up
+    -- counts): cycle selected -> assessed students from their latest result's frozen version, unassessed
+    -- current; no cycle ("Current" view) -> everyone anchors on the current version, as before.
     AttrStudents AS (
+        -- cycle selected, assessed: attributed by the latest result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
                fv.SchoolID, fv.GroupKey AS HomeroomKey, fv.ProgramCode
         FROM LatestMathTouch lt
         INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
-        WHERE lt.rn = 1
+        WHERE lt.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
+        -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey, s.ProgramCode
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-          AND NOT EXISTS (SELECT 1 FROM LatestMathTouch lt2 WHERE lt2.StudentNumber = s.StudentNumber)
+          AND (@CycleGroupID IS NULL
+               OR NOT EXISTS (SELECT 1 FROM LatestMathTouch lt2 WHERE lt2.StudentNumber = s.StudentNumber))
     ),
     -- The group's attributed students, P-5, intersected with the caller's SCOPE.
     GroupStudents AS (

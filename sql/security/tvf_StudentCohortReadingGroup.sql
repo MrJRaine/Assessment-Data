@@ -7,11 +7,12 @@
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
- *          (see its header for the full rationale). An assessed row's School/Grade/Homeroom (and so its
- *          @GroupKey membership) comes from the RESULT's frozen DimStudent version; unassessed rows
- *          stay current students. The oversight gate follows the ATTRIBUTED school. Display names come
- *          from the student's CURRENT version when one exists (people keep their current name), falling
- *          back to the frozen version's name for district leavers.
+ *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
+ *          row's School/Grade/Homeroom (and so its @GroupKey membership) comes from the RESULT's frozen
+ *          DimStudent version and the oversight gate follows the ATTRIBUTED school; unassessed rows
+ *          stay current students. With no cycle ("Current" view) everything anchors on the current
+ *          version, as before. Display names come from the student's CURRENT version when one exists
+ *          (people keep their current name), falling back to the frozen name for district leavers.
  * Region: Canada East (PIIDPA compliant)
  *
  * Group-scoped + @UPN-scoped: same OR-across-EXISTS gate as tvf_StudentCohortMath (oversight via
@@ -78,23 +79,36 @@ RETURN
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
         GROUP BY dsi.StudentNumber
     ),
-    -- ATTRIBUTED rows: assessed from the result's frozen version; unassessed from the current version
-    -- (mirrors tvf_StudentCohortReadingAll's Base so drill rows agree with roll-up counts).
+    -- ATTRIBUTION IS CYCLE-SCOPED (mirrors tvf_StudentCohortReadingAll's Base so drill rows agree with
+    -- roll-up counts): cycle selected -> assessed rows from the result's frozen version, unassessed from
+    -- the current version; no cycle ("Current" view) -> everything anchors on the current version.
     AttrStudents AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
                fv.SchoolID, fv.GroupKey AS HomeroomKey,
                lr.AssessmentWindowID, lr.ScaleSystem, lr.LevelCode, lr.LevelOrder, lr.ReadingDelta
         FROM LatestReading lr
         INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
-        WHERE lr.rn = 1
+        WHERE lr.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
+        -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
                CAST(NULL AS BIGINT), CAST(NULL AS VARCHAR(20)), CAST(NULL AS VARCHAR(10)),
                CAST(NULL AS INT), CAST(NULL AS INT)
         FROM DimStudent s
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        WHERE @CycleGroupID IS NOT NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM LatestReading lr2 WHERE lr2.StudentNumber = s.StudentNumber)
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
+               s.SchoolID, s.GroupKey,
+               lr3.AssessmentWindowID, lr3.ScaleSystem, lr3.LevelCode, lr3.LevelOrder, lr3.ReadingDelta
+        FROM DimStudent s
+        LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
     ),
     -- The group's attributed rows (in the reading grade span), intersected with the caller's scope.
     GroupStudents AS (

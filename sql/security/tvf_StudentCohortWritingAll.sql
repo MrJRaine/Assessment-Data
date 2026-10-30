@@ -8,10 +8,11 @@
  *          separately on expand).
  * Created: 2026-10-16
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
- *          (see its header for the full rationale). An assessed row's School/Grade/Homeroom comes from
- *          the RESULT's frozen DimStudent version; a student with no writing result in scope stays a
- *          current, enrolled student at their current school. The oversight gate follows the ATTRIBUTED
- *          school. Non-movers are unchanged (frozen = current).
+ *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
+ *          row's School/Grade/Homeroom comes from the RESULT's frozen DimStudent version and the
+ *          oversight gate follows the ATTRIBUTED school; a student with no writing result in that cycle
+ *          stays a current, enrolled student at their current school. With no cycle (the "Current"
+ *          view) everything anchors on the current version, as before. Non-movers are unchanged.
  * Region: Canada East (PIIDPA compliant)
  *
  * GRAIN — one row per (student x the language of a writing result they have this year):
@@ -86,24 +87,37 @@ RETURN
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Writing'
         GROUP BY dsi.StudentNumber
     ),
-    -- ATTRIBUTED base: assessed rows from the RESULT's frozen student version (includes movers'
-    -- old-school rows and district leavers); unassessed rows are CURRENT, enrolled students with no
-    -- writing result in scope ("No data" at their current school).
+    -- ATTRIBUTION IS CYCLE-SCOPED: with a cycle selected, assessed rows come from the RESULT's frozen
+    -- student version (includes movers' old-school rows and district leavers) and unassessed rows are
+    -- CURRENT, enrolled students ("No data" at their current school); with NO cycle (the "Current"
+    -- view) everything anchors on the current version, as before.
     Base AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
                lw.AssessmentLanguage, lw.AssessmentDate,
                lw.IdeasScore, lw.OrganizationScore, lw.LanguageScore, lw.ConventionsScore, lw.AvgScore
         FROM LatestWriting lw
         INNER JOIN DimStudent fv ON fv.StudentKey = lw.FactStudentKey
-        WHERE lw.rn = 1
+        WHERE lw.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
+        -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS DATE),
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)),
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS DECIMAL(5,2))
         FROM DimStudent s
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        WHERE @CycleGroupID IS NOT NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM LatestWriting lw2 WHERE lw2.StudentNumber = s.StudentNumber)
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               lw3.AssessmentLanguage, lw3.AssessmentDate,
+               lw3.IdeasScore, lw3.OrganizationScore, lw3.LanguageScore, lw3.ConventionsScore, lw3.AvgScore
+        FROM DimStudent s
+        LEFT JOIN (SELECT * FROM LatestWriting WHERE rn = 1) lw3 ON lw3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
     )
     SELECT
         CAST(b.StudentKey AS VARCHAR(20)) AS StudentKey,

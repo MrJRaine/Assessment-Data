@@ -5,6 +5,14 @@
  *          how many of {Reading, Writing, Math} the student is CURRENTLY meeting or
  *          exceeding (their most-recent result in each area).
  * Created: 2026-09-24
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohort (full
+ *          rationale in tvf_StudentCohortReadingAll), CYCLE-SCOPED: with a cycle selected, a student
+ *          WITH any R/W/M result in it takes their demographics from the frozen DimStudent version of
+ *          their MOST RECENT result across the three subjects in that cycle (one attribution per
+ *          student) and the scope gate follows the ATTRIBUTED school; students with no result stay
+ *          current students. With NO cycle (the "Current" view) everything anchors on the current
+ *          version, as before. Names + the emitted StudentKey (detail link) prefer the CURRENT
+ *          version. AnyIPP is keyed by StudentNumber (frozen keys predate IPP repointing).
  * Region: Canada East (PIIDPA compliant)
  *
  * "Meeting+" per area:
@@ -48,29 +56,82 @@ RETURN
         WHERE w.AssessmentType = 'Math' AND w.ActiveFlag = 1 AND w.SchoolYear = cy.Yr
           AND (@CycleGroupID IS NULL OR w.CycleGroupID = @CycleGroupID)
     ),
-    -- In-scope, current, P-6 students (role-gated).
-    InScope AS (
-        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, sg.GradeOrder,
-               s.SchoolID, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation,
-               s.ProgramCode, p.ProgramFamily, s.Homeroom
+    -- Cycle-scoped attribution source: the student's most recent result across R/W/M in the selected
+    -- cycle, whose frozen StudentKey supplies the demographics. Empty when no cycle is selected.
+    AnyTouch AS (
+        SELECT x.StudentNumber, x.StudentKey,
+               ROW_NUMBER() OVER (PARTITION BY x.StudentNumber
+                                  ORDER BY x.AssessmentDate DESC, x.LastUpdated DESC) AS rn
+        FROM (
+            SELECT far.StudentNumber, far.StudentKey, far.AssessmentDate, far.LastUpdated
+            FROM FactAssessmentReading far
+            WHERE @CycleGroupID IS NOT NULL
+              AND far.AssessmentWindowID IN (
+                    SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                    WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Reading' AND w.ActiveFlag = 1)
+            UNION ALL
+            SELECT faw.StudentNumber, faw.StudentKey, faw.AssessmentDate, faw.LastUpdated
+            FROM FactAssessmentWriting faw
+            WHERE @CycleGroupID IS NOT NULL
+              AND faw.AssessmentWindowID IN (
+                    SELECT w.AssessmentWindowID FROM DimAssessmentWindow w
+                    WHERE w.CycleGroupID = @CycleGroupID AND w.AssessmentType = 'Writing' AND w.ActiveFlag = 1)
+            UNION ALL
+            SELECT fm.StudentNumber, fm.StudentKey, fm.AssessmentDate, fm.LastUpdated
+            FROM FactAssessmentMath fm
+            WHERE @CycleGroupID IS NOT NULL
+              AND fm.AssessmentWindowID IN (SELECT AssessmentWindowID FROM MathWins)
+        ) x
+    ),
+    -- WHO appears + WHICH DimStudent version supplies the demographics (cycle-scoped attribution).
+    AttrBase AS (
+        -- cycle selected, assessed: the frozen version of the student's most recent R/W/M result
+        SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.SchoolID,
+               fv.ProgramCode, fv.Homeroom
+        FROM AnyTouch t
+        INNER JOIN DimStudent fv ON fv.StudentKey = t.StudentKey
+        WHERE t.rn = 1
+        UNION ALL
+        -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID,
+               s.ProgramCode, s.Homeroom
         FROM DimStudent s
-        INNER JOIN DimProgram p  ON p.ProgramCode = s.ProgramCode
-        INNER JOIN DimGrade   sg ON sg.GradeCode  = s.Grade
-        LEFT  JOIN DimSchool  sch ON sch.SchoolID = s.SchoolID
-        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1) AND sg.GradeOrder BETWEEN 0 AND 5  -- RWM P..5 (grade 6 math not ready 2026-27)
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND (@CycleGroupID IS NULL
+               OR NOT EXISTS (SELECT 1 FROM AnyTouch t2 WHERE t2.StudentNumber = s.StudentNumber))
+    ),
+    -- In-scope, attributed, P-5 students (role-gated against the ATTRIBUTED school).
+    InScope AS (
+        SELECT COALESCE(cur.StudentKey, a.StudentKey) AS StudentKey,   -- detail link only (prefer the live record)
+               a.StudentNumber,
+               COALESCE(cur.FirstName, a.FirstName)   AS FirstName,    -- current name when one exists;
+               COALESCE(cur.LastName,  a.LastName)    AS LastName,     -- frozen name for district leavers
+               a.Grade, sg.GradeOrder,
+               a.SchoolID, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation,
+               a.ProgramCode, p.ProgramFamily, a.Homeroom
+        FROM AttrBase a
+        INNER JOIN DimProgram p  ON p.ProgramCode = a.ProgramCode
+        INNER JOIN DimGrade   sg ON sg.GradeCode  = a.Grade
+        LEFT  JOIN DimSchool  sch ON sch.SchoolID = a.SchoolID
+        LEFT  JOIN DimStudent cur ON cur.StudentNumber = a.StudentNumber AND cur.IsCurrent = 1
+        WHERE sg.GradeOrder BETWEEN 0 AND 5  -- RWM P..5 (grade 6 math not ready 2026-27)
           AND (
                 EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
+                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = a.SchoolID
                           AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
              OR EXISTS (SELECT 1 FROM FactSectionTeachers fst
                         INNER JOIN DimSection sec ON sec.SectionID = fst.SectionID AND sec.IsCurrent = 1
                         INNER JOIN FactEnrollment e ON e.SectionKey = sec.SectionKey AND e.ActiveFlag = 1
-                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = s.StudentKey)
+                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e.StudentKey = a.StudentKey)
           )
     ),
     -- Any confirmed IPP in ANY of the three subjects removes the student from this report.
+    -- Keyed by StudentNumber (2026-10-30): an attributed row carries a frozen StudentKey, which the
+    -- IPP rows' current-version repointing no longer matches.
     AnyIPP AS (
-        SELECT DISTINCT fsi.StudentKey FROM FactStudentIPP fsi
+        SELECT DISTINCT ds.StudentNumber
+        FROM FactStudentIPP fsi
+        INNER JOIN DimStudent ds ON ds.StudentKey = fsi.StudentKey
         WHERE fsi.IsCurrent = 1 AND fsi.IsIPP = 1 AND fsi.Subject IN ('Reading', 'Writing', 'Math')
     ),
     -- Most-recent reading -> achievement code (delta mapped through DimAchievementLevel bounds).
@@ -212,7 +273,7 @@ RETURN
     LEFT JOIN WriteAch  wa ON wa.StudentNumber = isc.StudentNumber
     LEFT JOIN MathRoll  mr ON mr.StudentNumber = isc.StudentNumber
     LEFT JOIN MathZeroRoll mz ON mz.StudentNumber = isc.StudentNumber
-    WHERE NOT EXISTS (SELECT 1 FROM AnyIPP ai WHERE ai.StudentKey = isc.StudentKey)
+    WHERE NOT EXISTS (SELECT 1 FROM AnyIPP ai WHERE ai.StudentNumber = isc.StudentNumber)
 );
 GO
 
