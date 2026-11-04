@@ -25,8 +25,8 @@ SELECT
                         AND d.IsCurrent = 1 AND d.ActiveFlag = 1)
          THEN 'yes' ELSE 'NO' END               AS PrimaryActiveInDimStaff,
     ds.SectionKey,
-    ds.ActiveFlag                               AS DimSectionActiveFlag,
-    ds.IsCurrent                                AS DimSectionIsCurrent,
+    ds.IsCurrent                                AS DimSectionIsCurrent,     -- NULL row = no current version (closed out)
+    ds.EffectiveEndDate                         AS DimSectionEndDate,
     ds.LastUpdated                              AS DimSectionLastUpdated
 FROM Stg_CoTeacher ct
 LEFT JOIN Stg_Section sec
