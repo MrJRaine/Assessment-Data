@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-27T18:43:07.416Z
+  modified: 2026-11-06T18:43:10.698Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -41,6 +41,10 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # OPEN — near-term (not release-bound)
 
+- **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
+  per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
+  separate lists by their program; they should be ONE list per section on the page. User wants this
+  bundled into the next version worked on (1.3.1 candidate, alongside the pending charts fix).
 - **Write-rule rescue path for NOT-in-export coach-role overrides (gap found 2026-10-30).** usp_MergeStaff
   Step 2's not-in-staging rescue UNION covers ONLY `Maintenance` overrides — an active
   Administrator/RegionalAnalyst/SpecialistTeacher override for someone absent from the PS staff export is
@@ -48,6 +52,18 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   widen the UNION — but it needs a USER scope decision first: a not-in-PS RegionalAnalyst would have the
   role with NO PS-derived schools (empty StaffSchoolAccess) — synthesize all-schools scope, or require a
   PS record for region-wide access?
+- **Section-merge gate vs on-leave teachers w/ subs (census done 2026-11-06, decision pending).** A section
+  whose PRIMARY fails the merge's resolve gate (current+active DimStaff) is excluded, killing even
+  good-standing CO-TEACHERS' assignments (`usp_MergeSectionTeachers` current-DimSection check). Real case:
+  long-term sub Sarah Thornton lost 15 Meadowfields sections because on-leave primary (jocelyne.veinot@,
+  on the 28-email SIS hand-off list) dropped from the staff export. Census
+  (`sql/scripts/count_sections_inactive_primary_trap.sql`): this is the ONLY instance with a resolvable
+  co-teacher stranded; every other trapped section is a stale not-purged PS section the gate is CORRECTLY
+  filtering. **PARKED by user 2026-11-06** — follow up later if the leave-with-sub pattern recurs; do not
+  build the gate relaxation unprompted (it would resurrect the stale sections as live DimSection rows).
+  **Chosen remedy (user, SIS-side): make the SUB the section LEAD teacher in PS for those sections** — the
+  better records-keeping fix (export then names who is actually teaching), and the sections self-heal on
+  the next ingest. Not "add the on-leave teacher back to the staff export."
 - **Maintenance + ingest end-to-end dry-run on dev.** The lockout + ingest flow ship in the containers
   but have never been run start-to-finish. Prove on dev (schedule → land → `/enter` locks while
   `/ingest` + `/admin/maintenance` stay usable → clear) BEFORE any live use.
