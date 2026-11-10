@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-11-10T14:57:00.597Z
+  modified: 2026-11-10T15:30:03.002Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -56,6 +56,14 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 - **Repo review 2026-11-09 — PARKED (user 2026-11-10) until a full feature set is out.** Removal triage
   (~215 files), flag→state transition plan, congruence findings + streamlining plan:
   `docs/repo-review-2026-11-09.md` (committed 7843929). Nothing in it actioned; don't act unprompted.
+- **ONE feed per subject + client-held cohort (user floated 2026-11-10, Claude agreed directionally).**
+  Replace the per-subject trio (tvf_StudentCohort / *All / *Group) with ONE TVF per assessment type,
+  fetch once, derive Summary AND Student list client-side → instant view switching, no Fabric trip per
+  switch, drills free. Joins the parked review's C-8/C-5 streamlining; trade-offs flagged: heavier
+  single query/payload (region-wide with names for analysts), the all-cycles trend copy is still a
+  second read (or a per-cycle grain), freshness vs TTL caching. DESIGN with the review follow-ups
+  after the feature set is out — the 2026-11-10 summary-filter work widened the duplication (the
+  demographics now live in 4 TVFs), which strengthens the case.
 
 # OPEN — near-term (not release-bound)
 
