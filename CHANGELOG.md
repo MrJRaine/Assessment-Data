@@ -51,7 +51,20 @@ with `0.3.0`, so earlier detail is approximate.
   first-name order, unlike every other list (the feeds already order by last name; the client
   re-sort was undoing it). They now sort by "Last, First" with the display unchanged.
 
+- **RWM Summary roll-up.** The RWM report now opens on a School → Grade/Homeroom summary tree for
+  oversight roles (same Summarize-by toggle as the other reports; Regional Analysts get the TCRCE
+  all-schools row), with the flat student list as the second view. Columns are the **count of
+  students at each RWM score (0–3)** plus **"% in all 3"** — students Meeting or exceeding in
+  Reading, Writing AND Math. A grade/homeroom opens inline to its students; built from the same data
+  the list already loads, so no extra warehouse reads. Web only, no SQL.
+
 ### Changed
+- **RWM report polish.** The legend, area pills, and cycle-history cells all say **"Meeting or
+  exceeding"** in full (the app-wide phrasing) instead of "meeting+"; the **Program column** is gone
+  from the student list (still filterable), matching the other reports.
+- **Math reports show full student names where students are rows.** The summary drill and the class
+  view's students-down layout now show "Last, First" like every other report list; the compact
+  "First L." stays only where students are column headers (the tasks-down view and the entry grid).
 - **Every chart respects every non-cycle filter on its page.** The by-cycle bar graph now follows the
   Achievement chip too (each bar filters by that cycle's own band), and the Summary-view charts moved
   inside the tree so they obey its filters — the displays always represent the data displayed.

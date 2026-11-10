@@ -422,8 +422,10 @@ function StudentsDown({
             const r = rollup(s.studentKey, g)
             return (
               <tr key={s.studentKey}>
+                {/* Students are ROWS in this orientation → full "Last, First" name; the tasks-down
+                    view keeps the compact name (students are column headers there). */}
                 <th className="col-task" scope="row">
-                  <button className="linkbtn" onClick={() => onFocus(s.studentKey)}>{s.name}</button>
+                  <button className="linkbtn" onClick={() => onFocus(s.studentKey)}>{s.sortKey}</button>
                 </th>
                 <td className="col-pct">{bandCell(r, s.mathIPP && r == null, false)}</td>
                 {g.units.flatMap((u) => {

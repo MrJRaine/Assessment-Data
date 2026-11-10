@@ -159,8 +159,8 @@ export default function RWMStudentView({
               {cycles.map((h) => (
                 <tr key={h.cycleDate ?? h.cycleLabel}>
                   <td>{h.cycleLabel}</td>
-                  <td className={h.readingMeeting ? 'rwm-meet' : 'muted'}>{h.readingCode == null ? '—' : h.readingMeeting ? 'Meeting+' : 'Not yet'}</td>
-                  <td className={h.writingMeeting ? 'rwm-meet' : 'muted'}>{h.writingCode == null ? '—' : h.writingMeeting ? 'Meeting+' : 'Not yet'}</td>
+                  <td className={h.readingMeeting ? 'rwm-meet' : 'muted'}>{h.readingCode == null ? '—' : h.readingMeeting ? 'Meeting or exceeding' : 'Not yet'}</td>
+                  <td className={h.writingMeeting ? 'rwm-meet' : 'muted'}>{h.writingCode == null ? '—' : h.writingMeeting ? 'Meeting or exceeding' : 'Not yet'}</td>
                   <td className={h.mMeet ? 'rwm-meet' : 'muted'}>{h.mPct == null ? '—' : `${(h.mPct * 100).toFixed(1)}%`}</td>
                   <td><span className="rwm-score sm" style={{ background: SCORE_HEX[h.score] }}>{h.score}</span></td>
                 </tr>
