@@ -11,6 +11,25 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased] — 1.3.1 candidate (reports hotfix)
+
+### Fixed
+- **Student-list charts now follow the filters.** On the Reports Student-list view (oversight roles),
+  the achievement donut and trend chart ignored every filter chip while the table below filtered —
+  they were fed from the page-top roll-up feed. The list view now renders its own charts from the
+  **filtered** rows (and skips the unused roll-up fetch — one less warehouse query). The trend follows
+  the demographic chips too; the Achievement chip is deliberately excluded from the trend, since it
+  describes the current band. Teachers were unaffected. Web only, no SQL.
+- **Reading–Writing–Math (RWM) score colours match the standard achievement palette.** The RWM
+  report's 0–3 score (pie slices, score chips, trend dots) used its own red/amber/green/cyan set;
+  it now uses the same four colours as the reading/writing achievement levels
+  (`DimAchievementLevel`): 0 → Not Yet Meeting red through 3 → Exceeding green. Web only, no SQL.
+
+### Added
+- **"Collapse all" on the Reports summary trees.** One click closes every open school/grade/homeroom
+  branch on the Reading/Writing and Math roll-up trees (close-only by design — already-loaded groups
+  stay cached, so re-expanding is instant). Web only, no SQL.
+
 ## [1.3.0] — 2026-10-27
 
 > **Server-side patches since 1.3.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:

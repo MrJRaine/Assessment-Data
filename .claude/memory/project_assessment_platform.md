@@ -3,7 +3,7 @@ name: Assessment Platform Project
 description: Distilled current-state decision record for the regional student assessment data platform (Microsoft Fabric, Nova Scotia). Final/resolved decisions organized by topic — NOT a chronological log. Read this at session start; the full session-by-session narrative lives in project_session_archive.md (read on demand).
 type: project
 originSessionId: 4e72a76d-8a9e-4688-9831-7b79552a94a1
-modified: 2026-10-19T19:05:42.422Z
+modified: 2026-11-04T15:37:32.636Z
 ---
 
 Regional student reading/writing assessment platform for a Nova Scotia school system (~6000 students P–12, ~200 teachers, 10 region-level analytics users). Built on Microsoft Fabric. This file is the **distilled decision record** — each entry is the *resolved* state of a decision plus its rationale, with pointers to where the mechanics live. The chronological log (every session's "Decisions and Discoveries", test-data snapshots, intermediate/reversed decisions) is preserved verbatim in **[[project_session_archive]]** — go there only to recover a historical detail or the reasoning behind a reversal.
@@ -72,7 +72,7 @@ Regional student reading/writing assessment platform for a Nova Scotia school sy
 | DimAchievementLevel | 4 | Operator-column bounds (DECIMAL) + hex colors; reused for writing 2.75 threshold later. |
 | DimCalendar | 5844 | Bulk-insert (WHILE-loop version was too slow). |
 
-**RoleCode taxonomy (6 values):** `Teacher` (section-level RLS via FactSectionTeachers; incl. APSEA itinerants, IB/O2/Co-op coordinators after the 22/32 reclass), `SpecialistTeacher` + `Administrator` (school-level RLS via StaffSchoolAccess — **BUT SpecialistTeacher Data Entry = OWN SECTIONS ONLY** (user 2026-10-13: "specialist teachers are still teachers" → entry only for sections they teach; whole-school VIEW in Reports + whole-school Programming entry stay; removed from the oversight predicate of the 5 entry TVFs — `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql`)), `RegionalAnalyst` (multi-school via CanChangeSchool), `ProvincialAnalyst` + `SupportStaff` (no app access — excluded from all security groups). NULL = unused PS slots.
+**RoleCode taxonomy (6 values):** `Teacher` (section-level RLS via FactSectionTeachers; incl. APSEA itinerants, IB/O2/Co-op coordinators after the 22/32 reclass), `SpecialistTeacher` + `Administrator` (school-level RLS via StaffSchoolAccess — **BUT SpecialistTeacher Data Entry = OWN SECTIONS ONLY** — and this was the ORIGINAL communicated intent, not a 2026-10-13 rule change (user 2026-11-04: specialists were a separate class from admin precisely so they'd get Programming entry + VIEW-only elsewhere; bundling them into the oversight entry predicate was a BUG from the first implementation, vw_UserAssessmentWindows 2026-05-13, live-exposed ~2026-10-02→10-13). Fixed 2026-10-13: entry only for sections they teach; whole-school VIEW in Reports + whole-school Programming entry stay; removed from the oversight predicate of the 5 entry TVFs — `sql/deploy/live_1.2.0/deploy_specialist_entry_scope_2026-10-13.sql`), `RegionalAnalyst` (multi-school via CanChangeSchool), `ProvincialAnalyst` + `SupportStaff` (no app access — excluded from all security groups). NULL = unused PS slots.
 
 ## PowerSchool ingest conventions (resolved)
 

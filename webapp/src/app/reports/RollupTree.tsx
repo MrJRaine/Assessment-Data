@@ -180,7 +180,15 @@ export function RollupTree<T>({
             </div>
           </span>
         ) : null}
-        {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : null}
+        {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : <span className="spacer" />}
+        {/* Close-only on purpose: an "expand all" would fire every node's lazy loadGroup at once. */}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}
+        >
+          Collapse all
+        </button>
       </div>
 
       {measures && measureMode === 'mean' ? (
