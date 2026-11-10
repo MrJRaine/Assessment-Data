@@ -17,7 +17,9 @@ export interface Task {
   description: string
 }
 export interface Unit { name: string; order: number; tasks: Task[] }
-export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; mathIPP: boolean }
+// sortKey = "Last, First": the display name stays compact ("First L.") but ordering matches the
+// rest of the app, which sorts students by last name (user 2026-11-10).
+export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; sortKey: string; mathIPP: boolean }
 export interface Grade { grade: string; order: number; label: string; students: Student[]; units: Unit[] }
 
 export const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
@@ -121,6 +123,7 @@ export function buildGrades(rows: MathCohortRow[]): Grade[] {
         studentNumber: r.studentNumber,
         name: `${r.firstName} ${r.lastName.charAt(0)}.`,
         fullName: `${r.firstName} ${r.lastName}`,
+        sortKey: `${r.lastName}, ${r.firstName}`,
         mathIPP: r.mathIPPStatus === true,
       })
     }
@@ -143,7 +146,7 @@ export function buildGrades(rows: MathCohortRow[]): Grade[] {
   }
   const grades = [...byGrade.values()].sort((a, b) => a.order - b.order)
   for (const g of grades) {
-    g.students.sort((a, b) => a.name.localeCompare(b.name))
+    g.students.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     g.units.sort((a, b) => a.order - b.order)
     for (const u of g.units) u.tasks.sort((a, b) => a.displayOrder - b.displayOrder)
   }

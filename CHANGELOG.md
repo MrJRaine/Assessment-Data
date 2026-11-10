@@ -40,6 +40,17 @@ with `0.3.0`, so earlier detail is approximate.
   adds Gender + Self-ID columns to the four oversight roll-up TVFs; until it runs, those two filter
   groups stay hidden (Grade + Language work without it).
 
+### Fixed (reports/entry consistency)
+- **Math drill-down scrollbars are visible again.** Opening a grade/homeroom on the **Math** summary
+  tree gave no visible scrollbars when the student list spilled over — the math tree's unit columns
+  make it wider than the screen, so the drill pane stretched to the full table width and its
+  scrollbars (the same in-pane bars Reading/Writing show) rendered past the right edge. The pane now
+  pins to the visible area, putting its bars back on screen; Reading/Writing are unchanged.
+- **Math sorts students by last name, like everything else.** The math matrices (summary drill, full
+  class view, and the data-entry grid) kept the compact "First L." display name but sorted on it —
+  first-name order, unlike every other list (the feeds already order by last name; the client
+  re-sort was undoing it). They now sort by "Last, First" with the display unchanged.
+
 ### Changed
 - **Every chart respects every non-cycle filter on its page.** The by-cycle bar graph now follows the
   Achievement chip too (each bar filters by that cycle's own band), and the Summary-view charts moved

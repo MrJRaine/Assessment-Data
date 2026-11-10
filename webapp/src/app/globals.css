@@ -619,9 +619,15 @@ a { color: inherit; text-decoration: none; }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }
-/* width:0 + min-width:100% keeps a wide grade block from stretching the tree's columns; the block's
-   own .mscroll scrolls horizontally instead. */
-.mtree .blockwrap { width: 0; min-width: 100%; }
+/* width:0 + min-width keeps a wide grade block from stretching the tree's columns; the block's
+   own .mscroll scrolls horizontally instead. The min() cap + sticky (2026-11-10) fix the MATH tree:
+   its unit columns make the tree table wider than the screen, so a drill pane spanning the full td
+   put its scrollbars past the viewport's right edge — an overflowing student list showed no visible
+   bars (reading/writing trees fit the viewport, so theirs showed). Capping the pane at the visible
+   width (mirrors .container: 960px max, 1.5rem side padding, 1px wrap borders — identical to the old
+   100% for reading/writing on normal screens) and pinning it sticky-left keeps its scrollbars
+   on-screen while the outer tree pans. */
+.mtree .blockwrap { width: 0; min-width: min(100%, calc(min(100vw - 1rem, 960px) - 3rem - 2px)); position: sticky; left: 0; }
 .mtree .blockwrap .mscroll { max-height: 60vh; }
 .mgrid td.rpct { text-align: center; font-weight: 700; font-size: .82rem; font-variant-numeric: tabular-nums; padding: .35rem .3rem; cursor: help; background: var(--card); }
 .mgrid td.rpct.h4 { background: #dbf1e4; color: #1c6b3b; }
