@@ -7,6 +7,8 @@
  *          per language (EN/FR) + overall. Counts/measure only — no names (the per-group detail loads
  *          separately on expand).
  * Created: 2026-10-16
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters), in lockstep with tvf_StudentCohortReadingAll.
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
  *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
  *          row's School/Grade/Homeroom comes from the RESULT's frozen DimStudent version and the
@@ -94,6 +96,7 @@ RETURN
     Base AS (
         -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
                lw.AssessmentLanguage, lw.AssessmentDate,
                lw.IdeasScore, lw.OrganizationScore, lw.LanguageScore, lw.ConventionsScore, lw.AvgScore
         FROM LatestWriting lw
@@ -102,6 +105,7 @@ RETURN
         UNION ALL
         -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS DATE),
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)),
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS DECIMAL(5,2))
@@ -112,6 +116,7 @@ RETURN
         UNION ALL
         -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                lw3.AssessmentLanguage, lw3.AssessmentDate,
                lw3.IdeasScore, lw3.OrganizationScore, lw3.LanguageScore, lw3.ConventionsScore, lw3.AvgScore
         FROM DimStudent s
@@ -126,6 +131,9 @@ RETURN
         b.GroupKey                        AS HomeroomKey,
         b.SchoolID,
         sch.SchoolName,
+        b.Gender,                                            -- summary-view demographic filters (2026-11-10)
+        b.SelfIDAfrican,
+        b.SelfIDIndigenous,
         ipp.IsIPP                         AS WritingIPPStatus,
         b.AssessmentLanguage,                                -- 'English' | 'French'; NULL = no writing result
         b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result

@@ -834,6 +834,10 @@ export interface ReadingRollupRow {
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
   achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
+  // Summary-view demographic filters (2026-11-10). null until the TVF demographics deploy lands.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getReadingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<ReadingRollupRow[]> {
@@ -853,6 +857,9 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
     scaleSystem: (r.ScaleSystem as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -881,6 +888,10 @@ export interface ReadingGroupRow {
   achievementName: string | null
   achievementHexColor: string | null
   achievementHexColorTint: string | null // light tint for the level-cell background
+  // Summary-view demographic filters (2026-11-10) — the drill table matches the filtered tree counts.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getReadingGroup(
@@ -915,6 +926,9 @@ export async function getReadingGroup(
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -937,6 +951,10 @@ export interface WritingRollupRow {
   conventionsScore: string | null
   avgScore: number | null
   achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
+  // Summary-view demographic filters (2026-11-10). null until the TVF demographics deploy lands.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getWritingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<WritingRollupRow[]> {
@@ -961,6 +979,9 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     conventionsScore: (r.ConventionsScore as string) ?? null,
     avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -985,6 +1006,10 @@ export interface WritingGroupRow {
   achievementName: string | null
   achievementHexColor: string | null
   achievementHexColorTint: string | null // Avg-cell background tint (parity with the flat list)
+  // Summary-view demographic filters (2026-11-10) — the drill table matches the filtered tree counts.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getWritingGroup(
@@ -1016,6 +1041,9 @@ export async function getWritingGroup(
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 

@@ -6,6 +6,8 @@
  *          One row per (student x writing language) + a NULL-language row for a student with no writing
  *          result. The client renders one row per (student, language) with the four traits in COIL order.
  * Created: 2026-10-16
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters: the drill table must match the filtered node counts above it).
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortWritingAll /
  *          tvf_StudentCohortReadingAll (see the reading All header for the full rationale), CYCLE-
  *          SCOPED: with a cycle selected, an assessed row's School/Grade/Homeroom (and so its @GroupKey
@@ -81,6 +83,7 @@ RETURN
         -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
                fv.SchoolID, fv.GroupKey AS HomeroomKey,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
                lw.AssessmentLanguage, lw.IdeasScore, lw.OrganizationScore, lw.LanguageScore,
                lw.ConventionsScore, lw.AvgScore
         FROM LatestWriting lw
@@ -90,6 +93,7 @@ RETURN
         -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)),
                CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS DECIMAL(5,2))
         FROM DimStudent s
@@ -100,6 +104,7 @@ RETURN
         -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                lw3.AssessmentLanguage, lw3.IdeasScore, lw3.OrganizationScore, lw3.LanguageScore,
                lw3.ConventionsScore, lw3.AvgScore
         FROM DimStudent s
@@ -112,6 +117,7 @@ RETURN
                COALESCE(cur.FirstName, a.FirstName) AS FirstName,   -- current name when one exists;
                COALESCE(cur.LastName,  a.LastName)  AS LastName,    -- frozen name for district leavers
                a.Grade, a.Homeroom, a.SchoolID, sch.SchoolName,
+               a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous,
                a.AssessmentLanguage, a.IdeasScore, a.OrganizationScore, a.LanguageScore,
                a.ConventionsScore, a.AvgScore
         FROM AttrStudents a
@@ -150,6 +156,9 @@ RETURN
         gs.Grade,
         gs.Homeroom,
         gs.SchoolName,
+        gs.Gender,                                 -- summary-view demographic filters (2026-11-10)
+        gs.SelfIDAfrican,
+        gs.SelfIDIndigenous,
         ipp.IsIPP                 AS WritingIPPStatus,
         gs.AssessmentLanguage,                     -- 'English' | 'French'; NULL = no writing result
         gs.IdeasScore,

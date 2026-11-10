@@ -17,7 +17,6 @@ import {
   type WritingRollupRow,
 } from '@/lib/data'
 import CohortView from './CohortView'
-import CohortCharts from './CohortCharts'
 import ReadingRollupTree from './ReadingRollupTree'
 import WritingRollupTree from './WritingRollupTree'
 import CycleSelector from './CycleSelector'
@@ -93,10 +92,6 @@ export default async function StudentsPage({
     error = e instanceof Error ? e.message : String(e)
   }
 
-  // Chart feeds for the oversight top charts: donut = cycle-scoped rollup; trend = all-cycles rollup.
-  const donutRows = (isWriting ? writingRollup : rollup).map((r) => ({ code: r.achievementCode }))
-  const trendRows = (isWriting ? writingRollupAll : rollupAll).map((r) => ({ code: r.achievementCode, date: r.assessmentDate }))
-
   // View-switch hrefs, preserving subject + cycle.
   const viewHref = (v: 'summary' | 'list') => {
     const p = new URLSearchParams()
@@ -151,15 +146,21 @@ export default async function StudentsPage({
         <>
           {view === 'list' ? (
             <>
-              <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
               {cohort.length === 0 ? (
-                <EmptyState
-                  title="No students in your scope"
-                  hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
-                />
+                <>
+                  {/* No CohortView to carry the switch here, so render it standalone — otherwise an
+                      empty list would strand the viewer with no way back to Summary. */}
+                  <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
+                  <EmptyState
+                    title="No students in your scope"
+                    hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
+                  />
+                </>
               ) : (
                 // CohortView renders its OWN charts here, fed from the FILTERED rows — the donut and trend
-                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them).
+                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them). The
+                // Summary/Student-list switch rides its control bar, so the page order is charts →
+                // controls → table on both views (2026-11-10).
                 <CohortView
                   key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
                   cohort={cohort}
@@ -168,20 +169,17 @@ export default async function StudentsPage({
                   subject={isWriting ? 'Writing' : 'Reading'}
                   assessableRange={assessableRange}
                   trendCohort={trendCohort}
+                  viewToggle={viewToggle}
                 />
               )}
             </>
+          ) : isWriting ? (
+            // Summary view: the tree renders the two page-top charts itself, so they follow its
+            // Language of Assessment toggle and demographic filters (donut = the filtered cycle-scoped
+            // feed; trend = the all-cycles copy through the same filters, right edge = selected cycle).
+            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} trendRows={writingRollupAll} bands={bands} cycles={cycles} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           ) : (
-            <>
-              {/* Summary view: the two page-top charts ride the roll-up feed — donut follows the cycle
-                  selector; the by-cycle trend is independent of it (always the full year). */}
-              <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} />
-            </>
-          )}
-          {view === 'list' ? null : isWriting ? (
-            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
-          ) : (
-            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
+            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} trendRows={rollupAll} bands={bands} cycles={cycles} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           )}
         </>
       ) : cohort.length === 0 ? (

@@ -1,8 +1,11 @@
 ---
 name: project_math_split_pacing_model
-description: Split-grade math pacing + task carry-forward linking — design talk-through 2026-09-21. Default month on task + SCD composition exceptions; carry-forward via edge links with per-record provenance; DimHomeroom SCD from ingest. Structural footprint agreed; NOT yet built. One open item (link SCD).
+description: "Split-grade math pacing + task carry-forward linking — design 2026-09-21, PROMOTED to active queue 2026-11-10 with new UI direction (3-column override screen, flagged role, section-scoped exceptions for 3+/non-contiguous splits, earliest-origin provenance). NOT yet built."
 metadata:
+  node_type: memory
   type: project
+  originSessionId: 95b469e7-1d0c-487e-bcab-9f5c26d0c5b6
+  modified: 2026-11-10T14:53:11.049Z
 ---
 
 Design worked through with the user 2026-09-21 (talk-through; nothing built). Sits under
@@ -111,6 +114,35 @@ month; OutcomeCode frozen) over dimension SCD (which would break `DimMathTask`'s
 
 Post-1.0 (TVF/USP/client, no pre-deploy structure): pacing resolution, the carry-forward domino, the P-6 homeroom
 re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
+
+## 2026-11-10 — user PROMOTED both features to the active queue (priorities 2 & 3) with new direction
+
+**Split pacing delivery UI (priority 2).** "Systems will probably look the same" across both tiers:
+- **Contiguous 2-grade splits** — authored by a **FLAGGED ROLE** (there IS a set pacing guide, one person
+  enters it and pushes it out region-wide). Screen: each unit/task for a grade level on a page, **three
+  columns** — (1) straight-grade month pre-populated, (2) month for the split-with-LOWER-grade, (3) month
+  for the split-with-HIGHER-grade. Blank = falls to default; an entered month creates the row in the
+  exceptions table. Maps onto `MathTaskPacingException` keyed by composition exactly as designed.
+- **3+-grade splits AND non-contiguous 2-grade splits** (e.g. 1&3) — NO set pacing guide exists; those
+  teachers are given latitude to re-arrange. They get the SAME screen themselves, scoped to their
+  applicable grades, and their overrides apply **only to their specific sections** — NOT region-wide.
+  **STRUCTURAL DELTA to raise before building:** the locked footprint keys exceptions by CompositionKey
+  only (region-wide per composition); section-scoped overrides need a scope column (e.g. nullable
+  SectionID: NULL = region-wide by composition, set = that section only) or a parallel table — user
+  hasn't chosen. This supersedes the old "triples land on straight-grade fallback with a note" as the
+  END state; the fallback + note remain the behaviour until a teacher authors their overrides.
+
+**Task chains / carry-forward (priority 3).** Confirms the 2026-09-21 design (success carries, a saved
+0/O **breaks the chain** — next task in the chain must NOT auto-fill; only success carries). Additions:
+- Chain EDITING is tied to the **same flagged role** as the 2-grade split pacing.
+- No result is written **until a cycle opens for the benchmark month** of the successor task (the
+  materialize-on-first-save domino satisfies this; confirm on-open vs on-first-save with the user).
+- **Provenance beyond the immediate predecessor:** log + show on an assessment that it was auto-filled
+  vs manually entered, based on WHICH previous result — and it should carry a note of the **EARLIEST
+  result in the current unbroken chain of successes** (the origin) + who recorded it, so a chain traces
+  back to the original task/recorder. Open design choice: store the origin on the fact vs derive it by
+  walking `CarriedFromMathTaskKey` links at read time (immediate-predecessor column already in the
+  footprint). Raise before building.
 
 ## OPEN — none; footprint locked
 

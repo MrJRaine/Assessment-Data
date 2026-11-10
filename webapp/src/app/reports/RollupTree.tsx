@@ -1,12 +1,14 @@
 'use client'
 
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import type { AchievementBand, ReportCycle } from '@/lib/data'
 import {
   type Counts, type RollupSchool, type RollupStudent, type SummarizeBy, type LangFilter,
-  type Measure, type MeasureStat,
-  tally, pctOf, childrenOf, gradeLabel, gradeRank,
+  type Measure, type MeasureStat, type Tri, type DemoFilter,
+  tally, pctOf, childrenOf, gradeLabel, gradeRank, demoPass,
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
+import CohortCharts from './CohortCharts'
 
 type MeasureMode = 'pct' | 'mean'
 
@@ -72,14 +74,15 @@ function gradeGroups(students: RollupStudent[]): { grade: string; students: Roll
 const TCRCE_ID = '__TCRCE__'
 
 export function RollupTree<T>({
-  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, measures, showAll = false,
+  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, measures, showAll = false, charts,
 }: {
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
   // summarizeBy lets the detail drop the column already given by the node (a Grade node's drill shows
-  // Homeroom, a Homeroom node's drill shows Grade — neither repeats School).
-  renderDetail: (rows: T[], lang: LangFilter, summarizeBy: SummarizeBy) => ReactNode
+  // Homeroom, a Homeroom node's drill shows Grade — neither repeats School). demo carries the active
+  // demographic filters so the drill table matches the (filtered) node counts above it.
+  renderDetail: (rows: T[], lang: LangFilter, summarizeBy: SummarizeBy, demo: DemoFilter) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
   viewToggle?: ReactNode // page-level Summary/Student-list switch, rendered inline at the start of the toolbar
   // Per-node measure columns. When supplied (writing = 4 traits + avg), they REPLACE the single
@@ -87,6 +90,10 @@ export function RollupTree<T>({
   // benchmark-% column (with EN/FR hover) is used.
   measures?: Measure[]
   showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
+  // Page-top charts (donut = the tree's own cycle-scoped students; trend = the all-cycles copy).
+  // Rendered INSIDE the tree so both follow its Language of Assessment toggle AND the demographic
+  // filters — the displays always represent the data displayed (user rule 2026-11-10).
+  charts?: { trendStudents: RollupStudent[]; bands: AchievementBand[]; cycles: ReportCycle[] }
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
   const [lang, setLang] = useState<LangFilter>('All')
@@ -96,6 +103,67 @@ export function RollupTree<T>({
   )
   const [openNodes, setOpenNodes] = useState<Set<string>>(() => new Set())
   const [blocks, setBlocks] = useState<Record<string, BlockState<T>>>({})
+
+  // ── Demographic filters (2026-11-10): collapsible section mirroring the student list's. Grade +
+  // Language work from the tree's own rows; Gender / Self-ID groups are OFFERED only when the feed
+  // carries values (the *All TVFs need the demographics columns deployed first).
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const allStudentsRaw = useMemo(() => schools.flatMap((s) => s.students), [schools])
+  const gradeOpts = useMemo(
+    () => [...new Set(allStudentsRaw.map((s) => s.grade).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b)),
+    [allStudentsRaw],
+  )
+  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
+  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
+  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
+  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
+  const [gender, setGender] = useState('All')
+  const [african, setAfrican] = useState<Tri>('All')
+  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const genderOpts = useMemo(
+    () => [...new Set(allStudentsRaw.map((s) => s.gender).filter(Boolean) as string[])].sort(),
+    [allStudentsRaw],
+  )
+  const hasSelfID = useMemo(
+    () => allStudentsRaw.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
+    [allStudentsRaw],
+  )
+  const demo: DemoFilter = { gradeMinRank, gradeMaxRank, gender, african, indigenous }
+  const anyDemo = gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail || gender !== 'All' || african !== 'All' || indigenous !== 'All'
+  const resetFilters = () => {
+    setGradeMinRank(minRankAvail)
+    setGradeMaxRank(maxRankAvail)
+    setGender('All')
+    setAfrican('All')
+    setIndigenous('All')
+    setLang('All')
+  }
+  // The tree, its counts, and the donut all come from the FILTERED schools (empty schools drop out).
+  const filteredSchools = useMemo(() => {
+    const pass = demoPass(demo)
+    return schools
+      .map((sch) => ({ ...sch, students: sch.students.filter(pass) }))
+      .filter((sch) => sch.students.length > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schools, gradeMinRank, gradeMaxRank, gender, african, indigenous])
+
+  // Chart feeds: demographic filters + the Language toggle (donut = the filtered tree's own results;
+  // trend = the all-cycles students through the same filters).
+  const chartDonutRows = useMemo(
+    () =>
+      filteredSchools
+        .flatMap((sch) => sch.students)
+        .flatMap((s) => s.results.filter((r) => lang === 'All' || (lang === 'EN') === r.en).map((r) => ({ code: r.code }))),
+    [filteredSchools, lang],
+  )
+  const chartTrendRows = useMemo(() => {
+    if (!charts) return []
+    const pass = demoPass(demo)
+    return charts.trendStudents
+      .filter(pass)
+      .flatMap((s) => s.results.filter((r) => lang === 'All' || (lang === 'EN') === r.en).map((r) => ({ code: r.code, date: r.date ?? null })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charts, lang, gradeMinRank, gradeMaxRank, gender, african, indigenous])
 
   const toggleSchool = (id: string) =>
     setOpenSchools((prev) => {
@@ -126,7 +194,7 @@ export function RollupTree<T>({
     }
   }
 
-  const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
+  const noHomeroomCount = filteredSchools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
   // Measure columns: writing supplies 4 traits + avg (with a %/Mean toggle); reading uses the single
   // benchmark % column.
@@ -149,6 +217,9 @@ export function RollupTree<T>({
 
   return (
     <div className="math-entry">
+      {/* Data display first, controls second, tree third — the charts live inside the tree so they
+          follow the Language of Assessment toggle below. */}
+      {charts ? <CohortCharts donutRows={chartDonutRows} trendRows={chartTrendRows} bands={charts.bands} cycles={charts.cycles} /> : null}
       <div className="mtoolbar">
         {viewToggle ? <span className="mtoolbar-view">{viewToggle}</span> : null}
         <span className="mtoolbar-pair">
@@ -161,16 +232,12 @@ export function RollupTree<T>({
             ))}
           </div>
         </span>
-        <span className="mtoolbar-pair">
-          <span className="muted">Language of Assessment</span>
-          <div className="subject-toggle" style={{ margin: 0 }}>
-            {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
-              <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </span>
+        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+          {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && (anyDemo || lang !== 'All') ? ' (active)' : ''}
+        </button>
+        {anyDemo || lang !== 'All' ? (
+          <button className="btn-ghost" onClick={resetFilters}>Reset</button>
+        ) : null}
         {measures ? (
           <span className="mtoolbar-pair">
             <span className="muted">Show</span>
@@ -190,6 +257,71 @@ export function RollupTree<T>({
           Collapse all
         </button>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="filter-row">
+              <select value={gradeMinRank} onChange={(e) => setGradeMinRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+              <span className="muted">to</span>
+              <select value={gradeMaxRank} onChange={(e) => setGradeMaxRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {genderOpts.length > 1 ? (
+            <div className="filter-group">
+              <label>Gender</label>
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="All">All</option>
+                {genderOpts.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasSelfID ? (
+            <>
+              <div className="filter-group">
+                <label>Self-ID African</label>
+                <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Self-ID Indigenous</label>
+                <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </div>
+            </>
+          ) : null}
+
+          <div className="filter-group">
+            <label>Language of Assessment</label>
+            <div className="subject-toggle" style={{ margin: 0 }}>
+              {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
+                <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {measures && measureMode === 'mean' ? (
         <div className="mlegend">
@@ -215,6 +347,11 @@ export function RollupTree<T>({
         </p>
       ) : null}
 
+      {filteredSchools.length === 0 ? (
+        <div className="notice notice-empty">
+          <div className="notice-title">No students match the current filters.</div>
+        </div>
+      ) : (
       <div className="mtree-wrap">
         <table className="mgrid mtree">
           <thead>
@@ -226,9 +363,9 @@ export function RollupTree<T>({
             </tr>
           </thead>
           <tbody>
-            {showAll && schools.length > 1
+            {showAll && filteredSchools.length > 1
               ? (() => {
-                  const allStudents = schools.flatMap((s) => s.students)
+                  const allStudents = filteredSchools.flatMap((s) => s.students)
                   const tOpen = openSchools.has(TCRCE_ID)
                   const tc = tally(allStudents, lang)
                   if (lang !== 'All' && tc.students === 0) return null
@@ -251,7 +388,7 @@ export function RollupTree<T>({
                             // tree below).
                             const gradeNodeId = `${TCRCE_ID}:G:${g.grade}`
                             const gOpen = openNodes.has(gradeNodeId)
-                            const schoolsForGrade = schools
+                            const schoolsForGrade = filteredSchools
                               .map((sch) => ({ sch, students: sch.students.filter((s) => s.grade === g.grade) }))
                               .filter((x) => x.students.length > 0)
                             return (
@@ -290,7 +427,7 @@ export function RollupTree<T>({
                   )
                 })()
               : null}
-            {schools.map((sch) => {
+            {filteredSchools.map((sch) => {
               const open = openSchools.has(sch.id)
               const c = tally(sch.students, lang)
               if (lang !== 'All' && c.students === 0) return null
@@ -333,7 +470,7 @@ export function RollupTree<T>({
                                         <div className="muted">{block.message}</div>
                                       </div>
                                     ) : (
-                                      renderDetail(block.rows, lang, summarizeBy)
+                                      renderDetail(block.rows, lang, summarizeBy, demo)
                                     )}
                                   </div>
                                 </td>
@@ -349,6 +486,7 @@ export function RollupTree<T>({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }

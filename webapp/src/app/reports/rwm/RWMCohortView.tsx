@@ -126,6 +126,30 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
 
   return (
     <>
+      {/* Data display first, controls second, table third — same order as every other report. */}
+      <div className="cohort-charts">
+        <div className="chart-card">
+          <div className="chart-title">RWM score distribution</div>
+          <div className="donut-wrap">
+            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
+              <div className="donut-hole">
+                <div className="donut-total">{donut.total}</div>
+                <div className="donut-label">STUDENTS</div>
+              </div>
+            </div>
+            <ul className="donut-legend">
+              {donut.slices.map((s) => (
+                <li key={s.score}>
+                  <span className="swatch" style={{ background: s.color }} />
+                  <span className="legend-name">{s.score} of 3 meeting+</span>
+                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <div className="cohort-bar">
         <span className="muted">{filtered.length} of {cohort.length} students</span>
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
@@ -198,29 +222,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
           </div>
         </div>
       ) : null}
-
-      <div className="cohort-charts">
-        <div className="chart-card">
-          <div className="chart-title">RWM score distribution</div>
-          <div className="donut-wrap">
-            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
-              <div className="donut-hole">
-                <div className="donut-total">{donut.total}</div>
-                <div className="donut-label">STUDENTS</div>
-              </div>
-            </div>
-            <ul className="donut-legend">
-              {donut.slices.map((s) => (
-                <li key={s.score}>
-                  <span className="swatch" style={{ background: s.color }} />
-                  <span className="legend-name">{s.score} of 3 meeting+</span>
-                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
 
       {filtered.length === 0 ? (
         <div className="notice notice-empty"><div className="notice-title">No students match the current filters.</div></div>

@@ -7,6 +7,9 @@
  *          Counts/measure only — NO names or student numbers (privacy; the per-group student detail loads
  *          separately on expand, same pattern as Math).
  * Created: 2026-10-16
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters). Attributed rows carry the FROZEN version's demographics, unassessed/current
+ *          rows the current version's — same source row as the rest of the attribution.
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION (restores the documented design; server-side
  *          patch under 1.3.0), CYCLE-SCOPED: when @CycleGroupID is set, a row WITH a result attributes
  *          School/Grade/Homeroom from the RESULT's frozen DimStudent version (fact.StudentKey — the
@@ -97,6 +100,7 @@ RETURN
     Base AS (
         -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
                lr.ScaleSystem, lr.AssessmentDate, lr.ReadingDelta
         FROM LatestReading lr
         INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
@@ -104,6 +108,7 @@ RETURN
         UNION ALL
         -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                CAST(NULL AS VARCHAR(20)), CAST(NULL AS DATE), CAST(NULL AS INT)
         FROM DimStudent s
         WHERE @CycleGroupID IS NOT NULL
@@ -112,6 +117,7 @@ RETURN
         UNION ALL
         -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                lr3.ScaleSystem, lr3.AssessmentDate, lr3.ReadingDelta
         FROM DimStudent s
         LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
@@ -125,6 +131,9 @@ RETURN
         b.GroupKey                        AS HomeroomKey,   -- homeroom expansion key (per-group detail)
         b.SchoolID,
         sch.SchoolName,
+        b.Gender,                                           -- summary-view demographic filters (2026-11-10)
+        b.SelfIDAfrican,
+        b.SelfIDIndigenous,
         ipp.IsIPP                         AS ReadingIPPStatus,
         b.ScaleSystem,                                      -- language of THIS result; NULL = no reading result
         b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result

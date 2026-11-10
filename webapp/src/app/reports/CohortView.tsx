@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
 import CohortCharts from './CohortCharts'
 import { traitsInOrder, type WritingTraitKey } from '@/lib/writingTraits'
@@ -28,6 +28,7 @@ type CohortPersist = {
   prog?: string[]
   sch?: string[]
   ach?: (string | number)[] // string categories now ('1'..'4' | 'ipp' | 'nodata'); tolerate old numeric saves
+  lang?: string[] // Language of Assessment ('English' | 'French')
   sortKey?: string | null
   sortDir?: 'asc' | 'desc'
   assessableOnly?: boolean
@@ -143,6 +144,7 @@ export default function CohortView({
   assessableRange = null,
   trendCohort,
   showCharts = true,
+  viewToggle,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
@@ -155,9 +157,13 @@ export default function CohortView({
   // All-cycles cohort for the by-cycle trend (independent of the cycle selector). Falls back to `cohort`
   // when not supplied (i.e. when no cycle is selected, both are the same dataset).
   trendCohort?: CohortStudent[]
-  // Oversight renders the charts once at the page top (from the roll-up feed), so the in-view copy is
-  // suppressed there; teachers keep them inside the cohort view.
+  // Escape hatch for a caller that renders its own charts elsewhere; every current caller keeps the
+  // in-view pair (they follow the filter chips — the 2026-10-30 fix).
   showCharts?: boolean
+  // Oversight's Summary/Student-list switch, rendered leading the control bar so the page order is
+  // charts → controls → table on BOTH views (user rule 2026-11-10: controls sit between the data
+  // display and the list/tree, consistently, instead of jumping around the page).
+  viewToggle?: ReactNode
 }) {
   const isWriting = subject === 'Writing'
   // Writing student list shows the four trait scores as sortable columns, in the COIL/IOLC order the
@@ -186,6 +192,7 @@ export default function CohortView({
   // even before its school is re-selected). Display uses the faceted lists further down.
   const allHomerooms = useMemo(() => distinct(cohort.map((s) => s.homeroom).filter(Boolean) as string[]).sort(), [cohort])
   const allPrograms = useMemo(() => distinct(cohort.map((s) => s.programFamily).filter(Boolean) as string[]).sort(), [cohort])
+  const allLangs = useMemo(() => distinct(cohort.map((s) => s.assessmentLanguage).filter(Boolean) as string[]).sort(), [cohort])
   const allSchools = useMemo(() => {
     const seen = new Map<string, string>()
     for (const s of cohort) if (s.schoolId) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
@@ -207,6 +214,10 @@ export default function CohortView({
   // Achievement filter values are STRING categories: '1'..'4' (the bands), 'ipp' (shown as "IPP"),
   // and 'nodata' (no achievement shown — measured-but-no-result, or unresolved IPP, both render "—").
   const [ach, setAch] = useState<Set<string>>(new Set())
+  // Language of Assessment ('English' | 'French'). The cohort stacks one row per student × language,
+  // so this filter trims a dual-language student to the selected language's row(s); a NULL-language
+  // (unassessed) row only shows with no language selected.
+  const [langSel, setLangSel] = useState<Set<string>>(new Set())
   // Assessable-only (default ON when a scope is known): narrow the table + total to the subject's
   // assessed grades. The grade range comes from the window metadata (config-driven).
   const [assessableOnly, setAssessableOnly] = useState(true)
@@ -256,6 +267,7 @@ export default function CohortView({
     setProg(new Set())
     setSch(new Set())
     setAch(new Set())
+    setLangSel(new Set())
   }
 
   // Persist cohort filters for the tab session, so filtering the cohort, opening a student, and
@@ -277,6 +289,7 @@ export default function CohortView({
     if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
     if (p.ach) setAch(new Set(p.ach.map(String).filter((v) => achKeys.includes(v))))
+    if (p.lang) setLangSel(new Set(p.lang.filter((v) => allLangs.includes(v))))
     if (p.sortKey && (SORTABLE_HEADERS as string[]).includes(p.sortKey)) {
       setSortKey(p.sortKey as SortKey)
       setSortDir(p.sortDir === 'desc' ? 'desc' : 'asc')
@@ -291,12 +304,12 @@ export default function CohortView({
     try {
       sessionStorage.setItem(
         COHORT_FILTER_KEY,
-        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], sortKey, sortDir, assessableOnly }),
+        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], lang: [...langSel], sortKey, sortDir, assessableOnly }),
       )
     } catch {
       /* private mode / storage blocked — filters just won't persist */
     }
-  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, sortKey, sortDir, assessableOnly])
+  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, sortKey, sortDir, assessableOnly])
 
   // Each student's single achievement-filter category, matching what the table shows:
   //  '1'..'4' = the band; 'ipp' = a confirmed IPP student (shows "IPP"); 'nodata' = everyone else
@@ -319,6 +332,7 @@ export default function CohortView({
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
     // Achievement filter matches on the student's single displayed category (band / IPP / no-data),
     // so a band chip never pulls in an IPP or unscored student, and the IPP / No Data chips find them.
+    (except === 'lang' || langSel.size === 0 || (s.assessmentLanguage != null && langSel.has(s.assessmentLanguage))) &&
     (except === 'ach' || ach.size === 0 || ach.has(achCategory(s)))
 
   // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
@@ -326,24 +340,29 @@ export default function CohortView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const homerooms = useMemo(
     () => (oneSchool ? distinct(cohort.filter((s) => matchExcept(s, 'hr')).map((s) => s.homeroom).filter(Boolean) as string[]).sort() : []),
-    [cohort, oneSchool, gradeMin, gradeMax, gender, african, indigenous, prog, sch, ach],
+    [cohort, oneSchool, gradeMin, gradeMax, gender, african, indigenous, prog, sch, ach, langSel],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const programs = useMemo(
     () => distinct(cohort.filter((s) => matchExcept(s, 'prog')).map((s) => s.programFamily).filter(Boolean) as string[]).sort(),
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, sch, ach],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, sch, ach, langSel],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const schools = useMemo(() => {
     const seen = new Map<string, string>()
     for (const s of cohort) if (s.schoolId && matchExcept(s, 'sch')) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
     return Array.from(seen, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
-  }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach])
+  }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach, langSel])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const langs = useMemo(
+    () => distinct(cohort.filter((s) => matchExcept(s, 'lang')).map((s) => s.assessmentLanguage).filter(Boolean) as string[]).sort(),
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach],
+  )
 
   const filtered = useMemo(
     () => cohort.filter((s) => matchExcept(s, '') && inAssessable(s)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, assessableOnly, assessableRange],
   )
 
   // Counts are per-STUDENT (the cohort has one row per student x language now; a dual-language student
@@ -448,9 +467,9 @@ export default function CohortView({
   // Chart feeds (shared CohortCharts component). The DONUT reflects the current filters/cycle (chart-
   // eligible subset of what's in view); the by-cycle TREND is independent of the CYCLE selector (always
   // the full year, fed from the all-cycles `trendCohort`, falling back to `cohort` when no cycle is
-  // selected) but DOES follow the demographic filter chips (2026-10-30 fix — it ignored them, so the
-  // trend sat frozen while the table filtered). The ACHIEVEMENT chip is deliberately excluded from the
-  // trend: it describes the current result's band, and applying it to historical rows would misread.
+  // selected) but follows ALL non-cycle filter chips (user rule 2026-11-10) — including Achievement,
+  // which each historical row passes against its OWN cycle's band, so "show Approaching across cycles"
+  // reads correctly.
   const donutRows = useMemo(
     () => filtered.filter((s) => s.chartEligible).map((s) => ({ code: s.achievementCode })),
     [filtered],
@@ -458,15 +477,19 @@ export default function CohortView({
   const trendRows = useMemo(
     () =>
       (trendCohort ?? cohort)
-        .filter((s) => matchExcept(s, 'ach') && inAssessable(s) && s.chartEligible)
+        .filter((s) => matchExcept(s, '') && inAssessable(s) && s.chartEligible)
         .map((s) => ({ code: s.achievementCode, date: s.mostRecentDate })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trendCohort, cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, assessableOnly, assessableRange],
+    [trendCohort, cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, assessableOnly, assessableRange],
   )
 
   return (
     <>
+      {/* Data display first, controls second, table third — same order as the Summary view. */}
+      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
+
       <div className="cohort-bar">
+        {viewToggle}
         <span className="muted">{matchCount} of {baseTotal} students match</span>
         {isWriting ? <TraitOrderToggle mode={traitMode} onChange={setTraitMode} /> : null}
         {assessableRange ? (
@@ -599,6 +622,23 @@ export default function CohortView({
             </div>
           ) : null}
 
+          {langs.length > 1 || langSel.size > 0 ? (
+            <div className="filter-group">
+              <label>Language of Assessment</label>
+              <div className="chips">
+                {langs.map((l) => (
+                  <button
+                    key={l}
+                    className={langSel.has(l) ? 'chip chip-on' : 'chip'}
+                    onClick={() => toggle(langSel, l, setLangSel)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="filter-group">
             <label>Achievement</label>
             <div className="chips">
@@ -636,8 +676,6 @@ export default function CohortView({
           </div>
         </div>
       ) : null}
-
-      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
 
       {filtered.length === 0 ? (
         <div className="notice notice-empty">

@@ -11,8 +11,10 @@ import type { AchievementBand, ReportCycle } from '@/lib/data'
 // Two SEPARATE inputs, deliberately:
 //   - donutRows  — the "current" distribution; RESPECTS the cycle selector (and, for teachers, the table
 //                  filters), so it reflects whatever the page is scoped to.
-//   - trendRows  — the by-cycle progression; INDEPENDENT of the cycle selector (always the full year), so
-//                  the trend shows the same shape whether the rest of the page is filtered to one cycle or not.
+//   - trendRows  — the by-cycle progression. It is NOT scoped to one cycle, but the cycle selector sets
+//                  its RIGHT EDGE (user rule 2026-11-10): the selected cycle is always the rightmost bar,
+//                  so the bar graph ends at the data being displayed with the earlier cycles alongside to
+//                  compare against. No selection = all started cycles, rightmost = current.
 
 export interface DonutDatum { code: number | null }
 export interface TrendDatum { code: number | null; date: string | null }
@@ -62,10 +64,15 @@ export default function CohortCharts({
     return { slices, total, gradient }
   }, [donutRows, orderedBands])
 
-  // By-cycle bar: the 6 most recent cycles (oldest → newest), cumulative most-recent achievement AS-OF each
+  // By-cycle bar: up to 6 cycles (oldest → newest), cumulative most-recent achievement AS-OF each
   // cycle's end date — the cycle-based successor to the old "last 6 months" chart. cycles come from
-  // getReportCycles (this year's started cycles, StartDate-ascending), so slice(-6) is the recent window.
-  const cycleBuckets = useMemo(() => cycles.slice(-6), [cycles])
+  // getReportCycles (this year's started cycles, StartDate-ascending). The SELECTED cycle caps the
+  // window — it is always the rightmost bar (cycles after it are dropped), so the graph ends at the
+  // data on display; with no selection the window ends at the most recent cycle.
+  const cycleBuckets = useMemo(() => {
+    const idx = cycles.findIndex((c) => c.cycleGroupId === selectedCycleId)
+    return (idx >= 0 ? cycles.slice(0, idx + 1) : cycles).slice(-6)
+  }, [cycles, selectedCycleId])
   const cycleSeries = useMemo(
     () =>
       cycleBuckets.map((c) => {
