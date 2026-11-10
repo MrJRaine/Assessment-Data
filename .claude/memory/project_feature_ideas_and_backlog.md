@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-11-06T18:43:10.698Z
+  modified: 2026-11-10T14:53:37.089Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -38,6 +38,24 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   (Split-grade pacing + linked-task carry-forward are separate post-launch items below.)
 
 ---
+
+# ACTIVE QUEUE — user priorities set 2026-11-10 (work in this order)
+
+1. **Reports hotfix (1.3.1)** — list-view charts follow filter chips (coded 10-30), RWM score colours
+   → standard DimAchievementLevel palette + roll-up tree "Collapse all" (both coded 2026-11-10).
+   Awaiting user test on imp/awdev → bump → prod swap + release ritual. Proposed-not-decided: align the
+   Math report band palette (seed says "first pass… adjust to align with DimAchievementLevel"; needs a
+   seed UPDATE + mathModel.ts/globals.css edits — recolours the whole Math report).
+2. **Split-grade math pacing delivery** — promoted from post-launch; new UI direction + structural
+   delta (section-scoped exceptions) in [[project_math_split_pacing_model]] §2026-11-10.
+3. **Math task chains / carry-forward** — promoted from post-launch; additions (flagged-role editing,
+   fill-on-cycle-open, earliest-origin provenance) in [[project_math_split_pacing_model]] §2026-11-10.
+4. **Quick QoL + finishable in-flight items** — e.g. HS one-list-per-section entry fix (below; needs a
+   50-ft decision on save routing across cycle instances), LOTO confirm dialog, maintainer note.
+
+- **Repo review 2026-11-09 — PARKED (user 2026-11-10) until a full feature set is out.** Removal triage
+  (~215 files), flag→state transition plan, congruence findings + streamlining plan:
+  `docs/repo-review-2026-11-09.md` (committed 7843929). Nothing in it actioned; don't act unprompted.
 
 # OPEN — near-term (not release-bound)
 
@@ -93,11 +111,9 @@ we're not blocked and it's not our queue item.)*
 
 - **Math reporting** *(user: "skip for now, only relevant in SCoR 2")*. Cohort/reporting for Math
   (by-task proportion + by-student achievement level). Entry is built; reporting is not.
-- **Split-grade math pacing** — a split-grade class runs different pacing per grade, so the task set
-  must follow that grade's pacing, not just grade+month. Revisit `tvf_TeacherRosterMath` selection.
-  Design in [[project_math_split_pacing_model]]; confirm against what the math team actually delivers.
-- **Linked math tasks carry mastery forward** — a task LINKED to a later one should start the later
-  cycle already Meeting. Needs a task-link model in `DimMathTask` + carry-forward logic.
+- ~~Split-grade math pacing~~ / ~~Linked math tasks carry mastery forward~~ — **PROMOTED 2026-11-10 to
+  the ACTIVE QUEUE (priorities 2 & 3 above)**; full design + new direction in
+  [[project_math_split_pacing_model]].
 
 ---
 
@@ -136,11 +152,8 @@ we're not blocked and it's not our queue item.)*
   `StaffAppAccess`, same shape as `CanMaintain`, or a flag on the override) that lifts the lock. Pairs with the
   role-override work shipped in 1.3.0 ([[project_assessment_language_tracks]] has the course-based WRITE-scoping
   precedent for gating entry).
-- **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
-  roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
-  **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
-  (`loadGroup`) for all branches simultaneously, hammering Fabric. Collapse is free (client-state only —
-  clear `openSchools`/`openNodes`; keep the loaded `blocks` cached so re-expanding is instant).
+- ~~Roll-up tree "Collapse all" button~~ — **CODED 2026-11-10** into the 1.3.1 candidate (close-only as
+  specified; commit 0811582). Ships with the reports hotfix.
 - **Design/aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0")*. Flag a11y in passing, collect
   here, do NOT stop to fix. Math cell marks are already AA-compliant. **Reusable technique:** SC 1.4.11
   wants 3:1 against ADJACENT colours, not the page — a fill too light to pass alone works if a
