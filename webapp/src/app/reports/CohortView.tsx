@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
 import CohortCharts from './CohortCharts'
 import { traitsInOrder, type WritingTraitKey } from '@/lib/writingTraits'
@@ -143,6 +143,7 @@ export default function CohortView({
   assessableRange = null,
   trendCohort,
   showCharts = true,
+  viewToggle,
 }: {
   cohort: CohortStudent[]
   bands: AchievementBand[]
@@ -155,9 +156,13 @@ export default function CohortView({
   // All-cycles cohort for the by-cycle trend (independent of the cycle selector). Falls back to `cohort`
   // when not supplied (i.e. when no cycle is selected, both are the same dataset).
   trendCohort?: CohortStudent[]
-  // Oversight renders the charts once at the page top (from the roll-up feed), so the in-view copy is
-  // suppressed there; teachers keep them inside the cohort view.
+  // Escape hatch for a caller that renders its own charts elsewhere; every current caller keeps the
+  // in-view pair (they follow the filter chips — the 2026-10-30 fix).
   showCharts?: boolean
+  // Oversight's Summary/Student-list switch, rendered leading the control bar so the page order is
+  // charts → controls → table on BOTH views (user rule 2026-11-10: controls sit between the data
+  // display and the list/tree, consistently, instead of jumping around the page).
+  viewToggle?: ReactNode
 }) {
   const isWriting = subject === 'Writing'
   // Writing student list shows the four trait scores as sortable columns, in the COIL/IOLC order the
@@ -466,7 +471,11 @@ export default function CohortView({
 
   return (
     <>
+      {/* Data display first, controls second, table third — same order as the Summary view. */}
+      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
+
       <div className="cohort-bar">
+        {viewToggle}
         <span className="muted">{matchCount} of {baseTotal} students match</span>
         {isWriting ? <TraitOrderToggle mode={traitMode} onChange={setTraitMode} /> : null}
         {assessableRange ? (
@@ -636,8 +645,6 @@ export default function CohortView({
           </div>
         </div>
       ) : null}
-
-      {showCharts ? <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} /> : null}
 
       {filtered.length === 0 ? (
         <div className="notice notice-empty">

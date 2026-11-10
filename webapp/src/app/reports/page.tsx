@@ -151,15 +151,21 @@ export default async function StudentsPage({
         <>
           {view === 'list' ? (
             <>
-              <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
               {cohort.length === 0 ? (
-                <EmptyState
-                  title="No students in your scope"
-                  hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
-                />
+                <>
+                  {/* No CohortView to carry the switch here, so render it standalone — otherwise an
+                      empty list would strand the viewer with no way back to Summary. */}
+                  <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
+                  <EmptyState
+                    title="No students in your scope"
+                    hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
+                  />
+                </>
               ) : (
                 // CohortView renders its OWN charts here, fed from the FILTERED rows — the donut and trend
-                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them).
+                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them). The
+                // Summary/Student-list switch rides its control bar, so the page order is charts →
+                // controls → table on both views (2026-11-10).
                 <CohortView
                   key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
                   cohort={cohort}
@@ -168,6 +174,7 @@ export default async function StudentsPage({
                   subject={isWriting ? 'Writing' : 'Reading'}
                   assessableRange={assessableRange}
                   trendCohort={trendCohort}
+                  viewToggle={viewToggle}
                 />
               )}
             </>
