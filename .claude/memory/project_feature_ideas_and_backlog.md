@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-11-10T14:53:37.089Z
+  modified: 2026-11-10T14:57:00.597Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -43,9 +43,9 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 1. **Reports hotfix (1.3.1)** — list-view charts follow filter chips (coded 10-30), RWM score colours
    → standard DimAchievementLevel palette + roll-up tree "Collapse all" (both coded 2026-11-10).
-   Awaiting user test on imp/awdev → bump → prod swap + release ritual. Proposed-not-decided: align the
-   Math report band palette (seed says "first pass… adjust to align with DimAchievementLevel"; needs a
-   seed UPDATE + mathModel.ts/globals.css edits — recolours the whole Math report).
+   Awaiting user test on imp/awdev → bump → prod swap + release ritual. Math band palette alignment
+   REJECTED 2026-11-10: the math-band colours are the math team's specific request — a deliberate
+   deviation; see [[stakeholder-preferences]]. Do not re-propose.
 2. **Split-grade math pacing delivery** — promoted from post-launch; new UI direction + structural
    delta (section-scoped exceptions) in [[project_math_split_pacing_model]] §2026-11-10.
 3. **Math task chains / carry-forward** — promoted from post-launch; additions (flagged-role editing,

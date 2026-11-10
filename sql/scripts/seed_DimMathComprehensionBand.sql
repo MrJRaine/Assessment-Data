@@ -6,8 +6,11 @@
  * Created: 2026-09-02
  * Region: Canada East (PIIDPA compliant)
  *
- * Colours are a first pass (red -> amber -> green -> cyan); adjust to taste or
- * to align with DimAchievementLevel without touching any logic.
+ * Colours (red -> amber -> green -> cyan) are DELIBERATE, at the math team's
+ * specific request (confirmed 2026-11-10) — do NOT align them to the
+ * DimAchievementLevel palette. (General rule: a 4-pt scale uses the standard
+ * achievement colours unless a stakeholder asks to deviate; this is the
+ * exception.) Mirrored in code: mathModel.ts BAND_HEX + globals.css .mband.
  ******************************************************************************/
 
 TRUNCATE TABLE DimMathComprehensionBand;

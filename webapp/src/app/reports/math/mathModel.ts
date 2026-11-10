@@ -25,6 +25,8 @@ export const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? '
 
 // Entry-grid achievement bands, applied to an average in [0,1].
 export type BandCls = 'b1' | 'b2' | 'b3' | 'b4'
+// Deliberately NOT the DimAchievementLevel palette — the math team specifically asked for this set
+// (confirmed 2026-11-10). Mirrors seed_DimMathComprehensionBand.sql + globals.css .mband.
 export const BAND_HEX: Record<BandCls, string> = { b1: '#b23347', b2: '#c07d16', b3: '#2f8f4e', b4: '#0092c9' }
 export const BANDS: { cls: BandCls; name: string }[] = [
   { cls: 'b1', name: 'Emerging' },
