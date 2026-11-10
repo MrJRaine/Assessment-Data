@@ -37,8 +37,15 @@ with `0.3.0`, so earlier detail is approximate.
   African**, **Self-ID Indigenous**, and **Language of Assessment** (moved in from the toolbar). The
   filters trim the whole display together — the school/grade/homeroom counts, the page-top charts,
   and the drill-down student tables. **SQL:** `deploy_summary_filter_demographics_2026-11-10.sql`
-  adds Gender + Self-ID columns to the four oversight roll-up TVFs; until it runs, those two filter
+  adds Gender + Self-ID columns to the oversight roll-up TVFs; until it runs, those two filter
   groups stay hidden (Grade + Language work without it).
+- **Filter section on the RWM Summary tree.** The same collapsible section as the Reading/Writing
+  trees — **Grade**, **Gender**, **Self-ID African**, **Self-ID Indigenous** — plus the Student
+  list's two scoring toggles moved in with it: **Math blanks** (excluded vs count as 0, which
+  re-scores every student's 0–3) and **All 3 areas only**. Filters trim the donut, the counts, and
+  the drill tables together. **SQL:** `tvf_StudentCohortRWM` is included in the same
+  `deploy_summary_filter_demographics_2026-11-10.sql` (now five TVFs); until it runs, the RWM
+  Gender/Self-ID groups stay hidden (Grade + both toggles work without it).
 
 ### Fixed (reports/entry consistency)
 - **Math drill-down scrollbars are visible again.** Opening a grade/homeroom on the **Math** summary

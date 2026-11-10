@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import type { RWMStudent } from '@/lib/data'
-import { gradeLabel, gradeRank, gradeSpanLabel, type SummarizeBy } from '../rollupModel'
+import { gradeLabel, gradeRank, gradeSpanLabel, demoPass, type SummarizeBy, type Tri, type DemoFilter } from '../rollupModel'
 import { heatClass, fmtPct } from '../math/mathModel' // shared heat scale + 2-dp % (cross-report consistency)
 import { SCORE_HEX } from './RWMCohortView'
 
@@ -12,9 +12,11 @@ import { SCORE_HEX } from './RWMCohortView'
 // RWM score (0–3 of Reading/Writing/Math at Meeting or exceeding) + "% in all 3" (score-3 students
 // over the row's students). Built entirely client-side from the same cohort the Student list uses —
 // no extra warehouse reads; a node expands to its own students inline for the same reason.
-// Scores use the list view's DEFAULT math-blanks treatment (blanks excluded, meeting = roll-up ≥ 75%).
+// The filter section (2026-11-10) mirrors the Reading/Writing trees' (Grade / Gender / Self-ID) and
+// also hosts the two RWM scoring toggles from the Student list: Math blanks (excluded vs count-as-0,
+// which re-scores) and "All 3 areas only" (evidence in every area).
 
-type Row = RWMStudent & { score: number; mathMeets: boolean }
+type Row = RWMStudent & { score: number; mathMeets: boolean; complete: boolean }
 
 interface Node {
   id: string
@@ -26,10 +28,15 @@ interface Node {
 
 const TCRCE_ID = '__TCRCE__'
 
-const toRows = (cohort: RWMStudent[]): Row[] =>
+const toRows = (cohort: RWMStudent[], blankMode: 'exclude' | 'zero'): Row[] =>
   cohort.map((s) => {
-    const mathMeets = s.mathRollupPct != null && s.mathRollupPct >= 0.75
-    return { ...s, mathMeets, score: (s.readingMeeting ? 1 : 0) + (s.writingMeeting ? 1 : 0) + (mathMeets ? 1 : 0) }
+    const pct = blankMode === 'zero' ? s.mathRollupPctZero : s.mathRollupPct
+    const mathMeets = pct != null && pct >= 0.75
+    return {
+      ...s, mathMeets,
+      score: (s.readingMeeting ? 1 : 0) + (s.writingMeeting ? 1 : 0) + (mathMeets ? 1 : 0),
+      complete: s.hasReading && s.hasWriting && s.hasMath,
+    }
   })
 
 function tallyScores(rows: Row[]) {
@@ -120,7 +127,49 @@ function NodeDetail({ node, summarizeBy }: { node: Node; summarizeBy: SummarizeB
 export default function RWMRollupTree({
   cohort, showAll, viewToggle,
 }: { cohort: RWMStudent[]; showAll?: boolean; viewToggle?: ReactNode }) {
-  const rows = useMemo(() => toRows(cohort), [cohort])
+  // ── Filter section (2026-11-10): demographics (as on the Reading/Writing trees) + the two RWM
+  // scoring toggles from the Student list. Math blanks re-SCORES (pct source flips); the rest FILTER.
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+  const [completeOnly, setCompleteOnly] = useState(false)
+  const gradeOpts = useMemo(
+    () => [...new Set(cohort.map((s) => s.grade).filter((g): g is string => !!g))].sort((a, b) => gradeRank(a) - gradeRank(b)),
+    [cohort],
+  )
+  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
+  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
+  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
+  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
+  const [gender, setGender] = useState('All')
+  const [african, setAfrican] = useState<Tri>('All')
+  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const genderOpts = useMemo(
+    () => [...new Set(cohort.map((s) => s.gender).filter(Boolean) as string[])].sort(),
+    [cohort],
+  )
+  const hasSelfID = useMemo(
+    () => cohort.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
+    [cohort],
+  )
+  const demo: DemoFilter = { gradeMinRank, gradeMaxRank, gender, african, indigenous }
+  const anyFilter =
+    gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail ||
+    gender !== 'All' || african !== 'All' || indigenous !== 'All' || completeOnly
+  const resetFilters = () => {
+    setGradeMinRank(minRankAvail)
+    setGradeMaxRank(maxRankAvail)
+    setGender('All')
+    setAfrican('All')
+    setIndigenous('All')
+    setCompleteOnly(false)
+    // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as the Student list).
+  }
+
+  const rows = useMemo(() => {
+    const pass = demoPass(demo)
+    return toRows(cohort, blankMode).filter((s) => pass(s) && (!completeOnly || s.complete))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cohort, blankMode, completeOnly, gradeMinRank, gradeMaxRank, gender, african, indigenous])
   const schools = useMemo(() => {
     const bySchool = new Map<string, { id: string; name: string; students: Row[] }>()
     for (const s of rows) {
@@ -152,7 +201,8 @@ export default function RWMRollupTree({
       return next
     })
 
-  // Page-top donut: the score distribution over everything the tree shows (no filters here).
+  // Page-top donut: the score distribution over everything the tree currently shows — rows are
+  // already filtered, so the display always represents the data displayed (user rule 2026-11-10).
   const donut = useMemo(() => {
     const t = tallyScores(rows)
     let acc = 0
@@ -207,12 +257,94 @@ export default function RWMRollupTree({
             ))}
           </div>
         </span>
+        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+          {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
+        </button>
+        {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset</button> : null}
         <span className="spacer" />
         {/* Close-only on purpose, matching the other trees. */}
         <button type="button" className="btn-ghost" onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}>
           Collapse all
         </button>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="filter-row">
+              <select value={gradeMinRank} onChange={(e) => setGradeMinRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+              <span className="muted">to</span>
+              <select value={gradeMaxRank} onChange={(e) => setGradeMaxRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {genderOpts.length > 1 ? (
+            <div className="filter-group">
+              <label>Gender</label>
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="All">All</option>
+                {genderOpts.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasSelfID ? (
+            <>
+              <div className="filter-group">
+                <label>Self-ID African</label>
+                <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Self-ID Indigenous</label>
+                <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </div>
+            </>
+          ) : null}
+
+          <div className="filter-group">
+            <label>Math blanks</label>
+            <div
+              className="subject-toggle"
+              style={{ margin: 0 }}
+              title="How un-recorded Math tasks affect the roll-up (Reading/Writing are unaffected)"
+            >
+              <button className={blankMode === 'exclude' ? 'toggle-on' : ''} onClick={() => setBlankMode('exclude')}>Excluded</button>
+              <button className={blankMode === 'zero' ? 'toggle-on' : ''} onClick={() => setBlankMode('zero')}>Count as 0</button>
+            </div>
+          </div>
+
+          <div className="filter-group">
+            <label>Students</label>
+            <div
+              className="subject-toggle"
+              style={{ margin: 0 }}
+              title="Show only students with a result in Reading, Writing, AND Math"
+            >
+              <button className={!completeOnly ? 'toggle-on' : ''} onClick={() => setCompleteOnly(false)}>All</button>
+              <button className={completeOnly ? 'toggle-on' : ''} onClick={() => setCompleteOnly(true)}>All 3 areas only</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mlegend">
         <span className="grp"><strong>Students per RWM score</strong></span>
@@ -225,6 +357,11 @@ export default function RWMRollupTree({
         <span className="grp">% in all 3 = students Meeting or exceeding in Reading, Writing AND Math, out of the row&apos;s students.</span>
       </div>
 
+      {rows.length === 0 ? (
+        <div className="notice notice-empty">
+          <div className="notice-title">No students match the current filters.</div>
+        </div>
+      ) : (
       <div className="mtree-wrap">
         <table className="mgrid mtree">
           <thead>
@@ -323,6 +460,7 @@ export default function RWMRollupTree({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }

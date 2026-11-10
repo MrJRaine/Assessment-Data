@@ -1769,6 +1769,11 @@ export interface RWMStudent {
   programCode: string | null
   programFamily: string | null
   homeroom: string | null
+  // Demographics for the Summary tree's filter section (2026-11-10). null = unknown (e.g. the TVF
+  // predates the columns) — the Gender/Self-ID filter groups only appear when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   readingCode: number | null // most-recent reading achievement code (3-4 = meeting/exceeding)
   writingCode: number | null
   mathRollupPct: number | null // 0-1 current-year roll-up, blanks EXCLUDED (avg of unit averages)
@@ -1802,6 +1807,9 @@ export async function getStudentCohortRWM(upn: string, cycleGroupId: string | nu
     programCode: (r.ProgramCode as string) ?? null,
     programFamily: (r.ProgramFamily as string) ?? null,
     homeroom: (r.Homeroom as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
     readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
     writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
     mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
