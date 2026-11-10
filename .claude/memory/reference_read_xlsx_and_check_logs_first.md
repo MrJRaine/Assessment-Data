@@ -1,9 +1,11 @@
 ---
 name: reference_read_xlsx_and_check_logs_first
-description: "When the user says 'we did this before / do you remember how', search the session archive + transcripts for the ACTUAL method before reconstructing or saying you can't. Includes: how to read a .xlsx without Excel (PowerShell OOXML unzip)."
+description: "When the user says 'we did this before / do you remember how' OR 'make sure / verify / check that X' — X was already decided or built: search the archive/transcripts/code history for the ACTUAL prior state FIRST, and FLAG a discrepancy instead of concluding nothing exists and building fresh. Includes: how to read a .xlsx without Excel (PowerShell OOXML unzip)."
 metadata:
   node_type: memory
   type: reference
+  originSessionId: 95b469e7-1d0c-487e-bcab-9f5c26d0c5b6
+  modified: 2026-11-10T16:09:48.080Z
 ---
 
 **Set 2026-10-04**, after I twice claimed "I can't read a binary .xlsx" — wrong; I'd done it twice
@@ -14,6 +16,16 @@ When the user references prior work ("you've done this before", "do you remember
 **search `project_session_archive.md` (and the transcripts) for the actual method FIRST** — before saying
 "I can't" or rebuilding from scratch. The archive is my memory of *how*; use it. This is the same failure
 family as [[reference_gh_cli_token_via_git]] (don't declare something impossible without checking).
+
+**"Make sure / verify / check that X" is the same trigger (user 2026-11-10).** That phrasing means X was
+ALREADY discussed, decided, or built — it is a request to VERIFY against the prior decision, not to
+build X fresh. Workflow: (1) search memory/archive/git history/code for the prior implementation FIRST;
+(2) if it looks absent or partial, **FLAG the discrepancy** ("reading/writing have it via <mechanism>;
+math is missing it because <reason>") and fix the gap in the SAME mechanism — never bolt on a new
+parallel mechanism over the existing one. Incident: asked to "make sure all roll-ups have visible
+scrollbars", I grepped for scrollbar CSS, found none, and started adding global scrollbar styling —
+when the real feature was the existing .mscroll scroll-pane geometry, present on reading/writing and
+defeated on math by the over-wide tree. The user had to interrupt before I restyled what already worked.
 
 ## How to read a .xlsx WITHOUT Excel / Python / ImportExcel
 A `.xlsx` is OOXML = a ZIP of XML parts. Read it with a PowerShell unzip script (last used
