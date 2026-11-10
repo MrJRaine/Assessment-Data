@@ -28,6 +28,7 @@ type CohortPersist = {
   prog?: string[]
   sch?: string[]
   ach?: (string | number)[] // string categories now ('1'..'4' | 'ipp' | 'nodata'); tolerate old numeric saves
+  lang?: string[] // Language of Assessment ('English' | 'French')
   sortKey?: string | null
   sortDir?: 'asc' | 'desc'
   assessableOnly?: boolean
@@ -191,6 +192,7 @@ export default function CohortView({
   // even before its school is re-selected). Display uses the faceted lists further down.
   const allHomerooms = useMemo(() => distinct(cohort.map((s) => s.homeroom).filter(Boolean) as string[]).sort(), [cohort])
   const allPrograms = useMemo(() => distinct(cohort.map((s) => s.programFamily).filter(Boolean) as string[]).sort(), [cohort])
+  const allLangs = useMemo(() => distinct(cohort.map((s) => s.assessmentLanguage).filter(Boolean) as string[]).sort(), [cohort])
   const allSchools = useMemo(() => {
     const seen = new Map<string, string>()
     for (const s of cohort) if (s.schoolId) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
@@ -212,6 +214,10 @@ export default function CohortView({
   // Achievement filter values are STRING categories: '1'..'4' (the bands), 'ipp' (shown as "IPP"),
   // and 'nodata' (no achievement shown — measured-but-no-result, or unresolved IPP, both render "—").
   const [ach, setAch] = useState<Set<string>>(new Set())
+  // Language of Assessment ('English' | 'French'). The cohort stacks one row per student × language,
+  // so this filter trims a dual-language student to the selected language's row(s); a NULL-language
+  // (unassessed) row only shows with no language selected.
+  const [langSel, setLangSel] = useState<Set<string>>(new Set())
   // Assessable-only (default ON when a scope is known): narrow the table + total to the subject's
   // assessed grades. The grade range comes from the window metadata (config-driven).
   const [assessableOnly, setAssessableOnly] = useState(true)
@@ -261,6 +267,7 @@ export default function CohortView({
     setProg(new Set())
     setSch(new Set())
     setAch(new Set())
+    setLangSel(new Set())
   }
 
   // Persist cohort filters for the tab session, so filtering the cohort, opening a student, and
@@ -282,6 +289,7 @@ export default function CohortView({
     if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
     if (p.ach) setAch(new Set(p.ach.map(String).filter((v) => achKeys.includes(v))))
+    if (p.lang) setLangSel(new Set(p.lang.filter((v) => allLangs.includes(v))))
     if (p.sortKey && (SORTABLE_HEADERS as string[]).includes(p.sortKey)) {
       setSortKey(p.sortKey as SortKey)
       setSortDir(p.sortDir === 'desc' ? 'desc' : 'asc')
@@ -296,12 +304,12 @@ export default function CohortView({
     try {
       sessionStorage.setItem(
         COHORT_FILTER_KEY,
-        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], sortKey, sortDir, assessableOnly }),
+        JSON.stringify({ expanded, gradeMin, gradeMax, gender, african, indigenous, hr: [...hr], prog: [...prog], sch: [...sch], ach: [...ach], lang: [...langSel], sortKey, sortDir, assessableOnly }),
       )
     } catch {
       /* private mode / storage blocked — filters just won't persist */
     }
-  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, sortKey, sortDir, assessableOnly])
+  }, [ready, expanded, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, sortKey, sortDir, assessableOnly])
 
   // Each student's single achievement-filter category, matching what the table shows:
   //  '1'..'4' = the band; 'ipp' = a confirmed IPP student (shows "IPP"); 'nodata' = everyone else
@@ -324,6 +332,7 @@ export default function CohortView({
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
     // Achievement filter matches on the student's single displayed category (band / IPP / no-data),
     // so a band chip never pulls in an IPP or unscored student, and the IPP / No Data chips find them.
+    (except === 'lang' || langSel.size === 0 || (s.assessmentLanguage != null && langSel.has(s.assessmentLanguage))) &&
     (except === 'ach' || ach.size === 0 || ach.has(achCategory(s)))
 
   // Live-trimmed chip options (present under the OTHER active filters). Homeroom is withheld entirely
@@ -331,24 +340,29 @@ export default function CohortView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const homerooms = useMemo(
     () => (oneSchool ? distinct(cohort.filter((s) => matchExcept(s, 'hr')).map((s) => s.homeroom).filter(Boolean) as string[]).sort() : []),
-    [cohort, oneSchool, gradeMin, gradeMax, gender, african, indigenous, prog, sch, ach],
+    [cohort, oneSchool, gradeMin, gradeMax, gender, african, indigenous, prog, sch, ach, langSel],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const programs = useMemo(
     () => distinct(cohort.filter((s) => matchExcept(s, 'prog')).map((s) => s.programFamily).filter(Boolean) as string[]).sort(),
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, sch, ach],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, sch, ach, langSel],
   )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const schools = useMemo(() => {
     const seen = new Map<string, string>()
     for (const s of cohort) if (s.schoolId && matchExcept(s, 'sch')) seen.set(s.schoolId, s.schoolAbbreviation ?? s.schoolName ?? s.schoolId)
     return Array.from(seen, ([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label))
-  }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach])
+  }, [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, ach, langSel])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const langs = useMemo(
+    () => distinct(cohort.filter((s) => matchExcept(s, 'lang')).map((s) => s.assessmentLanguage).filter(Boolean) as string[]).sort(),
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach],
+  )
 
   const filtered = useMemo(
     () => cohort.filter((s) => matchExcept(s, '') && inAssessable(s)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
+    [cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, assessableOnly, assessableRange],
   )
 
   // Counts are per-STUDENT (the cohort has one row per student x language now; a dual-language student
@@ -466,7 +480,7 @@ export default function CohortView({
         .filter((s) => matchExcept(s, '') && inAssessable(s) && s.chartEligible)
         .map((s) => ({ code: s.achievementCode, date: s.mostRecentDate })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [trendCohort, cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, assessableOnly, assessableRange],
+    [trendCohort, cohort, gradeMin, gradeMax, gender, african, indigenous, hr, prog, sch, ach, langSel, assessableOnly, assessableRange],
   )
 
   return (
@@ -602,6 +616,23 @@ export default function CohortView({
                     onClick={() => toggleSchool(s.id)}
                   >
                     {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {langs.length > 1 || langSel.size > 0 ? (
+            <div className="filter-group">
+              <label>Language of Assessment</label>
+              <div className="chips">
+                {langs.map((l) => (
+                  <button
+                    key={l}
+                    className={langSel.has(l) ? 'chip chip-on' : 'chip'}
+                    onClick={() => toggle(langSel, l, setLangSel)}
+                  >
+                    {l}
                   </button>
                 ))}
               </div>

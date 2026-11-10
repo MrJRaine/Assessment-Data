@@ -2,33 +2,50 @@
 
 import Link from 'next/link'
 import { useMemo, useState, type ReactNode } from 'react'
-import type { ReadingRollupRow, ReadingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, type SummarizeBy, buildSchools, gradeRank } from './rollupModel'
+import type { ReadingRollupRow, ReadingGroupRow, AchievementBand, ReportCycle } from '@/lib/data'
+import { type RollupStudent, type LangFilter, type SummarizeBy, type DemoFilter, buildSchools, gradeRank, demoPass } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadReadingGroup } from './actions'
 
 // Reading oversight roll-up: School → Grade/Homeroom → students (EN/FR reading level + band). Thin
 // wrapper over the shared RollupTree; the per-group detail shows each student's English + French level.
 
-export default function ReadingRollupTree({ rows, cycle, showAll, viewToggle }: { rows: ReadingRollupRow[]; cycle: string | null; showAll?: boolean; viewToggle?: ReactNode }) {
-  const schools = useMemo(() => {
-    const byKey = new Map<string, RollupStudent>()
-    for (const r of rows) {
-      if (!r.schoolId) continue
-      let s = byKey.get(r.studentKey)
-      if (!s) {
-        s = {
-          key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
-          schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.readingIPP === true, results: [],
-        }
-        byKey.set(r.studentKey, s)
+// Rows → one RollupStudent per student, results tagged with language + date (date feeds the trend).
+function buildStudents(rows: ReadingRollupRow[]): RollupStudent[] {
+  const byKey = new Map<string, RollupStudent>()
+  for (const r of rows) {
+    if (!r.schoolId) continue
+    let s = byKey.get(r.studentKey)
+    if (!s) {
+      s = {
+        key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
+        schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.readingIPP === true,
+        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous, results: [],
       }
-      if (r.scaleSystem === 'EN_Reading' || r.scaleSystem === 'FR_Reading') {
-        s.results.push({ en: r.scaleSystem === 'EN_Reading', code: r.achievementCode })
-      }
+      byKey.set(r.studentKey, s)
     }
-    return buildSchools([...byKey.values()])
-  }, [rows])
+    if (r.scaleSystem === 'EN_Reading' || r.scaleSystem === 'FR_Reading') {
+      s.results.push({ en: r.scaleSystem === 'EN_Reading', code: r.achievementCode, date: r.assessmentDate })
+    }
+  }
+  return [...byKey.values()]
+}
+
+export default function ReadingRollupTree({ rows, trendRows, bands, cycles, cycle, showAll, viewToggle }: {
+  rows: ReadingRollupRow[]
+  // All-cycles rows for the by-cycle trend (rows are cycle-scoped); bands/cycles feed the charts.
+  trendRows: ReadingRollupRow[]
+  bands: AchievementBand[]
+  cycles: ReportCycle[]
+  cycle: string | null
+  showAll?: boolean
+  viewToggle?: ReactNode
+}) {
+  const schools = useMemo(() => buildSchools(buildStudents(rows)), [rows])
+  const charts = useMemo(
+    () => ({ trendStudents: buildStudents(trendRows), bands, cycles }),
+    [trendRows, bands, cycles],
+  )
 
   return (
     <RollupTree<ReadingGroupRow>
@@ -36,8 +53,9 @@ export default function ReadingRollupTree({ rows, cycle, showAll, viewToggle }: 
       cycle={cycle}
       showAll={showAll}
       loadGroup={loadReadingGroup}
-      renderDetail={(groupRows, lang, summarizeBy) => <ReadingDetail rows={groupRows} lang={lang} summarizeBy={summarizeBy} />}
+      renderDetail={(groupRows, lang, summarizeBy, demo) => <ReadingDetail rows={groupRows} lang={lang} summarizeBy={summarizeBy} demo={demo} />}
       viewToggle={viewToggle}
+      charts={charts}
     />
   )
 }
@@ -51,6 +69,9 @@ interface RowItem {
   homeroom: string | null
   ipp: boolean
   language: 'English' | 'French' | null
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   levelCode: string | null
   levelOrder: number | null
   tint: string | null
@@ -73,6 +94,9 @@ function toRows(rows: ReadingGroupRow[]): RowItem[] {
     homeroom: r.homeroom,
     ipp: r.readingIPP === true,
     language: r.scaleSystem === 'EN_Reading' ? 'English' : r.scaleSystem === 'FR_Reading' ? 'French' : null,
+    gender: r.gender,
+    selfIDAfrican: r.selfIDAfrican,
+    selfIDIndigenous: r.selfIDIndigenous,
     levelCode: r.levelCode,
     levelOrder: r.levelOrder,
     tint: r.achievementHexColorTint,
@@ -103,12 +127,13 @@ function SortHead({ label, col, sort, onSort, className = 'stu' }: { label: stri
   return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
 }
 
-function ReadingDetail({ rows, lang, summarizeBy }: { rows: ReadingGroupRow[]; lang: LangFilter; summarizeBy: SummarizeBy }) {
+function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRow[]; lang: LangFilter; summarizeBy: SummarizeBy; demo: DemoFilter }) {
   const [sort, setSort] = useState<SortState>({ key: 'name', dir: 'asc' })
-  const all = toRows(rows)
-  // Language filter: only rows in the selected language (a NULL-language no-result row shows under 'All').
+  // Demographic filters first (so the drill matches the filtered node counts above it), then language:
+  // only rows in the selected language (a NULL-language no-result row shows under 'All').
+  const all = toRows(rows).filter(demoPass(demo))
   const filtered = lang === 'All' ? all : all.filter((r) => r.language === (lang === 'EN' ? 'English' : 'French'))
-  if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
+  if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group match the current filters.</p>
   // The node already pins one axis: a Grade node drills to Homeroom; a Homeroom node drills to Grade.
   // (Neither repeats School — the drill is always inside one school.)
   const demoAxis: 'grade' | 'homeroom' = summarizeBy === 'Grade' ? 'homeroom' : 'grade'

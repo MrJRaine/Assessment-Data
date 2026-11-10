@@ -36,6 +36,7 @@ export type WritingTraitKey = 'conventions' | 'organization' | 'ideas' | 'langua
 export interface RollupResult {
   en: boolean // true = English track, false = French
   code: number | null // achievement band for this result; null = no band (no delta/avg)
+  date?: string | null // result date — only needed on the all-cycles trend feed
   // Writing only — the four trait scores (1–4; null = SCR/'-'/unscored) + the 4-trait average, for the
   // per-trait roll-up measures. Reading results omit these.
   traits?: { conventions: number | null; organization: number | null; ideas: number | null; language: number | null }
@@ -49,8 +50,33 @@ export interface RollupStudent {
   schoolId: string
   schoolName: string
   ipp: boolean // confirmed subject IPP — excluded from the % (not measured against the benchmark)
+  // Demographics for the summary-view filters (2026-11-10). null = unknown (e.g. the TVF predates the
+  // Gender/SelfID columns) — a filter option is only OFFERED when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   results: RollupResult[]
 }
+
+// ── Demographic filters on the summary tree (2026-11-10): same semantics as the student list ──
+export type Tri = 'All' | 'Yes' | 'No'
+export function triMatch(sel: Tri, v: boolean | null): boolean {
+  if (sel === 'All') return true
+  if (sel === 'Yes') return v === true
+  return v === false
+}
+export interface DemoFilter {
+  gradeMinRank: number
+  gradeMaxRank: number
+  gender: string // 'All' or a value
+  african: Tri
+  indigenous: Tri
+}
+export const demoPass = (f: DemoFilter) => (s: { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }): boolean =>
+  (s.grade == null || (gradeRank(s.grade) >= f.gradeMinRank && gradeRank(s.grade) <= f.gradeMaxRank)) &&
+  (f.gender === 'All' || s.gender === f.gender) &&
+  triMatch(f.african, s.selfIDAfrican) &&
+  triMatch(f.indigenous, s.selfIDIndigenous)
 export interface RollupSchool { id: string; name: string; students: RollupStudent[] }
 export interface RollupChild {
   id: string

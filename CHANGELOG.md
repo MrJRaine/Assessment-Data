@@ -29,6 +29,28 @@ with `0.3.0`, so earlier detail is approximate.
 - **"Collapse all" on the Reports summary trees.** One click closes every open school/grade/homeroom
   branch on the Reading/Writing and Math roll-up trees (close-only by design — already-loaded groups
   stay cached, so re-expanding is instant). Web only, no SQL.
+- **Language of Assessment filter on the Student-list view.** A new chip group alongside the other
+  filters trims a dual-language student's stacked EN/FR rows to the selected language — and, like
+  every filter, the charts follow it. Web only, no SQL.
+- **Filter section on the Reading/Writing Summary trees.** A collapsible **Show filters** section
+  (right of *Summarize by*, same controls as the Student list): **Grade**, **Gender**, **Self-ID
+  African**, **Self-ID Indigenous**, and **Language of Assessment** (moved in from the toolbar). The
+  filters trim the whole display together — the school/grade/homeroom counts, the page-top charts,
+  and the drill-down student tables. **SQL:** `deploy_summary_filter_demographics_2026-11-10.sql`
+  adds Gender + Self-ID columns to the four oversight roll-up TVFs; until it runs, those two filter
+  groups stay hidden (Grade + Language work without it).
+
+### Changed
+- **Every chart respects every non-cycle filter on its page.** The by-cycle bar graph now follows the
+  Achievement chip too (each bar filters by that cycle's own band), and the Summary-view charts moved
+  inside the tree so they obey its filters — the displays always represent the data displayed.
+- **The bar graph's right edge is the selected cycle.** Selecting a cycle drops the bars after it, so
+  the rightmost bar always matches the data on display, with the earlier cycles alongside for
+  comparison; no selection keeps the full year through the current cycle.
+- **Consistent report layout: data display → controls → list.** The Summary/Student-list switch and
+  filter controls now sit *between* the charts and the roll-up/student list on every report (they
+  were above the charts on the Student list and below them on the Summary, jumping around the page
+  on each switch). The RWM donut moved above its controls to match.
 
 ## [1.3.0] — 2026-10-27
 

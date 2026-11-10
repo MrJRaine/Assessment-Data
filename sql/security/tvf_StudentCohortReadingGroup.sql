@@ -6,6 +6,8 @@
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters: the drill table must match the filtered node counts above it).
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
  *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
  *          row's School/Grade/Homeroom (and so its @GroupKey membership) comes from the RESULT's frozen
@@ -86,6 +88,7 @@ RETURN
         -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
                fv.SchoolID, fv.GroupKey AS HomeroomKey,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
                lr.AssessmentWindowID, lr.ScaleSystem, lr.LevelCode, lr.LevelOrder, lr.ReadingDelta
         FROM LatestReading lr
         INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
@@ -94,6 +97,7 @@ RETURN
         -- cycle selected, unassessed: current, enrolled students with no result in that cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                CAST(NULL AS BIGINT), CAST(NULL AS VARCHAR(20)), CAST(NULL AS VARCHAR(10)),
                CAST(NULL AS INT), CAST(NULL AS INT)
         FROM DimStudent s
@@ -104,6 +108,7 @@ RETURN
         -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                lr3.AssessmentWindowID, lr3.ScaleSystem, lr3.LevelCode, lr3.LevelOrder, lr3.ReadingDelta
         FROM DimStudent s
         LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
@@ -116,6 +121,7 @@ RETURN
                COALESCE(cur.FirstName, a.FirstName) AS FirstName,   -- current name when one exists;
                COALESCE(cur.LastName,  a.LastName)  AS LastName,    -- frozen name for district leavers
                a.Grade, a.Homeroom, a.SchoolID, sch.SchoolName,
+               a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous,
                a.AssessmentWindowID, a.ScaleSystem, a.LevelCode, a.LevelOrder, a.ReadingDelta
         FROM AttrStudents a
         INNER JOIN DimGrade g ON g.GradeCode = a.Grade
@@ -153,6 +159,9 @@ RETURN
         gs.Grade,
         gs.Homeroom,
         gs.SchoolName,
+        gs.Gender,                                    -- summary-view demographic filters (2026-11-10)
+        gs.SelfIDAfrican,
+        gs.SelfIDIndigenous,
         ipp.IsIPP                 AS ReadingIPPStatus,
         gs.ScaleSystem,                               -- language of THIS result; NULL = no reading result
         gs.LevelCode,                                 -- the reading level (e.g. 'M'); NULL = no result
