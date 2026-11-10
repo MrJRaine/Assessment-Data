@@ -10,7 +10,9 @@ import type { RWMStudent } from '@/lib/data'
 
 const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
 const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
-const SCORE_HEX: Record<number, string> = { 0: '#b23347', 1: '#c07d16', 2: '#2f8f4e', 3: '#0092c9' }
+// Standard 4-pt achievement palette (DimAchievementLevel HexColor, levels 1-4):
+// 0 of 3 areas → Not Yet Meeting red … 3 of 3 → Exceeding green.
+const SCORE_HEX: Record<number, string> = { 0: '#D1495B', 1: '#E8A33D', 2: '#8FB339', 3: '#2E7D5B' }
 
 // Meeting pill for one area: ✓ meeting / — not meeting / no result yet.
 function AreaCell({ meeting, has }: { meeting: boolean; has: boolean }) {

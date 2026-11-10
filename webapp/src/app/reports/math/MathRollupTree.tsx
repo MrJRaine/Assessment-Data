@@ -196,6 +196,14 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
           ))}
         </div>
         <span className="spacer" />
+        {/* Close-only on purpose: an "expand all" would fire every node's lazy loadMathGroup at once. */}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}
+        >
+          Collapse all
+        </button>
         <button className="btn-ghost" onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}>
           Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
         </button>
