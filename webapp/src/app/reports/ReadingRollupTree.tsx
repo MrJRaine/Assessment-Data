@@ -20,12 +20,21 @@ function buildStudents(rows: ReadingRollupRow[]): RollupStudent[] {
       s = {
         key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
         schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.readingIPP === true,
-        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous, results: [],
+        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+        expectedEN: false, expectedFR: false, results: [],
       }
       byKey.set(r.studentKey, s)
     }
     if (r.scaleSystem === 'EN_Reading' || r.scaleSystem === 'FR_Reading') {
-      s.results.push({ en: r.scaleSystem === 'EN_Reading', code: r.achievementCode, date: r.assessmentDate })
+      const en = r.scaleSystem === 'EN_Reading'
+      if (r.isExpectedOnly) {
+        // Expected in this language, no result yet: keeps the student in that language's view
+        // (tally counts them under Students / "no result") without inventing a phantom result.
+        if (en) s.expectedEN = true
+        else s.expectedFR = true
+      } else {
+        s.results.push({ en, code: r.achievementCode, date: r.assessmentDate })
+      }
     }
   }
   return [...byKey.values()]

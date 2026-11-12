@@ -6,6 +6,11 @@
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
+ *          its header): an expected language (StudentExpectedAssessment) with no result emits a row
+ *          with ScaleSystem set and NULL level/delta, so the drill under a Language of Assessment
+ *          filter shows expected-but-unassessed students as "—" instead of dropping them; the
+ *          NULL-language "No data" row fires only when neither expected nor assessed.
  * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
  *          filters: the drill table must match the filtered node counts above it).
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
@@ -81,9 +86,18 @@ RETURN
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
         GROUP BY dsi.StudentNumber
     ),
+    -- Expected reading languages per student (cycle-scoped) — see StudentExpectedAssessment.
+    ExpectedLang AS (
+        SELECT DISTINCT sea.StudentNumber,
+               CASE sea.Language WHEN 'French' THEN 'FR_Reading' ELSE 'EN_Reading' END AS ScaleSystem
+        FROM StudentExpectedAssessment sea
+        WHERE sea.AssessmentType = 'Reading'
+          AND (@CycleGroupID IS NULL OR sea.CycleGroupID = @CycleGroupID)
+    ),
     -- ATTRIBUTION IS CYCLE-SCOPED (mirrors tvf_StudentCohortReadingAll's Base so drill rows agree with
     -- roll-up counts): cycle selected -> assessed rows from the result's frozen version, unassessed from
     -- the current version; no cycle ("Current" view) -> everything anchors on the current version.
+    -- LANGUAGE SET (2026-11-12) = expected UNION assessed, in lockstep with the *All feed.
     AttrStudents AS (
         -- cycle selected, assessed: attributed by that result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
@@ -94,26 +108,42 @@ RETURN
         INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
         WHERE lr.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
-        -- cycle selected, unassessed: current, enrolled students with no result in that cycle
-        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
-               s.SchoolID, s.GroupKey,
-               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
-               CAST(NULL AS BIGINT), CAST(NULL AS VARCHAR(20)), CAST(NULL AS VARCHAR(10)),
-               CAST(NULL AS INT), CAST(NULL AS INT)
-        FROM DimStudent s
-        WHERE @CycleGroupID IS NOT NULL
-          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-          AND NOT EXISTS (SELECT 1 FROM LatestReading lr2 WHERE lr2.StudentNumber = s.StudentNumber)
-        UNION ALL
         -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
                s.SchoolID, s.GroupKey,
                s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
                lr3.AssessmentWindowID, lr3.ScaleSystem, lr3.LevelCode, lr3.LevelOrder, lr3.ReadingDelta
         FROM DimStudent s
-        LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
+        INNER JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
         WHERE @CycleGroupID IS NULL
           AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        UNION ALL
+        -- expected language with NO result in it (either cycle mode): current, enrolled students
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
+               s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS BIGINT), el.ScaleSystem, CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS INT), CAST(NULL AS INT)
+        FROM DimStudent s
+        INNER JOIN ExpectedLang el ON el.StudentNumber = s.StudentNumber
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
+                          INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
+                          WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
+                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+        UNION ALL
+        -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
+               s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS BIGINT), CAST(NULL AS VARCHAR(20)), CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS INT), CAST(NULL AS INT)
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
+                          WHERE fx2.StudentNumber = s.StudentNumber
+                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+          AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     ),
     -- The group's attributed rows (in the reading grade span), intersected with the caller's scope.
     GroupStudents AS (

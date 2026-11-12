@@ -20,9 +20,10 @@ interface Task {
   answerKey: string | null
 }
 interface Unit { name: string; order: number; tasks: Task[] }
-// sortKey = "Last, First": the display name stays compact ("First L.") but column ordering matches
-// the rest of the app, which sorts students by last name (user 2026-11-10).
-interface Student { studentKey: string; studentNumber: string; name: string; sortKey: string; mathIPP: boolean }
+// sortKey = "Last, First": column ordering matches the rest of the app (last-name sort, user
+// 2026-11-10). name = full "First Last" (user 2026-11-12 — "First L." collided for same-first-name
+// classmates); the column HEADER stacks first/last on two lines so columns stay narrow.
+interface Student { studentKey: string; studentNumber: string; name: string; first: string; last: string; sortKey: string; mathIPP: boolean }
 interface Grade { grade: string; order: number; label: string; students: Student[]; units: Unit[] }
 
 const GRADE_ORDER: Record<string, number> = { P: 0, PP: -1, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
@@ -42,7 +43,9 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
       grade.students.push({
         studentKey: r.studentKey,
         studentNumber: r.studentNumber,
-        name: `${r.firstName} ${r.lastName.charAt(0)}.`,
+        name: `${r.firstName} ${r.lastName}`,
+        first: r.firstName,
+        last: r.lastName,
         sortKey: `${r.lastName}, ${r.firstName}`,
         mathIPP: r.mathIPPStatus === true,
       })
@@ -496,7 +499,10 @@ export default function MathRosterEntry({
                       <th className="col-task">Task</th>
                       <th className="col-pct">Class %</th>
                       {cols.map((s) => (
-                        <th className="stu" key={s.studentKey}>{s.name}</th>
+                        <th className="stu stu2" key={s.studentKey} title={s.name}>
+                          <span className="stu-first">{s.first}</span>
+                          <span className="stu-last">{s.last}</span>
+                        </th>
                       ))}
                     </tr>
                   </thead>

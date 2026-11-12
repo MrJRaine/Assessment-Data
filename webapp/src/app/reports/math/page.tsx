@@ -38,6 +38,9 @@ export default async function MathReportsPage({ searchParams }: { searchParams: 
       <ToggleLink href="/reports?subject=writing" className="toggle">Writing</ToggleLink>
       <ToggleLink href="/reports/math" className="toggle-on">Math</ToggleLink>
       <ToggleLink href="/reports/rwm" className="toggle">RWM</ToggleLink>
+      {accessLevel === 'Administrator' || accessLevel === 'RegionalAnalyst' ? (
+        <ToggleLink href="/reports/missing" className="toggle">Missing results</ToggleLink>
+      ) : null}
     </div>
   )
 

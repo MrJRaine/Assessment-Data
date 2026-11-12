@@ -5,6 +5,9 @@
  *          how many of {Reading, Writing, Math} the student is CURRENTLY meeting or
  *          exceeding (their most-recent result in each area).
  * Created: 2026-09-24
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (RWM Summary tree's filter
+ *          section, in lockstep with the Reading/Writing *All TVFs). Attributed rows carry the
+ *          FROZEN version's demographics, unassessed/current rows the current version's.
  * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohort (full
  *          rationale in tvf_StudentCohortReadingAll), CYCLE-SCOPED: with a cycle selected, a student
  *          WITH any R/W/M result in it takes their demographics from the frozen DimStudent version of
@@ -87,14 +90,14 @@ RETURN
     AttrBase AS (
         -- cycle selected, assessed: the frozen version of the student's most recent R/W/M result
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.SchoolID,
-               fv.ProgramCode, fv.Homeroom
+               fv.ProgramCode, fv.Homeroom, fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous
         FROM AnyTouch t
         INNER JOIN DimStudent fv ON fv.StudentKey = t.StudentKey
         WHERE t.rn = 1
         UNION ALL
         -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.SchoolID,
-               s.ProgramCode, s.Homeroom
+               s.ProgramCode, s.Homeroom, s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND (@CycleGroupID IS NULL
@@ -108,7 +111,8 @@ RETURN
                COALESCE(cur.LastName,  a.LastName)    AS LastName,     -- frozen name for district leavers
                a.Grade, sg.GradeOrder,
                a.SchoolID, sch.SchoolName, sch.Abbreviation AS SchoolAbbreviation,
-               a.ProgramCode, p.ProgramFamily, a.Homeroom
+               a.ProgramCode, p.ProgramFamily, a.Homeroom,
+               a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous
         FROM AttrBase a
         INNER JOIN DimProgram p  ON p.ProgramCode = a.ProgramCode
         INNER JOIN DimGrade   sg ON sg.GradeCode  = a.Grade
@@ -253,6 +257,9 @@ RETURN
         isc.ProgramCode,
         isc.ProgramFamily,
         isc.Homeroom,
+        isc.Gender,
+        isc.SelfIDAfrican,
+        isc.SelfIDIndigenous,
         ra.Code                                        AS ReadingCode,
         wa.Code                                        AS WritingCode,
         CAST(mr.RollupPct AS DECIMAL(5,4))             AS MathRollupPct,      -- blanks excluded

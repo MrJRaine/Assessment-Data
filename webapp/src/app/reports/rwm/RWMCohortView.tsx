@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { RWMStudent } from '@/lib/data'
 
 // RWM = a 0–3 score per Primary–5 student: how many of Reading / Writing / Math they're currently
@@ -11,18 +11,19 @@ import type { RWMStudent } from '@/lib/data'
 const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
 const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
 // Standard 4-pt achievement palette (DimAchievementLevel HexColor, levels 1-4):
-// 0 of 3 areas → Not Yet Meeting red … 3 of 3 → Exceeding green.
-const SCORE_HEX: Record<number, string> = { 0: '#D1495B', 1: '#E8A33D', 2: '#8FB339', 3: '#2E7D5B' }
+// 0 of 3 areas → Not Yet Meeting red … 3 of 3 → Exceeding green. Shared with the RWM roll-up tree.
+export const SCORE_HEX: Record<number, string> = { 0: '#D1495B', 1: '#E8A33D', 2: '#8FB339', 3: '#2E7D5B' }
 
-// Meeting pill for one area: ✓ meeting / — not meeting / no result yet.
+// Meeting pill for one area: ✓ meeting / — not meeting / no result yet. "Meeting or exceeding" is
+// the app-wide phrasing (roll-up legends, student snapshots) — match it, don't coin variants.
 function AreaCell({ meeting, has }: { meeting: boolean; has: boolean }) {
   if (!has) return <span className="rwm-area none">no result</span>
   return meeting
-    ? <span className="rwm-area yes">Meeting+</span>
+    ? <span className="rwm-area yes">Meeting or exceeding</span>
     : <span className="rwm-area no">Not yet</span>
 }
 
-export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
+export default function RWMCohortView({ cohort, viewToggle }: { cohort: RWMStudent[]; viewToggle?: ReactNode }) {
   const allGrades = useMemo(
     () => [...new Set(cohort.map((s) => s.grade).filter((g): g is string => !!g))]
       .sort((a, b) => (GRADE_ORDER[a] ?? 99) - (GRADE_ORDER[b] ?? 99)),
@@ -141,7 +142,7 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
               {donut.slices.map((s) => (
                 <li key={s.score}>
                   <span className="swatch" style={{ background: s.color }} />
-                  <span className="legend-name">{s.score} of 3 meeting+</span>
+                  <span className="legend-name">{s.score} of 3 areas Meeting or exceeding</span>
                   <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
                 </li>
               ))}
@@ -151,6 +152,7 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
       </div>
 
       <div className="cohort-bar">
+        {viewToggle}
         <span className="muted">{filtered.length} of {cohort.length} students</span>
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
           {expanded ? 'Hide filters' : 'Show filters'}{!expanded && anyFilter ? ' (active)' : ''}
@@ -231,7 +233,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
             <tr>
               <th>Student</th>
               <th>Grade</th>
-              <th>Program</th>
               <th>School</th>
               <th>Reading</th>
               <th>Writing</th>
@@ -244,7 +245,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
               <tr key={s.studentKey}>
                 <td><Link href={`/reports/rwm/${s.studentKey}`}>{s.fullName}</Link></td>
                 <td>{gradeLabel(s.grade ?? '—')}</td>
-                <td>{s.programFamily ?? '—'}</td>
                 <td>{s.schoolAbbrev ?? s.schoolName ?? '—'}</td>
                 <td><AreaCell meeting={s.readingMeeting} has={s.hasReading} /></td>
                 <td><AreaCell meeting={s.writingMeeting} has={s.hasWriting} /></td>

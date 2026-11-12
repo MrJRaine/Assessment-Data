@@ -489,7 +489,10 @@ function GradeBlock({
               const r = meanOf(avgs)
               return (
                 <tr key={s.studentKey}>
-                  <th className="col-task" scope="row" title={s.fullName}>{s.name}</th>
+                  {/* Students are ROWS here, so there's room for the full name — "Last, First" like
+                      every other report list. The compact "First L." stays only where students are
+                      COLUMN headers (the tasks-down class view + the entry grid). */}
+                  <th className="col-task" scope="row">{s.sortKey}</th>
                   <td className="col-pct"><BandCell avg={r} ipp={s.mathIPP && r == null} incomplete={false} /></td>
                   {cells}
                 </tr>
