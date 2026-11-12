@@ -40,8 +40,9 @@ export default async function MissingResultsPage({
   if (!error) {
     try {
       cycles = await getReportCycles()
-      // This report is inherently per-cycle: no ?cycle param = the newest cycle that has started
-      // (what the entry screens are on), so the CycleSelector's "Current" chip means exactly that.
+      // This report is inherently per-cycle (no most-recent-result mode), so the selector shows
+      // cycles only — no "Current" chip — and no ?cycle param = the newest cycle that has started
+      // (what the entry screens are on), which the selector then shows as selected.
       cycle = cycleParam ?? cycles[cycles.length - 1]?.cycleGroupId ?? null
       if (cycle) rows = await getMissingDataAll(upn, cycle)
     } catch (e) {
@@ -67,7 +68,7 @@ export default async function MissingResultsPage({
         (students with a confirmed IPP in a subject are not expected in it). Math counts as reported
         once 80% of the cycle&apos;s tasks are filled in. Open a section to see who still needs data entered.
       </p>
-      {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
+      {cycles.length > 0 ? <CycleSelector cycles={cycles} cyclesOnly /> : null}
       {error ? (
         <ErrorNote message={error} />
       ) : cycle == null ? (
