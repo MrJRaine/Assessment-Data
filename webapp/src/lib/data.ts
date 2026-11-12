@@ -831,8 +831,9 @@ export interface ReadingRollupRow {
   schoolId: string | null
   schoolName: string | null
   readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
-  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = neither expected nor assessed ("No data")
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
+  isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
   achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
   // Summary-view demographic filters (2026-11-10). null until the TVF demographics deploy lands.
   gender: string | null
@@ -856,6 +857,7 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
     scaleSystem: (r.ScaleSystem as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    isExpectedOnly: Boolean(r.IsExpectedOnly),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
     gender: (r.Gender as string) ?? null,
     selfIDAfrican: toBool(r.SelfIDAfrican),
@@ -942,8 +944,9 @@ export interface WritingRollupRow {
   schoolId: string | null
   schoolName: string | null
   writingIPP: boolean | null
-  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  assessmentLanguage: string | null // 'English' | 'French'; null = neither expected nor assessed
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
+  isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
   // The four trait scores ('1'-'4' | 'SCR' | '-' | null) + the average, for the per-trait roll-up measures.
   ideasScore: string | null
   organizationScore: string | null
@@ -973,6 +976,7 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    isExpectedOnly: Boolean(r.IsExpectedOnly),
     ideasScore: (r.IdeasScore as string) ?? null,
     organizationScore: (r.OrganizationScore as string) ?? null,
     languageScore: (r.LanguageScore as string) ?? null,

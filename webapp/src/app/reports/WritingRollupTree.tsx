@@ -31,11 +31,17 @@ function buildStudents(rows: WritingRollupRow[]): RollupStudent[] {
       s = {
         key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
         schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.writingIPP === true,
-        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous, results: [],
+        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+        expectedEN: false, expectedFR: false, results: [],
       }
       byKey.set(r.studentKey, s)
     }
-    if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
+    if (r.isExpectedOnly && (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French')) {
+      // Expected in this language, no result yet: keeps the student in that language's view
+      // (tally counts them under Students / "no result") without inventing a phantom result.
+      if (r.assessmentLanguage === 'English') s.expectedEN = true
+      else s.expectedFR = true
+    } else if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
       s.results.push({
         en: r.assessmentLanguage === 'English',
         code: r.achievementCode,

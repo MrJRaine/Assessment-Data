@@ -55,6 +55,11 @@ export interface RollupStudent {
   gender: string | null
   selfIDAfrican: boolean | null
   selfIDIndigenous: boolean | null
+  // Expected-but-unassessed languages (2026-11-12, from the feeds' IsExpectedOnly rows): the language
+  // view's population is expected UNION assessed, so these keep an unassessed student visible under
+  // the Language of Assessment filter without inventing a phantom result.
+  expectedEN: boolean
+  expectedFR: boolean
   results: RollupResult[]
 }
 
@@ -109,8 +114,9 @@ export interface Counts {
 // the Math roll-up's treatment. IPP results are tallied in `ippExcluded` for the hover.
 //
 // `lang` narrows the view to one language of assessment (Slice 4): a specific language counts only that
-// language's results and DROPS students with none in it (so Students/Results reflect that language's
-// population); 'All' keeps everything incl. no-result students.
+// language's results, and its student population = students ASSESSED in it UNION students EXPECTED in it
+// (2026-11-12 — an expected-but-unassessed student stays visible, landing in the "no result" count);
+// students neither assessed nor expected in that language drop. 'All' keeps everything.
 export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Counts {
   const c: Counts = {
     students: 0, studentsEN: 0, studentsFR: 0, studentsNone: 0,
@@ -119,7 +125,8 @@ export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Coun
   }
   for (const s of students) {
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
-    if (lang !== 'All' && rs.length === 0) continue // not part of this language's view
+    if (lang !== 'All' && rs.length === 0 && !(lang === 'EN' ? s.expectedEN : s.expectedFR))
+      continue // neither assessed nor expected in this language — not part of its view
     c.students++
     let hasEN = false
     let hasFR = false

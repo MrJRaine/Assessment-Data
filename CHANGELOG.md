@@ -59,7 +59,16 @@ with `0.3.0`, so earlier detail is approximate.
   `deploy_missing_results_2026-11-12.sql` creates `tvf_MissingDataAll` + `tvf_MissingDataGroup`.
 
 ### Fixed (reports/entry consistency)
-- **Math drill-down scrollbars are visible again.** Opening a grade/homeroom on the **Math** summary
+- **Language of Assessment filter no longer drops expected-but-unassessed students.** On the
+  Reading/Writing Summary trees, filtering by language showed only students with a RESULT tagged
+  in that language — a student who should be assessed in French but hasn't been yet vanished from
+  the counts and the grade/homeroom drill. The trees now build each language's population the same
+  way the Student list always has: students **expected** in the language (from their mapped-course
+  enrolment, `StudentExpectedAssessment`) **union** students assessed in it — so the unassessed
+  show under Students / "no result" and appear in the drill as "—" rows, without inventing a
+  phantom result (the % and Results counts are unchanged). **SQL:** included in the revised
+  `deploy_summary_filter_demographics_2026-11-10.sql` — run it (again, if the earlier revision
+  already ran; it is idempotent). Opening a grade/homeroom on the **Math** summary
   tree gave no visible scrollbars when the student list spilled over — the math tree's unit columns
   make it wider than the screen, so the drill pane stretched to the full table width and its
   scrollbars (the same in-pane bars Reading/Writing show) rendered past the right edge. The pane now
