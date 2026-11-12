@@ -210,10 +210,12 @@ function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRo
           {hasResult ? <span style={{ fontWeight: 600 }}>{r.levelCode}</span> : (r.ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : miss)}
         </td>
         <td className="stu muted">{fmtExp(r)}</td>
-        <td className="stu">{hasResult && r.delta != null ? signed(r.delta) : miss}</td>
+        {/* Diff/Achievement key off the BAND, not the level: an IPP student's result keeps its level
+            but the feed gives it no band (not measured) — show "IPP" there, like the flat list. */}
+        <td className="stu">{r.achCode != null && r.delta != null ? signed(r.delta) : miss}</td>
         <td className="stu">{r.diffJune != null ? signed(r.diffJune) : miss}</td>
         <td className="ach" style={hasResult && r.achColor ? { color: r.achColor, fontWeight: 600 } : undefined}>
-          {hasResult ? (r.achName ?? miss) : (r.ipp ? 'IPP' : miss)}
+          {r.achName ?? (r.ipp ? 'IPP' : miss)}
         </td>
       </tr>
     )

@@ -1,9 +1,9 @@
 /*******************************************************************************
- * Deploy: Summary-tree demographics + expected-language rows
- * Date: 2026-11-10 (revised 2026-11-12)
+ * Deploy: Summary-tree demographics + expected-language rows + lifetime "Current"
+ * Date: 2026-11-10 (revised 2026-11-12, twice)
  * Target: Assessment_Warehouse_Dev FIRST, then live. Idempotent - safe to run
- * again even if the 2026-11-10 revision already ran.
- * Replaces five oversight roll-up TVFs with BOTH changes:
+ * again even if an earlier revision already ran.
+ * Replaces five oversight roll-up TVFs with ALL THREE changes:
  *   (a) 2026-11-10 - Gender / SelfIDAfrican / SelfIDIndigenous columns for the
  *       Reports summary trees' demographic filter section;
  *   (b) 2026-11-12 - EXPECTED-LANGUAGE rows (reading/writing TVFs only): the
@@ -11,16 +11,26 @@
  *       cycle-scoped) UNION assessed, so the Language of Assessment filter no
  *       longer drops students who should be assessed in a language but have no
  *       result yet - they now count under that language as "no result".
- *   1. tvf_StudentCohortReadingAll     (roll-up feed)     a + b
- *   2. tvf_StudentCohortWritingAll     (roll-up feed)     a + b
- *   3. tvf_StudentCohortReadingGroup   (drill detail)     a + b
- *   4. tvf_StudentCohortWritingGroup   (drill detail)     a + b
+ *   (c) 2026-11-12 - "CURRENT" = LIFETIME + IPP NOT MEASURED (reading/writing
+ *       TVFs only), aligning the summary trees with the ON-SPEC flat Student
+ *       list (tvf_StudentCohort): with no cycle selected the latest-pick has NO
+ *       window restriction (each student's most recent result ON RECORD, any
+ *       school year - the roll-ups were silently this-year-only, which made the
+ *       summary donut undercount vs the list); and the achievement band is now
+ *       really NULL for IPP/unresolved students (donut, % Meeting/Exceeding,
+ *       trend and drill all match the list's chart-eligible rule).
+ *   1. tvf_StudentCohortReadingAll     (roll-up feed)     a + b + c
+ *   2. tvf_StudentCohortWritingAll     (roll-up feed)     a + b + c
+ *   3. tvf_StudentCohortReadingGroup   (drill detail)     a + b + c
+ *   4. tvf_StudentCohortWritingGroup   (drill detail)     a + b + c
  *   5. tvf_StudentCohortRWM            (RWM report feed)  a only
  * READS: DimStudent (Gender/Self-ID; frozen version for attributed rows),
- * StudentExpectedAssessment (expected languages). WRITES: nothing -
+ * StudentExpectedAssessment (expected languages), FactAssessmentReading/Writing
+ * (lifetime latest-pick), FactStudentIPP (band gating). WRITES: nothing -
  * DROP/CREATE of the five iTVFs + re-GRANT to StudentDataAssessment only.
  * Assembled verbatim from sql/security sources.
  ******************************************************************************/
+
 /*******************************************************************************
  * Function: tvf_StudentCohortReadingAll  (INLINE table-valued function)
  * Purpose: READ-ONLY feed for the Reports > Reading OVERSIGHT roll-up tree (1.3.0 reports rebuild).
@@ -30,6 +40,16 @@
  *          Counts/measure only — NO names or student numbers (privacy; the per-group student detail loads
  *          separately on expand, same pattern as Math).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, aligning this feed with the
+ *          ON-SPEC flat list (tvf_StudentCohort; user ruling 2026-11-12 — "Current" has always meant
+ *          the most current evidence available for every student): (1) with @CycleGroupID NULL the
+ *          latest-pick has NO window restriction — each student's most recent reading result ON
+ *          RECORD, any school year (the GradeSpan population gate stays current-year: who appears is
+ *          this year's assessed grades; what shows is their latest evidence, however old); the
+ *          expected/fallback NOT EXISTS probes follow the same scope so an old result isn't double-
+ *          reported as expected-only. (2) AchievementLevelCode is now really NULL for reading-IPP /
+ *          unresolved students — this header always claimed it; the band join never enforced it —
+ *          so the donut, % Meeting/Exceeding and trend match the list's chart-eligible rule.
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows (fixes the Language of Assessment filter dropping
  *          expected-but-unassessed students): the per-student language set is now EXPECTED
  *          (StudentExpectedAssessment, cycle-scoped) UNION assessed — the same union as
@@ -69,9 +89,10 @@
  *   StaffSchoolAccess, matched against the row's ATTRIBUTED school (identical gate shape to
  *   tvf_StudentCohortMathAll). A plain teacher gets no rows; teachers keep the flat per-student list.
  *
- * @CycleGroupID NULL = all current-year Reading windows (lifetime-this-year latest); a cycle id restricts
- *   the latest-pick to that cycle's Reading instances. Grades included = the span of the selected Reading
- *   windows' MinGrade..MaxGrade (config-driven, not hardcoded), checked against the ATTRIBUTED grade.
+ * @CycleGroupID NULL = LIFETIME most-recent reading per language ("Current" — any school year, lockstep
+ *   with tvf_StudentCohort); a cycle id restricts the latest-pick to that cycle's Reading instances.
+ *   Grades included = the span of the CURRENT-YEAR (or selected cycle's) Reading windows'
+ *   MinGrade..MaxGrade (config-driven, not hardcoded), checked against the ATTRIBUTED grade.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -111,7 +132,9 @@ RETURN
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
         INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with tvf_StudentCohort (user ruling 2026-11-12). A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
     ),
     ReadingIPP AS (    -- one value per STUDENT NUMBER (1 = reading IPP in any family, 0 = not, NULL =
         -- unresolved). Keyed by StudentNumber because attributed rows carry FROZEN StudentKeys,
@@ -169,7 +192,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
                           INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
                           WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
@@ -179,7 +203,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     )
     SELECT
@@ -206,6 +231,7 @@ RETURN
     -- bounds => at most one band per delta). No delta (no result / NULL) => no band.
     LEFT  JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
           AND b.ReadingDelta IS NOT NULL
           AND (dal.LowerBound IS NULL
                OR (dal.LowerOp = '>=' AND b.ReadingDelta >= dal.LowerBound)
@@ -233,6 +259,11 @@ GO
  *          per language (EN/FR) + overall. Counts/measure only — no names (the per-group detail loads
  *          separately on expand).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent writing result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          AchievementLevelCode is NULL for writing-IPP / unresolved students (not measured).
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
  *          its header): language set = expected (StudentExpectedAssessment, Writing) UNION assessed;
  *          an expected language with no result emits an IsExpectedOnly=1 row (NULL date/traits/avg);
@@ -261,8 +292,9 @@ GO
  *
  * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess,
  *   matched against the row's ATTRIBUTED school.
- * @CycleGroupID NULL = all current-year Writing windows; a cycle id restricts the latest-pick. Grades =
- *   the span of the selected Writing windows' MinGrade..MaxGrade, checked against the ATTRIBUTED grade.
+ * @CycleGroupID NULL = LIFETIME most-recent writing per language ("Current" — any school year, lockstep
+ *   with the flat list); a cycle id restricts the latest-pick. Grades = the span of the CURRENT-YEAR
+ *   (or selected cycle's) Writing windows' MinGrade..MaxGrade, checked against the ATTRIBUTED grade.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -310,7 +342,9 @@ RETURN
             ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber, faw.AssessmentLanguage
                                ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
-        WHERE faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the flat list (user ruling 2026-11-12). A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
     ),
     WritingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
         SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
@@ -369,7 +403,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx
                           WHERE fx.StudentNumber = s.StudentNumber
                             AND fx.AssessmentLanguage = el.Language
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
@@ -382,7 +417,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     )
     SELECT
@@ -404,6 +440,8 @@ RETURN
         b.ConventionsScore                AS ConventionsScore,
         b.AvgScore                        AS AvgScore,          -- the 4-trait average (for the Mean measure)
         CASE WHEN b.AvgScore IS NULL THEN NULL
+             -- IPP/unresolved: not measured, no band (lockstep with the flat list's chart-eligible rule)
+             WHEN ipp.StudentNumber IS NOT NULL AND (ipp.IsIPP IS NULL OR ipp.IsIPP = 1) THEN NULL
              WHEN b.AvgScore >= 3.50 THEN 4
              WHEN b.AvgScore >= 2.75 THEN 3
              WHEN b.AvgScore >= 1.75 THEN 2
@@ -431,6 +469,13 @@ GO
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent reading result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          WindowMonth covers ALL active Reading windows (a prior-year result must still resolve its
+ *          Expected range — mirrors tvf_StudentCohort); AchievementLevelCode/Name/colours are NULL
+ *          for reading-IPP / unresolved students (not measured — the drill shows "IPP" instead).
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
  *          its header): an expected language (StudentExpectedAssessment) with no result emits a row
  *          with ScaleSystem set and NULL level/delta, so the drill under a Language of Assessment
@@ -483,8 +528,10 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
-    -- Effective benchmark month per selected reading window (BenchmarkMonth, else dominant calendar
-    -- month) — matched against DimReadingBenchmark for the Expected range (mirrors tvf_StudentCohort).
+    -- Effective benchmark month per ACTIVE reading window, ANY year (BenchmarkMonth, else dominant
+    -- calendar month) — matched against DimReadingBenchmark for the Expected range. Not restricted to
+    -- ReadWins: in "Current" (lifetime) mode a latest result can sit in a prior-year window and its
+    -- Expected range must still resolve (mirrors tvf_StudentCohort's WindowMonth).
     WindowMonth AS (
         SELECT w.AssessmentWindowID,
                COALESCE(w.BenchmarkMonth,
@@ -492,7 +539,7 @@ RETURN
                     WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
                     GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w
-        WHERE w.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
     ),
     LatestReading AS (   -- latest result per (student, language) across the selected windows.
         -- far.StudentKey is the FROZEN version the result was recorded against — the attribution.
@@ -502,7 +549,9 @@ RETURN
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
         INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the *All feed and tvf_StudentCohort. A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
     ),
     ReadingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
         SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
@@ -555,7 +604,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
                           INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
                           WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
@@ -567,7 +617,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     ),
     -- The group's attributed rows (in the reading grade span), intersected with the caller's scope.
@@ -652,6 +703,7 @@ RETURN
            ON jrs.LevelCode = sp.StartingLevelCode AND jrs.ScaleSystem = gs.ScaleSystem
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
           AND gs.ReadingDelta IS NOT NULL
           AND (dal.LowerBound IS NULL
                OR (dal.LowerOp = '>=' AND gs.ReadingDelta >= dal.LowerBound)
@@ -674,6 +726,12 @@ GO
  *          One row per (student x writing language) + a NULL-language row for a student with no writing
  *          result. The client renders one row per (student, language) with the four traits in COIL order.
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent writing result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          AchievementLevelCode/Name/colours are NULL for writing-IPP / unresolved students (not
+ *          measured — the drill shows "IPP" instead).
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortWritingAll (see
  *          the reading All header for the rationale): an expected language (StudentExpectedAssessment)
  *          with no result emits a row with the language set and NULL traits/avg, so the drill under a
@@ -740,7 +798,9 @@ RETURN
             ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber, faw.AssessmentLanguage
                                ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
-        WHERE faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the *All feed and the flat list. A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
     ),
     WritingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
         SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
@@ -794,7 +854,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx
                           WHERE fx.StudentNumber = s.StudentNumber
                             AND fx.AssessmentLanguage = el.Language
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
@@ -806,7 +867,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     ),
     GroupStudents AS (
@@ -871,6 +933,7 @@ RETURN
     LEFT JOIN WritingIPP ipp ON ipp.StudentNumber = gs.StudentNumber
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
           AND gs.AvgScore IS NOT NULL
           AND dal.AchievementLevelCode =
               CASE WHEN gs.AvgScore >= 3.50 THEN 4

@@ -7,6 +7,11 @@
  *          per language (EN/FR) + overall. Counts/measure only — no names (the per-group detail loads
  *          separately on expand).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent writing result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          AchievementLevelCode is NULL for writing-IPP / unresolved students (not measured).
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
  *          its header): language set = expected (StudentExpectedAssessment, Writing) UNION assessed;
  *          an expected language with no result emits an IsExpectedOnly=1 row (NULL date/traits/avg);
@@ -35,8 +40,9 @@
  *
  * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess,
  *   matched against the row's ATTRIBUTED school.
- * @CycleGroupID NULL = all current-year Writing windows; a cycle id restricts the latest-pick. Grades =
- *   the span of the selected Writing windows' MinGrade..MaxGrade, checked against the ATTRIBUTED grade.
+ * @CycleGroupID NULL = LIFETIME most-recent writing per language ("Current" — any school year, lockstep
+ *   with the flat list); a cycle id restricts the latest-pick. Grades = the span of the CURRENT-YEAR
+ *   (or selected cycle's) Writing windows' MinGrade..MaxGrade, checked against the ATTRIBUTED grade.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -84,7 +90,9 @@ RETURN
             ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber, faw.AssessmentLanguage
                                ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
-        WHERE faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the flat list (user ruling 2026-11-12). A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
     ),
     WritingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
         SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
@@ -143,7 +151,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx
                           WHERE fx.StudentNumber = s.StudentNumber
                             AND fx.AssessmentLanguage = el.Language
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
@@ -156,7 +165,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     )
     SELECT
@@ -178,6 +188,8 @@ RETURN
         b.ConventionsScore                AS ConventionsScore,
         b.AvgScore                        AS AvgScore,          -- the 4-trait average (for the Mean measure)
         CASE WHEN b.AvgScore IS NULL THEN NULL
+             -- IPP/unresolved: not measured, no band (lockstep with the flat list's chart-eligible rule)
+             WHEN ipp.StudentNumber IS NOT NULL AND (ipp.IsIPP IS NULL OR ipp.IsIPP = 1) THEN NULL
              WHEN b.AvgScore >= 3.50 THEN 4
              WHEN b.AvgScore >= 2.75 THEN 3
              WHEN b.AvgScore >= 1.75 THEN 2

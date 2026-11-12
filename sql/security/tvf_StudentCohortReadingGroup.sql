@@ -6,6 +6,13 @@
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent reading result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          WindowMonth covers ALL active Reading windows (a prior-year result must still resolve its
+ *          Expected range — mirrors tvf_StudentCohort); AchievementLevelCode/Name/colours are NULL
+ *          for reading-IPP / unresolved students (not measured — the drill shows "IPP" instead).
  * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
  *          its header): an expected language (StudentExpectedAssessment) with no result emits a row
  *          with ScaleSystem set and NULL level/delta, so the drill under a Language of Assessment
@@ -58,8 +65,10 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
-    -- Effective benchmark month per selected reading window (BenchmarkMonth, else dominant calendar
-    -- month) — matched against DimReadingBenchmark for the Expected range (mirrors tvf_StudentCohort).
+    -- Effective benchmark month per ACTIVE reading window, ANY year (BenchmarkMonth, else dominant
+    -- calendar month) — matched against DimReadingBenchmark for the Expected range. Not restricted to
+    -- ReadWins: in "Current" (lifetime) mode a latest result can sit in a prior-year window and its
+    -- Expected range must still resolve (mirrors tvf_StudentCohort's WindowMonth).
     WindowMonth AS (
         SELECT w.AssessmentWindowID,
                COALESCE(w.BenchmarkMonth,
@@ -67,7 +76,7 @@ RETURN
                     WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
                     GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w
-        WHERE w.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
     ),
     LatestReading AS (   -- latest result per (student, language) across the selected windows.
         -- far.StudentKey is the FROZEN version the result was recorded against — the attribution.
@@ -77,7 +86,9 @@ RETURN
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
         INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the *All feed and tvf_StudentCohort. A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
     ),
     ReadingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
         SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
@@ -130,7 +141,8 @@ RETURN
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
                           INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
                           WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
-                            AND fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
         UNION ALL
         -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
@@ -142,7 +154,8 @@ RETURN
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
                           WHERE fx2.StudentNumber = s.StudentNumber
-                            AND fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins))
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
           AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     ),
     -- The group's attributed rows (in the reading grade span), intersected with the caller's scope.
@@ -227,6 +240,7 @@ RETURN
            ON jrs.LevelCode = sp.StartingLevelCode AND jrs.ScaleSystem = gs.ScaleSystem
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
           AND gs.ReadingDelta IS NOT NULL
           AND (dal.LowerBound IS NULL
                OR (dal.LowerOp = '>=' AND gs.ReadingDelta >= dal.LowerBound)
