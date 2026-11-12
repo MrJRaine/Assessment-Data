@@ -63,6 +63,7 @@
 
 ## Data model / SQL
 - [Ongoing-Assessment Monthly Model](project_ongoing_assessment_model.md) — windows = monthly bins; multiple dated results per window (latest-by-date wins); late entry allowed.
+- [Reports "Current" = Lifetime](project_current_mode_semantics.md) — "Current" on report pages = each student's most recent evidence ON RECORD (any school year); tvf_StudentCohort is the spec — NEVER add a school-year gate to a Current-mode latest-pick (population/grade-span gates may stay current-year). IPP/unresolved students get NO achievement band anywhere achievement is aggregated. (Math/RWM-math deliberately stay current-year — task×grade×month model.)
 - [Assessment Types](project_assessment_types.md) — Reading / Writing / Math; one type per window; Math in 1.0. ScaleSystem reading-only.
 - [Math P-6 Assessment Model](project_math_assessment_model.md) — task-based binary mastery; entry UI built on dev. TODO: Math IPP flow, cohort/reporting, DQ, FR + full seed.
 - [Math Split-Grade Pacing Model](project_math_split_pacing_model.md) — DESIGN 2026-09-21 (not built): default month on task + SCD composition exceptions; carry-forward via edge links; DimHomeroom SCD from ingest. Structural footprint locked.
