@@ -1824,6 +1824,80 @@ export async function getStudentCohortRWM(upn: string, cycleGroupId: string | nu
   }))
 }
 
+// ── Reports > Missing results (1.3.1): Administrator/RegionalAnalyst-only completeness roll-up ──
+export type MissingSubject = 'Reading' | 'Writing' | 'Math'
+
+/**
+ * One EXPECTED data point (section × student × subject) for the selected cycle, with a missing
+ * bit — the feed for the Missing-results tree. Deliberately name-free (StudentNumber only, needed
+ * to count a multi-section student once in teacher/school totals); names load per-section via
+ * getMissingDataGroup. The TVF only has an Admin/RA branch, so other roles get zero rows.
+ */
+export interface MissingDataRow {
+  subject: MissingSubject
+  schoolId: string
+  schoolName: string
+  sectionId: string
+  courseName: string | null
+  sectionNumber: string | null
+  teacherEmail: string | null // null = no current Primary teacher on the section
+  teacherName: string | null
+  grade: string | null
+  studentNumber: string
+  missing: boolean
+}
+
+export async function getMissingDataAll(upn: string, cycleGroupId: string): Promise<MissingDataRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_MissingDataAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    subject: r.AssessmentType as MissingSubject,
+    schoolId: String(r.SchoolID),
+    schoolName: (r.SchoolName as string) ?? String(r.SchoolID),
+    sectionId: String(r.SectionID),
+    courseName: (r.CourseName as string) ?? null,
+    sectionNumber: (r.SectionNumber as string) ?? null,
+    teacherEmail: (r.TeacherEmail as string) ?? null,
+    teacherName: (r.TeacherName as string) ?? null,
+    grade: (r.Grade as string) ?? null,
+    studentNumber: String(r.StudentNumber),
+    missing: Boolean(r.IsMissing),
+  }))
+}
+
+/** One section's still-missing students for the drill — one row per (student × missing subject). */
+export interface MissingGroupRow {
+  subject: MissingSubject
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+}
+
+export async function getMissingDataGroup(
+  upn: string,
+  cycleGroupId: string,
+  sectionId: string,
+): Promise<MissingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_MissingDataGroup(@UPN, @CycleGroupID, @SectionID)',
+    { CycleGroupID: cycleGroupId, SectionID: sectionId },
+  )
+  return rows.map((r) => ({
+    subject: r.AssessmentType as MissingSubject,
+    studentNumber: String(r.StudentNumber),
+    firstName: (r.FirstName as string) ?? '',
+    lastName: (r.LastName as string) ?? '',
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
+  }))
+}
+
 export interface RWMHistoryRow {
   cycleDate: string | null
   cycleLabel: string

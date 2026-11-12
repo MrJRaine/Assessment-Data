@@ -28,11 +28,13 @@ export default async function RwmReportsPage({
   let cycles: ReportCycle[] = []
   let oversight = false
   let regionWide = false
+  let adminRA = false // Administrator/RegionalAnalyst only → Missing results tab (NOT SpecialistTeacher)
   let error: string | null = null
   try {
     const accessLevel = await getCallerAccessLevel(upn)
     oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
     regionWide = accessLevel === 'RegionalAnalyst'
+    adminRA = accessLevel === 'Administrator' || regionWide
     cohort = await getStudentCohortRWM(upn, cycle)
     cycles = await getReportCycles()
   } catch (e) {
@@ -66,6 +68,7 @@ export default async function RwmReportsPage({
         <ToggleLink href="/reports?subject=writing" className="toggle">Writing</ToggleLink>
         <ToggleLink href="/reports/math" className="toggle">Math</ToggleLink>
         <ToggleLink href="/reports/rwm" className="toggle-on">RWM</ToggleLink>
+        {adminRA ? <ToggleLink href="/reports/missing" className="toggle">Missing results</ToggleLink> : null}
       </div>
       <p className="muted small" style={{ margin: '0 0 1rem' }}>
         Primary–5 only. A student&apos;s score counts Reading, Writing, and Math where their most-recent

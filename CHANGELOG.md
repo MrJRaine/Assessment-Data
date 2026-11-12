@@ -46,6 +46,17 @@ with `0.3.0`, so earlier detail is approximate.
   the drill tables together. **SQL:** `tvf_StudentCohortRWM` is included in the same
   `deploy_summary_filter_demographics_2026-11-10.sql` (now five TVFs); until it runs, the RWM
   Gender/Self-ID groups stay hidden (Grade + both toggles work without it).
+- **Missing results report (Administrators + Regional Analysts only).** New Reports tab: for the
+  selected cycle, a TCRCE → School → Lead teacher → Section roll-up of students who still need a
+  result entered (students with a confirmed IPP in a subject are not expected in it). Columns =
+  missing-student counts for Reading / Writing / Math / Total plus **% missing of expected**;
+  rows are colour-coded by **% reported** (<50% red · 50–74% yellow · 75–99% light green · 100%
+  dark green). Opening a section lists exactly who still needs data entered. Math counts as
+  reported at **80% of the cycle's tasks** — the entry grid's own unit-level threshold. Teacher,
+  school, and TCRCE totals count a multi-section student once; sections with no current lead
+  teacher appear under a visible "No lead teacher" row. The tab is hidden from every other role,
+  the page 404s for them, and the TVFs have no non-Admin/RA branch. **SQL:**
+  `deploy_missing_results_2026-11-12.sql` creates `tvf_MissingDataAll` + `tvf_MissingDataGroup`.
 
 ### Fixed (reports/entry consistency)
 - **Math drill-down scrollbars are visible again.** Opening a grade/homeroom on the **Math** summary
@@ -57,6 +68,10 @@ with `0.3.0`, so earlier detail is approximate.
   class view, and the data-entry grid) kept the compact "First L." display name but sorted on it —
   first-name order, unlike every other list (the feeds already order by last name; the client
   re-sort was undoing it). They now sort by "Last, First" with the display unchanged.
+- **Math data entry shows full last names.** Two classmates sharing a first name and last initial
+  were indistinguishable as "First L." column headers. The entry grid's student columns now show
+  the full name on two lines — first name on top, last name below — so columns stay narrow; the
+  student-picker chips and "can't be marked" notes use the full name too.
 
 - **RWM Summary roll-up.** The RWM report now opens on a School → Grade/Homeroom summary tree for
   oversight roles (same Summarize-by toggle as the other reports; Regional Analysts get the TCRCE
@@ -71,7 +86,8 @@ with `0.3.0`, so earlier detail is approximate.
   from the student list (still filterable), matching the other reports.
 - **Math reports show full student names where students are rows.** The summary drill and the class
   view's students-down layout now show "Last, First" like every other report list; the compact
-  "First L." stays only where students are column headers (the tasks-down view and the entry grid).
+  "First L." stays only in the reports' tasks-down view, where students are column headers (the
+  entry grid's columns got full two-line names — see Fixed above).
 - **Every chart respects every non-cycle filter on its page.** The by-cycle bar graph now follows the
   Achievement chip too (each bar filters by that cycle's own band), and the Summary-view charts moved
   inside the tree so they obey its filters — the displays always represent the data displayed.

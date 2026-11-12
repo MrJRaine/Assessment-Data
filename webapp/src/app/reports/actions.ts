@@ -1,7 +1,10 @@
 'use server'
 
 import { getCurrentUpn } from '@/lib/auth'
-import { getReadingGroup, getWritingGroup, type ReadingGroupRow, type WritingGroupRow } from '@/lib/data'
+import {
+  getReadingGroup, getWritingGroup, getMissingDataGroup,
+  type ReadingGroupRow, type WritingGroupRow, type MissingGroupRow,
+} from '@/lib/data'
 import { toUserMessage } from '@/lib/errors'
 
 /**
@@ -16,6 +19,22 @@ export async function loadReadingGroup(
   try {
     const upn = await getCurrentUpn()
     return { rows: await getReadingGroup(upn, groupKey, cycleGroupId), error: null }
+  } catch (e) {
+    return { rows: [], error: toUserMessage(e) }
+  }
+}
+
+/**
+ * One section's still-missing students for the Missing-results tree (1.3.1), loaded on expand.
+ * tvf_MissingDataGroup only has an Admin/RA branch, so out-of-scope callers get no rows.
+ */
+export async function loadMissingGroup(
+  sectionId: string,
+  cycleGroupId: string,
+): Promise<{ rows: MissingGroupRow[]; error: string | null }> {
+  try {
+    const upn = await getCurrentUpn()
+    return { rows: await getMissingDataGroup(upn, cycleGroupId, sectionId), error: null }
   } catch (e) {
     return { rows: [], error: toUserMessage(e) }
   }

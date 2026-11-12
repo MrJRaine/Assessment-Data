@@ -51,11 +51,13 @@ export default async function StudentsPage({
   let cycles: ReportCycle[] = []
   let oversight = false
   let regionWide = false // RegionalAnalyst = sees all schools → gets the TCRCE all-schools roll-up row
+  let adminRA = false // Administrator/RegionalAnalyst only → Missing results tab (NOT SpecialistTeacher)
   let error: string | null = null
   try {
     const accessLevel = await getCallerAccessLevel(upn)
     oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
     regionWide = accessLevel === 'RegionalAnalyst'
+    adminRA = accessLevel === 'Administrator' || regionWide
     cycles = await getReportCycles()
     bands = await getAchievementLevels()
     if (oversight) {
@@ -137,6 +139,11 @@ export default async function StudentsPage({
           <ToggleLink href="/reports/rwm" className="toggle">
             RWM
           </ToggleLink>
+          {adminRA ? (
+            <ToggleLink href="/reports/missing" className="toggle">
+              Missing results
+            </ToggleLink>
+          ) : null}
         </div>
         {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       </div>
