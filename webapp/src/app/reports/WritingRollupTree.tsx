@@ -204,8 +204,10 @@ function WritingDetail({ rows, traits, lang, summarizeBy, demo }: { rows: Writin
             style={hasResult && r.achievementHexColorTint ? { background: r.achievementHexColorTint } : undefined}>
           {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
         </td>
+        {/* Keyed off the band, not the avg: an IPP student's result keeps its traits/avg but the feed
+            gives it no band (not measured) — show "IPP" there, like the flat list. */}
         <td className="ach" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
-          {hasResult ? (r.achievementName ?? <span className="muted">—</span>) : (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
+          {r.achievementName ?? (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
         </td>
       </tr>
     )

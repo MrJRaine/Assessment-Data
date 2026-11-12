@@ -68,7 +68,22 @@ with `0.3.0`, so earlier detail is approximate.
   show under Students / "no result" and appear in the drill as "—" rows, without inventing a
   phantom result (the % and Results counts are unchanged). **SQL:** included in the revised
   `deploy_summary_filter_demographics_2026-11-10.sql` — run it (again, if the earlier revision
-  already ran; it is idempotent). Opening a grade/homeroom on the **Math** summary
+  already ran; it is idempotent).
+- **Summary trees' "Current" now means what it says — and IPP students leave the achievement
+  maths.** The Reading/Writing Summary trees' "Current" view silently limited each student's
+  most-recent result to THIS school year, while the Student list (on spec) shows the most current
+  evidence on record from any year — so the summary donut counted fewer assessed students than the
+  list. The roll-up and drill feeds now pick the latest result with no year restriction ("Current" =
+  each student's most recent result on record; a selected cycle still scopes exactly as before), and
+  the Current chip's tooltip says so. In the same revision, students with an IPP in the subject
+  (confirmed or unresolved) are no longer given an achievement band by the roll-up feeds — they were
+  never measured against a benchmark, so they're now excluded from the achievement-distribution
+  donut, the by-cycle chart, and every % Meeting/Exceeding, matching the Student list; they still
+  appear in the counts and drill, labelled "IPP". **SQL:** the same revised
+  `deploy_summary_filter_demographics_2026-11-10.sql` (one run covers both fixes).
+- **Missing results cycle selector shows cycles only.** The report is inherently per-cycle, so its
+  selector drops the "Current" chip and lands on the newest started cycle by default.
+- Opening a grade/homeroom on the **Math** summary
   tree gave no visible scrollbars when the student list spilled over — the math tree's unit columns
   make it wider than the screen, so the drill pane stretched to the full table width and its
   scrollbars (the same in-pane bars Reading/Writing show) rendered past the right edge. The pane now
