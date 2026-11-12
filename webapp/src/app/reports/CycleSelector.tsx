@@ -31,9 +31,9 @@ export default function CycleSelector({ cycles, cyclesOnly }: { cycles: ReportCy
   return (
     <div className="cycle-selector">
       <span className="cycle-label">Cycle</span>
+      {/* "Current" = each student's most recent evidence ON RECORD, any cycle or year (user ruling
+          2026-11-12) — never scope it to the current school year. */}
       {cyclesOnly ? null : (
-        {/* "Current" = each student's most recent evidence ON RECORD, any cycle or year (user ruling
-            2026-11-12) — never scope it to the current school year. */}
         <ToggleLink href={hrefFor(null)} className={!current ? 'cycle-btn cycle-on' : 'cycle-btn'} title="Each student's most recent result on record">
           Current
         </ToggleLink>
