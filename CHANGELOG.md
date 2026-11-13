@@ -56,8 +56,11 @@ with `0.3.0`, so earlier detail is approximate.
   rows are colour-coded by **% reported** (<50% red · 50–74% yellow · 75–99% light green · 100%
   dark green). Opening a section lists exactly who still needs data entered. Math counts as
   reported at **80% of the cycle's tasks** — the entry grid's own unit-level threshold. Teacher,
-  school, and TCRCE totals count a multi-section student once; sections with no current lead
-  teacher appear under a visible "No lead teacher" row. The tab is hidden from every other role,
+  school, and TCRCE totals count a multi-section student once. The lead teacher a section lists
+  under is **the cycle's** Primary teacher — the most recent one assigned during that cycle's
+  dates, named even if they've since left — not whoever holds the section today (teacher
+  attribution on reports is historic, as of the cycle viewed); a section with no Primary at any
+  point in the cycle appears under a visible "No lead teacher" row. The tab is hidden from every other role,
   the page 404s for them, and the TVFs have no non-Admin/RA branch. **SQL:**
   `deploy_missing_results_2026-11-12.sql` creates `tvf_MissingDataAll` + `tvf_MissingDataGroup`.
 

@@ -33,13 +33,18 @@ plain Entra behaviour.
 
 ## 1. Missing results report (new — Admin/RA only)
 
-- [ ] **Visibility**: as Administrator and as Regional Analyst the "Missing results" tab
+- [X] **Visibility**: as Administrator and as Regional Analyst the "Missing results" tab
       shows on all report pages; as Teacher AND as Specialist Teacher it does not, and
       `/reports/missing` directly gives the 404 page.
-- [ ] **Cycle selector**: no "Current" chip — cycles only, with the newest started cycle
+- [X] **Cycle selector**: no "Current" chip — cycles only, with the newest started cycle
       preselected on first load.
-- [ ] **Tree shape**: TCRCE row (RA only) → schools → lead teachers → sections; opening a
+- [X] **Tree shape**: TCRCE row (RA only) → schools → lead teachers → sections; opening a
       section lists the students still needing data, grouped per student with subject pills.
+- [ ] **Historic teacher attribution** (rev b, 2026-11-13 — rerun
+      [deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
+      first): a section lists under the Primary teacher it had DURING the selected cycle (most
+      recent within the cycle on a handover, named even if since departed), never today's
+      teacher. Spot-check any section with a known teacher change against an older cycle.
 - [ ] **Counts**: Reading / Writing / Math / Total columns; a student missing in two
       sections counts ONCE at teacher/school/TCRCE level; section rows count raw.
 - [ ] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
@@ -51,8 +56,8 @@ plain Entra behaviour.
 - [ ] **Math 80% rule**: a student with ≥80% of the grade's configured benchmark-month tasks
       recorded counts as reported; below that, missing. A grade with NO configured tasks for
       the cycle's math month contributes no math expectations at all.
-- [ ] **No lead teacher**: a section without a current Primary teacher appears under a
-      visible "No lead teacher" node (sorted last), never silently dropped.
+- [ ] **No lead teacher**: a section with NO Primary teacher at any point during the cycle
+      appears under a visible "No lead teacher" node (sorted last), never silently dropped.
 - [ ] A fully-complete section's drill says everyone has results, instead of an empty box.
 
 ## 2. "Current" = lifetime (Reading/Writing summary vs Student list)
