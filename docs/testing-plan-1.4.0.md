@@ -20,7 +20,8 @@ plain Entra behaviour.
 
 ## 0. Version surfaces (verify before deployment)
 
-- [ ] Footer bottom-right reads **1.4.0-dev** (the `-dev` suffix is stripped at cutover).
+- [ ] Footer bottom-right reads **1.4.0** (no `-dev` suffix — user call 2026-11-13: the
+      signed-off image IS the shipped artifact; at cutover it's retagged + tarred, never rebuilt).
 - [ ] Clicking the footer version opens **What's New** showing the five 1.4.0 entries
       (Missing results · filter sections/Collapse all · charts follow filters ·
       Current = most recent on record + IPP exclusion · math entry names/sort), with the
