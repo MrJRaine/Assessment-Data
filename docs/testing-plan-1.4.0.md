@@ -60,8 +60,12 @@ plain Entra behaviour.
 - [ ] **Math 80% rule**: a student with ≥80% of the grade's configured benchmark-month tasks
       recorded counts as reported; below that, missing. A grade with NO configured tasks for
       the cycle's math month contributes no math expectations at all.
-- [ ] **No lead teacher**: a section with NO Primary teacher at any point during the cycle
-      appears under a visible "No lead teacher" node (sorted last), never silently dropped.
+- [ ] **No lead teacher**: a section with NO Primary teacher on record for the cycle appears
+      under a visible "No lead teacher" node (sorted last), never silently dropped. NOTE
+      (ruled 2026-11-13): this is a DEFENSIVE surface — ingest can't produce a lead-less
+      section (teacher-less sections don't ingest; FST rows close, never delete; mid-year
+      sections ingest on their start day and have no earlier-cycle roster). Verified via the
+      synthetic MAT-45-EN fixture.
 - [ ] A fully-complete section's drill says everyone has results, instead of an empty box.
 
 ## 2. "Current" = lifetime (Reading/Writing summary vs Student list)
