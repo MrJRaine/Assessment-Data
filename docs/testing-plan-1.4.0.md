@@ -70,7 +70,7 @@ plain Entra behaviour.
       section (teacher-less sections don't ingest; FST rows close, never delete; mid-year
       sections ingest on their start day and have no earlier-cycle roster). Verified via the
       synthetic MAT-45-EN fixture.
-- [ ] A fully-complete section's drill says everyone has results, instead of an empty box.
+- [X] A fully-complete section's drill says everyone has results, instead of an empty box.
 
 ## 2. "Current" = lifetime (Reading/Writing summary vs Student list)
 
