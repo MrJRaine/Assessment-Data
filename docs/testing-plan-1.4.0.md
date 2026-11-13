@@ -9,24 +9,26 @@ plain Entra behaviour.
 
 ## Preconditions (do these first)
 
-- [ ] Run on **Assessment_Warehouse_Dev**:
+- [x] Run on **Assessment_Warehouse_Dev**:
       [sql/scripts/deploy_summary_filter_demographics_2026-11-10.sql](../sql/scripts/deploy_summary_filter_demographics_2026-11-10.sql)
       — **rerun even if an earlier revision already ran** (now carries demographics +
       expected-language + lifetime-Current/IPP changes; idempotent).
-- [ ] Run on dev: [sql/scripts/deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
+- [x] Run on dev: [sql/scripts/deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
       (the Missing results page errors until this is in).
-- [ ] Containers up on the 1.4.0 images (`podman ps`: awdev-impersonation :3002 on
+- [x] Containers up on the 1.4.0 images (`podman ps`: awdev-impersonation :3002 on
       `1.4.0-imp`, awdev :3001 on `1.4.0-dev`).
 
 ## 0. Version surfaces (verify before deployment)
 
-- [ ] Footer bottom-right reads **1.4.0** (no `-dev` suffix — user call 2026-11-13: the
+- [x] Footer bottom-right reads **1.4.0** (no `-dev` suffix — user call 2026-11-13: the
       signed-off image IS the shipped artifact; at cutover it's retagged + tarred, never rebuilt).
-- [ ] Clicking the footer version opens **What's New** showing the five 1.4.0 entries
+      ✓ 2026-11-13
+- [X] Clicking the footer version opens **What's New** showing the five 1.4.0 entries
       (Missing results · filter sections/Collapse all · charts follow filters ·
       Current = most recent on record + IPP exclusion · math entry names/sort), with the
       1.3.0 entries still listed below them (popup shows current + previous minor line).
-- [ ] [CHANGELOG.md](../CHANGELOG.md) Unreleased section is headed **1.4.0 candidate** and
+      ✓ 2026-11-13, incl. the revised Missing-results wording.
+- [X] [CHANGELOG.md](../CHANGELOG.md) Unreleased section is headed **1.4.0 candidate** and
       covers everything in this plan.
 
 ## 1. Missing results report (new — Admin/RA only)
