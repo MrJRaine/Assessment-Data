@@ -44,7 +44,11 @@ plain Entra behaviour.
       [deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
       first): a section lists under the Primary teacher it had DURING the selected cycle (most
       recent within the cycle on a handover, named even if since departed), never today's
-      teacher. Spot-check any section with a known teacher change against an older cycle.
+      teacher. Dev has no natural handover — run
+      [seed_teacher_handover_fixture_dev.sql](../sql/scripts/seed_teacher_handover_fixture_dev.sql)
+      (self-reverts on the next dev ingest), then at school 0079: **ELA-45-EN** under
+      Morgan Hazel on the Sep cycle but Rowan Aspen on the Nov cycle; **MAT-45-EN** under
+      "No lead teacher" on every cycle (this doubles as the No-lead check below).
 - [ ] **Counts**: Reading / Writing / Math / Total columns; a student missing in two
       sections counts ONCE at teacher/school/TCRCE level; section rows count raw.
 - [ ] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
