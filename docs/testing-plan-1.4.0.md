@@ -53,10 +53,10 @@ plain Entra behaviour.
       sections counts ONCE at teacher/school/TCRCE level; section rows count raw.
 - [X] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
       green · 100% dark green. Spot-check one row's % against its counts.
-      NOTE: ticked against the original "% missing" column; the displayed % FLIPPED to
-      **% reported** (user call 2026-11-13, colours unchanged) — one re-glance after the
-      next rebuild. % is per data point (student × subject), not per student: an ELA
-      section fully done in Reading but not Writing sits at ~50%.
+      NOTE: the displayed % FLIPPED to **% reported** (user call 2026-11-13, colours
+      unchanged) — re-verified and signed off post-rebuild 2026-11-13. % is per data
+      point (student × subject), not per student: an ELA section fully done in Reading
+      but not Writing sits at ~50%.
 - [X] **IPP exclusion**: a student with a CONFIRMED IPP in a subject is not expected in that
       subject anywhere; a flagged-but-unconfirmed IPP still counts as expected.
       (Open design point: the exclusion is subject-only, not per-language — a confirmed
