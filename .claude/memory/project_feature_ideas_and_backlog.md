@@ -41,7 +41,7 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # ACTIVE QUEUE — user priorities set 2026-11-10 (work in this order)
 
-1. **Reports hotfix (1.3.1)** — list-view charts follow filter chips (coded 10-30), RWM score colours
+1. **Reports hotfix (1.4.0)** — list-view charts follow filter chips (coded 10-30), RWM score colours
    → standard DimAchievementLevel palette + roll-up tree "Collapse all" (both coded 2026-11-10).
    Awaiting user test on imp/awdev → bump → prod swap + release ritual. Math band palette alignment
    REJECTED 2026-11-10: the math-band colours are the math team's specific request — a deliberate
@@ -70,7 +70,7 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 - **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
   per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
   separate lists by their program; they should be ONE list per section on the page. User wants this
-  bundled into the next version worked on (1.3.1 candidate, alongside the pending charts fix).
+  bundled into the next version worked on (1.4.0 candidate, alongside the pending charts fix).
 - **Write-rule rescue path for NOT-in-export coach-role overrides (gap found 2026-10-30).** usp_MergeStaff
   Step 2's not-in-staging rescue UNION covers ONLY `Maintenance` overrides — an active
   Administrator/RegionalAnalyst/SpecialistTeacher override for someone absent from the PS staff export is
@@ -160,7 +160,7 @@ we're not blocked and it's not our queue item.)*
   `StaffAppAccess`, same shape as `CanMaintain`, or a flag on the override) that lifts the lock. Pairs with the
   role-override work shipped in 1.3.0 ([[project_assessment_language_tracks]] has the course-based WRITE-scoping
   precedent for gating entry).
-- ~~Roll-up tree "Collapse all" button~~ — **CODED 2026-11-10** into the 1.3.1 candidate (close-only as
+- ~~Roll-up tree "Collapse all" button~~ — **CODED 2026-11-10** into the 1.4.0 candidate (close-only as
   specified; commit 0811582). Ships with the reports hotfix.
 - **Design/aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0")*. Flag a11y in passing, collect
   here, do NOT stop to fix. Math cell marks are already AA-compliant. **Reusable technique:** SC 1.4.11

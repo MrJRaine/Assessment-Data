@@ -21,7 +21,7 @@ Two key stakeholders drive curricular requirements on the platform, and they som
   team's specific request** (user confirmed 2026-11-10) — do NOT re-propose aligning them to the
   `DimAchievementLevel` palette. The GENERAL RULE (user, same date): a 4-pt scale uses the standard
   achievement colours **unless there is a specific stakeholder reason to deviate** — the Math band
-  roll-up is that exception; the RWM 0–3 score was not (realigned in 1.3.1).
+  roll-up is that exception; the RWM 0–3 score was not (realigned in 1.4.0).
 
 **Why:** When two coordinators disagree, the platform needs to surface (or hide) accordingly per program family. Don't auto-extend a French-side request to the English side without checking — the asks are scoped per program by design.
 

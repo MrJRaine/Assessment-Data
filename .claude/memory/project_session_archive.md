@@ -2036,3 +2036,36 @@ diag_departed_student_cycle_bleed, diag_math_report_live.
 **End-of-session state:** LIVE healthy — enrollment dates repaired, math tree restored, Save fixed,
 dup rows cleaned, last full cycle green. Dev has the same hotfixes. Attribution bundle + 1.3.1 charts
 image awaiting next session. prod container still :1.3.0 (no app change shipped today — all SQL).
+
+## Session 2026-11-10 → 2026-11-12 — 1.3.1 reports patch (filters, Missing results, Current semantics)
+
+- **RWM Summary tree filter section**: Grade/Gender/Self-ID filters + the Student list's two scoring
+  toggles (Math blanks excluded/count-as-0, All-3-only) moved into the collapsible section;
+  tvf_StudentCohortRWM gained Gender/Self-ID columns.
+- **Missing results report** (Admin/RA ONLY, specialists excluded — user decision): TCRCE → School →
+  Lead teacher → Section → students-needing-data tree; counts R/W/M/Total + % missing; rows coloured
+  by % reported (<50 red / 50–74 yellow / 75–99 light green / 100 dark green); confirmed same-subject
+  IPP not expected; math reported at ≥80% of the grade's configured benchmark-month tasks (entry-grid
+  threshold); no student names in the roll-up feed (tvf_MissingDataAll), names only in the per-section
+  drill (tvf_MissingDataGroup). Selector = cycles only, newest started preselected (no "Current" —
+  report is inherently per-cycle).
+- **Math entry**: full names on two-line column headers (first/last), picker chips + notes full name;
+  math lists sort by last name; drill scrollbar fix.
+- **Language of Assessment filter fix**: all 4 reading/writing roll-up/drill TVFs now build the
+  language set as EXPECTED (StudentExpectedAssessment) ∪ assessed; IsExpectedOnly rows keep
+  expected-but-unassessed students visible under the language filter.
+- **Donut discrepancy → two rulings (memory `project_current_mode_semantics`)**: (1) "Current" has
+  ALWAYS meant each student's most recent evidence ON RECORD, any year — tvf_StudentCohort was on
+  spec; the roll-up TVFs' this-year-only gate was the defect (as was a tooltip I added unannounced —
+  own goal, fixed). (2) IPP students are never measured against a benchmark → no achievement band in
+  any feed; they leave the donut/by-cycle/% maths everywhere (TVF-side band gating, matching the
+  list's chart-eligible rule). Both shipped in the re-revised idempotent 5-TVF bundle
+  `deploy_summary_filter_demographics_2026-11-10.sql`.
+- **Build stumbles**: JSX comment inside a ternary's parenthesized branch broke the compile
+  (CycleSelector) — fixed c190199; imp worktree has NO .env files — --env-file must point at the MAIN
+  repo's webapp/.env.dev (dev-containers skill updated).
+- **End state**: dev @ c190199 pushed; imp worktree merged bf1b2c5; containers awdev-impersonation
+  :3002 (1.3.1-imp) + awdev :3001 (1.3.1-dev) Up/Ready. NOT yet run on dev warehouse: the revised
+  demographics bundle (rerun required) + deploy_missing_results_2026-11-12.sql. Morning plan:
+  docs/testing-plan-1.3.1.md. Parked: Math/RWM-math stay current-year in Current mode (deliberate);
+  missing-report IPP exclusion is subject-only (flagged).

@@ -116,6 +116,10 @@ podman images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | he
 - **`MSYS_NO_PATHCONV=1`** on every `podman build`/`run` where args contain paths or `=`, or Git Bash
   mangles them.
 - **Env-file path is relative to your CWD.** From repo root use `webapp/.env` / `webapp/.env.dev`.
+- **Env files exist ONLY in the main repo** (`/c/Git-Repos/Assessment-Data/webapp/.env*`). The
+  `-imp` worktree has NO `.env.dev` — its branch supplies the *image*, not the env. When launching
+  `awdev-impersonation`, point `--env-file` at the MAIN repo's `webapp/.env.dev` (bit us 2026-11-12:
+  exit 125 "cannot find the file" pointing at the worktree copy).
 - **Ports are fixed by convention**: live 3000, dev 3001, impersonation 3002 — don't swap them; the Entra
   redirect URIs and `AUTH_URL` in the env files assume them.
 - **A fresh warehouse deploy isn't picked up by a rebuild** — the container reads schema/procs live, so new
