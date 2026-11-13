@@ -11,7 +11,10 @@
  *              ("-") - a prior-year result never leaks into a selected cycle.
  *
  * Writes: FactAssessmentReading +1 row (June 2026 window, EN_Reading level M,
- *         AssessmentDate 2026-06-15); FactSubmissionAudit +1 seed row.
+ *         AssessmentDate 2026-06-15); FactStudentIPP - the chosen student's
+ *         UNRESOLVED (IsIPP=NULL) current Reading gate rows resolve to 0 so the
+ *         band renders (no-op if they have no IPP rows; confirmed IPP students
+ *         are never chosen); FactSubmissionAudit +1 seed row.
  * Reads:  SectionRosterMembership + FactStudentIPP (choose an eligible student:
  *         no reading facts, no unresolved/confirmed Reading IPP - so the band
  *         actually renders), DimAssessmentWindow (June 2026 EN_Reading window),
@@ -50,22 +53,31 @@ BEGIN
         (SELECT ReadingScaleID FROM DimReadingScale
          WHERE ScaleSystem = 'EN_Reading' AND LevelCode = 'M');
 
-    -- A current grade-4 student at 0079, expected in reading this year, with NO
-    -- reading facts ever and no unresolved/confirmed Reading IPP (band must render)
+    -- A current grade-4/5 student at 0079, expected in reading this year, with NO
+    -- reading facts ever and no CONFIRMED Reading IPP (IsIPP=1 would remove them from
+    -- expected entirely). After the test-pass number-pumping, every fact-less student
+    -- carries the generator's UNRESOLVED (IsIPP=NULL) placeholder - so we accept those,
+    -- prefer a no-IPP-row student if one exists, and RESOLVE the gate to 0 below
+    -- (same move as the dualang sentinel) so the band renders.
     DECLARE @StudentNumber BIGINT =
         (SELECT TOP 1 m.StudentNumber
          FROM SectionRosterMembership m
          INNER JOIN DimAssessmentWindow w ON w.AssessmentWindowID = m.AssessmentWindowID
                                          AND w.AssessmentType = 'Reading'
-         WHERE m.SchoolID = '0079' AND m.Grade = '4'
+         WHERE m.SchoolID = '0079' AND m.Grade IN ('4', '5')
            AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading f
                            WHERE f.StudentNumber = m.StudentNumber)
            AND NOT EXISTS (SELECT 1 FROM FactStudentIPP i
                            INNER JOIN DimStudent ds2 ON ds2.StudentKey = i.StudentKey
                            WHERE ds2.StudentNumber = m.StudentNumber
                              AND i.Subject = 'Reading' AND i.IsCurrent = 1
-                             AND (i.IsIPP IS NULL OR i.IsIPP = 1))
-         ORDER BY m.StudentNumber);
+                             AND i.IsIPP = 1)
+         ORDER BY CASE WHEN EXISTS (SELECT 1 FROM FactStudentIPP i2
+                                    INNER JOIN DimStudent ds3 ON ds3.StudentKey = i2.StudentKey
+                                    WHERE ds3.StudentNumber = m.StudentNumber
+                                      AND i2.Subject = 'Reading' AND i2.IsCurrent = 1)
+                       THEN 1 ELSE 0 END,
+                  m.StudentNumber);
 
     DECLARE @StudentKey BIGINT =
         (SELECT StudentKey FROM DimStudent WHERE StudentNumber = @StudentNumber AND IsCurrent = 1);
@@ -81,6 +93,14 @@ BEGIN
     END
     ELSE
     BEGIN
+        -- Resolve any UNRESOLVED Reading IPP gate to 0 (not-IPP) so the student is
+        -- chart-eligible and the report renders Expected/Diff/Achievement (mirrors
+        -- seed_dual_language_sentinel_dev.sql; a no-IPP-row student is untouched).
+        UPDATE FactStudentIPP
+        SET IsIPP = 0, ChangedBy = 'devseed', LastUpdated = @Now
+        WHERE StudentKey = @StudentKey AND Subject = 'Reading'
+          AND IsCurrent = 1 AND IsIPP IS NULL;
+
         INSERT INTO FactAssessmentReading (
             StudentKey, StudentNumber, AssessmentWindowID, ReadingScaleID, ReadingDelta,
             LevelCode, ExpectedMinLevelCode, ExpectedMaxLevelCode,
