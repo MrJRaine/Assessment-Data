@@ -76,10 +76,15 @@ plain Entra behaviour.
 
 - [ ] On **Current**, the summary donut's ASSESSED total **equals** the Student list
       donut's total (same filters). This was the original discrepancy.
-- [ ] A student whose only result is from last school year shows that result on the summary
-      tree/drill (with its Expected range), not "No data".
+- [x] A student whose only result is from last school year shows that result on the summary
+      tree/drill (with its Expected range), not "No data". ✓ 2026-11-13 — inferred at scale:
+      the pre-seeded June 2026 data populates every grade 4 on Current (636 assessed) while
+      Cycle 1 holds ~56% at Hillcrest and Cycle 2 just 3 — only lifetime latest-pick
+      produces that triangle.
 - [ ] Current chip tooltip reads "Each student's most recent result on record".
-- [ ] With a specific cycle selected, summary and list still agree.
+- [x] With a specific cycle selected, summary and list still agree (cycle scope intact —
+      SC1 donut 322 / SC2 donut 3 match the Missing report's per-cycle completeness).
+      ✓ 2026-11-13
 
 ## 3. IPP students out of the achievement maths (summary trees)
 
