@@ -11,7 +11,10 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [Unreleased] — 1.3.1 candidate (reports hotfix)
+## [Unreleased] — 1.4.0 candidate (reports)
+
+> Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the Missing results
+> report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
 - **Student-list charts now follow the filters.** On the Reports Student-list view (oversight roles),

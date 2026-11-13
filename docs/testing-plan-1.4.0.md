@@ -1,7 +1,9 @@
-# 1.3.1 Testing Plan — items not yet signed off
+# 1.4.0 Testing Plan — items not yet signed off
 
 Written 2026-11-12 (evening), for the 2026-11-13 morning test pass. Everything in the
-Unreleased 1.3.1 patch that has not had an explicit sign-off, with concrete checks.
+Unreleased 1.4.0 release that has not had an explicit sign-off, with concrete checks.
+(Renamed from 1.3.1 on 2026-11-13 — the Missing results report + filter sections are
+new features, so this ships as a minor release.)
 Test on **awdev-impersonation (127.0.0.1:3002)** for role switching; awdev (:3001) for
 plain Entra behaviour.
 
@@ -13,8 +15,18 @@ plain Entra behaviour.
       expected-language + lifetime-Current/IPP changes; idempotent).
 - [ ] Run on dev: [sql/scripts/deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
       (the Missing results page errors until this is in).
-- [ ] Containers up on the 1.3.1 images (`podman ps`: awdev-impersonation :3002 on
-      `1.3.1-imp`, awdev :3001 on `1.3.1-dev`).
+- [ ] Containers up on the 1.4.0 images (`podman ps`: awdev-impersonation :3002 on
+      `1.4.0-imp`, awdev :3001 on `1.4.0-dev`).
+
+## 0. Version surfaces (verify before deployment)
+
+- [ ] Footer bottom-right reads **1.4.0-dev** (the `-dev` suffix is stripped at cutover).
+- [ ] Clicking the footer version opens **What's New** showing the five 1.4.0 entries
+      (Missing results · filter sections/Collapse all · charts follow filters ·
+      Current = most recent on record + IPP exclusion · math entry names/sort), with the
+      1.3.0 entries still listed below them (popup shows current + previous minor line).
+- [ ] [CHANGELOG.md](../CHANGELOG.md) Unreleased section is headed **1.4.0 candidate** and
+      covers everything in this plan.
 
 ## 1. Missing results report (new — Admin/RA only)
 
@@ -82,7 +94,7 @@ plain Entra behaviour.
       overflows (previously rendered past the right edge).
 - [ ] Math reports students-down views show "Last, First".
 
-## 7. Earlier 1.3.1 items (if not already satisfied)
+## 7. Earlier 1.4.0 items (if not already satisfied)
 
 - [ ] Student-list view charts follow every filter chip (and language chip exists there).
 - [ ] RWM colours = the standard four achievement colours everywhere in that report.

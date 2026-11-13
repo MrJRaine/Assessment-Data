@@ -16,6 +16,41 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'feature',
+    summary:
+      'New "Missing results" report for school administrators and regional staff: pick a cycle and see — by school, teacher and class — who still needs Reading, Writing or Math results entered. Open a class to see exactly which students. Rows are colour-coded by how complete each group is.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'feature',
+    summary:
+      'The Reading, Writing and RWM summaries now have a "Show filters" section: trim the whole summary — counts, charts and drill-downs together — by grade, gender, self-identification or language of instruction. The student list adds the language filter too, and a "Collapse all" button closes every open branch on the summary trees.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      'Charts now follow your filters everywhere. On the student-list view, the donut and trend update with every filter you set instead of always showing the whole group, and filtering by language no longer hides students who are expected in that language but have no result yet.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      '"Current" on the Reading and Writing summaries now shows each student’s most recent result on record — any school year — matching the student list. Students with an IPP in a subject are no longer counted in that subject’s achievement percentages or charts, since they aren’t measured against a benchmark; they still appear in the lists, marked "IPP".',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      'Math data entry shows each student’s full name (first name over last name) in the column headers and sorts students by last name, like every other list — two classmates with the same first name and last initial are no longer indistinguishable.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',
