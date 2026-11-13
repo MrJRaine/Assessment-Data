@@ -313,6 +313,12 @@ for ($a = 0; $a -lt $adminSchools.Count; $a++) {
     $sch = $adminSchools[$a]
     $staffRows += @("principal.$sch@tcrce.ca", $adminNames[$a][0], $adminNames[$a][1], 'Principal', $sch, $sch, '', '33', $staffId) -join $DELIM
 }
+# Resource Teacher (Group 45 -> SpecialistTeacher) at JR 0716 — the SpecialistTeacher impersonation
+# persona (same identity seed_dev_resource_teacher.sql creates by hand; in the export it survives
+# every re-ingest instead of being closed out as absent). Teaches no sections by design.
+$staffId++
+$staffRows += @('resource.teacher.0716@tcrce.ca', 'Quinn', 'Larch', 'Resource Teacher', $JR, $JR, '', '45', $staffId) -join $DELIM
+
 # Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over ALL 5 test schools)
 $allSchools = "$ELEM;$JR;$SR;$ELEM2;$SEC2"
 $staffId++
@@ -388,7 +394,7 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 "Generated ingest test set [Format=$Format]:"
 "  students     : {0} rows" -f $studentRows.Count
-"  staff        : {0} rows ({1} base + {2} added-school teachers + itinerant x3 + {3} principals + 2 analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count), $addedTeachers.Count, $adminSchools.Count
+"  staff        : {0} rows ({1} base + {2} added-school teachers + itinerant x3 + {3} principals + 1 resource teacher + 2 analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count), $addedTeachers.Count, $adminSchools.Count
 "  schools      : {0} ({1} elementary + {2} secondary)" -f 5, 2, 3
 "  sections     : {0} rows" -f $sectionRows.Count
 "  enrollments  : {0} rows" -f $enrollRows.Count

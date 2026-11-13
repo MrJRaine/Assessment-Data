@@ -1,6 +1,6 @@
 /*******************************************************************************
  * Function: tvf_MissingDataAll  (INLINE table-valued function)
- * Purpose: READ-ONLY feed for Reports > Missing results (1.3.1): per selected cycle, every
+ * Purpose: READ-ONLY feed for Reports > Missing results (1.4.0): per selected cycle, every
  *          EXPECTED data point (section x student x subject) with an IsMissing bit, so the
  *          client builds the TCRCE -> School -> Lead teacher -> Section roll-up of students
  *          who still need a result entered. Expected = SectionRosterMembership rows for the
@@ -25,9 +25,13 @@
  * expected in THAT subject (subject-only match, keyed by StudentNumber — same treatment as
  * tvf_StudentCohortRWM's AnyIPP; a flagged-but-unconfirmed IPP still counts as expected).
  *
- * Lead teacher = FactSectionTeachers TeacherRole='Primary', IsCurrent=1 (first by email when
- * data ever holds two); NULL teacher columns = no current Primary -> client shows a visible
- * "No lead teacher" node, never a silent drop.
+ * Lead teacher = the CYCLE's Primary (user ruling 2026-11-13: any report that displays a
+ * teacher resolves them as of the cycle being viewed, never "today"): the most recent
+ * FactSectionTeachers TeacherRole='Primary' row whose EffectiveStartDate/EndDate overlap the
+ * cycle's span (latest start wins a mid-cycle handover; email tiebreak guards a double-Primary
+ * quirk). The name comes from the teacher's current DimStaff identity row, so a since-departed
+ * teacher still shows by name. NULL teacher columns = NO Primary overlapped the cycle at all ->
+ * client shows a visible "No lead teacher" node, never a silent drop.
  *
  * READS: SectionRosterMembership, DimAssessmentWindow, DimCalendar (benchmark-month fallback),
  * FactAssessmentReading/Writing/Math, DimMathTask, FactStudentIPP + DimStudent (StudentNumber
@@ -103,11 +107,23 @@ RETURN
                                  AND mt.ActiveFlag = 1 AND mt.AssessmentMonth = cw.BenchMonth
         GROUP BY fm.StudentNumber, fm.AssessmentWindowID, mt.GradeCode
     ),
-    LeadTeacher AS (   -- one Primary per section (rn guards a double-Primary data quirk)
+    CycleSpan AS (   -- the selected cycle's overall date span, for historic teacher resolution
+        SELECT MIN(w.StartDate) AS CycleStart, MAX(w.EndDate) AS CycleEnd
+        FROM DimAssessmentWindow w
+        WHERE w.ActiveFlag = 1 AND w.CycleGroupID = @CycleGroupID
+    ),
+    LeadTeacher AS (   -- the CYCLE's Primary per section: most recent Primary whose assignment
+                       -- overlaps the cycle span (user ruling 2026-11-13 — teacher attribution on
+                       -- reports is historic, as-of the cycle; rn breaks a mid-cycle handover
+                       -- toward the later teacher and guards the double-Primary data quirk)
         SELECT fst.SectionID, fst.TeacherEmail,
-               ROW_NUMBER() OVER (PARTITION BY fst.SectionID ORDER BY fst.TeacherEmail) AS rn
+               ROW_NUMBER() OVER (PARTITION BY fst.SectionID
+                                  ORDER BY fst.EffectiveStartDate DESC, fst.TeacherEmail) AS rn
         FROM FactSectionTeachers fst
-        WHERE fst.TeacherRole = 'Primary' AND fst.IsCurrent = 1
+        CROSS JOIN CycleSpan cs
+        WHERE fst.TeacherRole = 'Primary'
+          AND fst.EffectiveStartDate <= cs.CycleEnd
+          AND (fst.EffectiveEndDate IS NULL OR fst.EffectiveEndDate >= cs.CycleStart)
     )
     SELECT
         e.AssessmentType,

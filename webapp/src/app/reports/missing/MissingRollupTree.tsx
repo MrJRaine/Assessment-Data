@@ -10,7 +10,7 @@ import { loadMissingGroup } from '../actions'
 // only. TCRCE → School → Lead teacher → Section; opening a section lists the students who still
 // need data entered for the selected cycle. Counts = students missing a result per subject
 // (deduped by student at every roll-up level — one entered result clears every section the
-// student sits in); % = missing ÷ expected data points. Row colour keys off % REPORTED:
+// student sits in); % column + row colour = % REPORTED (user call 2026-11-13 — positive frame):
 // <50% red · 50–<75% yellow · 75–<100% light green · 100% dark green (user buckets — deliberately
 // NOT the usual 50/65/80 heat scale).
 
@@ -71,7 +71,7 @@ function CountCells({ t }: { t: Tally }) {
         className={`rpct ${bucket}`}
         title={`${t.mTot} of ${t.eTot} expected data points missing${rep == null ? '' : ` · ${fmtPct(rep)} reported`}`}
       >
-        {fmtPct(t.eTot === 0 ? null : t.mTot / t.eTot)}
+        {fmtPct(rep)}
       </td>
     </>
   )
@@ -236,7 +236,7 @@ export default function MissingRollupTree({
 
       <div className="mlegend">
         <span className="grp"><strong>Students missing a result</strong> (confirmed IPPs excluded)</span>
-        <span className="grp">% = missing ÷ expected data points · row colour = % reported:</span>
+        <span className="grp">% = reported ÷ expected data points · row colour matches:</span>
         <span className="grp">
           <span className="sw h1" /> &lt;50 <span className="sw h2" /> 50–74 <span className="sw h3" /> 75–99 <span className="sw h4" /> 100
         </span>
@@ -252,7 +252,7 @@ export default function MissingRollupTree({
                 <th className="rn" key={s}>{s}</th>
               ))}
               <th className="rn">Total</th>
-              <th className="rpct-h">% missing</th>
+              <th className="rpct-h">% reported</th>
             </tr>
           </thead>
           <tbody>

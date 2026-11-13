@@ -72,7 +72,7 @@
 - [User-Authored Data Is Auditable](project_user_authored_is_auditable.md) — anything a user authors/edits tracks WHO created + who changed/removed it (SCD: created/ended-by per version; Type-1 dims: separate audit log). TODO: extend audit to maintenance/ingest/cycles ops.
 - [Reading Scale Design](project_reading_scale_design.md) — DimReadingScale/Benchmark; EN_Reading naming; ReadingDelta; dominant-month; Grade 7 carry-over.
 - [Fact-Table SCD Linking Policy](project_assessment_fact_scd_policy.md) — when surrogate links freeze vs re-resolve; assessment-fact insert-time-only resolution. Facts carry stable StudentNumber; reads match current student by StudentNumber NOT the mutable StudentKey (durable fix for SCD-reversion stranding, LIVE 2026-10-13).
-- [Historical Roster Reconciliation](project_historical_roster_reconciliation.md) — window-context reads resolve roster by effective-date join, not current RLS.
+- [Historical Roster Reconciliation](project_historical_roster_reconciliation.md) — window-context reads resolve roster by effective-date join, not current RLS. Displayed TEACHER attribution on reports = as-of the cycle too (2026-11-13); the "admin current-only" wrinkle is about ACCESS scope only — never cite it for anything displayed.
 - [Submission Validation Strategy](project_submission_validation_strategy.md) — 3-layer validate-before-write; THROW 51010+ user-fixable, 51001-09 impossible-state.
 - [IPP Type Labelling](project_ipp_type_labelling.md) — confirm prompts name the TYPE ("Yes (Literacy IPP)" / "Yes (Math IPP)"); helper ippTypeLabel(subject).
 - [SQL Reserved-Word Aliases](feedback_sql_reserved_word_aliases.md) — never RowCount / Group / Current as aliases in Fabric.
