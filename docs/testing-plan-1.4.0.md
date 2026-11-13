@@ -40,7 +40,7 @@ plain Entra behaviour.
       preselected on first load.
 - [X] **Tree shape**: TCRCE row (RA only) → schools → lead teachers → sections; opening a
       section lists the students still needing data, grouped per student with subject pills.
-- [ ] **Historic teacher attribution** (rev b, 2026-11-13 — rerun
+- [X] **Historic teacher attribution** (rev b, 2026-11-13 — rerun
       [deploy_missing_results_2026-11-12.sql](../sql/scripts/deploy_missing_results_2026-11-12.sql)
       first): a section lists under the Primary teacher it had DURING the selected cycle (most
       recent within the cycle on a handover, named even if since departed), never today's
@@ -49,18 +49,22 @@ plain Entra behaviour.
       (self-reverts on the next dev ingest), then at school 0079: **ELA-45-EN** under
       Morgan Hazel on the Sep cycle but Rowan Aspen on the Nov cycle; **MAT-45-EN** under
       "No lead teacher" on every cycle (this doubles as the No-lead check below).
-- [ ] **Counts**: Reading / Writing / Math / Total columns; a student missing in two
+- [X] **Counts**: Reading / Writing / Math / Total columns; a student missing in two
       sections counts ONCE at teacher/school/TCRCE level; section rows count raw.
-- [ ] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
+- [X] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
       green · 100% dark green. Spot-check one row's % against its counts.
-- [ ] **IPP exclusion**: a student with a CONFIRMED IPP in a subject is not expected in that
+      NOTE: ticked against the original "% missing" column; the displayed % FLIPPED to
+      **% reported** (user call 2026-11-13, colours unchanged) — one re-glance after the
+      next rebuild. % is per data point (student × subject), not per student: an ELA
+      section fully done in Reading but not Writing sits at ~50%.
+- [X] **IPP exclusion**: a student with a CONFIRMED IPP in a subject is not expected in that
       subject anywhere; a flagged-but-unconfirmed IPP still counts as expected.
       (Open design point: the exclusion is subject-only, not per-language — a confirmed
       Reading IPP removes Reading expectations in both languages. Say if that's wrong.)
-- [ ] **Math 80% rule**: a student with ≥80% of the grade's configured benchmark-month tasks
+- [X] **Math 80% rule**: a student with ≥80% of the grade's configured benchmark-month tasks
       recorded counts as reported; below that, missing. A grade with NO configured tasks for
       the cycle's math month contributes no math expectations at all.
-- [ ] **No lead teacher**: a section with NO Primary teacher on record for the cycle appears
+- [X] **No lead teacher**: a section with NO Primary teacher on record for the cycle appears
       under a visible "No lead teacher" node (sorted last), never silently dropped. NOTE
       (ruled 2026-11-13): this is a DEFENSIVE surface — ingest can't produce a lead-less
       section (teacher-less sections don't ingest; FST rows close, never delete; mid-year

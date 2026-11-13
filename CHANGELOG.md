@@ -52,9 +52,9 @@ with `0.3.0`, so earlier detail is approximate.
 - **Missing results report (Administrators + Regional Analysts only).** New Reports tab: for the
   selected cycle, a TCRCE → School → Lead teacher → Section roll-up of students who still need a
   result entered (students with a confirmed IPP in a subject are not expected in it). Columns =
-  missing-student counts for Reading / Writing / Math / Total plus **% missing of expected**;
-  rows are colour-coded by **% reported** (<50% red · 50–74% yellow · 75–99% light green · 100%
-  dark green). Opening a section lists exactly who still needs data entered. Math counts as
+  missing-student counts for Reading / Writing / Math / Total plus **% reported** of expected
+  data points; rows are colour-coded to match (<50% red · 50–74% yellow · 75–99% light green ·
+  100% dark green). Opening a section lists exactly who still needs data entered. Math counts as
   reported at **80% of the cycle's tasks** — the entry grid's own unit-level threshold. Teacher,
   school, and TCRCE totals count a multi-section student once. The lead teacher a section lists
   under is **the cycle's** Primary teacher — the most recent one assigned during that cycle's
