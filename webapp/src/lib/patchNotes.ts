@@ -20,7 +20,7 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-11-13',
     kind: 'feature',
     summary:
-      'New "Missing results" report for school administrators and regional staff: pick a cycle and see — by school, teacher and class — who still needs Reading, Writing or Math results entered. Open a class to see exactly which students. Rows are colour-coded by how complete each group is.',
+      'New "Missing results" report for school administrators and regional staff: pick a cycle and see which students do not yet have Reading, Writing or Math results entered. Open a class to see the full list. Rows are colour-coded by how complete each group is.',
   },
   {
     version: '1.4.0',
