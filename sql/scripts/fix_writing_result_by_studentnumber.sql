@@ -140,6 +140,8 @@ BEGIN
                WritingAverage, EnteredByStaffKey, SubmissionTimestamp
         FROM FactAssessmentWriting
         WHERE StudentNumber = @StudentNumber
+          AND (@TargetWindowID IS NULL OR AssessmentWindowID = @TargetWindowID)
+          AND (@TargetDate     IS NULL OR AssessmentDate     = @TargetDate)
         ORDER BY AssessmentDate, AssessmentLanguage, WritingAssessmentID;
     END;
 END;
