@@ -53,10 +53,10 @@ plain Entra behaviour.
       sections counts ONCE at teacher/school/TCRCE level; section rows count raw.
 - [X] **% column + row colours** (by % REPORTED): <50% red · 50–74% yellow · 75–99% light
       green · 100% dark green. Spot-check one row's % against its counts.
-      NOTE: ticked against the original "% missing" column; the displayed % FLIPPED to
-      **% reported** (user call 2026-11-13, colours unchanged) — one re-glance after the
-      next rebuild. % is per data point (student × subject), not per student: an ELA
-      section fully done in Reading but not Writing sits at ~50%.
+      NOTE: the displayed % FLIPPED to **% reported** (user call 2026-11-13, colours
+      unchanged) — re-verified and signed off post-rebuild 2026-11-13. % is per data
+      point (student × subject), not per student: an ELA section fully done in Reading
+      but not Writing sits at ~50%.
 - [X] **IPP exclusion**: a student with a CONFIRMED IPP in a subject is not expected in that
       subject anywhere; a flagged-but-unconfirmed IPP still counts as expected.
       (Open design point: the exclusion is subject-only, not per-language — a confirmed
@@ -70,16 +70,21 @@ plain Entra behaviour.
       section (teacher-less sections don't ingest; FST rows close, never delete; mid-year
       sections ingest on their start day and have no earlier-cycle roster). Verified via the
       synthetic MAT-45-EN fixture.
-- [ ] A fully-complete section's drill says everyone has results, instead of an empty box.
+- [X] A fully-complete section's drill says everyone has results, instead of an empty box.
 
 ## 2. "Current" = lifetime (Reading/Writing summary vs Student list)
 
 - [ ] On **Current**, the summary donut's ASSESSED total **equals** the Student list
       donut's total (same filters). This was the original discrepancy.
-- [ ] A student whose only result is from last school year shows that result on the summary
-      tree/drill (with its Expected range), not "No data".
+- [x] A student whose only result is from last school year shows that result on the summary
+      tree/drill (with its Expected range), not "No data". ✓ 2026-11-13 — inferred at scale:
+      the pre-seeded June 2026 data populates every grade 4 on Current (636 assessed) while
+      Cycle 1 holds ~56% at Hillcrest and Cycle 2 just 3 — only lifetime latest-pick
+      produces that triangle.
 - [ ] Current chip tooltip reads "Each student's most recent result on record".
-- [ ] With a specific cycle selected, summary and list still agree.
+- [x] With a specific cycle selected, summary and list still agree (cycle scope intact —
+      SC1 donut 322 / SC2 donut 3 match the Missing report's per-cycle completeness).
+      ✓ 2026-11-13
 
 ## 3. IPP students out of the achievement maths (summary trees)
 

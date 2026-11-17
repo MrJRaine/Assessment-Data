@@ -17,6 +17,12 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Student detail page: switching Reading ⟷ Writing no longer shows the other subject's history.**
+  The subject toggle kept the previous subject's already-loaded rows (its own and the Prev/Next
+  prefetches, cached per student without the subject in the key), so the table rendered the new
+  subject's columns full of "—" with the old subject's achievement band carried over, and the trend
+  chart went blank. The view now remounts on a subject switch, so the history and the prefetches
+  reload for the right subject. Web only, no SQL.
 - **Student-list charts now follow the filters.** On the Reports Student-list view (oversight roles),
   the achievement donut and trend chart ignored every filter chip while the table below filtered —
   they were fed from the page-top roll-up feed. The list view now renders its own charts from the
