@@ -17,6 +17,12 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Writing: the average is not computed for IPP students — anywhere.** Entered trait scores stay
+  visible as raw evidence, but the derived average is writing's benchmark metric, so an IPP
+  student's Avg cell shows their IPP state instead of a number: the purple IPP chip when confirmed,
+  the orange IPP? when unconfirmed — on the Student list, the summary drill, the student detail
+  history, AND the data-entry grid (which previously showed an unconfirmed student's computed
+  average). Mirrors reading, where the level stays but Expected/Δ are never computed for IPPs.
 - **Summary-tree percentages: unconfirmed IPPs excluded from every column, and every exclusion is
   named.** The Reading/Writing trees' trait columns counted an unconfirmed IPP's scores while the
   Average/band column excluded them — different denominators per column, so the node's numbers could

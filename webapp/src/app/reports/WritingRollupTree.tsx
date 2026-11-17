@@ -203,7 +203,15 @@ function WritingDetail({ rows, traits, lang, summarizeBy, demo }: { rows: Writin
         )}
         <td className="stu" title={r.achievementName ?? undefined}
             style={hasResult && r.achievementHexColorTint ? { background: r.achievementHexColorTint } : undefined}>
-          {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
+          {/* The AVERAGE is writing's benchmark metric — an unmeasured student's traits stay visible
+              (raw evidence) but the average shows the IPP state instead (user 2026-11-17). */}
+          {r.avgScore == null
+            ? <span className="muted">—</span>
+            : r.writingIPP
+              ? <span className="ach-chip aipp">IPP</span>
+              : !r.chartEligible
+                ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                : r.avgScore.toFixed(2)}
         </td>
         {/* Keyed off the band, not the avg: an IPP student's result keeps its traits/avg but the feed
             gives it no band (not measured) — show "IPP" there, like the flat list. */}
