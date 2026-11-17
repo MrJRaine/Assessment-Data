@@ -17,16 +17,18 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
-- **Math report: IPP handling now mirrors the data-entry grid.** An **unresolved** math IPP
-  (flagged, unconfirmed) is unmeasured — marks stay visible in the matrix, band cells show "—", and
-  they're out of every chart and percentage, matching Reading/Writing. A **confirmed** IPP keeps the
-  entry grid's rule: IPP-excluded cells drop from the 80% denominator, and a sufficiently-assessed
-  unit earns an achievement level that **counts wherever a level counts** — unit bars, the roll-up
-  tree's percentages, cohort means, and now the donut too (which previously excluded every confirmed
-  IPP outright, even banded ones). "IPP" in tallies and hovers means the badge state: nothing
-  scorable. RWM is unchanged by design. **SQL:** rerun `sql/security/tvf_StudentCohortMath.sql` and
-  `tvf_StudentCohortMathAll.sql` (adds the measured flag that distinguishes "no IPP" from
-  "unresolved").
+- **Math: one IPP rule across entry and reports.** An **unresolved** math IPP (flagged, unconfirmed)
+  is unmeasured — marks stay visible, band cells show "—", out of every chart and percentage,
+  matching Reading/Writing. A **confirmed** IPP earns a unit level when **at least 80% of the unit's
+  full task list** is marked — the plan's deleted outcomes count the denominator — so a
+  lightly-modified IPP can still earn levels while a heavily-modified one reads **IPP**, never a
+  band off a sliver (below threshold now shows IPP, not "Incomplete": the shortfall is the plan's
+  deletions, not missing entry — entry grid and report both). An earned level **counts wherever a
+  level counts** — unit bars, the roll-up tree's percentages, cohort means, and now the donut too
+  (which previously excluded every confirmed IPP outright, even banded ones). "IPP" in tallies and
+  hovers means the badge state: no earnable level. RWM is unchanged by design. **SQL:** rerun
+  `sql/security/tvf_StudentCohortMath.sql` and `tvf_StudentCohortMathAll.sql` (adds the measured
+  flag that distinguishes "no IPP" from "unresolved").
 - **IPP students no longer show an Expected range on the summary drill or the student detail page.**
   The flat Student list already blanked Expected and Diff for students not measured against the
   benchmark (IPP / unconfirmed IPP), but the Reading summary drill and the student detail history
