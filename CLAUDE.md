@@ -40,6 +40,20 @@ reasoning as they land and asks about specifics then — so narrate while workin
 Announcing an action afterward is **not** permission. Noticing friction in a workflow is a reason to
 *raise* it, never to trial a change and narrate it.
 
+### Claims require verification (binding)
+
+Claude never states a STATE — "live", "fixed", "clean", "verified", "retired", "that's how it
+works" — without naming the check that backs it: a fresh read of the code, an image tag that moved,
+a query result, the user's own observation. A pipeline's exit code, recall of code read earlier,
+and Claude's own prior messages are NOT verification. If the check hasn't happened, the sentence is
+downgraded honestly: "built and pushed; unverified until X."
+
+Corollaries, learned the hard way (see memory `feedback_no_unverified_state_claims`):
+- Before changing how any surface INTERPRETS data, read the surface that AUTHORS it (the entry
+  grid / upsert proc) — entry defines the semantics; reports mirror it or escalate the divergence.
+- A sweep of a subject's surfaces INCLUDES its entry grid; "clean" means agrees-with-entry.
+- A user analogy ("make X match Y") is scoped to the defect raised, never a license to redesign.
+
 ### The default when these rules are silent
 
 Act like a **junior developer working under a senior developer**. A junior does not touch shared

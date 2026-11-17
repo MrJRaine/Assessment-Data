@@ -4,6 +4,7 @@
 - [Project: Session Archive](project_session_archive.md) â€” ARCHIVE, do NOT auto-read; verbatim session log (2026-04 â†’ 06-08). Open only to recover history.
 
 ## How I work with this user (feedback)
+- [No Unverified State Claims](feedback_no_unverified_state_claims.md) — ROOT PATTERN (two months): never say live/fixed/clean/retired without naming the verification behind it; pipelines' exit codes, recall, and my own prior messages are not verification.
 - [Batch Builds During Review Bursts](feedback_batch_builds.md) â€” don't rebuild/relaunch/commit after every bullet of feedback; accumulate edits and do ONE build cycle when the user says done.
 - [Imp Container First](feedback_imp_container_first.md) â€” when the user is testing via impersonation, build `-imp` + relaunch awdev-impersonation FIRST (it's what they view); awdev (:3001) after or skip.
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) â€” **ABSOLUTE**: no DDL/DML/reads against any database or Fabric instance, dev or live, ever. The user executes all SQL; I write tracked scripts and hand them over.
