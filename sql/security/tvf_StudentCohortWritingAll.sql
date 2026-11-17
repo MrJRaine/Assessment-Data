@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortWritingAll  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleWriting output (see the column comment): the tree tallies
+ *          exclude unconfirmed IPPs from every measure and name them in the hovers.
  * Purpose: READ-ONLY feed for the Reports > Writing OVERSIGHT roll-up tree (1.3.0 reports rebuild).
  *          Writing counterpart of tvf_StudentCohortReadingAll: one row per in-scope student PER WRITING
  *          LANGUAGE, carrying the achievement band of that language's latest writing AVERAGE (for the
@@ -180,6 +182,11 @@ RETURN
         b.SelfIDAfrican,
         b.SelfIDIndigenous,
         ipp.IsIPP                         AS WritingIPPStatus,
+        -- Measured flag (2026-11-17), lockstep with the band CASE below + the Group/list feeds: the
+        -- client can't tell "no IPP row" from "unresolved" via WritingIPPStatus (both NULL), and the
+        -- tree tallies need it so unconfirmed IPPs are excluded from EVERY measure and counted in
+        -- the hovers (trait/band denominators diverged without it).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleWriting,
         b.AssessmentLanguage,                                -- 'English' | 'French'; NULL = no writing result
         b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
         b.IdeasScore                      AS IdeasScore,        -- the four trait scores ('1'-'4'/'SCR'/'-'/NULL)

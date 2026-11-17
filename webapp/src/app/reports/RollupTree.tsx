@@ -25,39 +25,43 @@ function StudentsCell({ c }: { c: Counts }) {
 function ResultsCell({ c }: { c: Counts }) {
   return <td className="rn" title={`EN ${c.resultsEN} · FR ${c.resultsFR}`}>{c.results}</td>
 }
+// Every excluded result gets NAMED in the hover (never a silent omission): IPP + unconfirmed-IPP
+// lines make Results = band + IPP + unconfirmed (+ band-less) reconcile against the drill.
+function exclNote(ipp: number, unresolved: number): string {
+  const parts: string[] = []
+  if (ipp > 0) parts.push(`${ipp} IPP result${ipp === 1 ? '' : 's'} excluded`)
+  if (unresolved > 0) parts.push(`${unresolved} unconfirmed-IPP result${unresolved === 1 ? '' : 's'} excluded`)
+  return parts.length ? `\n${parts.join('\n')}` : ''
+}
 function MeetCell({ c }: { c: Counts }) {
   const p = pctOf(c.meet, c.band)
+  const note = exclNote(c.ippExcluded, c.unresolvedExcluded)
   if (p == null) {
-    const t = c.ippExcluded > 0 ? `No results with a benchmark level here (${c.ippExcluded} IPP excluded)` : 'No results with a level here'
-    return <td className="rpct none" title={t}>—</td>
+    return <td className="rpct none" title={`No results with a level here${note}`}>—</td>
   }
-  const ippNote = c.ippExcluded > 0 ? `\n${c.ippExcluded} IPP result${c.ippExcluded === 1 ? '' : 's'} excluded` : ''
-  const title = `Meeting/Exceeding ${c.meet} of ${c.band} results with a level\nEN ${c.meetEN}/${c.bandEN} · FR ${c.meetFR}/${c.bandFR}${ippNote}`
+  const title = `Meeting/Exceeding ${c.meet} of ${c.band} results with a level\nEN ${c.meetEN}/${c.bandEN} · FR ${c.meetFR}/${c.bandFR}${note}`
   return <td className={`rpct ${heatClass(p)}`} title={title}>{fmtPct(p)}</td>
 }
 // One rolled-up measure cell, rendered as either % Meeting/Exceeding or the Mean score (toggle). Mean is
 // heat-coloured by normalising the 1–4 scale to 0..1 so it uses the same heat ramp as the %.
 function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
+  const note = exclNote(stat.ippExcluded, stat.unresolvedExcluded)
   if (mode === 'mean') {
     const m = stat.count > 0 ? stat.sum / stat.count : null
     if (m == null) {
-      const t = stat.ippExcluded > 0 ? `No scored results here (${stat.ippExcluded} IPP excluded)` : 'No scored results here'
-      return <td className="rpct none" title={t}>—</td>
+      return <td className="rpct none" title={`No scored results here${note}`}>—</td>
     }
-    const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
     const meanEN = stat.countEN > 0 ? (stat.sumEN / stat.countEN).toFixed(2) : '—'
     const meanFR = stat.countFR > 0 ? (stat.sumFR / stat.countFR).toFixed(2) : '—'
     const enfr = `\nEN ${meanEN} (${stat.countEN}) · FR ${meanFR} (${stat.countFR})`
-    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${enfr}${ippNote}`}>{m.toFixed(2)}</td>
+    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${enfr}${note}`}>{m.toFixed(2)}</td>
   }
   const p = pctOf(stat.meet, stat.band)
   if (p == null) {
-    const t = stat.ippExcluded > 0 ? `No results with a level here (${stat.ippExcluded} IPP excluded)` : 'No results with a level here'
-    return <td className="rpct none" title={t}>—</td>
+    return <td className="rpct none" title={`No results with a level here${note}`}>—</td>
   }
-  const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
   const enfr = `\nEN ${stat.meetEN}/${stat.bandEN} · FR ${stat.meetFR}/${stat.bandFR}`
-  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${enfr}${ippNote}`}>{fmtPct(p)}</td>
+  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${enfr}${note}`}>{fmtPct(p)}</td>
 }
 
 // Generic School → Grade/Homeroom → (expand) student-detail roll-up. The subject wrapper supplies the

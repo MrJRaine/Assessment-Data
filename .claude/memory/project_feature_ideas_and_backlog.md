@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-11-10T15:30:03.002Z
+  modified: 2026-11-17T16:23:14.081Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -127,6 +127,10 @@ we're not blocked and it's not our queue item.)*
 
 # Post-1.0
 
+- **Achievement-chip typography/shape pass** *(user 2026-11-17, cosmetic)*. 1.4.0 standardized every
+  Reading/Writing report achievement cell on chips (`.ach-chip`, matching Math's `.mband` geometry;
+  `IPP?` orange, `IPP` purple). "Fine for now" — revisit font size / chip shape in a future version so
+  the chips better fill the column space (they currently sit small inside the row height). Pure CSS.
 - **LOTO sysadmin-override confirm dialog** *(user 2026-10-27, QoL/safety)*. When a **sysadmin** clears a
   maintenance window they did **not** open, prompt a confirm first naming the owner — e.g. "You are
   cancelling a maintenance window set by user: XYZ" (XYZ = `AppMaintenance.SetByEmail`). Fires ONLY on the

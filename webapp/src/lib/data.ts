@@ -833,6 +833,7 @@ export interface ReadingRollupRow {
   schoolId: string | null
   schoolName: string | null
   readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
+  chartEligible: boolean // measured (not IPP/unresolved) — false + readingIPP false = unconfirmed IPP
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = neither expected nor assessed ("No data")
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
   isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
@@ -857,6 +858,10 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
     schoolId: (r.SchoolID as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleReading: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleReading == null
+      ? !(Number(r.ReadingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleReading) === true,
     scaleSystem: (r.ScaleSystem as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
     isExpectedOnly: Boolean(r.IsExpectedOnly),
@@ -952,6 +957,7 @@ export interface WritingRollupRow {
   schoolId: string | null
   schoolName: string | null
   writingIPP: boolean | null
+  chartEligible: boolean // measured (not IPP/unresolved) — false + writingIPP false = unconfirmed IPP
   assessmentLanguage: string | null // 'English' | 'French'; null = neither expected nor assessed
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
   isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
@@ -982,6 +988,10 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     schoolId: (r.SchoolID as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleWriting: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleWriting == null
+      ? !(Number(r.WritingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleWriting) === true,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
     isExpectedOnly: Boolean(r.IsExpectedOnly),

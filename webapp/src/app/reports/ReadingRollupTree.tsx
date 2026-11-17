@@ -20,6 +20,7 @@ function buildStudents(rows: ReadingRollupRow[]): RollupStudent[] {
       s = {
         key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
         schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.readingIPP === true,
+        unresolved: !r.chartEligible && r.readingIPP !== true,
         gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
         expectedEN: false, expectedFR: false, results: [],
       }

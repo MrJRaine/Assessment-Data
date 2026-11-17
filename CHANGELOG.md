@@ -17,6 +17,14 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Summary-tree percentages: unconfirmed IPPs excluded from every column, and every exclusion is
+  named.** The Reading/Writing trees' trait columns counted an unconfirmed IPP's scores while the
+  Average/band column excluded them — different denominators per column, so the node's numbers could
+  not be reconciled against the drill. Unconfirmed IPPs are now out of every measure (per the
+  unresolved-unmeasured rule), and the % hovers gain explicit "IPP excluded" / "unconfirmed-IPP
+  excluded" lines (the old IPP counter had gone dead), so Results = banded + IPP + unconfirmed adds
+  up on every node. **SQL:** rerun `sql/security/tvf_StudentCohortReadingAll.sql` and
+  `tvf_StudentCohortWritingAll.sql`.
 - **Math: one IPP rule across entry and reports.** An **unresolved** math IPP (flagged, unconfirmed)
   is unmeasured — marks stay visible, band cells show "—", out of every chart and percentage,
   matching Reading/Writing. A **confirmed** IPP earns a unit level when **at least 80% of the unit's

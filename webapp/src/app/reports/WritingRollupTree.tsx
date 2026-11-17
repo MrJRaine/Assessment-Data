@@ -31,6 +31,7 @@ function buildStudents(rows: WritingRollupRow[]): RollupStudent[] {
       s = {
         key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
         schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.writingIPP === true,
+        unresolved: !r.chartEligible && r.writingIPP !== true,
         gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
         expectedEN: false, expectedFR: false, results: [],
       }

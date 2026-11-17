@@ -50,6 +50,7 @@ export interface RollupStudent {
   schoolId: string
   schoolName: string
   ipp: boolean // confirmed subject IPP — excluded from the % (not measured against the benchmark)
+  unresolved: boolean // flagged-but-unconfirmed IPP — also unmeasured; tallied separately so counts reconcile
   // Demographics for the summary-view filters (2026-11-10). null = unknown (e.g. the TVF predates the
   // Gender/SelfID columns) — a filter option is only OFFERED when real values are present.
   gender: string | null
@@ -106,7 +107,8 @@ export interface Counts {
   bandEN: number
   meetFR: number
   bandFR: number
-  ippExcluded: number // results with a band that were left out of the % because the student is IPP
+  ippExcluded: number // results left out of the % because the student has a confirmed IPP
+  unresolvedExcluded: number // results left out because the student's IPP is flagged but unconfirmed
 }
 
 // Distinct STUDENTS (a both-languages student counts once) vs total RESULTS (counts per language), and
@@ -121,7 +123,7 @@ export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Coun
   const c: Counts = {
     students: 0, studentsEN: 0, studentsFR: 0, studentsNone: 0,
     results: 0, resultsEN: 0, resultsFR: 0,
-    meet: 0, band: 0, meetEN: 0, bandEN: 0, meetFR: 0, bandFR: 0, ippExcluded: 0,
+    meet: 0, band: 0, meetEN: 0, bandEN: 0, meetFR: 0, bandFR: 0, ippExcluded: 0, unresolvedExcluded: 0,
   }
   for (const s of students) {
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
@@ -133,8 +135,13 @@ export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Coun
     for (const r of rs) {
       c.results++
       if (r.en) { c.resultsEN++; hasEN = true } else { c.resultsFR++; hasFR = true }
+      // IPP/unresolved checks come BEFORE the band check: the feeds null these students' bands, so
+      // testing code first made both groups vanish from every tally line (found 2026-11-17 — the
+      // drill and the node could not be reconciled by counting). Now: results = band + IPP +
+      // unconfirmed + band-less, every term visible in the hovers.
+      if (s.ipp) { c.ippExcluded++; continue }
+      if (s.unresolved) { c.unresolvedExcluded++; continue }
       if (r.code == null) continue
-      if (s.ipp) { c.ippExcluded++; continue } // IPP: has a mark but isn't measured against the benchmark
       c.band++
       if (r.en) c.bandEN++
       else c.bandFR++
@@ -157,13 +164,13 @@ export const pctOf = (meet: number, band: number): number | null => (band === 0 
 // % Meeting/Exceeding inputs (meet/band) AND the Mean inputs (sum/count), so a client toggle can switch
 // between them without re-querying. IPP results are excluded (not measured) and counted in ippExcluded.
 export interface MeasureStat {
-  meet: number; band: number; sum: number; count: number; ippExcluded: number
+  meet: number; band: number; sum: number; count: number; ippExcluded: number; unresolvedExcluded: number
   // Per-language breakdown for the hover tooltip (parity with reading's Counts). EN = English results.
   meetEN: number; bandEN: number; sumEN: number; countEN: number
   meetFR: number; bandFR: number; sumFR: number; countFR: number
 }
 const zeroStat = (): MeasureStat => ({
-  meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0,
+  meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0, unresolvedExcluded: 0,
   meetEN: 0, bandEN: 0, sumEN: 0, countEN: 0, meetFR: 0, bandFR: 0, sumFR: 0, countFR: 0,
 })
 export interface Measure {
@@ -181,6 +188,10 @@ export function traitMeasure(students: RollupStudent[], lang: LangFilter, key: W
       const v = r.traits?.[key]
       if (v == null) continue
       if (s.ipp) { st.ippExcluded++; continue }
+      // Unresolved IPPs are unmeasured like confirmed ones — WITHOUT this, their trait scores counted
+      // here while the band column excluded them, giving the trait %s a different denominator than
+      // the Average column (the 2026-11-17 reconciliation bug).
+      if (s.unresolved) { st.unresolvedExcluded++; continue }
       const meets = v >= MEETING_MIN
       st.band++; st.count++; st.sum += v
       if (meets) st.meet++
@@ -198,7 +209,10 @@ export function avgMeasure(students: RollupStudent[], lang: LangFilter): Measure
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
     for (const r of rs) {
       if (r.code == null && r.avgScore == null) continue
-      if (s.ipp) { if (r.code != null) st.ippExcluded++; continue }
+      // Count the excluded RESULT (not just banded ones — the feeds null these students' bands,
+      // which previously left this counter dead) so the hover reconciles against the drill.
+      if (s.ipp) { st.ippExcluded++; continue }
+      if (s.unresolved) { st.unresolvedExcluded++; continue }
       if (r.code != null) {
         const meets = r.code >= MEETING_MIN
         st.band++; if (meets) st.meet++
