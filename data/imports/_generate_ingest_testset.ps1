@@ -292,6 +292,17 @@ $studentRows = @($studentRows | ForEach-Object {
     } else { $_ }
 })
 
+# MATH-TEAM IPP FIXTURES (2026-11-17): CurrentIPP -> 'Y' for these 8 students, per the math team's
+# request (teacher/class per the request: Hollis Tide CHES-5; Morgan Hazel HIA-4/5; Rafa Stonefield
+# CHES-3/4; Ellis Wintergreen CHES-2/3; Alex Cedar HIA-P/1 grade-P half). They ingest as FLAGGED
+# (unresolved) gates and show IPP? until confirmed in the app. Encoded HERE, not hand-edited in the
+# CSV, so regens never wipe them (the Odin Bramble lesson).
+$mathTeamIppY = @('9200000083','9200000105','9200000113','9200000566','9200001008','9200001012','9200001022','9200001033')
+$studentRows = @($studentRows | ForEach-Object {
+    $f = $_ -split [regex]::Escape($DELIM)
+    if ($mathTeamIppY -contains $f[0]) { $f[13] = 'Y'; $f -join $DELIM } else { $_ }
+})
+
 # -----------------------------------------------------------------------------
 # Staff (16 teachers, Group 47 = Teacher) + 1 regional itinerant (Group 32, multi-school)
 # -----------------------------------------------------------------------------

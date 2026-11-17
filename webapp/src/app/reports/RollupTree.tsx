@@ -306,10 +306,11 @@ export function RollupTree<T>({
             <>
               <div className="filter-group">
                 <label>Self-ID African</label>
+                {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
                 <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
                   <option>All</option>
                   <option>Yes</option>
-                  <option>No</option>
+                  <option value="No">Not Yes</option>
                 </select>
               </div>
               <div className="filter-group">

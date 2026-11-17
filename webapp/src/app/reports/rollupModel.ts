@@ -71,6 +71,14 @@ export function triMatch(sel: Tri, v: boolean | null): boolean {
   if (sel === 'Yes') return v === true
   return v === false
 }
+// Self-ID African is filtered YES vs NOT-YES (user 2026-11-17): the source field is Yes / N / never
+// answered, and the ingest stores only Yes=1 (N and unanswered both land NULL) — so "not Yes" is the
+// only honest complement. The UI labels this option "Not Yes".
+export function yesNotYes(sel: Tri, v: boolean | null): boolean {
+  if (sel === 'All') return true
+  if (sel === 'Yes') return v === true
+  return v !== true
+}
 export interface DemoFilter {
   gradeMinRank: number
   gradeMaxRank: number
@@ -81,7 +89,7 @@ export interface DemoFilter {
 export const demoPass = (f: DemoFilter) => (s: { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }): boolean =>
   (s.grade == null || (gradeRank(s.grade) >= f.gradeMinRank && gradeRank(s.grade) <= f.gradeMaxRank)) &&
   (f.gender === 'All' || s.gender === f.gender) &&
-  triMatch(f.african, s.selfIDAfrican) &&
+  yesNotYes(f.african, s.selfIDAfrican) &&
   triMatch(f.indigenous, s.selfIDIndigenous)
 export interface RollupSchool { id: string; name: string; students: RollupStudent[] }
 export interface RollupChild {
