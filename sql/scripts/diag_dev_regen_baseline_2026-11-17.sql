@@ -25,7 +25,7 @@
  ******************************************************************************/
 
 -- 1) Which P-EN teacher identity is current?
-SELECT 'P-EN teacher' AS Check_, Email, FirstName, LastName, SchoolID, IsCurrent, EffectiveStartDate
+SELECT 'P-EN teacher' AS Check_, Email, FirstName, LastName, HomeSchoolID, IsCurrent, EffectiveStartDate
 FROM DimStaff
 WHERE Email IN ('teach.elem.en.0@tcrce.ca', 'teach.elem.en.p@tcrce.ca')
 ORDER BY Email, EffectiveStartDate;
