@@ -217,6 +217,8 @@ function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRo
             they are not measured against the benchmark, so no expectation and no Diff — like the list. */}
         <td className="stu muted">{r.eligible ? fmtExp(r) : '—'}</td>
         <td className="stu">{r.eligible && r.delta != null ? signed(r.delta) : miss}</td>
+        {/* ΔJune is growth vs the student's OWN prior June — individual progress, NOT a benchmark
+            comparison — so it deliberately shows for IPP/unconfirmed students (user ruling 2026-11-17). */}
         <td className="stu">{r.diffJune != null ? signed(r.diffJune) : miss}</td>
         <td className="ach">
           {/* Achievement as a CHIP (standardized with Math, user 2026-11-17); IPP purple, IPP? orange. */}

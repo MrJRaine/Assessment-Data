@@ -13,3 +13,5 @@ metadata:
 **Why:** divergent Current semantics made the summary donut and the Student list donut disagree; I proposed "fixing" the list to match the summary and had the direction exactly backwards.
 
 **How to apply:** any new report feed's no-cycle mode picks each student's latest result with NO school-year restriction; never reintroduce a CurYear/SchoolYear gate on the latest-pick in Current mode (grade-span/population gates may stay current-year). Open question flagged 2026-11-12: whether Math / RWM Current should also go lifetime (math is task×month×grade-bound, so lifetime is murkier). See [[feedback_no_unilateral_scope_decisions]].
+
+**Diff-from-Prev-June shows for IPP/unconfirmed students (ruled 2026-11-17):** it measures growth against the student's OWN prior June level — individual progress tracking, not a benchmark comparison — so it is NOT suppressed with Expected/Diff/band. Do not "fix" it as a leak.
