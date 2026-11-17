@@ -700,15 +700,17 @@ export async function getStaffRoleOverrideList(): Promise<StaffRoleOverrideRow[]
 export interface MaintenanceWindow {
   maintenanceAt: string | null // ISO-8601 UTC, or null = no window
   message: string | null
+  setBy: string | null // lowercased owner email (LOTO) — who opened the window; null when none
 }
 export async function getMaintenanceWindow(): Promise<MaintenanceWindow> {
-  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null }>(
-    'SELECT MaintenanceAt, Message FROM dbo.AppMaintenance WHERE Id = 1',
+  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null; SetByEmail: string | null }>(
+    'SELECT MaintenanceAt, Message, SetByEmail FROM dbo.AppMaintenance WHERE Id = 1',
   )
   const at = rows[0]?.MaintenanceAt ?? null
   return {
     maintenanceAt: at == null ? null : at instanceof Date ? at.toISOString() : new Date(at).toISOString(),
     message: rows[0]?.Message ?? null,
+    setBy: at == null ? null : (rows[0]?.SetByEmail ?? null)?.toLowerCase() ?? null,
   }
 }
 

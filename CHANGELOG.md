@@ -17,6 +17,15 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Maintenance clear controls now follow the lock-out rule (LOTO) everywhere.** The warehouse has
+  locked clearing to the window's opener or a sysadmin since 1.3.0, but the app's surfaces missed the
+  patch: the banner and down-overlay "Clear now" showed for every maintenance-capable user (whose
+  click would then be refused), the Maintenance page offered everyone "Cancel / all clear", and the
+  app-side gate refused ingest-flagged users the clear the warehouse allows them on their own windows.
+  Now `/api/status` carries the window owner's work email (public staff info), the Clear buttons
+  render only for the owner or a sysadmin, a non-owner on the Maintenance page sees who holds the
+  lock instead of a silently missing button, and ingest-flagged owners can clear their own windows.
+  Web only, no SQL — the proc's gate was already right.
 - **Student detail page: switching Reading ⟷ Writing no longer shows the other subject's history.**
   The subject toggle kept the previous subject's already-loaded rows (its own and the Prev/Next
   prefetches, cached per student without the subject in the key), so the table rendered the new

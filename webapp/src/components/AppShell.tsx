@@ -16,8 +16,9 @@ export default async function AppShell({ children }: { children: React.ReactNode
   let caps = { isSysAdmin: false, canManageCycles: false, canRunIngest: false, canMaintain: false }
   let authed = false
   let capsError = false
+  let upn: string | null = null // also handed to MaintenanceProvider for the LOTO owner check
   try {
-    const upn = await getCurrentUpn() // throws when not signed in -> caught below
+    upn = await getCurrentUpn() // throws when not signed in -> caught below
     authed = true
     // Resolve caps in its OWN try so a transient caps-query failure can't flip the user to signed-out
     // (which would also hide the non-gated nav). getCallerCapabilities already retries a cold pool;
@@ -33,7 +34,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
 
   return (
     <>
-      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canMaintain={caps.canMaintain} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
+      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canMaintain={caps.canMaintain} canRunIngest={caps.canRunIngest} upn={upn} authSlot={<AuthArea />}>
       <header className="header">
         {/* The brand lockup is the way home — standard convention, and the only home affordance now
             that the landing page has no nav entry of its own. */}

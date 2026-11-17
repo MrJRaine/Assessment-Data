@@ -13,12 +13,16 @@ export default async function MaintenanceAdminPage() {
   if (!caps.canMaintain && !caps.isSysAdmin) redirect('/')
 
   // Resilient if AppMaintenance isn't deployed yet — show "none" rather than erroring the page.
-  let current = { maintenanceAt: null as string | null, message: null as string | null }
+  let current = { maintenanceAt: null as string | null, message: null as string | null, setBy: null as string | null }
   try {
     current = await getMaintenanceWindow()
   } catch {
     /* table not deployed yet — the first schedule will surface a clear error */
   }
+
+  // LOTO: the Cancel/all-clear control belongs to the window's OWNER or a sysadmin — matching the
+  // proc's gate, so a CanMaintain non-owner isn't shown a button that would be refused.
+  const canClear = caps.isSysAdmin || (current.setBy != null && current.setBy === upn.toLowerCase())
 
   return (
     <>
@@ -26,7 +30,7 @@ export default async function MaintenanceAdminPage() {
         title="Maintenance"
         subtitle="Schedule a graceful entry lockout before an emergency container swap. Teachers get a countdown, entry locks in stages, and unsaved work is auto-saved before the restart."
       />
-      <MaintenanceControl current={current} />
+      <MaintenanceControl current={current} canClear={canClear} />
     </>
   )
 }

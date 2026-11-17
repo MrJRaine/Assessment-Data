@@ -118,7 +118,7 @@ export async function runIngestCycle(): Promise<RunResult> {
     try {
       await execProc('usp_ClearMaintenanceWindow', { CallerUPN: upn })
     } catch {
-      cleared = false // e.g. not a sysadmin; the run itself was fine, so say so and move on
+      cleared = false // LOTO: the window belongs to someone else (51042); the run itself was fine, so say so and move on
     }
     revalidatePath('/ingest')
     return {

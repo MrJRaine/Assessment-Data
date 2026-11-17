@@ -33,9 +33,10 @@ export interface MaintenanceState {
   secondsRemaining: number | null // to T, server-corrected
   maintenanceAt: string | null // ISO UTC
   message: string | null
+  setBy: string | null // lowercased owner email (LOTO) — who opened the window
 }
 
-const Ctx = createContext<MaintenanceState>({ stage: 'none', secondsRemaining: null, maintenanceAt: null, message: null })
+const Ctx = createContext<MaintenanceState>({ stage: 'none', secondsRemaining: null, maintenanceAt: null, message: null, setBy: null })
 
 // Separate controls channel: entry grids register that they hold UNSAVED work, so the provider can
 // keep the background heartbeat alive for exactly those tabs (see the poll scheduler below). Kept off
@@ -59,18 +60,21 @@ export default function MaintenanceProvider({
   isSysAdmin = false,
   canMaintain = false,
   canRunIngest = false,
+  upn = null,
   authSlot = null,
 }: {
   children: React.ReactNode
   isSysAdmin?: boolean
   canMaintain?: boolean // Technology Services — full maintenance control (1.3.0)
   canRunIngest?: boolean
+  upn?: string | null // signed-in email — compared against the window owner (LOTO) for the Clear control
   authSlot?: React.ReactNode // AuthArea (sign in / sign out), rendered on the down overlay
 }) {
   // Raw window from the server + the clock offset measured at fetch time.
-  const windowRef = useRef<{ atMs: number | null; message: string | null; offsetMs: number }>({
+  const windowRef = useRef<{ atMs: number | null; message: string | null; setBy: string | null; offsetMs: number }>({
     atMs: null,
     message: null,
+    setBy: null,
     offsetMs: 0,
   })
   const [state, setState] = useState<MaintenanceState>({
@@ -78,6 +82,7 @@ export default function MaintenanceProvider({
     secondsRemaining: null,
     maintenanceAt: null,
     message: null,
+    setBy: null,
   })
 
   // How many entry grids in THIS tab currently hold unsaved work, and a handle to re-run the poll
@@ -99,15 +104,15 @@ export default function MaintenanceProvider({
   }, [])
 
   const recompute = useCallback(() => {
-    const { atMs, message, offsetMs } = windowRef.current
+    const { atMs, message, setBy, offsetMs } = windowRef.current
     if (atMs == null) {
-      setState((s) => (s.stage === 'none' ? s : { stage: 'none', secondsRemaining: null, maintenanceAt: null, message: null }))
+      setState((s) => (s.stage === 'none' ? s : { stage: 'none', secondsRemaining: null, maintenanceAt: null, message: null, setBy: null }))
       return
     }
     const serverNowMs = Date.now() + offsetMs
     const secondsRemaining = Math.round((atMs - serverNowMs) / 1000)
     const stage = stageFor(secondsRemaining)
-    setState({ stage, secondsRemaining, maintenanceAt: new Date(atMs).toISOString(), message })
+    setState({ stage, secondsRemaining, maintenanceAt: new Date(atMs).toISOString(), message, setBy })
   }, [])
 
   // Returns whether the status was actually refreshed, so the caller can retry SOON on failure
@@ -116,11 +121,12 @@ export default function MaintenanceProvider({
     try {
       const res = await fetch('/api/status', { cache: 'no-store' })
       if (!res.ok) return false
-      const data: { maintenanceAt: string | null; serverNow: string; message: string | null } = await res.json()
+      const data: { maintenanceAt: string | null; serverNow: string; message: string | null; setBy?: string | null } = await res.json()
       const offsetMs = new Date(data.serverNow).getTime() - Date.now()
       windowRef.current = {
         atMs: data.maintenanceAt ? new Date(data.maintenanceAt).getTime() : null,
         message: data.message,
+        setBy: data.setBy ?? null,
         offsetMs,
       }
       recompute()
@@ -247,9 +253,11 @@ export default function MaintenanceProvider({
     })
   }, [recompute])
 
-  // Clear control shows for a sysadmin OR a maintenance-capable user; the server still enforces LOTO
-  // (only the window's opener or a sysadmin can actually clear it) and returns a friendly message if not.
-  const admin = isSysAdmin || canMaintain ? { onClear: clearNow, clearing, error: clearError } : null
+  // LOTO (missed in the original patch, fixed 2026-11-17): the Clear control shows ONLY for a
+  // sysadmin or the window's OWNER (setBy from /api/status) — matching what usp_ClearMaintenanceWindow
+  // actually allows, instead of showing every maintenance-capable user a button that would be refused.
+  const isOwner = state.setBy != null && upn != null && state.setBy === upn.toLowerCase()
+  const admin = isSysAdmin || isOwner ? { onClear: clearNow, clearing, error: clearError } : null
 
   // Pages that EXIST to run maintenance are not covered by it — otherwise the documented procedure
   // (schedule -> wait -> run the ingest) is impossible: the window lands, the overlay covers /ingest,

@@ -27,8 +27,10 @@ function fmt(iso: string): string {
 
 export default function MaintenanceControl({
   current,
+  canClear,
 }: {
-  current: { maintenanceAt: string | null; message: string | null }
+  current: { maintenanceAt: string | null; message: string | null; setBy: string | null }
+  canClear: boolean // LOTO: sysadmin or the window's owner — mirrors usp_ClearMaintenanceWindow's gate
 }) {
   const router = useRouter()
   const [minutes, setMinutes] = useState(10)
@@ -77,6 +79,13 @@ export default function MaintenanceControl({
             <strong>Maintenance scheduled</strong> for <strong>{fmt(current.maintenanceAt!)}</strong>. Entry locks 5 minutes
             before; unsaved work auto-saves 1 minute before. All open tabs are counting down.
             {current.message ? <div className="muted" style={{ marginTop: '0.4rem' }}>Message: “{current.message}”</div> : null}
+            {/* Never a silently missing button: a non-owner is told WHO holds the lock and what to do. */}
+            {!canClear ? (
+              <div className="muted" style={{ marginTop: '0.4rem' }}>
+                Locked by <strong>{current.setBy ?? 'whoever opened it'}</strong> — only they or a system administrator
+                can cancel or clear this window.
+              </div>
+            ) : null}
           </>
         ) : (
           <>No maintenance scheduled. Entry is open as normal.</>
@@ -119,7 +128,7 @@ export default function MaintenanceControl({
           <button className="btn" onClick={schedule} disabled={busy || confirmShort}>
             {busy ? 'Working…' : active ? 'Reschedule' : `Start countdown (${minutes} min)`}
           </button>
-          {active ? (
+          {active && canClear ? (
             <button className="btn-ghost" onClick={clear} disabled={busy}>
               Cancel / all clear
             </button>
