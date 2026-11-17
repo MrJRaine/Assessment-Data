@@ -17,6 +17,14 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Math data entry now enforces the IPP confirmation gate.** A student flagged for a Math IPP but
+  not yet confirmed could be marked like any other student — the math grid never consumed the
+  needs-confirmation state the feed already carried, unlike the Reading/Writing grids which block
+  entry and prompt for confirmation. Math entry now works the same way: an unconfirmed student's
+  task cells are blocked (existing marks stay visible), their band cells show the orange **IPP?**,
+  and a banner above the grid lists them with staged **Yes (Math IPP)/No** choices committed on
+  Save — resolving to No unlocks the cells, Yes flips them to IPP cells, both without a refresh.
+  Web only, no SQL (the same IPP confirmation proc the other grids use).
 - **Writing: the average is not computed for IPP students — anywhere.** Entered trait scores stay
   visible as raw evidence, but the derived average is writing's benchmark metric, so an IPP
   student's Avg cell shows their IPP state instead of a number: the purple IPP chip when confirmed,
