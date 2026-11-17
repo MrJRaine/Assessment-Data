@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortReadingAll  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleReading output (see the column comment): the tree tallies
+ *          exclude unconfirmed IPPs from every measure and name them in the hovers.
  * Purpose: READ-ONLY feed for the Reports > Reading OVERSIGHT roll-up tree (1.3.0 reports rebuild).
  *          Mirrors tvf_StudentCohortMathAll: one row per in-scope student PER READING-RESULT LANGUAGE,
  *          carrying the measure the client rolls up (School -> Grade|Homeroom, % Meeting/Exceeding) plus
@@ -185,6 +187,11 @@ RETURN
         b.SelfIDAfrican,
         b.SelfIDIndigenous,
         ipp.IsIPP                         AS ReadingIPPStatus,
+        -- Measured flag (2026-11-17), lockstep with the dal join below + the Group/list feeds: the
+        -- client can't tell "no IPP row" from "unresolved" via ReadingIPPStatus (both NULL), and the
+        -- tree tallies need it so unconfirmed IPPs are excluded from EVERY measure and counted in
+        -- the hovers (trait/band denominators diverged without it).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleReading,
         b.ScaleSystem,                                      -- language of THIS row; NULL = neither expected nor assessed
         b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
         dal.AchievementLevelCode          AS AchievementLevelCode, -- band for THIS result; NULL = none/IPP/unresolved
