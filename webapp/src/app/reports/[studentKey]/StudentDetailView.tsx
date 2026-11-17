@@ -115,6 +115,13 @@ export default function StudentDetailView({
   // against benchmarks — suppress the achievement band/colour (and Δ for reading). Mirrors the roster.
   const measured = current.ippStatus === 'Not IPP' || current.ippStatus === 'N/A'
   const ippConfirmed = current.ippStatus === 'IPP'
+  // Unconfirmed IPP: explicit row marker, parity with the list/drills (user 2026-11-17) — the prose
+  // note above explains it, but the history rows must reconcile at a glance too.
+  const achFallback = ippConfirmed
+    ? 'IPP'
+    : current.ippStatus === 'Unresolved'
+      ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+      : '—'
 
   const meta = [
     `Grade ${current.grade ?? '—'}`,
@@ -188,7 +195,7 @@ export default function StudentDetailView({
                   <td>{h.conventions ?? '—'}</td>
                   <td>{h.avgScore == null ? '—' : h.avgScore.toFixed(2)}</td>
                   <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
-                    {!measured ? (ippConfirmed ? 'IPP' : '—') : h.achievementName ?? '—'}
+                    {!measured ? achFallback : h.achievementName ?? '—'}
                   </td>
                 </tr>
               ))}
@@ -239,7 +246,7 @@ export default function StudentDetailView({
                   <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
                     {!measured ? (ippConfirmed ? 'IPP' : '—') : h.delta == null ? '—' : h.delta > 0 ? `+${h.delta}` : h.delta}
                   </td>
-                  <td>{!measured ? (ippConfirmed ? 'IPP' : '—') : h.achievementName ?? '—'}</td>
+                  <td>{!measured ? achFallback : h.achievementName ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
