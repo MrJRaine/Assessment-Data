@@ -32,6 +32,7 @@ interface TreeStudent {
   homeroomKey: string | null
   schoolId: string
   ipp: boolean
+  eligible: boolean // measured (no confirmed OR unresolved IPP) — unmeasured students get no band
   units: Map<string, UnitCounts>
 }
 interface School { id: string; name: string; students: TreeStudent[] }
@@ -55,7 +56,7 @@ function summarize(students: TreeStudent[], unitNames: string[], blankMode: Blan
     for (const [name, c] of s.units) {
       // An IPP student's unmarked task is an IPP cell (not in scope) — same rule as the matrix.
       const ippCells = s.ipp ? c.taskCount - c.scored : 0
-      const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode)
+      const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s)
       units[name][unitBucket(st)]++
       avgs.push(st.avg)
     }
@@ -88,7 +89,7 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
       if (!s) {
         s = {
           key: r.studentKey, grade: r.grade, homeroom: r.homeroom, homeroomKey: r.homeroomKey,
-          schoolId: r.schoolId, ipp: r.mathIPP, units: new Map(),
+          schoolId: r.schoolId, ipp: r.mathIPP, eligible: r.mathEligible, units: new Map(),
         }
         byKey.set(r.studentKey, s)
         schoolNames.set(r.schoolId, r.schoolName ?? r.schoolId)
@@ -383,7 +384,9 @@ function GradeBlock({
       return next
     })
   const mark = (studentKey: string, taskKey: string): Mark => marks[rk(studentKey, taskKey)] ?? 'blank'
-  const stat = (studentKey: string, u: Unit) => unitStat(countUnit((t) => mark(studentKey, t), u), blankMode)
+  // Per-student measured flag: unmeasured students (confirmed/unresolved IPP) keep visible marks, no band.
+  const meta = new Map(g.students.map((s) => [s.studentKey, { eligible: s.eligible, ipp: s.mathIPP }]))
+  const stat = (studentKey: string, u: Unit) => unitStat(countUnit((t) => mark(studentKey, t), u), blankMode, meta.get(studentKey))
 
   // Summary row tallies: overall + per unit (students), and per task (cells).
   const overall = emptyTally()

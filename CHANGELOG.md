@@ -17,6 +17,15 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **Math report: unresolved IPPs are now unmeasured, matching Reading/Writing.** A student flagged
+  for a math IPP but not yet confirmed was scored and banded as a normal student in the math matrix,
+  roll-up tree, donut and unit bars; Reading/Writing give unresolved students no band anywhere. Math
+  now applies the same rule: their marks stay visible in the matrix, but band cells show "—"
+  (confirmed IPPs keep the "IPP" badge — including a previously-banded edge case where a confirmed
+  IPP with fully scored tasks still got a band) and they're out of the % Meeting, charts and cohort
+  averages. RWM is unchanged by design (it excludes confirmed-IPP-in-any and scores everyone else).
+  **SQL:** rerun `sql/security/tvf_StudentCohortMath.sql` and `tvf_StudentCohortMathAll.sql`; until
+  they run, confirmed IPPs are handled and unresolved ones follow once they're in.
 - **IPP students no longer show an Expected range on the summary drill or the student detail page.**
   The flat Student list already blanked Expected and Diff for students not measured against the
   benchmark (IPP / unconfirmed IPP), but the Reading summary drill and the student detail history

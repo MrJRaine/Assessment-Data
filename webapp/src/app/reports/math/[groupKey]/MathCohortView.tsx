@@ -27,6 +27,13 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   const [focusKey, setFocusKey] = useState<string | null>(null)
 
   const mark = (studentKey: string, taskKey: string): Mark => marks[rk(studentKey, taskKey)] ?? 'blank'
+  // Per-student measured flag for unitStat: a confirmed/unresolved IPP keeps their marks visible but
+  // gets no band anywhere (same rule as Reading/Writing — user ruling 2026-11-17).
+  const studentMeta = useMemo(() => {
+    const m = new Map<string, { eligible: boolean; ipp: boolean }>()
+    for (const g of grades) for (const s of g.students) m.set(s.studentKey, { eligible: s.eligible, ipp: s.mathIPP })
+    return m
+  }, [grades])
   const uk = (g: Grade, u: Unit) => `${g.grade}:${u.name}`
   const toggleUnit = (key: string) =>
     setCollapsedUnits((prev) => {
@@ -39,7 +46,7 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   // Returns null when the student has no scorable data in the unit (all blank in exclude mode, or
   // all IPP). `incomplete` mirrors the entry grid's <80%-filled nudge for the DISPLAYED band only.
   function unitAvg(studentKey: string, u: Unit): { avg: number | null; ipp: boolean; incomplete: boolean } {
-    return unitStat(countUnit((t) => mark(studentKey, t), u), blankMode)
+    return unitStat(countUnit((t) => mark(studentKey, t), u), blankMode, studentMeta.get(studentKey))
   }
 
   // The per-student roll-up = the mean of that student's unit averages (units with data only).
@@ -74,7 +81,8 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
 
   // ── charts (group view): donut of overall roll-ups + stacked bars by unit name ────────────────
   const measuredStudents = useMemo(
-    () => grades.flatMap((g) => g.students.filter((s) => !s.mathIPP).map((s) => ({ s, g }))),
+    // eligible, not just !mathIPP: an UNRESOLVED IPP is also unmeasured (no band, out of the charts).
+    () => grades.flatMap((g) => g.students.filter((s) => s.eligible).map((s) => ({ s, g }))),
     [grades],
   )
   const donut = useMemo(() => {

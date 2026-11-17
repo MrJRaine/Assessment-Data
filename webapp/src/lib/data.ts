@@ -1667,6 +1667,7 @@ export interface MathCohortRow {
   description: string | null
   result: boolean | null // latest 0/1 (BIT), or null if never marked (a blank cell)
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
+  chartEligibleMath: boolean // measured (no IPP row, or resolved not-IPP) — false = confirmed OR unresolved IPP, no band
 }
 
 export async function getMathCohort(upn: string, groupKey: string, cycleGroupId: string | null = null): Promise<MathCohortRow[]> {
@@ -1688,6 +1689,7 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     TaskDescription: string | null
     ExistingResult: boolean | null
     MathIPPStatus: boolean | null
+    IsChartEligibleMath?: number | boolean | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
@@ -1711,6 +1713,9 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     description: r.TaskDescription ?? null,
     result: r.ExistingResult ?? null,
     mathIPPStatus: r.MathIPPStatus ?? null,
+    // Fallback while the TVF predates IsChartEligibleMath: confirmed IPPs become unmeasured at once;
+    // unresolved ones follow when the TVF rerun lands (NULL status is ambiguous without it).
+    chartEligibleMath: r.IsChartEligibleMath == null ? r.MathIPPStatus !== true : toBool(r.IsChartEligibleMath) === true,
   }))
 }
 
@@ -1726,6 +1731,7 @@ export interface MathRollupRow {
   schoolId: string
   schoolName: string | null
   mathIPP: boolean
+  mathEligible: boolean // measured — false = confirmed OR unresolved math IPP (no band anywhere)
   unitName: string | null
   unitOrder: number
   taskCount: number
@@ -1742,6 +1748,7 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     SchoolID: string
     SchoolName: string | null
     MathIPPStatus: number | null
+    IsChartEligibleMath?: number | null
     UnitName: string | null
     UnitOrder: number | null
     TaskCount: number
@@ -1756,6 +1763,8 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     schoolId: r.SchoolID,
     schoolName: r.SchoolName ?? null,
     mathIPP: r.MathIPPStatus === 1,
+    // Same fallback rule as the matrix feed: without the TVF column, only confirmed IPPs are unmeasured.
+    mathEligible: r.IsChartEligibleMath == null ? r.MathIPPStatus !== 1 : Number(r.IsChartEligibleMath) === 1,
     unitName: r.UnitName ?? null,
     unitOrder: Number(r.UnitOrder ?? 0),
     taskCount: Number(r.TaskCount ?? 0),

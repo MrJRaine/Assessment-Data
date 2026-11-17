@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortMathAll  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleMath output: unresolved math IPPs are unmeasured (no band),
+ *          matching Reading/Writing (user ruling); the marks stay visible.
  * Purpose: READ-ONLY feed for the Reports > Math OVERSIGHT roll-up tree (math-reports #2,
  *          Phase 1, 1.2.0). One row per (student x unit) for EVERY P-5 student in the
  *          caller's oversight scope, carrying COUNTS only — the unit's task count, how many
@@ -117,6 +119,10 @@ RETURN
         a.SchoolID,
         sch.SchoolName,
         ipp.IsIPP                         AS MathIPPStatus,
+        -- Measured flag (2026-11-17): 0 = confirmed OR unresolved IPP -> no band anywhere (the client
+        -- can't tell "no IPP row" from "unresolved" via MathIPPStatus — both NULL). MAX() only to stay
+        -- out of the GROUP BY; it is constant per student.
+        MAX(CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END) AS IsChartEligibleMath,
         t.UnitName,                                         -- NULL = no tasks configured for this grade
         MAX(t.UnitOrder)                  AS UnitOrder,
         COUNT(t.MathTaskKey)              AS TaskCount,
