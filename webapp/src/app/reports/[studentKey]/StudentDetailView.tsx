@@ -196,7 +196,9 @@ export default function StudentDetailView({
                   <td>{h.organization ?? '—'}</td>
                   <td>{h.language ?? '—'}</td>
                   <td>{h.conventions ?? '—'}</td>
-                  <td>{h.avgScore == null ? '—' : h.avgScore.toFixed(2)}</td>
+                  {/* The average is writing's benchmark metric — unmeasured students show their IPP
+                      state here instead of the number (traits above stay visible as raw evidence). */}
+                  <td>{h.avgScore == null ? '—' : measured ? h.avgScore.toFixed(2) : achFallback}</td>
                   <td>
                     {!measured ? achFallback : achChip(h.achievementName, h.achievementHexColor)}
                   </td>

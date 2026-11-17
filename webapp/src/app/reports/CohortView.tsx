@@ -428,9 +428,19 @@ export default function CohortView({
               return <td key={t.key}>{hasResult ? (v ?? <span className="muted">—</span>) : miss}</td>
             })
           : null}
-        {/* Level (reading) / Avg (writing) — cell tinted by the achievement band (uniform block). */}
+        {/* Level (reading) / Avg (writing) — cell tinted by the achievement band (uniform block).
+            WRITING: the average is the benchmark metric, so an unmeasured student shows their IPP
+            state instead of the number (reading keeps the LEVEL — it's evidence, not a comparison). */}
         <td style={measured && s.achievementHexColorTint ? { background: s.achievementHexColorTint } : undefined}>
-          {hasResult ? s.mostRecentLevelCode : miss}
+          {!hasResult
+            ? miss
+            : isWriting && !measured
+              ? s.ippStatusReading === 'IPP'
+                ? <span className="ach-chip aipp">IPP</span>
+                : s.ippStatusReading === 'Unresolved'
+                  ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                  : s.mostRecentLevelCode
+              : s.mostRecentLevelCode}
         </td>
         {subject === 'Reading' ? (
           <td>

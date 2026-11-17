@@ -364,9 +364,22 @@ export default function WritingRosterEntry({
                     )}
                   </td>
                 ))}
-                <td>{isIPP ? 'IPP' : avg == null ? '—' : avg.toFixed(2)}</td>
+                {/* The AVERAGE is the derived benchmark metric: entered trait scores stay visible,
+                    but the average is NOT processed for an IPP student — confirmed OR unconfirmed
+                    (user 2026-11-17; parity with the reports). */}
+                <td>
+                  {isIPP
+                    ? <span className="ach-chip aipp">IPP</span>
+                    : needsConfirm
+                      ? <span className="ipp-unres" title="IPP flagged but not confirmed — the average and achievement are not computed until the IPP is confirmed (below or on the Programming screen).">IPP?</span>
+                      : avg == null ? '—' : avg.toFixed(2)}
+                </td>
                 <td style={band ? { color: band.hex, fontWeight: 600 } : undefined}>
-                  {isIPP ? 'IPP' : band ? band.name : '—'}
+                  {isIPP
+                    ? <span className="ach-chip aipp">IPP</span>
+                    : needsConfirm
+                      ? <span className="ipp-unres" title="IPP flagged but not confirmed — the average and achievement are not computed until the IPP is confirmed (below or on the Programming screen).">IPP?</span>
+                      : band ? band.name : '—'}
                 </td>
                 <td>
                   {needsConfirm ? (
