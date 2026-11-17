@@ -157,7 +157,10 @@ function New-SecClasses($school,$tag,$tpfx) {
 
 $classes = @(
     # ---- Elementary English (school 0716): 1 teacher/class, Math + ELA ----
-    @{ Label='STR-P-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'P'=20};        Sections=@((Sec 'MAT' 'MAT-P-EN' 'teach.elem.en.p@tcrce.ca'),  (Sec 'ELA' 'ELA-P-EN' 'teach.elem.en.p@tcrce.ca')) }
+    # NB: the P-EN teacher email is 'en.0' (grade token), NOT 'en.p' — dev's DimStaff/DimSection were
+    # built from a generation that used '0' and have never seen '.p'; emitting '.p' would close the
+    # teacher out as departed and re-version both P-EN sections (confirmed against dev 2026-11-17).
+    @{ Label='STR-P-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'P'=20};        Sections=@((Sec 'MAT' 'MAT-P-EN' 'teach.elem.en.0@tcrce.ca'),  (Sec 'ELA' 'ELA-P-EN' 'teach.elem.en.0@tcrce.ca')) }
     @{ Label='STR-1-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'1'=20};        Sections=@((Sec 'MAT' 'MAT-1-EN' 'teach.elem.en.1@tcrce.ca'),  (Sec 'ELA' 'ELA-1-EN' 'teach.elem.en.1@tcrce.ca')) }
     @{ Label='STR-4-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'4'=20};        Sections=@((Sec 'MAT' 'MAT-4-EN' 'teach.elem.en.4@tcrce.ca'),  (Sec 'ELA' 'ELA-4-EN' 'teach.elem.en.4@tcrce.ca')) }
     @{ Label='STR-5-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'5'=20};        Sections=@((Sec 'MAT' 'MAT-5-EN' 'teach.elem.en.5@tcrce.ca'),  (Sec 'ELA' 'ELA-5-EN' 'teach.elem.en.5@tcrce.ca')) }
@@ -294,7 +297,7 @@ $studentRows = @($studentRows | ForEach-Object {
 $staffId = 82000
 $staffRows = @()
 $elemTeachers = @(
-    @('teach.elem.en.p@tcrce.ca','Pat','Willow',$ELEM),  @('teach.elem.en.1@tcrce.ca','Robin','Sorrel',$ELEM),
+    @('teach.elem.en.0@tcrce.ca','Pat','Willow',$ELEM),  @('teach.elem.en.1@tcrce.ca','Robin','Sorrel',$ELEM),
     @('teach.elem.en.4@tcrce.ca','Sam','Tamarack',$ELEM),@('teach.elem.en.5@tcrce.ca','Jamie','Aspen',$ELEM),
     @('teach.elem.en.p1@tcrce.ca','Alex','Cedar',$ELEM), @('teach.elem.en.45@tcrce.ca','Morgan','Hazel',$ELEM),
     @('teach.elem.ei.p@tcrce.ca','Remy','Bouleau',$ELEM),@('teach.elem.ei.1@tcrce.ca','Noa','Erable',$ELEM),
@@ -307,7 +310,11 @@ $tierTeachers = @(
 )
 foreach ($t in ($elemTeachers + $tierTeachers)) {
     $staffId++
-    $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $staffId) -join $DELIM
+    # FIXTURE PRESERVATION (2026-11-17): teach.elem.en.1's PS staff ID was hand-edited to 82050 in
+    # the ingested file (SourceSystemID-churn test) and dev's FactStaffAssignment holds it; keep
+    # emitting it so a re-ingest doesn't close+reinsert the assignment row. 82002 stays unused.
+    $emitId = if ($t[0] -eq 'teach.elem.en.1@tcrce.ca') { 82050 } else { $staffId }
+    $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $emitId) -join $DELIM
 }
 # CHES 2/3 + 3/4 split-class teachers — hand-named OUTSIDE the student first/last pools (the
 # auto-derived names below walk the same pools and can collide with a student's pair). Their
@@ -343,12 +350,6 @@ for ($a = 0; $a -lt $adminSchools.Count; $a++) {
     $sch = $adminSchools[$a]
     $staffRows += @("principal.$sch@tcrce.ca", $adminNames[$a][0], $adminNames[$a][1], 'Principal', $sch, $sch, '', '33', $staffId) -join $DELIM
 }
-# Resource Teacher (Group 45 -> SpecialistTeacher) at JR 0716 — the SpecialistTeacher impersonation
-# persona (same identity seed_dev_resource_teacher.sql creates by hand; in the export it survives
-# every re-ingest instead of being closed out as absent). Teaches no sections by design.
-$staffId++
-$staffRows += @('resource.teacher.0716@tcrce.ca', 'Quinn', 'Larch', 'Resource Teacher', $JR, $JR, '', '45', $staffId) -join $DELIM
-
 # Regional analyst dummy (Group 41 -> RegionalAnalyst; multi-school over ALL 5 test schools)
 $allSchools = "$ELEM;$JR;$SR;$ELEM2;$SEC2"
 $staffId++
@@ -356,6 +357,14 @@ $staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $E
 # Project lead's own account, as a region-wide RegionalAnalyst, so they can sign in and test on dev as themselves.
 $staffId++
 $staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, $allSchools, '41', $staffId) -join $DELIM
+
+# Resource Teacher (Group 45 -> SpecialistTeacher) at JR 0716 — the SpecialistTeacher impersonation
+# persona (same identity seed_dev_resource_teacher.sql creates by hand; in the export it survives
+# every re-ingest instead of being closed out as absent). Teaches no sections by design.
+# Emitted AFTER the analysts (2026-11-17): dev was last ingested from a pre-resource-teacher export,
+# so analyst/project-lead hold IDs 82039/82040 — inserting this row earlier would shift them.
+$staffId++
+$staffRows += @('resource.teacher.0716@tcrce.ca', 'Quinn', 'Larch', 'Resource Teacher', $JR, $JR, '', '45', $staffId) -join $DELIM
 
 # CHES 2/3 + 3/4 split teachers (2026-11-17) — APPENDED LAST so existing staff IDs never shift on regen.
 foreach ($em in $chesSplitTeachers.Keys) {
