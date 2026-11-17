@@ -69,8 +69,9 @@ export function unitStat(
   // UNRESOLVED IPP (flagged, unconfirmed): not measured at all — marks stay visible, no band
   // (avg null ripples to cells/buckets/charts), matching Reading/Writing. A CONFIRMED IPP falls
   // through to the normal computation: entry-grid parity — their IPP cells drop from the 80%
-  // denominator and a sufficiently-assessed unit shows a personal-progress band. Aggregates
-  // (% Meeting, donut, bars, cohort means) exclude confirmed IPPs via the bucket/eligible gates.
+  // denominator and a sufficiently-assessed unit EARNS a level that counts everywhere a level
+  // counts (bars, %, donut, cohort means); 'IPP' in tallies = the badge state, nothing scorable
+  // (user ruling 2026-11-17).
   if (student && !student.eligible && !student.ipp) return { avg: null, ipp: false, incomplete: false }
   if (c.inScope === 0) return { avg: null, ipp: c.ipp > 0, incomplete: false } // all IPP
   const denom = blankMode === 'zero' ? c.inScope : c.filled
@@ -91,18 +92,16 @@ export type Bucket = BandCls | 'inc' | 'ipp' | 'none'
 export type Tally = Record<Bucket, number>
 export const emptyTally = (): Tally => ({ b1: 0, b2: 0, b3: 0, b4: 0, inc: 0, ipp: 0, none: 0 })
 
-/** Bucket for a unit cell. A confirmed-IPP student always tallies as 'ipp' — their personal-progress
- *  band still DISPLAYS on their row, but it never counts in the % (this view's documented rule). */
-export function unitBucket(s: UnitStat, studentIpp = false): Bucket {
-  if (studentIpp) return 'ipp'
+/** Bucket for a unit cell. A level is a level, whoever earned it — a confirmed IPP's banded unit
+ *  counts in the %; the 'ipp' bucket is the BADGE state (nothing scorable this unit). */
+export function unitBucket(s: UnitStat): Bucket {
   if (s.avg == null) return s.ipp ? 'ipp' : 'none'
   if (s.incomplete) return 'inc'
   return bandForAvg(s.avg).cls
 }
 /** Bucket for the overall roll-up (never "Incomplete" — matches the matrix's overall cell). */
 export function overallBucket(avg: number | null, mathIPP: boolean): Bucket {
-  if (mathIPP) return 'ipp' // display may band (personal progress); the tally never counts it
-  if (avg == null) return 'none'
+  if (avg == null) return mathIPP ? 'ipp' : 'none'
   return bandForAvg(avg).cls
 }
 export function pctMeeting(t: Tally): number | null {
