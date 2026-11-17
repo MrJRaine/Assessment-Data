@@ -258,16 +258,21 @@ export async function confirmRosterIPPs(
   windowId: string,
   groupKey: string,
   entries: IppEntry[],
-  subject: 'Reading' | 'Writing' = 'Reading',
+  subject: 'Reading' | 'Writing' | 'Math' = 'Reading',
   language: WritingLanguage = 'English',
 ): Promise<IppSaveResult> {
   const upn = await getCurrentUpn()
   // SCOPE GATE (once for the batch): only students on this caller's RLS-scoped roster. Writing is
   // dual-language, so scope to the confirmed track's roster (language is ignored for Reading).
-  const roster = subject === 'Writing'
-    ? await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)
-    : await getTeacherRoster(upn, windowId, splitKeys(groupKey))
-  const allowed = new Set(roster.map((r) => r.studentKey))
+  // Math added 2026-11-17 — the math grid's IPP gate was missing entirely (entry was never blocked).
+  const allowed = subject === 'Math'
+    ? new Set((await getMathRoster(upn, windowId, splitKeys(groupKey))).map((r) => r.studentKey))
+    : new Set(
+        (subject === 'Writing'
+          ? await getTeacherRosterWriting(upn, windowId, splitKeys(groupKey), language)
+          : await getTeacherRoster(upn, windowId, splitKeys(groupKey))
+        ).map((r) => r.studentKey),
+      )
 
   const errors: IppSaveResult['errors'] = []
   let saved = 0

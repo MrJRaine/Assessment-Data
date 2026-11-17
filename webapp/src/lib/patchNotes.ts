@@ -72,6 +72,13 @@ export const PATCH_NOTES: PatchNote[] = [
       'Students whose IPP is flagged but not yet confirmed now show an orange “IPP?” marker on the reports instead of a blank dash, so class counts reconcile and unconfirmed IPPs are easy to spot and follow up. Hover the marker for what to do.',
   },
   {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Math entry now asks you to confirm a flagged IPP before marks can be entered for that student — the same Yes/No confirmation Reading and Writing entry already have. Unconfirmed students are listed above the grid; choices save with the Save button, and the student unlocks (or switches to IPP cells) right away.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',

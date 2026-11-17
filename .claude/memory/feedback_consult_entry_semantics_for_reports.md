@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 95b469e7-1d0c-487e-bcab-9f5c26d0c5b6
-  modified: 2026-11-17T15:18:54.805Z
+  modified: 2026-11-17T17:19:24.289Z
 ---
 
 When changing how a report/summary interprets stored data (bands, exclusions, eligibility,
@@ -25,3 +25,7 @@ Same session also missed sweeping all IPP display surfaces before fixing one
 grid/upsert proc for that data; (2) diff its rules against the planned report rule;
 (3) differences go to the user as a question with both behaviours named. A user analogy
 ("match X") is scoped to the defect raised, not a license to rewrite the subject's model.
+A SWEEP of a subject's display surfaces INCLUDES its entry grid — "clean" means the
+report surfaces agree with ENTRY, not merely with each other. (Second miss 2026-11-17:
+declared writing clean comparing reports to reports/reading, while writing's entry Avg
+cell already showed IPP-not-number — the divergence the sweep existed to find.)
