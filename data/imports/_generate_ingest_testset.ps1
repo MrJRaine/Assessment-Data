@@ -120,6 +120,17 @@ function Get-Program($tier,$stream) {
 
 $birthYear = @{ 'P'=2020; '1'=2019; '2'=2018; '3'=2017; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
 
+# Per-attribute deterministic hash (2026-11-17). Demographics/flags used to ride the shared index
+# ($i % n), which CORRELATED every attribute with every other — e.g. all African-Yes students were
+# gender X with June birthdays, making equity-lens filter combinations untestable (and indefensible
+# as a dataset). Each attribute now draws from its OWN hash of the stable StudentNumber + a salt:
+# same rates, independent attributes, identical output on every regen.
+$script:md5 = [System.Security.Cryptography.MD5]::Create()
+function Get-AttrHash([string]$studentNum, [string]$attr) {
+    $b = $script:md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("$studentNum`:$attr"))
+    [math]::Abs([System.BitConverter]::ToInt32($b, 0))
+}
+
 # 50 x 50 = 2500 unique (first,last) pairs — more than the whole dev population, so every student gets a
 # UNIQUE name (no more 17 "Ash, Avery"s). Pairing below cycles first every student, last every 50.
 $firsts = @('Avery','Blake','Casey','Devon','Emery','Finley','Gray','Harper','Indy','Jules','Kai','Lane','Marlow','Nico','Oakley','Parker','Quinn','Reese','Sage','Tatum','Uri','Vale','Wren','Xen','Yael','Zion','Ari','Bell','Cove','Dale','Eden','Flynn','Gael','Hollis','Ira','Jory','Keir','Lior','Milan','Noor','Odin','Perry','Rory','Sasha','Teo','Wynn','Xavi','Yuki','Zane','Remy')
@@ -258,15 +269,19 @@ foreach ($c in $classes) {
             # sort bug): index by (block + i). With equal pools this is (floor(i/N)+i) % N = (block+first)%N,
             # so each block of 50 walks a different diagonal and every (first,last) pair stays unique.
             $last   = $lasts[([math]::Floor($i / $firsts.Count) + $i) % $lasts.Count]
-            $middle = if ($i % 4 -eq 0) { $firsts[($i * 3) % $firsts.Count] } else { '' }
+            # Independent per-attribute hashes of the StudentNumber (see Get-AttrHash) — rates match
+            # the old index scheme (gender 1/3 each; African-Yes 1/12; Indigenous '1' 1/9, '2' 1/15;
+            # IPP 1/10; Adap 1/8; middle name 1/4) with NO cross-attribute correlation.
+            $middle = if ((Get-AttrHash $studentNum 'middle') % 4 -eq 0) { $firsts[(Get-AttrHash $studentNum 'middlename') % $firsts.Count] } else { '' }
             $gl     = Get-GradeLevel $g
             $by     = $birthYear[$g]
-            $dob    = '{0:D2}/{1:D2}/{2}' -f (($i % 12) + 1), (($i % 28) + 1), $by
-            $gender = @('M','F','X')[$i % 3]
-            $afr    = if ($i % 12 -eq 5) { 'Yes' } else { '' }
-            $abo    = if ($i % 9 -eq 2) { '1' } elseif ($i % 15 -eq 7) { '2' } else { '' }
-            $ipp    = if ($i % 10 -eq 0) { 'Y' } else { 'N' }
-            $adap   = if ($i % 8 -eq 3) { 'Y' } else { 'N' }
+            $dob    = '{0:D2}/{1:D2}/{2}' -f (((Get-AttrHash $studentNum 'dobmonth') % 12) + 1), (((Get-AttrHash $studentNum 'dobday') % 28) + 1), $by
+            $gender = @('M','F','X')[(Get-AttrHash $studentNum 'gender') % 3]
+            $afr    = if ((Get-AttrHash $studentNum 'african') % 12 -eq 0) { 'Yes' } else { '' }
+            $aboH   = (Get-AttrHash $studentNum 'indigenous') % 45
+            $abo    = if ($aboH -lt 5) { '1' } elseif ($aboH -lt 8) { '2' } else { '' }
+            $ipp    = if ((Get-AttrHash $studentNum 'ipp') % 10 -eq 0) { 'Y' } else { 'N' }
+            $adap   = if ((Get-AttrHash $studentNum 'adap') % 8 -eq 0) { 'Y' } else { 'N' }
 
             $studentRows += @($studentNum, $studentDcid, $first, $middle, $last, $c.School, $gl, $prog, $c.Label, $gender, $dob, $afr, $abo, $ipp, $adap, '0') -join $DELIM
 
