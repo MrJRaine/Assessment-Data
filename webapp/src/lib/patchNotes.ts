@@ -51,6 +51,13 @@ export const PATCH_NOTES: PatchNote[] = [
       'Math data entry shows each student’s full name (first name over last name) in the column headers and sorts students by last name, like every other list — two classmates with the same first name and last initial are no longer indistinguishable.',
   },
   {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'On a student’s detail page, switching between Reading and Writing could briefly show the other subject’s history — dashes in every column with a leftover achievement colour and a blank chart. The page now reloads the history for the subject you pick.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',

@@ -64,6 +64,7 @@ export default async function StudentDetailPage({
 
   return (
     <StudentDetailView
+      key={subj} // remount on subject toggle: the client-side history cache is keyed by studentKey only
       navList={navList}
       initialKey={studentKey}
       initialHistory={initialHistory}
