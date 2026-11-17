@@ -217,13 +217,15 @@ function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRo
         <td className="stu muted">{r.eligible ? fmtExp(r) : '—'}</td>
         <td className="stu">{r.eligible && r.delta != null ? signed(r.delta) : miss}</td>
         <td className="stu">{r.diffJune != null ? signed(r.diffJune) : miss}</td>
-        <td className="ach" style={hasResult && r.achColor ? { color: r.achColor, fontWeight: 600 } : undefined}>
-          {/* Unconfirmed IPP: explicit "IPP?" marker, parity with the flat list (user 2026-11-17). */}
-          {r.achName ?? (r.ipp
-            ? 'IPP'
-            : !r.eligible
-              ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
-              : miss)}
+        <td className="ach">
+          {/* Achievement as a CHIP (standardized with Math, user 2026-11-17); IPP purple, IPP? orange. */}
+          {r.achName
+            ? (r.achColor ? <span className="ach-chip" style={{ background: r.achColor }}>{r.achName}</span> : r.achName)
+            : r.ipp
+              ? <span className="ach-chip aipp">IPP</span>
+              : !r.eligible
+                ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                : miss}
         </td>
       </tr>
     )

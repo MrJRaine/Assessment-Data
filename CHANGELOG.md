@@ -71,6 +71,12 @@ with `0.3.0`, so earlier detail is approximate.
   until the IPP is confirmed on the roster or Programming screen. **SQL:** rerun
   `sql/security/tvf_StudentCohortWritingGroup.sql` (the writing drill needs the measured flag);
   reading/math already have theirs.
+- **Achievement renders as chips on every Reading/Writing report surface.** The Student list, both
+  summary drills, and the student detail history now show the achievement band as a solid chip in
+  the band's colour (same shape as the Math/data-entry chips) instead of coloured text — one visual
+  language across subjects. Confirmed IPP is the purple chip, unconfirmed the outlined orange
+  **IPP?**, no data stays a plain dash. Math's fixed-width Overall column gets slightly tighter chip
+  type so the longest labels ("Developing", "Incomplete") never clip. Web only, no SQL.
 - **"Collapse all" on the Reports summary trees.** One click closes every open school/grade/homeroom
   branch on the Reading/Writing and Math roll-up trees (close-only by design — already-loaded groups
   stay cached, so re-expanding is instant). Web only, no SQL.
