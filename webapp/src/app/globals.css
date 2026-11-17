@@ -518,8 +518,9 @@ a { color: inherit; text-decoration: none; }
 .mband.bipp { background: #6b4fbb; }
 /* Unconfirmed IPP — OUTLINED burnt orange, deliberately distinct from the solid amber b2 band. */
 .mband.bunres { background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-weight: 700; }
-/* Same state as an inline badge on the Reading/Writing list + drill achievement cells. */
-.ipp-unres { display: inline-block; padding: .05rem .35rem; border-radius: 5px; background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-size: .78em; font-weight: 700; white-space: nowrap; }
+/* Same state as an inline badge on the Reading/Writing list + drill achievement cells.
+   EXACT .ach-chip geometry (padding minus the 1px border) so it sits flush with the band chips. */
+.ipp-unres { display: inline-block; padding: calc(.12rem - 1px) calc(.45rem - 1px); border-radius: 5px; background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-size: .67rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
 .mband.inc { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-weight: 600; }
 .mband.partial-ipp { box-shadow: 0 0 0 4px #6b4fbb; }
 .partial-swatch { display: inline-block; width: 1.1rem; height: 0.85rem; border-radius: 4px; background: var(--card); box-shadow: 0 0 0 3px #6b4fbb; }
