@@ -64,12 +64,11 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
     return scored === 0 ? null : ones / scored
   }
   // Cohort roll-up for a unit = mean of the students' unit averages (colours the collapsed unit row).
-  // ELIGIBLE students only: a confirmed IPP's personal-progress band shows on THEIR row but never
-  // feeds a cohort aggregate (same rule as the donut/% — user ruling 2026-11-17).
+  // Any non-null average counts (a confirmed IPP's earned level included); unresolved IPPs are
+  // suppressed to null in unitStat, so they drop out here on their own.
   function unitCohort(students: Student[], u: Unit): number | null {
     const avgs: number[] = []
     for (const s of students) {
-      if (!s.eligible) continue
       const a = unitAvg(s.studentKey, u).avg
       if (a != null) avgs.push(a)
     }
@@ -84,8 +83,10 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
 
   // ── charts (group view): donut of overall roll-ups + stacked bars by unit name ────────────────
   const measuredStudents = useMemo(
-    // eligible, not just !mathIPP: an UNRESOLVED IPP is also unmeasured (no band, out of the charts).
-    () => grades.flatMap((g) => g.students.filter((s) => s.eligible).map((s) => ({ s, g }))),
+    // A level counts wherever it exists, confirmed-IPP or not (user ruling 2026-11-17) — only an
+    // UNRESOLVED IPP is excluded outright (they can never band). Null roll-ups drop out downstream,
+    // so an under-assessed IPP (badge state) never reaches a chart anyway.
+    () => grades.flatMap((g) => g.students.filter((s) => s.eligible || s.mathIPP).map((s) => ({ s, g }))),
     [grades],
   )
   const donut = useMemo(() => {
@@ -290,8 +291,7 @@ function TasksDown({
   onFocus: (key: string) => void
 }) {
   const overallCohort = (() => {
-    // Eligible students only — a confirmed IPP's personal-progress roll-up never feeds the cohort mean.
-    const rs = students.filter((s) => s.eligible).map((s) => rollup(s.studentKey, g)).filter((v): v is number => v != null)
+    const rs = students.map((s) => rollup(s.studentKey, g)).filter((v): v is number => v != null)
     return rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null
   })()
   return (

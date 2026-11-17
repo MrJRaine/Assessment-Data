@@ -18,8 +18,9 @@ import { loadMathGroup } from './actions'
 //
 // School and Grade/Homeroom rows share one set of columns: Overall + one per unit, pooled by unit
 // NAME across grades (tasks differ by grade, unit names line up). Each cell = % of students at
-// Meeting or In-depth, out of students WITH a level; IPP / No data / Incomplete are left out of the
-// % and listed in the hover. Expanding a Grade/Homeroom row loads that group's matrix on demand and
+// Meeting or In-depth, out of students WITH a level — a level counts whoever earned it, including a
+// confirmed IPP's personal-progress band (user ruling 2026-11-17). "IPP" in the hover = the BADGE
+// state (nothing scorable); No data / Incomplete likewise have no level and sit out of the %. Expanding a Grade/Homeroom row loads that group's matrix on demand and
 // shows one block per grade, with that grade's own unit columns that expand into task columns.
 
 type SummarizeBy = 'Grade' | 'Homeroom'
@@ -57,7 +58,7 @@ function summarize(students: TreeStudent[], unitNames: string[], blankMode: Blan
       // An IPP student's unmarked task is an IPP cell (not in scope) — same rule as the matrix.
       const ippCells = s.ipp ? c.taskCount - c.scored : 0
       const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s)
-      units[name][unitBucket(st, s.ipp)]++
+      units[name][unitBucket(st)]++
       avgs.push(st.avg)
     }
     overall[overallBucket(meanOf(avgs), s.ipp)]++
@@ -395,7 +396,7 @@ function GradeBlock({
   for (const s of g.students) {
     const avgs = g.units.map((u) => {
       const st = stat(s.studentKey, u)
-      unitT[u.name][unitBucket(st, s.mathIPP)]++
+      unitT[u.name][unitBucket(st)]++
       return st.avg
     })
     overall[overallBucket(meanOf(avgs), s.mathIPP)]++
