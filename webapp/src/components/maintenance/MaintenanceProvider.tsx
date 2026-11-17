@@ -241,7 +241,7 @@ export default function MaintenanceProvider({
       try {
         const res = await clearMaintenance()
         if (res.ok) {
-          windowRef.current = { atMs: null, message: null, offsetMs: windowRef.current.offsetMs }
+          windowRef.current = { atMs: null, message: null, setBy: null, offsetMs: windowRef.current.offsetMs }
           recompute()
         } else {
           setClearError(res.error ?? 'This maintenance window is locked by whoever opened it — only they or a system administrator can clear it.')
