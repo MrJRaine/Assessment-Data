@@ -194,7 +194,11 @@ export default function MathRosterEntry({
       inScope++
       if (v === '1' || v === '0') { filled++; if (v === '1') ones++ }
     }
-    // All IPP -> plain IPP flag; no in-scope task scored -> —; too few scored -> Incomplete.
+    // IPP 80% threshold (user ruling 2026-11-17): the denominator is ALL of the unit's tasks —
+    // deleted (IPP-excluded) outcomes included — so a lightly-modified IPP can still earn a level
+    // while a heavily-modified one reads IPP, never a band off a sliver. Below threshold -> 'IPP',
+    // not 'Incomplete' (the shortfall is the plan's deletions, not missing entry).
+    if (ippCount > 0 && filled / (inScope + ippCount) < 0.8) return { cls: 'bipp', label: 'IPP', partial: false }
     if (inScope === 0) return { cls: 'bipp', label: 'IPP', partial: false }
     if (filled === 0) return { cls: 'inc', label: '—', partial: false }
     if (filled / inScope < 0.8) return { cls: 'inc', label: 'Incomplete', partial: false }

@@ -73,6 +73,11 @@ export function unitStat(
   // counts (bars, %, donut, cohort means); 'IPP' in tallies = the badge state, nothing scorable
   // (user ruling 2026-11-17).
   if (student && !student.eligible && !student.ipp) return { avg: null, ipp: false, incomplete: false }
+  // CONFIRMED-IPP 80% threshold (user ruling 2026-11-17): the denominator is ALL tasks in scope —
+  // the IPP's deleted outcomes included. Assessed >= 80% of the total -> a real level (counts
+  // everywhere); below -> the IPP badge, NOT "Incomplete" (the shortfall is the plan's deletions,
+  // and a heavily-modified IPP shouldn't band off a sliver). Same rule as the entry grid.
+  if (c.ipp > 0 && c.filled / (c.inScope + c.ipp) < 0.8) return { avg: null, ipp: true, incomplete: false }
   if (c.inScope === 0) return { avg: null, ipp: c.ipp > 0, incomplete: false } // all IPP
   const denom = blankMode === 'zero' ? c.inScope : c.filled
   if (denom === 0) return { avg: null, ipp: false, incomplete: false } // nothing scored

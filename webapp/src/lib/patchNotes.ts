@@ -58,6 +58,13 @@ export const PATCH_NOTES: PatchNote[] = [
       'On a student’s detail page, switching between Reading and Writing could briefly show the other subject’s history — dashes in every column with a leftover achievement colour and a blank chart. The page now reloads the history for the subject you pick.',
   },
   {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Math and IPPs: a student with a confirmed IPP earns a unit level once at least 80% of the unit’s full task list is marked — outcomes removed by their plan count toward that total — so lighter plan modifications can still earn levels, while heavier ones show “IPP” rather than a level based on only a few tasks. Earned levels now count in every math chart and percentage. A flagged-but-unconfirmed IPP shows marks but no level until it’s confirmed.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',
