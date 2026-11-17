@@ -17,15 +17,16 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
-- **Math report: unresolved IPPs are now unmeasured, matching Reading/Writing.** A student flagged
-  for a math IPP but not yet confirmed was scored and banded as a normal student in the math matrix,
-  roll-up tree, donut and unit bars; Reading/Writing give unresolved students no band anywhere. Math
-  now applies the same rule: their marks stay visible in the matrix, but band cells show "—"
-  (confirmed IPPs keep the "IPP" badge — including a previously-banded edge case where a confirmed
-  IPP with fully scored tasks still got a band) and they're out of the % Meeting, charts and cohort
-  averages. RWM is unchanged by design (it excludes confirmed-IPP-in-any and scores everyone else).
-  **SQL:** rerun `sql/security/tvf_StudentCohortMath.sql` and `tvf_StudentCohortMathAll.sql`; until
-  they run, confirmed IPPs are handled and unresolved ones follow once they're in.
+- **Math report: IPP handling now mirrors the data-entry grid.** Two rules, both display-vs-aggregate:
+  (1) an **unresolved** math IPP (flagged, unconfirmed) is unmeasured — marks stay visible in the
+  matrix, band cells show "—", and they're out of every aggregate, matching Reading/Writing;
+  (2) a **confirmed** IPP keeps the entry grid's personal-progress band on their own row (IPP cells
+  drop from the 80% denominator; a sufficiently-assessed unit still bands), but those bands no longer
+  leak into the cohort aggregates — the roll-up tree's unit percentages, the donut/unit bars, and the
+  cohort mean rows now all exclude them (the tree's % previously counted a banded IPP unit, against
+  its own documented rule). RWM is unchanged by design. **SQL:** rerun
+  `sql/security/tvf_StudentCohortMath.sql` and `tvf_StudentCohortMathAll.sql` (adds the measured
+  flag the client needs to tell "no IPP" from "unresolved").
 - **IPP students no longer show an Expected range on the summary drill or the student detail page.**
   The flat Student list already blanked Expected and Diff for students not measured against the
   benchmark (IPP / unconfirmed IPP), but the Reading summary drill and the student detail history

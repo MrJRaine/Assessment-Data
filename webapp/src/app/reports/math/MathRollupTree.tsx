@@ -57,7 +57,7 @@ function summarize(students: TreeStudent[], unitNames: string[], blankMode: Blan
       // An IPP student's unmarked task is an IPP cell (not in scope) — same rule as the matrix.
       const ippCells = s.ipp ? c.taskCount - c.scored : 0
       const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s)
-      units[name][unitBucket(st)]++
+      units[name][unitBucket(st, s.ipp)]++
       avgs.push(st.avg)
     }
     overall[overallBucket(meanOf(avgs), s.ipp)]++
@@ -395,7 +395,7 @@ function GradeBlock({
   for (const s of g.students) {
     const avgs = g.units.map((u) => {
       const st = stat(s.studentKey, u)
-      unitT[u.name][unitBucket(st)]++
+      unitT[u.name][unitBucket(st, s.mathIPP)]++
       return st.avg
     })
     overall[overallBucket(meanOf(avgs), s.mathIPP)]++
