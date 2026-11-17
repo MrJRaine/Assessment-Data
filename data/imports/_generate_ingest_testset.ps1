@@ -118,7 +118,7 @@ function Get-Program($tier,$stream) {
     }
 }
 
-$birthYear = @{ 'P'=2020; '1'=2019; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
+$birthYear = @{ 'P'=2020; '1'=2019; '2'=2018; '3'=2017; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
 
 # 50 x 50 = 2500 unique (first,last) pairs — more than the whole dev population, so every student gets a
 # UNIQUE name (no more 17 "Ash, Avery"s). Pairing below cycles first every student, last every 50.
@@ -198,6 +198,15 @@ $classes = @(
 # Add the two extra schools (2 of each tier): CHES elementary + BMHS full 7-12 secondary.
 $classes = $classes + (New-ElemClasses $ELEM2 'CHES' 'teach.ches') + (New-SecClasses $SEC2 'BMHS' 'teach.bmhs')
 
+# 2/3 + 3/4 split EN homerooms at CHES (2026-11-17) — grades 2 and 3 are NEW to the population.
+# APPEND-ONLY: these stay LAST in $classes so every pre-existing student/section keeps its exact
+# number, name and ID on regen (section IDs, student numbers and the name-pair index $i are all
+# assigned in list order). Their teachers are hand-named in $chesSplitTeachers below.
+$classes = $classes + @(
+    @{ Label='SPL-23-EN-CHES'; Tier='ELEM'; School=$ELEM2; Stream='EN'; Grades=[ordered]@{'2'=10;'3'=10}; Sections=@((Sec 'MAT' 'MAT-23-EN-CHES' 'teach.ches.en.23@tcrce.ca'),(Sec 'ELA' 'ELA-23-EN-CHES' 'teach.ches.en.23@tcrce.ca')) }
+    @{ Label='SPL-34-EN-CHES'; Tier='ELEM'; School=$ELEM2; Stream='EN'; Grades=[ordered]@{'3'=10;'4'=10}; Sections=@((Sec 'MAT' 'MAT-34-EN-CHES' 'teach.ches.en.34@tcrce.ca'),(Sec 'ELA' 'ELA-34-EN-CHES' 'teach.ches.en.34@tcrce.ca')) }
+)
+
 # course_name (human label) from subject + code
 function Course-Name($subj,$code) {
     $kind = switch ($subj) { 'MAT' { 'Math' } 'ELA' { 'English Language Arts' } 'FLA' { 'Francais (immersion)' } }
@@ -266,6 +275,19 @@ foreach ($c in $classes) {
     }
 }
 
+# FIXTURE PRESERVATION (2026-11-17): student 9200000341 was hand-edited in the ingested CSV
+# (grade 7 -> 8, CurrentIPP Y -> N) to exercise the IPP change paths, and dev's SCD history now
+# holds that state. Keep emitting those values so a regen + re-ingest is a NO-OP for this student
+# (reverting under a backdated @EffectiveDate would insert a version dated BEFORE the change it
+# reverts). Remove this block only in a normal, non-backdated ingest once the fixture is retired.
+$studentRows = @($studentRows | ForEach-Object {
+    if ($_ -like "9200000341$DELIM*") {
+        $f = $_ -split [regex]::Escape($DELIM)
+        $f[6] = '8'; $f[13] = 'N'   # Grade_Level, CurrentIPP
+        $f -join $DELIM
+    } else { $_ }
+})
+
 # -----------------------------------------------------------------------------
 # Staff (16 teachers, Group 47 = Teacher) + 1 regional itinerant (Group 32, multi-school)
 # -----------------------------------------------------------------------------
@@ -287,10 +309,18 @@ foreach ($t in ($elemTeachers + $tierTeachers)) {
     $staffId++
     $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $staffId) -join $DELIM
 }
+# CHES 2/3 + 3/4 split-class teachers — hand-named OUTSIDE the student first/last pools (the
+# auto-derived names below walk the same pools and can collide with a student's pair). Their
+# rows are emitted at the very END of the staff list so every pre-existing staff ID is unchanged.
+$chesSplitTeachers = [ordered]@{
+    'teach.ches.en.23@tcrce.ca' = @('Ellis','Wintergreen')
+    'teach.ches.en.34@tcrce.ca' = @('Rafa','Stonefield')
+}
+
 # Teachers for the ADDED schools (CHES/BMHS), Group 47 — derived from their section teacher emails so
 # every referenced teacher exists (names generated; the BMHS ELA teacher is the cross-band 7-12 case).
 $addedTeachers = [ordered]@{}
-foreach ($c in $classes) { if ($c.School -eq $ELEM2 -or $c.School -eq $SEC2) { foreach ($s in $c.Sections) { if (-not $addedTeachers.Contains($s.Teacher)) { $addedTeachers[$s.Teacher] = $c.School } } } }
+foreach ($c in $classes) { if ($c.School -eq $ELEM2 -or $c.School -eq $SEC2) { foreach ($s in $c.Sections) { if (-not $addedTeachers.Contains($s.Teacher) -and -not $chesSplitTeachers.Contains($s.Teacher)) { $addedTeachers[$s.Teacher] = $c.School } } } }
 $ti = 0
 foreach ($em in $addedTeachers.Keys) {
     $staffId++
@@ -326,6 +356,12 @@ $staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $E
 # Project lead's own account, as a region-wide RegionalAnalyst, so they can sign in and test on dev as themselves.
 $staffId++
 $staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, $allSchools, '41', $staffId) -join $DELIM
+
+# CHES 2/3 + 3/4 split teachers (2026-11-17) — APPENDED LAST so existing staff IDs never shift on regen.
+foreach ($em in $chesSplitTeachers.Keys) {
+    $staffId++
+    $staffRows += @($em, $chesSplitTeachers[$em][0], $chesSplitTeachers[$em][1], 'Teacher', $ELEM2, $ELEM2, '', '47', $staffId) -join $DELIM
+}
 
 # -----------------------------------------------------------------------------
 # Co-Teachers (sqlReport: comma-delimited, CRLF, quote the "Last, First" name)
