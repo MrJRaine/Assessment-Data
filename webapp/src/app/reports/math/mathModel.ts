@@ -19,7 +19,10 @@ export interface Task {
 export interface Unit { name: string; order: number; tasks: Task[] }
 // sortKey = "Last, First": the display name stays compact ("First L.") but ordering matches the
 // rest of the app, which sorts students by last name (user 2026-11-10).
-export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; sortKey: string; mathIPP: boolean }
+// eligible = measured against the benchmark (no IPP row, or resolved not-IPP). A CONFIRMED IPP or an
+// UNRESOLVED (flagged, unconfirmed) one is NOT eligible: results stay visible, bands are suppressed —
+// the same rule Reading/Writing apply (user ruling 2026-11-17).
+export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; sortKey: string; mathIPP: boolean; eligible: boolean }
 export interface Grade { grade: string; order: number; label: string; students: Student[]; units: Unit[] }
 
 export const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
@@ -58,7 +61,15 @@ export interface UnitStat { avg: number | null; ipp: boolean; incomplete: boolea
  * unmarked task); `filled` = cells with a 0/1. Null avg = nothing scorable (all IPP, or nothing scored
  * in exclude mode). `incomplete` mirrors the entry grid's <80%-filled nudge.
  */
-export function unitStat(c: { inScope: number; filled: number; ones: number; ipp: number }, blankMode: BlankMode): UnitStat {
+export function unitStat(
+  c: { inScope: number; filled: number; ones: number; ipp: number },
+  blankMode: BlankMode,
+  student?: { eligible: boolean; ipp: boolean },
+): UnitStat {
+  // Not chart-eligible (confirmed OR unresolved IPP): the marks stay visible in the matrix, but the
+  // student is not measured — no band. avg null ripples everywhere (buckets -> 'ipp'/'none', band
+  // cells -> badge/'—', donut/bars/cohort means skip them), matching Reading/Writing.
+  if (student && !student.eligible) return { avg: null, ipp: student.ipp, incomplete: false }
   if (c.inScope === 0) return { avg: null, ipp: c.ipp > 0, incomplete: false } // all IPP
   const denom = blankMode === 'zero' ? c.inScope : c.filled
   if (denom === 0) return { avg: null, ipp: false, incomplete: false } // nothing scored
@@ -125,6 +136,7 @@ export function buildGrades(rows: MathCohortRow[]): Grade[] {
         fullName: `${r.firstName} ${r.lastName}`,
         sortKey: `${r.lastName}, ${r.firstName}`,
         mathIPP: r.mathIPPStatus === true,
+        eligible: r.chartEligibleMath,
       })
     }
     let unit = grade.units.find((u) => u.name === (r.unitName ?? ''))

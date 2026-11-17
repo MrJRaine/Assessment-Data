@@ -227,8 +227,10 @@ export default function StudentDetailView({
                   <td>{h.windowName}{h.windowSchoolYear ? ` · ${h.windowSchoolYear}` : ''}</td>
                   <td className="muted">{h.assessmentDate ?? '—'}</td>
                   <td>{h.levelCode ?? '—'}</td>
+                  {/* Expected gates on measured like Δ/Achievement: an IPP/unresolved student is not
+                      compared to the benchmark, so no expectation is shown (parity with list + drill). */}
                   <td>
-                    {h.expectedMin && h.expectedMax
+                    {measured && h.expectedMin && h.expectedMax
                       ? h.expectedMin === h.expectedMax
                         ? h.expectedMin
                         : `${h.expectedMin}–${h.expectedMax}`

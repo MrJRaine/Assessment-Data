@@ -51,12 +51,14 @@ export async function startMaintenance(minutes: number, message: string): Promis
 }
 
 /** Cancel a scheduled window / post "all clear" after a swap. The window is LOCKED to whoever opened it
- *  (or any sysadmin) — a non-owner gets a friendly "locked by …" message from usp_ClearMaintenanceWindow. */
+ *  (or any sysadmin) — a non-owner gets a friendly "locked by …" message from usp_ClearMaintenanceWindow.
+ *  Gate is WIDER than assertMaintainer: an ingest-flagged user owns the windows the ingest page opens
+ *  for them, and the proc's LOTO (owner-or-sysadmin) is the real authority — refusing them here was
+ *  the app refusing something the warehouse allows (fixed 2026-11-17). */
 export async function clearMaintenance(): Promise<MaintActionResult> {
-  let upn: string
-  try {
-    upn = await assertMaintainer()
-  } catch {
+  const upn = await getCurrentUpn()
+  const caps = await getCallerCapabilities(upn, { fresh: true })
+  if (!caps.canMaintain && !caps.isSysAdmin && !caps.canRunIngest) {
     return { ok: false, error: 'Not authorized.' }
   }
   try {

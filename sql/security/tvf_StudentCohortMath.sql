@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortMath  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleMath output: unresolved math IPPs are unmeasured (no band),
+ *          matching Reading/Writing (user ruling); the marks stay visible.
  * Purpose: READ-ONLY math cohort matrix for the Reports > Math view (0.7.0, item 4).
  *          One row per (student x applicable task) for ONE group (homeroom / grade /
  *          section) across ALL of the CURRENT school year's math cycles, carrying the
@@ -177,7 +179,11 @@ RETURN
              THEN COALESCE(t.TaskDescriptionFR, t.TaskDescriptionEN)
              ELSE t.TaskDescriptionEN END AS TaskDescription,
         lm.Result           AS ExistingResult,   -- BIT: latest 0/1, or NULL if never marked
-        ipp.IsIPP           AS MathIPPStatus      -- 1 = math IPP, 0 = not, NULL = unresolved
+        ipp.IsIPP           AS MathIPPStatus,     -- 1 = math IPP, 0 = not, NULL = unresolved
+        -- Measured flag (2026-11-17): the client can't tell "no IPP row" from "unresolved" via
+        -- MathIPPStatus (both NULL). 0 = confirmed OR unresolved IPP -> no band anywhere, in
+        -- lockstep with the Reading/Writing chart-eligibility rule.
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleMath
     FROM GroupStudents gs
     INNER JOIN Tasks t ON t.GradeCode = gs.Grade   -- each student gets THEIR grade's tasks
     LEFT JOIN LatestMath lm

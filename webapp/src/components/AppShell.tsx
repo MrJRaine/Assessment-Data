@@ -20,7 +20,8 @@ export default async function AppShell({ children }: { children: React.ReactNode
   let authed = false
   let capsError = false
   // Hoisted to function scope so the impersonation bar below can compare the EFFECTIVE UPN against
-  // the real one (null when unauthenticated on the public landing).
+  // the real one (null when unauthenticated on the public landing). Also handed to
+  // MaintenanceProvider for the LOTO owner check.
   let currentUpn: string | null = null
   try {
     currentUpn = await getCurrentUpn() // throws when not signed in (entra) -> caught below
@@ -80,7 +81,7 @@ export default async function AppShell({ children }: { children: React.ReactNode
           initialCollapsed={barCollapsed}
         />
       )}
-      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canMaintain={caps.canMaintain} canRunIngest={caps.canRunIngest} authSlot={<AuthArea />}>
+      <MaintenanceProvider isSysAdmin={caps.isSysAdmin} canMaintain={caps.canMaintain} canRunIngest={caps.canRunIngest} upn={currentUpn} authSlot={<AuthArea />}>
       <header className="header">
         {/* The brand lockup is the way home — standard convention, and the only home affordance now
             that the landing page has no nav entry of its own. */}

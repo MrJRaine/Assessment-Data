@@ -15,7 +15,10 @@ const CACHE_MS = 4_000
 // the sysadmin can clear from the banner, from the down overlay (which also offers sign-in, so a
 // locked-out admin can switch accounts), or directly via usp_ClearMaintenanceWindow.
 
-let cache: { at: string | null; message: string | null; fetchedAt: number } | null = null
+// setBy (the window owner's work email, LOTO) rides along so each client can decide whether to show
+// its Clear control. Staff name + work email are public, not PII (recorded boundary); it is only
+// non-null while a window exists.
+let cache: { at: string | null; message: string | null; setBy: string | null; fetchedAt: number } | null = null
 
 let pollSeq = 0
 
@@ -33,10 +36,10 @@ export async function GET(req: Request) {
   if (!cache || now - cache.fetchedAt > CACHE_MS) {
     try {
       const w = await getMaintenanceWindow()
-      cache = { at: w.maintenanceAt, message: w.message, fetchedAt: now }
+      cache = { at: w.maintenanceAt, message: w.message, setBy: w.setBy, fetchedAt: now }
     } catch {
       // Fail OPEN: a transient DB error must not lock everyone out — report no window.
-      cache = { at: null, message: null, fetchedAt: now }
+      cache = { at: null, message: null, setBy: null, fetchedAt: now }
     }
   }
 
@@ -46,6 +49,7 @@ export async function GET(req: Request) {
     {
       maintenanceAt,
       message: maintenanceAt ? cache.message : null,
+      setBy: maintenanceAt ? cache.setBy : null,
       serverNow: new Date().toISOString(),
     },
     { headers: { 'Cache-Control': 'no-store' } },
