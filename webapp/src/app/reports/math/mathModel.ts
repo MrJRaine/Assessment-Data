@@ -66,10 +66,12 @@ export function unitStat(
   blankMode: BlankMode,
   student?: { eligible: boolean; ipp: boolean },
 ): UnitStat {
-  // Not chart-eligible (confirmed OR unresolved IPP): the marks stay visible in the matrix, but the
-  // student is not measured — no band. avg null ripples everywhere (buckets -> 'ipp'/'none', band
-  // cells -> badge/'—', donut/bars/cohort means skip them), matching Reading/Writing.
-  if (student && !student.eligible) return { avg: null, ipp: student.ipp, incomplete: false }
+  // UNRESOLVED IPP (flagged, unconfirmed): not measured at all — marks stay visible, no band
+  // (avg null ripples to cells/buckets/charts), matching Reading/Writing. A CONFIRMED IPP falls
+  // through to the normal computation: entry-grid parity — their IPP cells drop from the 80%
+  // denominator and a sufficiently-assessed unit shows a personal-progress band. Aggregates
+  // (% Meeting, donut, bars, cohort means) exclude confirmed IPPs via the bucket/eligible gates.
+  if (student && !student.eligible && !student.ipp) return { avg: null, ipp: false, incomplete: false }
   if (c.inScope === 0) return { avg: null, ipp: c.ipp > 0, incomplete: false } // all IPP
   const denom = blankMode === 'zero' ? c.inScope : c.filled
   if (denom === 0) return { avg: null, ipp: false, incomplete: false } // nothing scored
@@ -89,15 +91,18 @@ export type Bucket = BandCls | 'inc' | 'ipp' | 'none'
 export type Tally = Record<Bucket, number>
 export const emptyTally = (): Tally => ({ b1: 0, b2: 0, b3: 0, b4: 0, inc: 0, ipp: 0, none: 0 })
 
-/** Bucket for a unit cell. */
-export function unitBucket(s: UnitStat): Bucket {
+/** Bucket for a unit cell. A confirmed-IPP student always tallies as 'ipp' — their personal-progress
+ *  band still DISPLAYS on their row, but it never counts in the % (this view's documented rule). */
+export function unitBucket(s: UnitStat, studentIpp = false): Bucket {
+  if (studentIpp) return 'ipp'
   if (s.avg == null) return s.ipp ? 'ipp' : 'none'
   if (s.incomplete) return 'inc'
   return bandForAvg(s.avg).cls
 }
 /** Bucket for the overall roll-up (never "Incomplete" — matches the matrix's overall cell). */
 export function overallBucket(avg: number | null, mathIPP: boolean): Bucket {
-  if (avg == null) return mathIPP ? 'ipp' : 'none'
+  if (mathIPP) return 'ipp' // display may band (personal progress); the tally never counts it
+  if (avg == null) return 'none'
   return bandForAvg(avg).cls
 }
 export function pctMeeting(t: Tally): number | null {

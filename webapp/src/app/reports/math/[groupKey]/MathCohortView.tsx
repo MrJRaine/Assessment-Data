@@ -64,9 +64,12 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
     return scored === 0 ? null : ones / scored
   }
   // Cohort roll-up for a unit = mean of the students' unit averages (colours the collapsed unit row).
+  // ELIGIBLE students only: a confirmed IPP's personal-progress band shows on THEIR row but never
+  // feeds a cohort aggregate (same rule as the donut/% — user ruling 2026-11-17).
   function unitCohort(students: Student[], u: Unit): number | null {
     const avgs: number[] = []
     for (const s of students) {
+      if (!s.eligible) continue
       const a = unitAvg(s.studentKey, u).avg
       if (a != null) avgs.push(a)
     }
@@ -287,7 +290,8 @@ function TasksDown({
   onFocus: (key: string) => void
 }) {
   const overallCohort = (() => {
-    const rs = students.map((s) => rollup(s.studentKey, g)).filter((v): v is number => v != null)
+    // Eligible students only — a confirmed IPP's personal-progress roll-up never feeds the cohort mean.
+    const rs = students.filter((s) => s.eligible).map((s) => rollup(s.studentKey, g)).filter((v): v is number => v != null)
     return rs.length ? rs.reduce((a, b) => a + b, 0) / rs.length : null
   })()
   return (
