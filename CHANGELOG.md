@@ -31,6 +31,11 @@ with `0.3.0`, so earlier detail is approximate.
   the orange IPP? when unconfirmed — on the Student list, the summary drill, the student detail
   history, AND the data-entry grid (which previously showed an unconfirmed student's computed
   average). Mirrors reading, where the level stays but Expected/Δ are never computed for IPPs.
+- **Summary-tree Results column now shows the % denominator.** The Results number included IPP and
+  unconfirmed-IPP results that the percentage beside it deliberately excludes, so recomputing the %
+  from the visible numbers gave a different answer. The column now shows measured results only —
+  the number the % is actually over — with the assessed-but-unmeasured results named in its hover
+  ("not counted in the %: N IPP · N unconfirmed IPP").
 - **Summary-tree percentages: unconfirmed IPPs excluded from every column, and every exclusion is
   named.** The Reading/Writing trees' trait columns counted an unconfirmed IPP's scores while the
   Average/band column excluded them — different denominators per column, so the node's numbers could

@@ -23,7 +23,16 @@ function StudentsCell({ c }: { c: Counts }) {
   return <td className="rn" title={title}>{c.students}</td>
 }
 function ResultsCell({ c }: { c: Counts }) {
-  return <td className="rn" title={`EN ${c.resultsEN} · FR ${c.resultsFR}`}>{c.results}</td>
+  // The displayed number IS the denominator of the % on the same line (user 2026-11-17: showing a
+  // Results count that includes IPP/unconfirmed results invites recomputing the % wrong — "a recipe
+  // for angry e-mails"). Assessed-but-unmeasured results are NAMED in the hover, never dropped.
+  const extra: string[] = []
+  if (c.ippExcluded > 0) extra.push(`${c.ippExcluded} IPP`)
+  if (c.unresolvedExcluded > 0) extra.push(`${c.unresolvedExcluded} unconfirmed IPP`)
+  const unbanded = c.results - c.band - c.ippExcluded - c.unresolvedExcluded
+  if (unbanded > 0) extra.push(`${unbanded} without a level`)
+  const title = `EN ${c.bandEN} · FR ${c.bandFR}${extra.length ? `\nnot counted in the %: ${extra.join(' · ')}` : ''}`
+  return <td className="rn" title={title}>{c.band}</td>
 }
 // Every excluded result gets NAMED in the hover (never a silent omission): IPP + unconfirmed-IPP
 // lines make Results = band + IPP + unconfirmed (+ band-less) reconcile against the drill.
