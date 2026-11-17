@@ -157,10 +157,11 @@ function New-SecClasses($school,$tag,$tpfx) {
 
 $classes = @(
     # ---- Elementary English (school 0716): 1 teacher/class, Math + ELA ----
-    # NB: the P-EN teacher email is 'en.0' (grade token), NOT 'en.p' — dev's DimStaff/DimSection were
-    # built from a generation that used '0' and have never seen '.p'; emitting '.p' would close the
-    # teacher out as departed and re-version both P-EN sections (confirmed against dev 2026-11-17).
-    @{ Label='STR-P-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'P'=20};        Sections=@((Sec 'MAT' 'MAT-P-EN' 'teach.elem.en.0@tcrce.ca'),  (Sec 'ELA' 'ELA-P-EN' 'teach.elem.en.0@tcrce.ca')) }
+    # NB: dev historically held 'teach.elem.en.0@' for this teacher (a pre-script-convention
+    # generation); ruled 2026-11-17 to standardize on the '.p' grade token like every other staff
+    # email. The first re-ingest after that ruling closes the '.0' identity and re-versions the two
+    # P-EN sections to '.p' — intentional, one-time.
+    @{ Label='STR-P-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'P'=20};        Sections=@((Sec 'MAT' 'MAT-P-EN' 'teach.elem.en.p@tcrce.ca'),  (Sec 'ELA' 'ELA-P-EN' 'teach.elem.en.p@tcrce.ca')) }
     @{ Label='STR-1-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'1'=20};        Sections=@((Sec 'MAT' 'MAT-1-EN' 'teach.elem.en.1@tcrce.ca'),  (Sec 'ELA' 'ELA-1-EN' 'teach.elem.en.1@tcrce.ca')) }
     @{ Label='STR-4-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'4'=20};        Sections=@((Sec 'MAT' 'MAT-4-EN' 'teach.elem.en.4@tcrce.ca'),  (Sec 'ELA' 'ELA-4-EN' 'teach.elem.en.4@tcrce.ca')) }
     @{ Label='STR-5-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'5'=20};        Sections=@((Sec 'MAT' 'MAT-5-EN' 'teach.elem.en.5@tcrce.ca'),  (Sec 'ELA' 'ELA-5-EN' 'teach.elem.en.5@tcrce.ca')) }
@@ -297,7 +298,7 @@ $studentRows = @($studentRows | ForEach-Object {
 $staffId = 82000
 $staffRows = @()
 $elemTeachers = @(
-    @('teach.elem.en.0@tcrce.ca','Pat','Willow',$ELEM),  @('teach.elem.en.1@tcrce.ca','Robin','Sorrel',$ELEM),
+    @('teach.elem.en.p@tcrce.ca','Pat','Willow',$ELEM),  @('teach.elem.en.1@tcrce.ca','Robin','Sorrel',$ELEM),
     @('teach.elem.en.4@tcrce.ca','Sam','Tamarack',$ELEM),@('teach.elem.en.5@tcrce.ca','Jamie','Aspen',$ELEM),
     @('teach.elem.en.p1@tcrce.ca','Alex','Cedar',$ELEM), @('teach.elem.en.45@tcrce.ca','Morgan','Hazel',$ELEM),
     @('teach.elem.ei.p@tcrce.ca','Remy','Bouleau',$ELEM),@('teach.elem.ei.1@tcrce.ca','Noa','Erable',$ELEM),
