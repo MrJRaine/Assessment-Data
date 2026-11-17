@@ -1008,6 +1008,7 @@ export interface WritingGroupRow {
   homeroom: string | null
   schoolName: string | null
   writingIPP: boolean | null
+  chartEligible: boolean // measured (not IPP/unresolved) — false + writingIPP false = unconfirmed IPP
   assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
   ideasScore: string | null // '1'-'4' | 'SCR' | '-' | null
   organizationScore: string | null
@@ -1043,6 +1044,10 @@ export async function getWritingGroup(
     homeroom: (r.Homeroom as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleWriting: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleWriting == null
+      ? !(Number(r.WritingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleWriting) === true,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     ideasScore: (r.IdeasScore as string) ?? null,
     organizationScore: (r.OrganizationScore as string) ?? null,

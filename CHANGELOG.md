@@ -63,6 +63,14 @@ with `0.3.0`, so earlier detail is approximate.
   (`DimAchievementLevel`): 0 → Not Yet Meeting red through 3 → Exceeding green. Web only, no SQL.
 
 ### Added
+- **"IPP?" marker for unconfirmed IPPs across the reports.** A student flagged for an IPP that
+  hasn't been confirmed showed the same "—" as a student with no results — headcounts didn't
+  reconcile and the unconfirmed state was invisible. They now get an outlined orange **IPP?** badge
+  (deliberately distinct from the solid achievement colours) in the Reading/Writing Student list and
+  summary drills and in every math band cell, with a hover explaining that achievement is hidden
+  until the IPP is confirmed on the roster or Programming screen. **SQL:** rerun
+  `sql/security/tvf_StudentCohortWritingGroup.sql` (the writing drill needs the measured flag);
+  reading/math already have theirs.
 - **"Collapse all" on the Reports summary trees.** One click closes every open school/grade/homeroom
   branch on the Reading/Writing and Math roll-up trees (close-only by design — already-loaded groups
   stay cached, so re-expanding is instant). Web only, no SQL.

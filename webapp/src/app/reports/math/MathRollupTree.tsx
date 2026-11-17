@@ -482,7 +482,7 @@ function GradeBlock({
                 if (collapsed.has(u.name)) {
                   return [
                     <td className="stu" key={`${u.name}-sum`}>
-                      <BandCell avg={st.avg} ipp={st.ipp} incomplete={st.incomplete} />
+                      <BandCell avg={st.avg} ipp={st.ipp} incomplete={st.incomplete} unresolved={!s.eligible && !s.mathIPP} />
                     </td>,
                   ]
                 }
@@ -497,7 +497,7 @@ function GradeBlock({
                       every other report list. The compact "First L." stays only where students are
                       COLUMN headers (the tasks-down class view + the entry grid). */}
                   <th className="col-task" scope="row">{s.sortKey}</th>
-                  <td className="col-pct"><BandCell avg={r} ipp={s.mathIPP && r == null} incomplete={false} /></td>
+                  <td className="col-pct"><BandCell avg={r} ipp={s.mathIPP && r == null} incomplete={false} unresolved={!s.eligible && !s.mathIPP} /></td>
                   {cells}
                 </tr>
               )

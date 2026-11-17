@@ -6,6 +6,8 @@
  *          One row per (student x writing language) + a NULL-language row for a student with no writing
  *          result. The client renders one row per (student, language) with the four traits in COIL order.
  * Created: 2026-10-16
+ * Modified: 2026-11-17 — + IsChartEligibleWriting output (the dal-join measured predicate), so the
+ *          drill can mark unconfirmed IPPs ("IPP?") in lockstep with the flat list.
  * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
  *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
  *          now puts NO window restriction on the latest-pick (most recent writing result ON RECORD,
@@ -199,6 +201,10 @@ RETURN
         gs.SelfIDAfrican,
         gs.SelfIDIndigenous,
         ipp.IsIPP                 AS WritingIPPStatus,
+        -- Lockstep with the dal join below + the reading group feed (2026-11-17): 1 = measured. The
+        -- client can't tell "no IPP row" from "unresolved" via WritingIPPStatus (both NULL); this
+        -- drives the drill's unconfirmed-IPP ("IPP?") marker.
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleWriting,
         gs.AssessmentLanguage,                     -- 'English' | 'French'; NULL = no writing result
         gs.IdeasScore,
         gs.OrganizationScore,

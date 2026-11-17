@@ -76,8 +76,8 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   }
 
   // Per-student band cell (unit or overall roll-up) + a read-only task cell — shared with the tree.
-  const bandCell = (avg: number | null, ipp: boolean, incomplete: boolean) => (
-    <BandCell avg={avg} ipp={ipp} incomplete={incomplete} />
+  const bandCell = (avg: number | null, ipp: boolean, incomplete: boolean, unresolved = false) => (
+    <BandCell avg={avg} ipp={ipp} incomplete={incomplete} unresolved={unresolved} />
   )
   const taskCell = (v: Mark) => <TaskCell v={v} />
 
@@ -286,7 +286,7 @@ function TasksDown({
   rollup: (s: string, g: Grade) => number | null
   taskPct: (students: Student[], t: string) => number | null
   unitCohort: (students: Student[], u: Unit) => number | null
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onFocus: (key: string) => void
 }) {
@@ -315,7 +315,7 @@ function TasksDown({
             <td className={`col-pct ${heatClass(overallCohort)}`}>{overallCohort == null ? '—' : Math.round(overallCohort * 100)}</td>
             {students.map((s) => {
               const r = rollup(s.studentKey, g)
-              return <td className="stu" key={s.studentKey}>{bandCell(r, s.mathIPP && r == null, false)}</td>
+              return <td className="stu" key={s.studentKey}>{bandCell(r, s.mathIPP && r == null, false, !s.eligible && !s.mathIPP)}</td>
             })}
           </tr>
           {g.units.map((u) => {
@@ -332,7 +332,7 @@ function TasksDown({
                   <td className={`col-pct ${heatClass(cohort)}`}>{cohort == null ? '—' : Math.round(cohort * 100)}</td>
                   {students.map((s) => {
                     const a = unitAvg(s.studentKey, u)
-                    return <td className="stu" key={s.studentKey}>{bandCell(a.avg, a.ipp, a.incomplete)}</td>
+                    return <td className="stu" key={s.studentKey}>{bandCell(a.avg, a.ipp, a.incomplete, !s.eligible && !s.mathIPP)}</td>
                   })}
                 </tr>
                 {!coll && u.tasks.map((t) => {
@@ -372,7 +372,7 @@ function StudentsDown({
   mark: (s: string, t: string) => Mark
   unitAvg: (s: string, u: Unit) => { avg: number | null; ipp: boolean; incomplete: boolean }
   rollup: (s: string, g: Grade) => number | null
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onFocus: (key: string) => void
 }) {
@@ -439,12 +439,12 @@ function StudentsDown({
                 <th className="col-task" scope="row">
                   <button className="linkbtn" onClick={() => onFocus(s.studentKey)}>{s.sortKey}</button>
                 </th>
-                <td className="col-pct">{bandCell(r, s.mathIPP && r == null, false)}</td>
+                <td className="col-pct">{bandCell(r, s.mathIPP && r == null, false, !s.eligible && !s.mathIPP)}</td>
                 {g.units.flatMap((u) => {
                   const coll = collapsed.has(uk(g, u))
                   if (coll) {
                     const a = unitAvg(s.studentKey, u)
-                    return [<td className="stu" key={`${u.name}-sum`}>{bandCell(a.avg, a.ipp, a.incomplete)}</td>]
+                    return [<td className="stu" key={`${u.name}-sum`}>{bandCell(a.avg, a.ipp, a.incomplete, !s.eligible && !s.mathIPP)}</td>]
                   }
                   return u.tasks.map((t) => (
                     <td className="cell stu" key={t.mathTaskKey}>{taskCell(mark(s.studentKey, t.mathTaskKey))}</td>
@@ -475,7 +475,7 @@ function StudentGrid({
   rollup: number | null
   unitAvg: (s: string, u: Unit) => { avg: number | null; ipp: boolean; incomplete: boolean }
   mark: (s: string, t: string) => Mark
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onBack: () => void
 }) {
@@ -496,7 +496,7 @@ function StudentGrid({
       <div className="mghead">
         <h3>{student.fullName}</h3>
         <span className="gc">· {grade.label} · Roll-up: </span>
-        {bandCell(rollup, student.mathIPP && rollup == null, false)}
+        {bandCell(rollup, student.mathIPP && rollup == null, false, !student.eligible && !student.mathIPP)}
       </div>
       <div className="mscroll">
         <table className="mgrid">
@@ -517,7 +517,7 @@ function StudentGrid({
                       <span className="chev">{coll ? '▸' : '▾'}</span>
                       <span className="uname">{u.name} · {u.tasks.length} tasks</span>
                     </th>
-                    <td className="col-pct">{bandCell(a.avg, a.ipp, a.incomplete)}</td>
+                    <td className="col-pct">{bandCell(a.avg, a.ipp, a.incomplete, !student.eligible && !student.mathIPP)}</td>
                   </tr>
                   {!coll && u.tasks.map((t) => (
                     <tr key={t.mathTaskKey}>
