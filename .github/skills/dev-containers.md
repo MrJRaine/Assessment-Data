@@ -44,6 +44,10 @@ cd webapp && MSYS_NO_PATHCONV=1 podman build -t assessment-webapp:<ver>-wip .
 ```
 
 - `MSYS_NO_PATHCONV=1` stops Git Bash mangling the build args — keep it.
+- **NEVER pipe the build** (`| tail`, `| grep`) when acting on its result: the pipeline's exit code
+  is the pipe's, not podman's, so a FAILED build reads as success while the old tag keeps running —
+  this shipped stale containers through five "rebuilds" on 2026-11-17. Run the build unpiped and
+  verify the tag's CreatedAt moved (`podman images`) or the log ends `Successfully tagged`.
 - `<ver>` is the in-progress version, e.g. `1.3.0`. The `-wip` tag is a scratch tag for the typecheck.
 - For a long build, run it in the background and wait for the completion notification rather than polling.
 - **This same image is what you run as `awdev`** — no separate build. After a green typecheck, just tag

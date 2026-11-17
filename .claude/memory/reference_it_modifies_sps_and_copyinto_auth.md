@@ -96,3 +96,5 @@ container compat.
   editor intermittently fails on the FIRST attempt with a token auth error and succeeds on retry
   (seen twice 2026-10-30). The app/SP path doesn't show it. Next occurrence: capture the exact
   Msg number + first line before retrying, THEN diagnose; until then treat as transient.
+
+**Cold-token finding (2026-11-16, live IngestRunLog):** the recurring App-ingest token error is an INTERMITTENT COLD FIRST-ATTEMPT OneLake token failure at the cycle's FIRST COPY INTO (WI credential), retry-cured, NOT account-dependent — App runs die right after the Started row (no terminal row; Fabric has no TRY/CATCH), Fabric-editor reruns succeed in <1 min. Flagged users never hit it only because they never run it. Exact Msg text STILL uncaptured; proposed (unapproved) app fix: one auto-retry in runIngestCycle on the token signature.
