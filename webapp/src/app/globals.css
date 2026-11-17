@@ -518,6 +518,10 @@ a { color: inherit; text-decoration: none; }
 .mband.bipp { background: #6b4fbb; }
 /* Unconfirmed IPP — OUTLINED burnt orange, deliberately distinct from the solid amber b2 band. */
 .mband.bunres { background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-weight: 700; }
+/* Math entry: an unconfirmed-IPP student's BLOCKED column — greyed cells + dimmed marks so the
+   no-entry state reads at a glance (the confirm control sits in the banner above the grid). */
+.mgrid td.cell.unres-col { background: #eceeed; }
+.mgrid td.cell.unres-col .mtoggle { opacity: .45; cursor: not-allowed; }
 /* Same state as an inline badge on the Reading/Writing list + drill achievement cells.
    EXACT .ach-chip geometry (padding minus the 1px border) so it sits flush with the band chips. */
 .ipp-unres { display: inline-block; padding: calc(.12rem - 1px) calc(.45rem - 1px); border-radius: 5px; background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-size: .67rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
