@@ -670,7 +670,9 @@ export default function MathRosterEntry({
                                   // the ring. IPP stays real text.
                                   const glyph = v === 'ipp' ? 'IPP' : ''
                                   return (
-                                    <td className="cell stu" key={s.studentKey}>
+                                    // Blocked column greyed out so the no-entry state is visible at a
+                                    // glance, not just on click (user 2026-11-17).
+                                    <td className={`cell stu${unres ? ' unres-col' : ''}`} key={s.studentKey}>
                                       <button
                                         className={`mtoggle ${cls}`}
                                         disabled={inputsLocked || ro || unres}
