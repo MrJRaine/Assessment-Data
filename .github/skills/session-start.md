@@ -10,6 +10,13 @@ The MEMORY.md index is auto-injected into context every session — its one-line
 standing behavioral rules and advertise what deeper memories exist. You do not need to read a
 memory file to be bound by its rule; the hook line IS the rule.
 
+**Standing claim rule — verification BEFORE assertion.** Never state that something is live /
+fixed / clean / retired / "how it works" without naming the check that backs it (fresh code read,
+moved image tag, query result, user observation). Pipeline exit codes, recall, and your own prior
+messages are not verification. Full rule: CLAUDE.md "Claims require verification" +
+[[no-unverified-state-claims]]. This was a two-month recurring failure — treat it as load-bearing
+as the warehouse rule.
+
 **Standing output rule — ALWAYS use clickable file links.** Whenever you refer to a file —
 ESPECIALLY a SQL script, `.md`, or anything the user needs to open or run — write it as a
 clickable markdown link `[name](relative/path)`, never a bare code span or plain text. Use the
