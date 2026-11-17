@@ -207,7 +207,12 @@ function WritingDetail({ rows, traits, lang, summarizeBy, demo }: { rows: Writin
         {/* Keyed off the band, not the avg: an IPP student's result keeps its traits/avg but the feed
             gives it no band (not measured) — show "IPP" there, like the flat list. */}
         <td className="ach" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
-          {r.achievementName ?? (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
+          {/* Unconfirmed IPP: explicit "IPP?" marker, parity with the flat list (user 2026-11-17). */}
+          {r.achievementName ?? (r.writingIPP
+            ? 'IPP'
+            : !r.chartEligible
+              ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+              : <span className="muted">—</span>)}
         </td>
       </tr>
     )

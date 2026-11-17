@@ -458,7 +458,15 @@ export default function CohortView({
           </td>
         ) : null}
         <td style={measured && s.achievementHexColor ? { color: s.achievementHexColor, fontWeight: 600 } : undefined}>
-          {!measured ? (s.ippStatusReading === 'IPP' ? 'IPP' : '—') : s.achievementName ?? '—'}
+          {/* Unconfirmed IPP gets an explicit "IPP?" marker (user 2026-11-17): a bare dash reads as
+              "no result yet" and makes headcounts irreconcilable — and the state needs chasing up. */}
+          {!measured
+            ? s.ippStatusReading === 'IPP'
+              ? 'IPP'
+              : s.ippStatusReading === 'Unresolved'
+                ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                : '—'
+            : s.achievementName ?? '—'}
         </td>
       </tr>
     )

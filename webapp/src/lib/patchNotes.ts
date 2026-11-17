@@ -65,6 +65,13 @@ export const PATCH_NOTES: PatchNote[] = [
       'Math and IPPs: a student with a confirmed IPP earns a unit level once at least 80% of the unit’s full task list is marked — outcomes removed by their plan count toward that total — so lighter plan modifications can still earn levels, while heavier ones show “IPP” rather than a level based on only a few tasks. Earned levels now count in every math chart and percentage. A flagged-but-unconfirmed IPP shows marks but no level until it’s confirmed.',
   },
   {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Students whose IPP is flagged but not yet confirmed now show an orange “IPP?” marker on the reports instead of a blank dash, so class counts reconcile and unconfirmed IPPs are easy to spot and follow up. Hover the marker for what to do.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',

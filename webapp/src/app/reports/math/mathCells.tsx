@@ -2,9 +2,14 @@ import { bandForAvg, type Mark } from './mathModel'
 
 // Shared read-only cells for the Reports > Math matrix and the oversight roll-up tree's grade blocks.
 
-/** Achievement Level badge for a unit / overall average (IPP, no data and Incomplete included). */
-export function BandCell({ avg, ipp, incomplete }: { avg: number | null; ipp: boolean; incomplete: boolean }) {
-  if (avg == null) return <span className={`mband ${ipp ? 'bipp' : 'inc'}`}>{ipp ? 'IPP' : '—'}</span>
+/** Achievement Level badge for a unit / overall average (IPP, unconfirmed IPP, no data and
+ *  Incomplete included). `unresolved` = flagged-but-unconfirmed IPP — explicit "IPP?" marker so
+ *  headcounts reconcile and the unconfirmed state gets chased up (user 2026-11-17). */
+export function BandCell({ avg, ipp, incomplete, unresolved = false }: { avg: number | null; ipp: boolean; incomplete: boolean; unresolved?: boolean }) {
+  if (avg == null) {
+    if (unresolved) return <span className="mband bunres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+    return <span className={`mband ${ipp ? 'bipp' : 'inc'}`}>{ipp ? 'IPP' : '—'}</span>
+  }
   if (incomplete) return <span className="mband inc">Incomplete</span>
   const b = bandForAvg(avg)
   return <span className={`mband ${b.cls}`}>{b.label}</span>
