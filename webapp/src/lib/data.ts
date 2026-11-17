@@ -879,6 +879,7 @@ export interface ReadingGroupRow {
   homeroom: string | null
   schoolName: string | null
   readingIPP: boolean | null
+  chartEligible: boolean // measured against the benchmark (not IPP/unresolved) — gates Expected/Diff like the list
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result
   levelCode: string | null // the reading level (e.g. 'M'); null = no result
   levelOrder: number | null
@@ -917,6 +918,11 @@ export async function getReadingGroup(
     homeroom: (r.Homeroom as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleReading (column absent): treat non-IPP as
+    // eligible — same as the old behaviour except confirmed IPPs stop showing Expected/Diff.
+    chartEligible: r.IsChartEligibleReading == null
+      ? !(Number(r.ReadingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleReading) === true,
     scaleSystem: (r.ScaleSystem as string) ?? null,
     levelCode: (r.LevelCode as string) ?? null,
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),

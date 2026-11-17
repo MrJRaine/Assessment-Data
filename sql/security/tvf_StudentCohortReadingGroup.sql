@@ -6,6 +6,8 @@
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-17 — + IsChartEligibleReading output (the dal-join measured predicate), so the
+ *          drill can blank Expected/Diff for IPP/unresolved students in lockstep with the flat list.
  * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
  *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
  *          now puts NO window restriction on the latest-pick (most recent reading result ON RECORD,
@@ -206,6 +208,10 @@ RETURN
         gs.SelfIDAfrican,
         gs.SelfIDIndigenous,
         ipp.IsIPP                 AS ReadingIPPStatus,
+        -- Lockstep with the dal join below + the *All/list feeds: 1 = measured against the benchmark.
+        -- The client can't derive this from ReadingIPPStatus alone (NULL = no IPP row OR unresolved),
+        -- and it gates the drill's Expected/Diff cells exactly like the flat list (2026-11-17).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleReading,
         gs.ScaleSystem,                               -- language of THIS result; NULL = no reading result
         gs.LevelCode,                                 -- the reading level (e.g. 'M'); NULL = no result
         gs.LevelOrder,

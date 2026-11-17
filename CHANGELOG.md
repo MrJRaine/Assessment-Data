@@ -17,6 +17,13 @@ with `0.3.0`, so earlier detail is approximate.
 > report and the Summary-tree filter sections are new features, so this ships as a minor release.
 
 ### Fixed
+- **IPP students no longer show an Expected range on the summary drill or the student detail page.**
+  The flat Student list already blanked Expected and Diff for students not measured against the
+  benchmark (IPP / unconfirmed IPP), but the Reading summary drill and the student detail history
+  still rendered the expectation. Both now gate Expected exactly like the list (the drill's Expected
+  and Diff sorts treat them as blank too). **SQL:** rerun
+  `sql/security/tvf_StudentCohortReadingGroup.sql` — it now exposes the measured flag the drill
+  needs; until it runs, confirmed IPPs are handled and unconfirmed ones follow once it's in.
 - **Maintenance clear controls now follow the lock-out rule (LOTO) everywhere.** The warehouse has
   locked clearing to the window's opener or a sysadmin since 1.3.0, but the app's surfaces missed the
   patch: the banner and down-overlay "Clear now" showed for every maintenance-capable user (whose

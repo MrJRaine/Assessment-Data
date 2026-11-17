@@ -77,6 +77,7 @@ interface RowItem {
   grade: string | null
   homeroom: string | null
   ipp: boolean
+  eligible: boolean // measured against the benchmark (not IPP/unresolved) — gates Expected/Diff like the list
   language: 'English' | 'French' | null
   gender: string | null
   selfIDAfrican: boolean | null
@@ -102,6 +103,7 @@ function toRows(rows: ReadingGroupRow[]): RowItem[] {
     grade: r.grade,
     homeroom: r.homeroom,
     ipp: r.readingIPP === true,
+    eligible: r.chartEligible,
     language: r.scaleSystem === 'EN_Reading' ? 'English' : r.scaleSystem === 'FR_Reading' ? 'French' : null,
     gender: r.gender,
     selfIDAfrican: r.selfIDAfrican,
@@ -154,8 +156,9 @@ function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRo
       case 'homeroom': return r.homeroom
       case 'lang': return r.language
       case 'level': return r.levelOrder
-      case 'expected': return r.expMinOrder
-      case 'diff': return r.delta
+      // IPP/unresolved students show no Expected/Diff (not measured) — sort them blank, like the list.
+      case 'expected': return r.eligible ? r.expMinOrder : null
+      case 'diff': return r.eligible ? r.delta : null
       case 'diffJune': return r.diffJune
       case 'achievement': return r.achCode
     }
@@ -209,10 +212,10 @@ function ReadingDetail({ rows, lang, summarizeBy, demo }: { rows: ReadingGroupRo
         <td className="stu" title={r.achName ?? undefined} style={hasResult && r.tint ? { background: r.tint } : undefined}>
           {hasResult ? <span style={{ fontWeight: 600 }}>{r.levelCode}</span> : (r.ipp ? <span className="muted" title="IPP — not measured against the benchmark">IPP</span> : miss)}
         </td>
-        <td className="stu muted">{fmtExp(r)}</td>
-        {/* Diff/Achievement key off the BAND, not the level: an IPP student's result keeps its level
-            but the feed gives it no band (not measured) — show "IPP" there, like the flat list. */}
-        <td className="stu">{r.achCode != null && r.delta != null ? signed(r.delta) : miss}</td>
+        {/* Expected/Diff gate on ELIGIBLE (not IPP/unresolved): an IPP student keeps their level, but
+            they are not measured against the benchmark, so no expectation and no Diff — like the list. */}
+        <td className="stu muted">{r.eligible ? fmtExp(r) : '—'}</td>
+        <td className="stu">{r.eligible && r.delta != null ? signed(r.delta) : miss}</td>
         <td className="stu">{r.diffJune != null ? signed(r.diffJune) : miss}</td>
         <td className="ach" style={hasResult && r.achColor ? { color: r.achColor, fontWeight: 600 } : undefined}>
           {r.achName ?? (r.ipp ? 'IPP' : miss)}
