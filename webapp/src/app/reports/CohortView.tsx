@@ -47,6 +47,14 @@ function triMatch(sel: Tri, v: boolean | null): boolean {
   if (sel === 'Yes') return v === true
   return v === false
 }
+// Self-ID African filters YES vs NOT-YES (user 2026-11-17): the source is Yes / N / unanswered and
+// the warehouse stores only Yes=1 (N and unanswered both NULL) — "not Yes" is the only honest
+// complement. Indigenous keeps the true tri-state (it has genuine answered-No values).
+function yesNotYes(sel: Tri, v: boolean | null): boolean {
+  if (sel === 'All') return true
+  if (sel === 'Yes') return v === true
+  return v !== true
+}
 
 // --- Column sort ------------------------------------------------------------------------------
 // Sortable value per column key. Reading-only columns (expected / diffExpected / diffJune) only
@@ -325,7 +333,7 @@ export default function CohortView({
   const matchExcept = (s: CohortStudent, except: string) =>
     (except === 'grade' || s.gradeOrder == null || (s.gradeOrder >= gradeMin && s.gradeOrder <= gradeMax)) &&
     (except === 'gender' || gender === 'All' || s.gender === gender) &&
-    (except === 'african' || triMatch(african, s.selfIDAfrican)) &&
+    (except === 'african' || yesNotYes(african, s.selfIDAfrican)) &&
     (except === 'indigenous' || triMatch(indigenous, s.selfIDIndigenous)) &&
     (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
     (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
@@ -570,10 +578,11 @@ export default function CohortView({
 
           <div className="filter-group">
             <label>Self-ID African</label>
+            {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
             <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
               <option>All</option>
               <option>Yes</option>
-              <option>No</option>
+              <option value="No">Not Yes</option>
             </select>
           </div>
 

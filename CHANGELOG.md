@@ -31,6 +31,12 @@ with `0.3.0`, so earlier detail is approximate.
   the orange IPP? when unconfirmed — on the Student list, the summary drill, the student detail
   history, AND the data-entry grid (which previously showed an unconfirmed student's computed
   average). Mirrors reading, where the level stays but Expected/Δ are never computed for IPPs.
+- **Self-ID African filter is Yes / Not Yes.** The source field is Yes, N, or never-answered, and
+  the warehouse stores only the Yes (an answered N and an unanswered both land as unknown) — so the
+  old "No" option, which demanded an explicit answered-No, could never match anything. The option is
+  now labelled **Not Yes** and matches everyone without an explicit Yes, on the summary trees, the
+  Student list, and RWM. Self-ID Indigenous keeps its true Yes/No/unknown behaviour (its source
+  distinguishes an answered No).
 - **Summary-tree Results column now shows the % denominator.** The Results number included IPP and
   unconfirmed-IPP results that the percentage beside it deliberately excludes, so recomputing the %
   from the visible numbers gave a different answer. The column now shows measured results only —
