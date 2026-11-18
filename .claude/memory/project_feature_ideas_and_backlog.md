@@ -109,8 +109,16 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   `reports/math/mathModel.ts`) — >80% h4, >=65% h3, >=50% h2, below 50% h1, no scored marks = none.
   These are the TASK heat cut-offs, NOT the unit band cut-offs (50/75/90) I had assumed. The entry
   grid's `taskPct` = can-do / students with a 0 or 1 mark on that task (IPP-deleted cells and blanks
-  out of the denominator) — consistent with ruling 7; whether Blanks "count as 0" changes the
-  denominator here follows ruling 3 and needs spelling out in the proposal.
+  out of the denominator) — consistent with ruling 7.
+  HOW THE EXISTING MATH CLASS VIEW ALREADY HANDLES THE TASK % (read 2026-11-18,
+  `reports/math/[groupKey]/MathCohortView.tsx` `taskPct` + `mathModel.ts` `buildMarks`): identical
+  formula — can-do / cells marked 0 or 1. (a) BLANKS MODE DOES NOT TOUCH IT: `blankMode` only feeds
+  the unit/student averages (`unitStat`), never the per-task %. (b) A confirmed-IPP student's
+  unmarked cells become 'ipp' and drop out; their marked cells count. (c) It is fed `g.students` —
+  ALL the group's students — so an UNCONFIRMED-IPP student's existing 0/1 marks DO count in the task
+  % there (the entry gate blocks NEW marks, but marks saved before the flag remain). TWO DIVERGENCES
+  from the user's rulings to put to the user as questions, both behaviours named: ruling 3 (Blanks
+  applies) vs (a); ruling 7 (unconfirmed IPP out of every task) vs (c).
   *My reading, unconfirmed:* task-grain like the item above, so the two likely share one
   task-grain feed; "Current" for Math is current-year (task x grade x month model,
   [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.

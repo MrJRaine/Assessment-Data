@@ -8,7 +8,7 @@
 - [Batch Builds During Review Bursts](feedback_batch_builds.md) — accumulate feedback edits; ONE build cycle when the user says done.
 - [Imp Container First](feedback_imp_container_first.md) — when the user tests via impersonation, build `-imp` + relaunch awdev-impersonation FIRST.
 - [NEVER Modify Databases Remotely](feedback_sql_write_authorization.md) — **ABSOLUTE**: no DDL/DML/reads against any Fabric instance, dev or live. The user runs all SQL; I hand over tracked scripts.
-- [Consult Entry Semantics for Reports](feedback_consult_entry_semantics_for_reports.md) — the entry surface DEFINES what stored values mean; reports mirror it or escalate the divergence.
+- [Read Existing Handling First](feedback_consult_entry_semantics_for_reports.md) — before stating/assuming/recording/asking/proposing how data is counted, excluded or coloured, READ how the app already does it (entry grid, report code, ruling memory); entry defines semantics. 3 misses in 48h.
 - [RLS Review: Verify Every Role Branch](feedback_rls_review_verify_per_role.md) — check each role's scoping against the documented design across the WHOLE surface; never assert an access claim unverified.
 - [SQL Must Run As-Is](feedback_runnable_sql_no_placeholders.md) — no `<placeholder>` in run-now SQL; substitute or DECLARE values. Empty result = suspect the parameters first.
 - [Resolve Reference Data From Seeds](feedback_resolve_reference_data_from_seeds.md) — grep the repo's seed files for exact IDs/codes instead of a fuzzy LIKE or asking.

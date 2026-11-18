@@ -1,6 +1,6 @@
 ---
 name: consult-entry-semantics-for-reports
-description: "Before changing how a REPORT interprets data, consult the data-entry surface that authors it — entry defines the semantics; reports follow or escalate."
+description: "Before stating, assuming, recording, asking or proposing ANYTHING about how data is counted/excluded/coloured, READ how the app already handles it (entry grid, existing report code, the subject's ruling memory) — entry defines the semantics; never describe an existing rule from recall. Three misses in 48h (2026-11-17/18)."
 metadata:
   node_type: memory
   type: feedback
@@ -29,3 +29,19 @@ A SWEEP of a subject's display surfaces INCLUDES its entry grid — "clean" mean
 report surfaces agree with ENTRY, not merely with each other. (Second miss 2026-11-17:
 declared writing clean comparing reports to reports/reading, while writing's entry Avg
 cell already showed IPP-not-number — the divergence the sweep existed to find.)
+
+**THIRD miss, 2026-11-18 — the rule is WIDER than "report changes".** While only RECORDING the
+user's rulings for a new Math homeroom report, I (a) wrote "omit every Math-IPP student = the
+existing rule" without opening [[math-ipp-display-rules]] (wrong on both halves), (b) assumed task
+cells use the unit band cut-offs (they use the entry grid's `heatClass` task cut-offs), and
+(c) parked "how do Blanks affect the task %" as an open question when the existing class view
+already answers it. User: *"third time in 48hrs I'm reminding you that you should be looking at the
+way we're already handling things to see how to handle data."*
+
+**So, applies at EVERY stage, not just implementation:** before I state, assume, record, ask or
+propose ANYTHING about how data is counted, excluded, coloured or labelled — in a backlog note, a
+question to the user, a 50-ft proposal, or a summary — I first READ how the app already handles
+that exact thing (the entry grid/upsert proc, the existing report code, and the ruling memory for
+that subject) and quote it with its file/function. An "open question" is only legitimate AFTER that
+read shows the existing surfaces don't answer it or disagree with what the user just said; then the
+question names both behaviours. Never describe an "existing rule" from recall.
