@@ -7,6 +7,11 @@
  * against them — every change is additive columns or a new function).
  * Idempotent - every object is DROP IF EXISTS + CREATE + GRANT; safe to run again.
  *
+ * PREREQUISITE (added after the 2026-11-18 live run): run
+ * deploy_1.4.0_prereq_expected_table.sql FIRST. Parts 1-6 read
+ * dbo.StudentExpectedAssessment, which the 1.3.0 live bundle never created; without
+ * it those six CREATEs fail (Msg 208) AFTER their DROPs have already run.
+ *
  * WHAT IT DOES: replaces 9 report functions and creates 3 new ones. Assembled
  * verbatim from the sql/security sources at this commit; each part's own header
  * documents its change history.

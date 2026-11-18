@@ -11,10 +11,24 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
-## [Unreleased] — 1.4.0 candidate (reports)
+## [1.4.0] — 2026-11-18
 
-> Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the Missing results
-> report and the Summary-tree filter sections are new features, so this ships as a minor release.
+> Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
+> Missing results report and the Summary-tree filter sections are new features, so this shipped as a
+> minor release. Live 2026-11-18 (container `assessment-webapp:1.4.0`).
+
+### SQL deployed to live for 1.4.0 (in this order)
+1. `sql/deploy/live_1.4.0/deploy_1.4.0_prereq_expected_table.sql` — creates `StudentExpectedAssessment`,
+   redeploys `usp_RebuildRosterMembership` (adds the step that fills it) and runs the rebuild. **This
+   table was built on dev 2026-10-20 but was never in the 1.3.0 live bundle**; six of the 1.4.0
+   functions read it, so the first run of the main bundle failed on them (Msg 208) and left the Reading
+   and Writing report functions dropped on live for about three minutes until this ran.
+2. `sql/deploy/live_1.4.0/deploy_1.4.0.sql` — 9 report functions replaced + 3 new
+   (`tvf_StudentCohortMathTrend`, `tvf_MissingDataAll`, `tvf_MissingDataGroup`); read-only functions,
+   no table data written.
+
+Not shipped (held): the 2026-10-30 section-school binding change to the three
+`usp_Upsert*Assessment` procedures — server-side only, no dev test on record.
 
 ### Fixed
 - **Math data entry now enforces the IPP confirmation gate.** A student flagged for a Math IPP but
