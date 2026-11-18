@@ -1,5 +1,8 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortMath  (INLINE table-valued function)
+ * Modified: 2026-11-18 — + Gender / SelfIDAfrican / SelfIDIndigenous outputs so the Math summary
+ *          tree's drill rows can be filtered on their own data (lockstep with tvf_StudentCohortMathAll).
+ *          From the ATTRIBUTED DimStudent version, like School/Grade/Homeroom. Scope and grain unchanged.
  * Modified: 2026-11-17 — + IsChartEligibleMath output: unresolved math IPPs are unmeasured (no band),
  *          matching Reading/Writing (user ruling); the marks stay visible.
  * Purpose: READ-ONLY math cohort matrix for the Reports > Math view (0.7.0, item 4).
@@ -69,14 +72,16 @@ RETURN
     AttrStudents AS (
         -- cycle selected, assessed: attributed by the latest result's frozen version
         SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
-               fv.SchoolID, fv.GroupKey AS HomeroomKey, fv.ProgramCode
+               fv.SchoolID, fv.GroupKey AS HomeroomKey, fv.ProgramCode,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous
         FROM LatestMathTouch lt
         INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
         WHERE lt.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
         -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
-               s.SchoolID, s.GroupKey, s.ProgramCode
+               s.SchoolID, s.GroupKey, s.ProgramCode,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND (@CycleGroupID IS NULL
@@ -87,7 +92,8 @@ RETURN
         SELECT a.StudentKey, a.StudentNumber,
                COALESCE(cur.FirstName, a.FirstName) AS FirstName,   -- current name when one exists;
                COALESCE(cur.LastName,  a.LastName)  AS LastName,    -- frozen name for district leavers
-               a.Grade, a.Homeroom, a.SchoolID, sch.SchoolName, p.ProgramFamily, ml.MathSectionLanguage
+               a.Grade, a.Homeroom, a.SchoolID, sch.SchoolName, p.ProgramFamily, ml.MathSectionLanguage,
+               a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous
         FROM AttrStudents a
         INNER JOIN DimProgram p  ON p.ProgramCode = a.ProgramCode
         INNER JOIN DimGrade   g  ON g.GradeCode   = a.Grade
@@ -167,6 +173,9 @@ RETURN
         gs.Homeroom,
         gs.SchoolName,
         gs.ProgramFamily,
+        gs.Gender,                                -- summary-tree demographic filters (2026-11-18)
+        gs.SelfIDAfrican,
+        gs.SelfIDIndigenous,
         CAST(t.MathTaskKey AS VARCHAR(20)) AS MathTaskKey,
         t.UnitName,
         t.UnitOrder,

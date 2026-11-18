@@ -134,6 +134,14 @@ with `0.3.0`, so earlier detail is approximate.
   the drill tables together. **SQL:** `tvf_StudentCohortRWM` is included in the same
   `deploy_summary_filter_demographics_2026-11-10.sql` (now five TVFs); until it runs, the RWM
   Gender/Self-ID groups stay hidden (Grade + both toggles work without it).
+- **Filter section on the Math Summary tree.** The same collapsible **Show filters** section —
+  **Grade**, **Gender**, **Self-ID African Descent**, **Self-ID Indigenous Descent** — with the
+  **Blanks** scoring toggle (excluded vs count as 0) moved in from the toolbar, as on RWM. Filters
+  trim the school/grade/homeroom rows, the counts, every % cell, and the drill's student rows
+  together; **Reset filters** leaves the Blanks mode alone. No Language filter (math results carry
+  no language of assessment). **SQL:** `deploy_math_filter_demographics_2026-11-18.sql` adds
+  Gender + Self-ID columns to `tvf_StudentCohortMathAll` and `tvf_StudentCohortMath`; until it
+  runs, the Gender/Self-ID groups stay hidden (Grade + Blanks work without it).
 - **Missing results report (Administrators + Regional Analysts only).** New Reports tab: for the
   selected cycle, a TCRCE → School → Lead teacher → Section roll-up of students who still need a
   result entered (students with a confirmed IPP in a subject are not expected in it). Columns =
@@ -179,6 +187,9 @@ with `0.3.0`, so earlier detail is approximate.
   make it wider than the screen, so the drill pane stretched to the full table width and its
   scrollbars (the same in-pane bars Reading/Writing show) rendered past the right edge. The pane now
   pins to the visible area, putting its bars back on screen; Reading/Writing are unchanged.
+  (2026-11-18 follow-up: the first cut still ran 1.5rem past the edge — it didn't subtract the drill
+  row's own padding — so the vertical bar stayed clipped; corrected, and the drill pane's bars now
+  use a higher-contrast colour.)
 - **Math sorts students by last name, like everything else.** The math matrices (summary drill, full
   class view, and the data-entry grid) kept the compact "First L." display name but sorted on it —
   first-name order, unlike every other list (the feeds already order by last name; the client
