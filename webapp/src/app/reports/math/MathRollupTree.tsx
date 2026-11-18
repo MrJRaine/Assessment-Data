@@ -1,15 +1,15 @@
 'use client'
 
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import type { MathCohortRow, MathRollupRow } from '@/lib/data'
+import type { MathCohortRow, MathRollupRow, MathTrendRow, ReportCycle } from '@/lib/data'
 import {
   type BlankMode, type Grade, type Mark, type Tally, type Unit,
   GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, meanOf,
-  emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct,
+  emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct, BANDS, BAND_HEX,
 } from './mathModel'
 import { BandCell, TaskCell } from './mathCells'
-import { loadMathGroup } from './actions'
+import { loadMathGroup, loadMathTrend } from './actions'
 import { demoPass, gradeRank, type DemoFilter, type Tri } from '../rollupModel'
 import { useSharedFilters } from '../sharedFilters'
 
@@ -55,6 +55,27 @@ interface ChildNode {
 interface Summary { n: number; overall: Tally; units: Record<string, Tally> }
 type BlockState = { status: 'loading' } | { status: 'done'; rows: MathCohortRow[] } | { status: 'error'; message: string }
 
+// ── Page-top charts (1.4.0): donut = the tree's own (filtered) students; bars = one per cycle ─────
+// One student's OVERALL bucket from their per-unit counts — the same arithmetic summarize() uses for
+// the tree's Overall column, so the charts and the table can never disagree.
+type Countable = { ipp: boolean; eligible: boolean; units: Map<string, { taskCount: number; scored: number; canDo: number }> }
+function overallOf(s: Countable, blankMode: BlankMode) {
+  const avgs: (number | null)[] = []
+  for (const c of s.units.values()) {
+    const ippCells = s.ipp ? c.taskCount - c.scored : 0
+    avgs.push(unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s).avg)
+  }
+  return overallBucket(meanOf(avgs), s.ipp)
+}
+function tallyOverall(students: Iterable<Countable>, blankMode: BlankMode): Tally {
+  const t = emptyTally()
+  for (const s of students) t[overallOf(s, blankMode)]++
+  return t
+}
+const withLevel = (t: Tally) => t.b1 + t.b2 + t.b3 + t.b4
+type TrendStudent = Countable & DemoRow
+type TrendState = { status: 'loading' } | { status: 'done'; rows: MathTrendRow[] } | { status: 'error'; message: string }
+
 function summarize(students: TreeStudent[], unitNames: string[], blankMode: BlankMode): Summary {
   const overall = emptyTally()
   const units: Record<string, Tally> = {}
@@ -87,7 +108,7 @@ function RollupCell({ t, sticky }: { t: Tally; sticky?: boolean }) {
   )
 }
 
-export default function MathRollupTree({ rows, cycle, showAll = false }: { rows: MathRollupRow[]; cycle: string | null; showAll?: boolean }) {
+export default function MathRollupTree({ rows, cycle, cycles = [], showAll = false }: { rows: MathRollupRow[]; cycle: string | null; cycles?: ReportCycle[]; showAll?: boolean }) {
   const { schools: allSchools, unitNames } = useMemo(() => {
     const byKey = new Map<string, TreeStudent>()
     const unitOrder = new Map<string, number>()
@@ -233,8 +254,140 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
   const colCount = 3 + unitNames.length
   const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
+  // ── Charts. Donut: overall Achievement Level of every student the tree currently shows (filters +
+  // Blanks applied). Bars: the same, once per cycle — each bar is what the tree shows with THAT cycle
+  // selected (that cycle's tasks, results recorded in it). The all-cycles feed loads after the tree.
+  const scopeLabel = cycles.find((c) => c.cycleGroupId === cycle)?.name ?? 'Current'
+  const donut = useMemo(() => {
+    const t = tallyOverall(schools.flatMap((s) => s.students), blankMode)
+    const total = withLevel(t)
+    let acc = 0
+    const slices = BANDS.map((b) => {
+      const count = t[b.cls]
+      const startPct = total ? (acc / total) * 100 : 0
+      acc += count
+      const endPct = total ? (acc / total) * 100 : 0
+      return { ...b, color: BAND_HEX[b.cls], count, pct: total ? (count / total) * 100 : 0, startPct, endPct }
+    })
+    const gradient = total
+      ? slices.filter((s) => s.count > 0).map((s) => `${s.color} ${s.startPct.toFixed(2)}% ${s.endPct.toFixed(2)}%`).join(', ')
+      : 'var(--border) 0% 100%'
+    return { slices, total, gradient, t }
+  }, [schools, blankMode])
+
+  const [trend, setTrend] = useState<TrendState>({ status: 'loading' })
+  useEffect(() => {
+    let live = true
+    loadMathTrend()
+      .then((res) => { if (live) setTrend(res.error ? { status: 'error', message: res.error } : { status: 'done', rows: res.rows }) })
+      .catch(() => { if (live) setTrend({ status: 'error', message: 'Could not load the by-cycle results. Please reload the page.' }) })
+    return () => { live = false }
+  }, [])
+  const trendByCycle = useMemo(() => {
+    const byCycle = new Map<string, Map<string, TrendStudent>>()
+    if (trend.status !== 'done') return byCycle
+    for (const r of trend.rows) {
+      let students = byCycle.get(r.cycleGroupId)
+      if (!students) byCycle.set(r.cycleGroupId, (students = new Map()))
+      let s = students.get(r.studentKey)
+      if (!s) {
+        s = {
+          grade: r.grade, gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+          ipp: r.mathIPP, eligible: r.mathEligible, units: new Map(),
+        }
+        students.set(r.studentKey, s)
+      }
+      if (r.unitName) s.units.set(r.unitName, { taskCount: r.taskCount, scored: r.scoredCount, canDo: r.canDoCount })
+    }
+    return byCycle
+  }, [trend])
+  // Same window rule as the Reading/Writing chart: up to 6 cycles, oldest → newest, and the SELECTED
+  // cycle is always the rightmost bar (no selection = through the most recent started cycle).
+  const cycleBars = useMemo(() => {
+    const idx = cycles.findIndex((c) => c.cycleGroupId === cycle)
+    const shown = (idx >= 0 ? cycles.slice(0, idx + 1) : cycles).slice(-6)
+    return shown.map((c) => {
+      const students = [...(trendByCycle.get(c.cycleGroupId)?.values() ?? [])].filter(pass)
+      const t = tallyOverall(students, blankMode)
+      return { id: c.cycleGroupId, label: c.name, t, total: withLevel(t) }
+    })
+  }, [cycles, cycle, trendByCycle, pass, blankMode])
+  const cycleMax = Math.max(1, ...cycleBars.map((b) => b.total))
+  const noLevelNote = (t: Tally) =>
+    [t.ipp ? `${t.ipp} IPP` : null, t.none ? `${t.none} no data` : null].filter(Boolean).join(' · ')
+
   return (
     <div className="math-entry">
+      {/* Data display first, controls second, tree third — same order as every other report. */}
+      <div className="cohort-charts">
+        <div className="chart-card">
+          <div className="chart-title">{scopeLabel} achievement distribution</div>
+          <div className="donut-wrap">
+            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
+              <div className="donut-hole">
+                <div className="donut-total">{donut.total}</div>
+                <div className="donut-label">STUDENTS</div>
+              </div>
+            </div>
+            <ul className="donut-legend">
+              {donut.slices.map((s) => (
+                <li key={s.cls}>
+                  <span className="swatch" style={{ background: s.color }} />
+                  <span className="legend-name">{s.name}</span>
+                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {donut.total === 0 ? <div className="muted chart-empty">No students with an overall level match.</div> : null}
+          {noLevelNote(donut.t) ? (
+            <div className="muted small chart-empty">Not in the chart (no overall level): {noLevelNote(donut.t)}.</div>
+          ) : null}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-title">Achievement by cycle</div>
+          {trend.status === 'loading' ? (
+            <div className="muted chart-empty">Loading results by cycle…</div>
+          ) : trend.status === 'error' ? (
+            <div className="muted chart-empty">Couldn&apos;t load the by-cycle chart. {trend.message}</div>
+          ) : cycleBars.length === 0 ? (
+            <div className="muted chart-empty">No cycles have started yet this year.</div>
+          ) : (
+            <>
+              <div className="monthbars">
+                {cycleBars.map((bar) => (
+                  <div key={bar.id} className="monthbar">
+                    <div className="monthbar-stack">
+                      {BANDS.map((b) => {
+                        const v = bar.t[b.cls]
+                        if (!v) return null
+                        return (
+                          <div
+                            key={b.cls}
+                            className="monthbar-seg"
+                            style={{ height: `${(v / cycleMax) * 100}%`, background: BAND_HEX[b.cls] }}
+                            title={`${b.name}: ${v}`}
+                          />
+                        )
+                      })}
+                    </div>
+                    <div className="monthbar-label" title={`${bar.total} with a level${noLevelNote(bar.t) ? ` · ${noLevelNote(bar.t)}` : ''}`}>
+                      {bar.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <ul className="bar-legend">
+                {BANDS.map((b) => (
+                  <li key={b.cls}><span className="swatch" style={{ background: BAND_HEX[b.cls] }} />{b.name}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="mtoolbar">
         <span className="muted">Summarize by</span>
         <div className="subject-toggle" style={{ margin: 0 }}>

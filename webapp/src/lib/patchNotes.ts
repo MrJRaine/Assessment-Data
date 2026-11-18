@@ -27,7 +27,14 @@ export const PATCH_NOTES: PatchNote[] = [
     date: '2026-11-13',
     kind: 'feature',
     summary:
-      'The Reading, Writing, Math and RWM summaries now have a "Show filters" section: trim the whole summary — counts, charts and drill-downs together — by grade, gender or self-identification (and, for Reading and Writing, language of instruction). The student list adds the language filter too, and a "Collapse all" button closes every open branch on the summary trees.',
+      'The Reading, Writing, Math and RWM summaries now have a "Show filters" section: trim the whole summary — counts, charts and expanded roster views together — by grade, gender or self-identification (and, for Reading and Writing, language of instruction). The student list adds the language filter too, and a "Collapse all" button closes every open branch on the summary trees. Your filter choices now stay in place when you change the cycle or move between reports.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-18',
+    kind: 'feature',
+    summary:
+      'The Math summary now opens with the same two charts as Reading and Writing: a donut of students at each overall achievement level, and bars showing that breakdown for each cycle. Both follow your filters.',
   },
   {
     version: '1.4.0',

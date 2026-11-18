@@ -124,6 +124,13 @@ plain Entra behaviour.
       shows Math's nearest grade and returns intact in Writing. Reset filters on any report clears
       it for all of them. A new browser tab starts clean.
 
+- [ ] **Math charts** (2026-11-18 — run
+      [tvf_StudentCohortMathTrend.sql](../sql/security/tvf_StudentCohortMathTrend.sql) on dev first,
+      or the bars card says it couldn't load): the donut total + slices equal the tree's Overall
+      column for what's shown (TCRCE/school row hover gives the same level counts); each cycle bar
+      equals the donut you get by selecting that cycle; both follow the filters and Blanks; the
+      selected cycle is the rightmost bar; IPP / no-data counts are named under the donut.
+
 ## 6. Math name/display fixes
 
 - [X] **Entry grid**: student columns show first name over full last name (two lines),
