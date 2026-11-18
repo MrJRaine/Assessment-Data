@@ -78,6 +78,23 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   unit cells, and the data source — the tree feed (`tvf_StudentCohortMathAll`) is unit-grain counts
   only; task grain exists only in the per-group feed (`tvf_StudentCohortMath`), so this needs either a
   task-grain roll-up feed or a client roll-up of the per-group rows. Needs the 50-ft proposal first.
+- **Math regional "pick your homerooms" report, for targeting PD (user 2026-11-18, NOT yet triaged to
+  a release).** User's words: "a regional report that lets me select a grade level for math and then
+  select specific homerooms that I can click checkboxes to include them in the report and create
+  essentially a bespoke roll up tree with just those homerooms so that we can better target PD to the
+  teachers that are coming in rather than the general whole region data set. The report would show all
+  of the tasks within the given time period (Current/Cycles) and the rolled up performance of each
+  homeroom and then a roll up at the top for the whole active data set." So: pick ONE math grade ->
+  tick homerooms (across schools, region-wide) -> a tree of just those homerooms; columns/rows = every
+  task in the selected period (Current or a cycle); one roll-up per homeroom + a top roll-up over the
+  whole ticked set. Purpose = PD sessions built around the teachers attending. *My reading,
+  unconfirmed:* "regional" = Regional Analyst audience (who else sees it is the user's call — access
+  must follow StaffSchoolAccess per school, no region-wide branch); task-grain like the item above, so
+  the two likely share one task-grain feed; "Current" for Math is current-year (task x grade x month
+  model, [[project_current_mode_semantics]]). *Open before building:* audience/roles; what a task cell
+  shows (% can-do vs band); whether Blanks mode + demographic filters apply; whether a selection can be
+  saved/named or is per-visit; split-grade homerooms (a 2/3 class under a grade-2 pick); whether
+  teacher names show on the homeroom rows. Needs the 50-ft proposal first.
 
 - **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
   per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
