@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CohortStudent, AchievementBand, ReportCycle } from '@/lib/data'
 import CohortCharts from './CohortCharts'
+import { readSharedFilters, writeSharedFilters, snapMin, snapMax } from './sharedFilters'
 import { traitsInOrder, type WritingTraitKey } from '@/lib/writingTraits'
 import { useTraitOrder, TraitOrderToggle } from '@/components/TraitOrderToggle'
 
@@ -206,12 +207,12 @@ export default function CohortView({
   const minOrd = grades.length ? grades[0].ord : 0
   const maxOrd = grades.length ? grades[grades.length - 1].ord : 0
 
-  const [expanded, setExpanded] = useState(false)
-  const [gradeMin, setGradeMin] = useState(minOrd)
-  const [gradeMax, setGradeMax] = useState(maxOrd)
-  const [gender, setGender] = useState('All')
-  const [african, setAfrican] = useState<Tri>('All')
-  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const [expanded, setExpandedRaw] = useState(false)
+  const [gradeMin, setGradeMinRaw] = useState(minOrd)
+  const [gradeMax, setGradeMaxRaw] = useState(maxOrd)
+  const [gender, setGenderRaw] = useState('All')
+  const [african, setAfricanRaw] = useState<Tri>('All')
+  const [indigenous, setIndigenousRaw] = useState<Tri>('All')
   const [hr, setHr] = useState<Set<string>>(new Set())
   const [prog, setProg] = useState<Set<string>>(new Set())
   const [sch, setSch] = useState<Set<string>>(new Set())
@@ -221,7 +222,24 @@ export default function CohortView({
   // Language of Assessment ('English' | 'French'). The cohort stacks one row per student × language,
   // so this filter trims a dual-language student to the selected language's row(s); a NULL-language
   // (unassessed) row only shows with no language selected.
-  const [langSel, setLangSel] = useState<Set<string>>(new Set())
+  const [langSel, setLangSelRaw] = useState<Set<string>>(new Set())
+  // Cross-report filters (2026-11-18): every USER change is mirrored into the tab-wide shared store
+  // (sharedFilters.ts) so the summary trees and the other reports pick it up. The *Raw setters are
+  // for the mount-time restore only — restoring must never write back, or a range snapped to THIS
+  // report's grades would overwrite the wider range the viewer actually chose elsewhere.
+  const setExpanded = (v: boolean) => { setExpandedRaw(v); writeSharedFilters({ open: v }) }
+  const setGradeMin = (v: number) => { setGradeMinRaw(v); writeSharedFilters({ gradeMin: v === minOrd ? null : v }) }
+  const setGradeMax = (v: number) => { setGradeMaxRaw(v); writeSharedFilters({ gradeMax: v === maxOrd ? null : v }) }
+  const setGender = (v: string) => { setGenderRaw(v); writeSharedFilters({ gender: v }) }
+  const setAfrican = (v: Tri) => { setAfricanRaw(v); writeSharedFilters({ african: v }) }
+  const setIndigenous = (v: Tri) => { setIndigenousRaw(v); writeSharedFilters({ indigenous: v }) }
+  // The trees' language filter is single-choice (All / EN / FR); the list's is a chip set. One chip
+  // selected maps onto EN/FR; none or both maps onto All.
+  const setLangSel = (s: Set<string>) => {
+    setLangSelRaw(s)
+    const only = s.size === 1 ? [...s][0] : null
+    writeSharedFilters({ lang: only === 'English' ? 'EN' : only === 'French' ? 'FR' : 'All' })
+  }
   // Assessable-only (default ON when a scope is known): narrow the table + total to the subject's
   // assessed grades. The grade range comes from the window metadata (config-driven).
   const [assessableOnly, setAssessableOnly] = useState(true)
@@ -283,17 +301,31 @@ export default function CohortView({
     const p = readCohortFilters()
     const schoolIds = allSchools.map((s) => s.id)
     const achKeys = [...orderedBands.map((b) => String(b.code)), 'ipp', 'nodata']
-    if (typeof p.expanded === 'boolean') setExpanded(p.expanded)
-    if (typeof p.gradeMin === 'number') setGradeMin(Math.min(Math.max(p.gradeMin, minOrd), maxOrd))
-    if (typeof p.gradeMax === 'number') setGradeMax(Math.min(Math.max(p.gradeMax, minOrd), maxOrd))
-    if (p.gender === 'All' || (p.gender && genders.includes(p.gender))) setGender(p.gender)
-    if (p.african === 'All' || p.african === 'Yes' || p.african === 'No') setAfrican(p.african)
-    if (p.indigenous === 'All' || p.indigenous === 'Yes' || p.indigenous === 'No') setIndigenous(p.indigenous)
+    // Cross-report filters come from the shared store when it has them (2026-11-18); the list's own
+    // save is only the fallback for a tab that predates the shared store.
+    const sh = readSharedFilters()
+    const ords = grades.map((g) => g.ord)
+    const isTri = (v: unknown): v is Tri => v === 'All' || v === 'Yes' || v === 'No'
+    const open = typeof sh.open === 'boolean' ? sh.open : p.expanded
+    if (typeof open === 'boolean') setExpandedRaw(open)
+    const gMin = 'gradeMin' in sh ? sh.gradeMin : p.gradeMin
+    const gMax = 'gradeMax' in sh ? sh.gradeMax : p.gradeMax
+    setGradeMinRaw(snapMin(gMin, ords))
+    setGradeMaxRaw(snapMax(gMax, ords))
+    const g = sh.gender ?? p.gender
+    if (g === 'All' || (g && genders.includes(g))) setGenderRaw(g)
+    const af = sh.african ?? p.african
+    if (isTri(af)) setAfricanRaw(af)
+    const ind = sh.indigenous ?? p.indigenous
+    if (isTri(ind)) setIndigenousRaw(ind)
     if (p.hr) setHr(new Set(p.hr.filter((v) => allHomerooms.includes(v))))
     if (p.prog) setProg(new Set(p.prog.filter((v) => allPrograms.includes(v))))
     if (p.sch) setSch(new Set(p.sch.filter((v) => schoolIds.includes(v))))
     if (p.ach) setAch(new Set(p.ach.map(String).filter((v) => achKeys.includes(v))))
-    if (p.lang) setLangSel(new Set(p.lang.filter((v) => allLangs.includes(v))))
+    const shLang = sh.lang === 'EN' ? 'English' : sh.lang === 'FR' ? 'French' : null
+    if (shLang && allLangs.includes(shLang)) setLangSelRaw(new Set([shLang]))
+    else if (sh.lang === 'All') setLangSelRaw(new Set())
+    else if (p.lang) setLangSelRaw(new Set(p.lang.filter((v) => allLangs.includes(v))))
     if (p.sortKey && (SORTABLE_HEADERS as string[]).includes(p.sortKey)) {
       setSortKey(p.sortKey as SortKey)
       setSortDir(p.sortDir === 'desc' ? 'desc' : 'asc')
@@ -522,7 +554,7 @@ export default function CohortView({
             Participating grades only
           </label>
         ) : null}
-        <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
+        <button className="btn-ghost" onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide filters' : 'Show filters'}
         </button>
         <button className="btn-ghost" onClick={reset}>

@@ -38,6 +38,17 @@ with `0.3.0`, so earlier detail is approximate.
   everyone without an explicit Yes, on the summary trees, the Student list, and RWM. Indigenous
   Descent mirrors it (ruled 2026-11-18): **Not Yes** = an answered No or never answered. The filter
   labels now read **Self-ID African Descent** and **Self-ID Indigenous Descent**.
+- **Report filters carry across cycles and across reports.** The summary trees held their filters
+  in memory only and are rebuilt on every cycle change, so a selection reverted to defaults. One
+  saved filter set per browser tab (cleared when the tab closes) is now shared by the Reading,
+  Writing, RWM and Math summary trees and the Reading/Writing Student list: **Grade range, Gender,
+  both Self-ID filters** carry everywhere; **Language of Assessment** carries between Reading and
+  Writing; the **Blanks** mode carries between Math and RWM (and is still left alone by Reset
+  filters); the filter panel stays open or closed as you left it. A grade range is fitted to each
+  report's own grades without overwriting what you chose (Grade 7–9 picked in Writing shows Math's
+  nearest grade, and comes back as 7–9 in Writing). A saved Gender/Self-ID choice is not applied on
+  a report that cannot show that filter. The Student list's School, Homeroom, Program and
+  Achievement chips stay its own; the RWM student list's chip filters are unchanged. Web only.
 - **"Reset" is now "Reset filters"** on every report filter bar (Reading/Writing/RWM summary trees
   and the Student list; the RWM student list already said so) — the bare word didn't say what it
   reset, sitting beside "Reset sort order".
