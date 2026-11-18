@@ -97,8 +97,8 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   share of students who can do the task — user's exact words: "percentage, yes, omitting anyone with
   an IPP in that field, and omitting anyone who has an unconfirmed IPP." CORRECTED 2026-11-18 (I
   first recorded this as "omit every Math-IPP student = the existing rule"; the user: "That is not
-  what I said and it is not the existing math report rule" — both true). *My corrected reading, to be
-  CONFIRMED before building:* "that field" = the TASK cell — a CONFIRMED-IPP student is left out of a
+  what I said and it is not the existing math report rule" — both true). Corrected reading, ACCEPTED by
+  the user 2026-11-18 ("that's better"): "that field" = the TASK cell — a CONFIRMED-IPP student is left out of a
   task's % only for the tasks their plan deletes, and still counts on every other task; a student with
   an UNCONFIRMED IPP is left out of every task. The existing rule is in [[math-ipp-display-rules]]
   (confirmed IPP COUNTS with deleted outcomes dropped from the numerator; unresolved = unmeasured) —
