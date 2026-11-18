@@ -32,6 +32,19 @@ several round-trips: unguarded migrations, then missing GO terminators, then pro
   a maybe-absent column is wrapped in `EXEC('…')` so it doesn't PARSE-fail on an already-migrated warehouse
   (Fabric parses the whole batch up front — guards don't stop the parse).
 
+- **LIVE IS NOT THE GIT TAG — verify the bundle's DEPENDENCIES exist on the target before hand-over
+  (2026-11-18, the 1.4.0 live deploy).** I scoped deploy_1.4.0 from `git diff v1.3.0..HEAD -- sql/` and
+  assumed live matched the tag. It didn't: `StudentExpectedAssessment` + the `usp_RebuildRosterMembership`
+  step that fills it were built on dev 2026-10-20 but never made it into the 1.3.0 live bundle. Six
+  functions read the table, so their CREATEs failed (Msg 208) AFTER their DROPs ran — Reading/Writing
+  report functions were GONE on live for ~3 minutes until a prerequisite script went in. Two rules:
+  (1) for every table/view/function a bundled object READS, either find it in an earlier LIVE bundle
+  file (grep `sql/deploy/live_*`) or hand the user a read-only existence check
+  (`sys.objects WHERE name IN (...)`) to run on the target FIRST — a dev-only script under
+  `sql/deploy/live_X.Y.Z/` with a date in its name is NOT evidence it ran on live; (2) DROP+CREATE of a
+  LIVE object is only safe when the CREATE cannot fail on a missing dependency — the pre-check is what
+  makes it safe.
+
 **Exception:** `CREATE TABLE` for genuinely-new tables is intentionally run-ONCE, not guarded — you can't
 DROP a table that will hold data. Such a stage errors "already exists" on a warehouse that already has them
 (e.g. dev) — that's expected; it runs clean on the fresh target (live). Say so, don't try to make it idempotent.

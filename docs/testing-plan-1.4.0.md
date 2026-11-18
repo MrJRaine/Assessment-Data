@@ -117,14 +117,14 @@ plain Entra behaviour.
 - [X] **Labels** (2026-11-18): every Self-ID filter reads "… Descent" with All / Yes / Not Yes,
       and every filter bar's reset button reads "Reset filters".
 
-- [ ] **Filters carry over** (2026-11-18): set Grade + Gender + a Self-ID filter on one summary
+- [X] **Filters carry over** (2026-11-18): set Grade + Gender + a Self-ID filter on one summary
       tree, then (a) change the cycle, (b) switch Reading → Writing → Math → RWM, (c) switch
       Summary ↔ Student list — the selection and the open filter panel follow each time. Language
       follows Reading ↔ Writing; Blanks follows Math ↔ RWM. A Writing grade range above Grade 5
       shows Math's nearest grade and returns intact in Writing. Reset filters on any report clears
       it for all of them. A new browser tab starts clean.
 
-- [ ] **Math charts** (2026-11-18 — run
+- [X] **Math charts** (2026-11-18 — run
       [tvf_StudentCohortMathTrend.sql](../sql/security/tvf_StudentCohortMathTrend.sql) on dev first,
       or the bars card says it couldn't load): the donut total + slices equal the tree's Overall
       column for what's shown (TCRCE/school row hover gives the same level counts); each cycle bar
