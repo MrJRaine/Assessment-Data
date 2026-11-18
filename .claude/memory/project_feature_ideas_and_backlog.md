@@ -113,7 +113,11 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   HOW THE EXISTING MATH CLASS VIEW ALREADY HANDLES THE TASK % (read 2026-11-18,
   `reports/math/[groupKey]/MathCohortView.tsx` `taskPct` + `mathModel.ts` `buildMarks`): identical
   formula — can-do / cells marked 0 or 1. (a) BLANKS MODE DOES NOT TOUCH IT: `blankMode` only feeds
-  the unit/student averages (`unitStat`), never the per-task %. (b) A confirmed-IPP student's
+  the unit/student averages (`unitStat`), never the per-task %. Same in the summary tree's expanded
+  roster view (`MathRollupTree.tsx` `taskSummary`: yes / (yes + no)). What DOES move with the Blanks
+  toggle: every unit %, Overall %, the tree's % Meeting+ cells, the donut and the by-cycle bars. (The
+  user, 2026-11-18, read my "blanks don't affect the task %" as "blanks don't affect percentages" —
+  say WHICH cells, by name, every time.) (b) A confirmed-IPP student's
   unmarked cells become 'ipp' and drop out; their marked cells count. (c) It is fed `g.students` —
   ALL the group's students — so an UNCONFIRMED-IPP student's existing 0/1 marks DO count in the task
   % there (the entry gate blocks NEW marks, but marks saved before the flag remain). TWO DIVERGENCES
