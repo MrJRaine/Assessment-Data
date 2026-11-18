@@ -120,9 +120,12 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   say WHICH cells, by name, every time.) (b) A confirmed-IPP student's
   unmarked cells become 'ipp' and drop out; their marked cells count. (c) It is fed `g.students` —
   ALL the group's students — so an UNCONFIRMED-IPP student's existing 0/1 marks DO count in the task
-  % there (the entry gate blocks NEW marks, but marks saved before the flag remain). TWO DIVERGENCES
-  from the user's rulings to put to the user as questions, both behaviours named: ruling 3 (Blanks
-  applies) vs (a); ruling 7 (unconfirmed IPP out of every task) vs (c).
+  % there (the entry gate blocks NEW marks, but marks saved before the flag remain). (a) WAS A DEFECT — user
+  2026-11-18: the Blanks setting should always have carried into the nested table's task cells.
+  FIXED on dev for 1.5.0 (commit `3785ec7`): both views now use the shared `taskStat` in
+  `mathModel.ts` — count-as-0 = can-do / (can-do + cannot + not scored); IPP cells out in both modes.
+  The homeroom report's task cells MUST use `taskStat` too (ruling 3 settled). STILL OPEN, to put to
+  the user with both behaviours named: ruling 7 (unconfirmed IPP out of every task) vs (c).
   *My reading, unconfirmed:* task-grain like the item above, so the two likely share one
   task-grain feed; "Current" for Math is current-year (task x grade x month model,
   [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.
