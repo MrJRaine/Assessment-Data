@@ -87,14 +87,18 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   homeroom and then a roll up at the top for the whole active data set." So: pick ONE math grade ->
   tick homerooms (across schools, region-wide) -> a tree of just those homerooms; columns/rows = every
   task in the selected period (Current or a cycle); one roll-up per homeroom + a top roll-up over the
-  whole ticked set. Purpose = PD sessions built around the teachers attending. *My reading,
-  unconfirmed:* "regional" = Regional Analyst audience (who else sees it is the user's call — access
-  must follow StaffSchoolAccess per school, no region-wide branch); task-grain like the item above, so
-  the two likely share one task-grain feed; "Current" for Math is current-year (task x grade x month
-  model, [[project_current_mode_semantics]]). *Open before building:* audience/roles; what a task cell
-  shows (% can-do vs band); whether Blanks mode + demographic filters apply; whether a selection can be
-  saved/named or is per-visit; split-grade homerooms (a 2/3 class under a grade-2 pick); whether
-  teacher names show on the homeroom rows. Needs the 50-ft proposal first.
+  whole ticked set. Purpose = PD sessions built around the teachers attending.
+  **RULED by the user 2026-11-18:** (1) AUDIENCE = Regional Analyst ONLY "to start" (access still via
+  per-school StaffSchoolAccess rows — no region-wide branch); (2) TASK CELL = a % with colour-coding
+  "according to achievement level"; (3) FILTERS apply — yes (Blanks mode + the demographic filters);
+  (4) SELECTIONS are fresh each visit "to start for now" (no saved/named sets yet); (5) SPLIT
+  HOMEROOMS show under EVERY grade they hold, but ONLY the students of the picked grade enter the
+  roll-up; (6) rows are labelled by the HOMEROOM IDENTIFIER only — no teacher names.
+  *My reading, unconfirmed:* the % = share of students who can do the task; the colour thresholds =
+  the same band cut-offs the Math unit cells already use (math-team palette — do NOT re-propose the
+  standard palette, see item 1 above); task-grain like the item above, so the two likely share one
+  task-grain feed; "Current" for Math is current-year (task x grade x month model,
+  [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.
 
 - **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
   per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
