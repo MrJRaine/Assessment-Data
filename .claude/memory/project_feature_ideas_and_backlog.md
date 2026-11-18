@@ -66,6 +66,19 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # OPEN — near-term (not release-bound)
 
+- **Math report: expand a unit to see task-level achievement roll-ups when filtered to ONE grade
+  (user 2026-11-18, NOT yet triaged to a release).** User's words: "when we filter down to a single
+  grade in the math report … we can then expand the units to see the achievement roll ups of the
+  individual tasks." So: on the Math summary tree, once the Grade filter is narrowed to a single grade,
+  each unit column/row becomes expandable into its individual tasks, each showing its own achievement
+  roll-up. *My reading, unconfirmed:* single-grade is the gate because tasks are grade-specific (a
+  multi-grade view has no common task set); the roll-up per task would be the share of students who
+  can do it (tasks are binary), shown the same way the unit cells are. *Open before building:* what
+  the per-task cell shows (% can-do vs a band), whether it respects the Blanks mode + filters like the
+  unit cells, and the data source — the tree feed (`tvf_StudentCohortMathAll`) is unit-grain counts
+  only; task grain exists only in the per-group feed (`tvf_StudentCohortMath`), so this needs either a
+  task-grain roll-up feed or a client roll-up of the per-group rows. Needs the 50-ft proposal first.
+
 - **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
   per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
   separate lists by their program; they should be ONE list per section on the page. User wants this
