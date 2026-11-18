@@ -1,5 +1,9 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortMathAll  (INLINE table-valued function)
+ * Modified: 2026-11-18 — + Gender / SelfIDAfrican / SelfIDIndigenous outputs (Math summary-tree
+ *          demographic filter section, in lockstep with the Reading/Writing/RWM feeds of 2026-11-10).
+ *          Taken from the SAME DimStudent version that supplies School/Grade/Homeroom (frozen for
+ *          attributed rows, current otherwise). Scope, grain and counts unchanged.
  * Modified: 2026-11-17 — + IsChartEligibleMath output: unresolved math IPPs are unmeasured (no band),
  *          matching Reading/Writing (user ruling); the marks stay visible.
  * Purpose: READ-ONLY feed for the Reports > Math OVERSIGHT roll-up tree (math-reports #2,
@@ -99,13 +103,15 @@ RETURN
     -- cycle (the "Current" view) everyone anchors on the current version, as before.
     AttrStudents AS (
         -- cycle selected, assessed: attributed by the latest result's frozen version
-        SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID
+        SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous
         FROM LatestMathTouch lt
         INNER JOIN DimStudent fv ON fv.StudentKey = lt.FactStudentKey
         WHERE lt.rn = 1 AND @CycleGroupID IS NOT NULL
         UNION ALL
         -- current students: ALL of them with no cycle selected; the unassessed ones with a cycle
-        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous
         FROM DimStudent s
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
           AND (@CycleGroupID IS NULL
@@ -118,6 +124,9 @@ RETURN
         a.GroupKey                        AS HomeroomKey,   -- the homeroom's tvf_StudentCohortMath key
         a.SchoolID,
         sch.SchoolName,
+        a.Gender,                                           -- summary-tree demographic filters (2026-11-18)
+        a.SelfIDAfrican,
+        a.SelfIDIndigenous,
         ipp.IsIPP                         AS MathIPPStatus,
         -- Measured flag (2026-11-17): 0 = confirmed OR unresolved IPP -> no band anywhere (the client
         -- can't tell "no IPP row" from "unresolved" via MathIPPStatus — both NULL). MAX() only to stay
@@ -154,7 +163,9 @@ RETURN
                   WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1
                     AND e.StudentKey = a.StudentKey)
       )
-    GROUP BY a.StudentKey, a.Grade, a.Homeroom, a.GroupKey, a.SchoolID, sch.SchoolName, ipp.IsIPP, t.UnitName
+    GROUP BY a.StudentKey, a.Grade, a.Homeroom, a.GroupKey, a.SchoolID, sch.SchoolName,
+             a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous,   -- constant per StudentKey (no MAX: BIT)
+             ipp.IsIPP, t.UnitName
 );
 GO
 

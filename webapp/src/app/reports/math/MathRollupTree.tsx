@@ -10,6 +10,9 @@ import {
 } from './mathModel'
 import { BandCell, TaskCell } from './mathCells'
 import { loadMathGroup } from './actions'
+import { demoPass, gradeRank, type DemoFilter, type Tri } from '../rollupModel'
+
+type DemoRow = { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }
 
 // ── Reports > Math OVERSIGHT roll-up tree (math-reports #2, Phase 1). Replaces the card picker for
 // Administrator / SpecialistTeacher / RegionalAnalyst; teachers keep the cards.
@@ -34,6 +37,9 @@ interface TreeStudent {
   schoolId: string
   ipp: boolean
   eligible: boolean // measured (no confirmed OR unresolved IPP) — unmeasured students get no band
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   units: Map<string, UnitCounts>
 }
 interface School { id: string; name: string; students: TreeStudent[] }
@@ -81,7 +87,7 @@ function RollupCell({ t, sticky }: { t: Tally; sticky?: boolean }) {
 }
 
 export default function MathRollupTree({ rows, cycle, showAll = false }: { rows: MathRollupRow[]; cycle: string | null; showAll?: boolean }) {
-  const { schools, unitNames } = useMemo(() => {
+  const { schools: allSchools, unitNames } = useMemo(() => {
     const byKey = new Map<string, TreeStudent>()
     const unitOrder = new Map<string, number>()
     const schoolNames = new Map<string, string>()
@@ -90,7 +96,9 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
       if (!s) {
         s = {
           key: r.studentKey, grade: r.grade, homeroom: r.homeroom, homeroomKey: r.homeroomKey,
-          schoolId: r.schoolId, ipp: r.mathIPP, eligible: r.mathEligible, units: new Map(),
+          schoolId: r.schoolId, ipp: r.mathIPP, eligible: r.mathEligible,
+          gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+          units: new Map(),
         }
         byKey.set(r.studentKey, s)
         schoolNames.set(r.schoolId, r.schoolName ?? r.schoolId)
@@ -118,9 +126,56 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
 
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
   const [blankMode, setBlankMode] = useState<BlankMode>('exclude')
+
+  // ── Filter section (2026-11-18): the same demographic filters as the Reading/Writing/RWM trees,
+  // with the Blanks scoring toggle moved in beside them (as on RWM). Filters trim the tree rows,
+  // the counts, every % cell and the drill's student rows together. Gender / Self-ID are OFFERED
+  // only when the feed carries them (deploy_math_filter_demographics_2026-11-18.sql).
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const allStudents = useMemo(() => allSchools.flatMap((s) => s.students), [allSchools])
+  const gradeOpts = useMemo(
+    () => [...new Set(allStudents.map((s) => s.grade))].sort((a, b) => gradeRank(a) - gradeRank(b)),
+    [allStudents],
+  )
+  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
+  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
+  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
+  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
+  const [gender, setGender] = useState('All')
+  const [african, setAfrican] = useState<Tri>('All')
+  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const genderOpts = useMemo(
+    () => [...new Set(allStudents.map((s) => s.gender).filter(Boolean) as string[])].sort(),
+    [allStudents],
+  )
+  const hasSelfID = useMemo(
+    () => allStudents.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
+    [allStudents],
+  )
+  const anyFilter =
+    gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail ||
+    gender !== 'All' || african !== 'All' || indigenous !== 'All'
+  const resetFilters = () => {
+    setGradeMinRank(minRankAvail)
+    setGradeMaxRank(maxRankAvail)
+    setGender('All')
+    setAfrican('All')
+    setIndigenous('All')
+    // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as RWM).
+  }
+  const pass = useMemo(
+    () => demoPass({ gradeMinRank, gradeMaxRank, gender, african, indigenous } satisfies DemoFilter),
+    [gradeMinRank, gradeMaxRank, gender, african, indigenous],
+  )
+  // A school with nobody left after filtering drops out of the tree (as on the other trees).
+  const schools = useMemo(
+    () => allSchools.map((sch) => ({ ...sch, students: sch.students.filter(pass) })).filter((sch) => sch.students.length > 0),
+    [allSchools, pass],
+  )
+
   // A school admin with one school lands with it open; everyone else starts fully collapsed.
   const [openSchools, setOpenSchools] = useState<Set<string>>(
-    () => new Set(schools.length === 1 ? [schools[0].id] : []),
+    () => new Set(allSchools.length === 1 ? [allSchools[0].id] : []),
   )
   const [openNodes, setOpenNodes] = useState<Set<string>>(() => new Set())
   const [blocks, setBlocks] = useState<Record<string, BlockState>>({})
@@ -197,6 +252,10 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
             </button>
           ))}
         </div>
+        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+          {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
+        </button>
+        {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset filters</button> : null}
         <span className="spacer" />
         {/* Close-only on purpose: an "expand all" would fire every node's lazy loadMathGroup at once. */}
         <button
@@ -206,10 +265,71 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
         >
           Collapse all
         </button>
-        <button className="btn-ghost" onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}>
-          Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
-        </button>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="filter-row">
+              <select value={gradeMinRank} onChange={(e) => setGradeMinRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+              <span className="muted">to</span>
+              <select value={gradeMaxRank} onChange={(e) => setGradeMaxRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {genderOpts.length > 1 ? (
+            <div className="filter-group">
+              <label>Gender</label>
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="All">All</option>
+                {genderOpts.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasSelfID ? (
+            <>
+              <div className="filter-group">
+                <label>Self-ID African Descent</label>
+                {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
+                <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Self-ID Indigenous Descent</label>
+                {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
+                <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+            </>
+          ) : null}
+
+          <div className="filter-group">
+            <label>Blanks</label>
+            <div className="subject-toggle" style={{ margin: 0 }} title="How un-recorded tasks affect the roll-up">
+              <button className={blankMode === 'exclude' ? 'toggle-on' : ''} onClick={() => setBlankMode('exclude')}>Excluded</button>
+              <button className={blankMode === 'zero' ? 'toggle-on' : ''} onClick={() => setBlankMode('zero')}>Count as 0</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mlegend">
         <span className="grp"><strong>% Meeting or In-depth</strong></span>
@@ -238,11 +358,11 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
           <tbody>
             {showAll && schools.length > 1
               ? (() => {
-                  const allStudents = schools.flatMap((s) => s.students)
+                  const shown = schools.flatMap((s) => s.students)
                   const tOpen = openSchools.has('__TCRCE__')
-                  const ts = summarize(allStudents, unitNames, blankMode)
+                  const ts = summarize(shown, unitNames, blankMode)
                   const byGrade = new Map<string, TreeStudent[]>()
-                  for (const s of allStudents) byGrade.set(s.grade, [...(byGrade.get(s.grade) ?? []), s])
+                  for (const s of shown) byGrade.set(s.grade, [...(byGrade.get(s.grade) ?? []), s])
                   const grades = [...byGrade.entries()]
                     .map(([grade, students]) => ({ grade, students }))
                     .sort((a, b) => (GRADE_ORDER[a.grade] ?? 99) - (GRADE_ORDER[b.grade] ?? 99))
@@ -311,6 +431,7 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
                                   state={node.groupKey ? blocks[node.groupKey] : undefined}
                                   blankMode={blankMode}
                                   cycle={cycle}
+                                  pass={pass}
                                 />
                               </div>
                             </td>
@@ -331,8 +452,8 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
 
 // ── One expanded Grade/Homeroom: a block per grade (a split homeroom shows one per grade) ──────────
 function GroupBlock({
-  node, state, blankMode, cycle,
-}: { node: ChildNode; state: BlockState | undefined; blankMode: BlankMode; cycle: string | null }) {
+  node, state, blankMode, cycle, pass,
+}: { node: ChildNode; state: BlockState | undefined; blankMode: BlankMode; cycle: string | null; pass: (s: DemoRow) => boolean }) {
   if (!node.groupKey) {
     return (
       <p className="muted small" style={{ margin: 0 }}>
@@ -350,8 +471,10 @@ function GroupBlock({
       </div>
     )
   }
-  const grades = buildGrades(state.rows)
-  const marks = buildMarks(state.rows)
+  // The drill follows the tree's filters: same predicate, applied to the drill feed's own columns.
+  const rows = state.rows.filter(pass)
+  const grades = buildGrades(rows)
+  const marks = buildMarks(rows)
   const loaded = new Set(grades.map((g) => g.grade))
   const missing = node.grades.filter((g) => !loaded.has(g))
   const href = `/reports/math/${encodeURIComponent(node.groupKey)}${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ''}`

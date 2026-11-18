@@ -104,24 +104,33 @@ plain Entra behaviour.
 - [X] **Reading/Writing trees**: Show filters → Grade / Gender / Self-ID African
       Descent / Self-ID Indigenous Descent (both **Yes / Not Yes**) / Language; everything (node counts, charts, drills) trims together;
       Reset restores. Gender/Self-ID groups appear only after the SQL bundle runs.
-- [ ] **RWM tree**: same section plus the two scoring toggles moved in — **Math blanks**
+- [X] **RWM tree**: same section plus the two scoring toggles moved in — **Math blanks**
       (Excluded vs Count-as-0 re-scores the 0–3) and **All 3 areas only**. Reset leaves the
       Math-blanks mode alone (it's a scoring mode, not a filter).
 
+- [ ] **Math tree** (added 2026-11-18 — run
+      [deploy_math_filter_demographics_2026-11-18.sql](../sql/scripts/deploy_math_filter_demographics_2026-11-18.sql)
+      on dev first, or only Grade + Blanks show): Show filters → Grade / Gender / Self-ID African
+      Descent / Self-ID Indigenous Descent / **Blanks** (moved in from the toolbar). Rows, Students
+      counts, % cells and an opened group's student rows trim together; Reset filters restores but
+      leaves the Blanks mode alone.
+- [ ] **Labels** (2026-11-18): every Self-ID filter reads "… Descent" with All / Yes / Not Yes,
+      and every filter bar's reset button reads "Reset filters".
+
 ## 6. Math name/display fixes
 
-- [ ] **Entry grid**: student columns show first name over full last name (two lines),
+- [X] **Entry grid**: student columns show first name over full last name (two lines),
       columns stay narrow, long names ellipsize with full name on hover; the picker chips
       and "can't be marked" notes use full names. Two classmates with the same first name +
       last initial are now distinguishable.
-- [ ] **Sort**: math summary drill, class view, and entry grid order students by LAST name.
+- [X] **Sort**: math summary drill, class view, and entry grid order students by LAST name.
 - [ ] **Math summary drill**: scrollbars are visible on screen when the student list
       overflows (previously rendered past the right edge).
-- [ ] Math reports students-down views show "Last, First".
+- [X] Math reports students-down views show "Last, First".
 
 ## 7. Earlier 1.4.0 items (if not already satisfied)
 
-- [ ] Student-list view charts follow every filter chip (and language chip exists there).
+- [X] Student-list view charts follow every filter chip (and language chip exists there).
 - [ ] RWM colours = the standard four achievement colours everywhere in that report.
 - [ ] "Collapse all" closes every open branch on Reading/Writing/Math trees.
 

@@ -1683,6 +1683,10 @@ export interface MathCohortRow {
   result: boolean | null // latest 0/1 (BIT), or null if never marked (a blank cell)
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
   chartEligibleMath: boolean // measured (no IPP row, or resolved not-IPP) — false = confirmed OR unresolved IPP, no band
+  // Demographic filter fields (2026-11-18) — null until deploy_math_filter_demographics_2026-11-18.sql runs.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getMathCohort(upn: string, groupKey: string, cycleGroupId: string | null = null): Promise<MathCohortRow[]> {
@@ -1705,6 +1709,9 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     ExistingResult: boolean | null
     MathIPPStatus: boolean | null
     IsChartEligibleMath?: number | boolean | null
+    Gender?: string | null
+    SelfIDAfrican?: boolean | number | null
+    SelfIDIndigenous?: boolean | number | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
@@ -1731,6 +1738,9 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     // Fallback while the TVF predates IsChartEligibleMath: confirmed IPPs become unmeasured at once;
     // unresolved ones follow when the TVF rerun lands (NULL status is ambiguous without it).
     chartEligibleMath: r.IsChartEligibleMath == null ? r.MathIPPStatus !== true : toBool(r.IsChartEligibleMath) === true,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -1747,6 +1757,11 @@ export interface MathRollupRow {
   schoolName: string | null
   mathIPP: boolean
   mathEligible: boolean // measured — false = confirmed OR unresolved math IPP (no band anywhere)
+  // Demographic filter fields (2026-11-18) — null until deploy_math_filter_demographics_2026-11-18.sql
+  // runs; the tree only OFFERS the Gender / Self-ID filter groups when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   unitName: string | null
   unitOrder: number
   taskCount: number
@@ -1764,6 +1779,9 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     SchoolName: string | null
     MathIPPStatus: number | null
     IsChartEligibleMath?: number | null
+    Gender?: string | null
+    SelfIDAfrican?: boolean | number | null
+    SelfIDIndigenous?: boolean | number | null
     UnitName: string | null
     UnitOrder: number | null
     TaskCount: number
@@ -1780,6 +1798,9 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     mathIPP: r.MathIPPStatus === 1,
     // Same fallback rule as the matrix feed: without the TVF column, only confirmed IPPs are unmeasured.
     mathEligible: r.IsChartEligibleMath == null ? r.MathIPPStatus !== 1 : Number(r.IsChartEligibleMath) === 1,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
     unitName: r.UnitName ?? null,
     unitOrder: Number(r.UnitOrder ?? 0),
     taskCount: Number(r.TaskCount ?? 0),
