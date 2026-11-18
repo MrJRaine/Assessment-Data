@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortReadingAll  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleReading output (see the column comment): the tree tallies
+ *          exclude unconfirmed IPPs from every measure and name them in the hovers.
  * Purpose: READ-ONLY feed for the Reports > Reading OVERSIGHT roll-up tree (1.3.0 reports rebuild).
  *          Mirrors tvf_StudentCohortMathAll: one row per in-scope student PER READING-RESULT LANGUAGE,
  *          carrying the measure the client rolls up (School -> Grade|Homeroom, % Meeting/Exceeding) plus
@@ -7,12 +9,42 @@
  *          Counts/measure only — NO names or student numbers (privacy; the per-group student detail loads
  *          separately on expand, same pattern as Math).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, aligning this feed with the
+ *          ON-SPEC flat list (tvf_StudentCohort; user ruling 2026-11-12 — "Current" has always meant
+ *          the most current evidence available for every student): (1) with @CycleGroupID NULL the
+ *          latest-pick has NO window restriction — each student's most recent reading result ON
+ *          RECORD, any school year (the GradeSpan population gate stays current-year: who appears is
+ *          this year's assessed grades; what shows is their latest evidence, however old); the
+ *          expected/fallback NOT EXISTS probes follow the same scope so an old result isn't double-
+ *          reported as expected-only. (2) AchievementLevelCode is now really NULL for reading-IPP /
+ *          unresolved students — this header always claimed it; the band join never enforced it —
+ *          so the donut, % Meeting/Exceeding and trend match the list's chart-eligible rule.
+ * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows (fixes the Language of Assessment filter dropping
+ *          expected-but-unassessed students): the per-student language set is now EXPECTED
+ *          (StudentExpectedAssessment, cycle-scoped) UNION assessed — the same union as
+ *          tvf_StudentCohort's LangSet. An expected language with no result emits a row with
+ *          ScaleSystem set, NULL date/delta, IsExpectedOnly=1 (the client counts the STUDENT under
+ *          that language but no result); the NULL-language "No data" fallback row now only fires
+ *          when a student is neither expected nor assessed.
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters). Attributed rows carry the FROZEN version's demographics, unassessed/current
+ *          rows the current version's — same source row as the rest of the attribution.
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION (restores the documented design; server-side
+ *          patch under 1.3.0), CYCLE-SCOPED: when @CycleGroupID is set, a row WITH a result attributes
+ *          School/Grade/Homeroom from the RESULT's frozen DimStudent version (fact.StudentKey — the
+ *          version in force when it was recorded), NOT the student's current version — so a transfer
+ *          no longer moves recorded history to the new school, and a district leaver keeps their
+ *          recorded results in the cycles where they were assessed; a student with NO result in that
+ *          cycle shows from their CURRENT version ("No data", current+enrolled only), and the access
+ *          gate follows the ATTRIBUTED school. With NO cycle selected (the "Current" view) everything
+ *          anchors on the CURRENT version, as before. Non-movers are unchanged (frozen = current).
  * Region: Canada East (PIIDPA compliant)
  *
  * GRAIN — one row per (student x the language of a reading result they have this year):
  *   - a student with an EN and an FR reading result => TWO rows (ScaleSystem 'EN_Reading' / 'FR_Reading');
  *   - a student with one => ONE row; a student with NO reading result => ONE row, ScaleSystem NULL
  *     (so the tree shows them as "No data" instead of dropping them).
+ *   A mover assessed at two schools shows under EACH school that recorded a (latest-per-language) result.
  *   Reading language is DERIVED from ReadingScaleID -> DimReadingScale.ScaleSystem (the reading fact has
  *   no AssessmentLanguage column — unlike writing). Dual-language reading is real: entry routes through the
  *   section's cycle instance, whose ScaleSystem the save stores (see project_assessment_language_tracks).
@@ -23,13 +55,13 @@
  *   (code >= 3) / rows with ANY band; IPP / no-data are excluded from the % and shown in the hover.
  *
  * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst, per school via
- *   StaffSchoolAccess (identical gate to tvf_StudentCohortMathAll / the cohort TVF oversight branch). A
- *   plain teacher gets no rows; teachers keep the flat per-student cohort list.
+ *   StaffSchoolAccess, matched against the row's ATTRIBUTED school (identical gate shape to
+ *   tvf_StudentCohortMathAll). A plain teacher gets no rows; teachers keep the flat per-student list.
  *
- * @CycleGroupID NULL = all current-year Reading windows (lifetime-this-year latest); a cycle id restricts
- *   the latest-pick to that cycle's Reading instances. Grades included = the span of the selected Reading
- *   windows' MinGrade..MaxGrade (config-driven, not hardcoded), so a no-result student still appears if
- *   their grade is assessed for reading.
+ * @CycleGroupID NULL = LIFETIME most-recent reading per language ("Current" — any school year, lockstep
+ *   with tvf_StudentCohort); a cycle id restricts the latest-pick to that cycle's Reading instances.
+ *   Grades included = the span of the CURRENT-YEAR (or selected cycle's) Reading windows'
+ *   MinGrade..MaxGrade (config-driven, not hardcoded), checked against the ATTRIBUTED grade.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -60,55 +92,132 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
-    LatestReading AS (   -- latest result per (student, language) across the selected windows
-        SELECT far.StudentNumber, drs.ScaleSystem, far.ReadingDelta, far.AssessmentDate,
+    LatestReading AS (   -- latest result per (student, language) across the selected windows.
+        -- far.StudentKey is the FROZEN version the result was recorded against (insert-time
+        -- effective-date/section-school resolution) — it carries the attribution.
+        SELECT far.StudentNumber, far.StudentKey AS FactStudentKey, drs.ScaleSystem,
+               far.ReadingDelta, far.AssessmentDate,
                ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
                                   ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
         FROM FactAssessmentReading far
         INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with tvf_StudentCohort (user ruling 2026-11-12). A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
     ),
-    ReadingIPP AS (    -- one value per student (1 = reading IPP in any family, 0 = not, NULL = unresolved)
-        SELECT fsi.StudentKey, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
+    ReadingIPP AS (    -- one value per STUDENT NUMBER (1 = reading IPP in any family, 0 = not, NULL =
+        -- unresolved). Keyed by StudentNumber because attributed rows carry FROZEN StudentKeys,
+        -- which predate the IPP rows' current-version repointing.
+        SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
         FROM FactStudentIPP fsi
+        INNER JOIN DimStudent dsi ON dsi.StudentKey = fsi.StudentKey
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
-        GROUP BY fsi.StudentKey
+        GROUP BY dsi.StudentNumber
+    ),
+    -- Expected reading languages per student (cycle-scoped; config-derived from mapped-course
+    -- enrolment — see StudentExpectedAssessment), as the reading ScaleSystem the facts carry.
+    ExpectedLang AS (
+        SELECT DISTINCT sea.StudentNumber,
+               CASE sea.Language WHEN 'French' THEN 'FR_Reading' ELSE 'EN_Reading' END AS ScaleSystem
+        FROM StudentExpectedAssessment sea
+        WHERE sea.AssessmentType = 'Reading'
+          AND (@CycleGroupID IS NULL OR sea.CycleGroupID = @CycleGroupID)
+    ),
+    -- ATTRIBUTION IS CYCLE-SCOPED: with a cycle selected, an assessed row attributes to the RESULT's
+    -- frozen student version (the school/grade/homeroom that recorded it — includes movers' old-school
+    -- rows and district leavers); with NO cycle selected (the "Current" view) every row anchors on the
+    -- CURRENT version, as before — the current view reflects the schools as they are today. A
+    -- non-mover's frozen version IS their current version — identical output either way.
+    -- LANGUAGE SET (2026-11-12) = expected UNION assessed (tvf_StudentCohort's LangSet union): an
+    -- expected language with no result emits an IsExpectedOnly row from the CURRENT version (there is
+    -- no result to attribute by); the NULL-language fallback fires only when neither expected nor
+    -- assessed. The NOT EXISTS probes hit the fact directly — cheaper than re-running LatestReading
+    -- (Fabric inlines a CTE at every reference).
+    Base AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
+        SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
+               lr.ScaleSystem, lr.AssessmentDate, lr.ReadingDelta, CAST(0 AS BIT) AS IsExpectedOnly
+        FROM LatestReading lr
+        INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
+        WHERE lr.rn = 1 AND @CycleGroupID IS NOT NULL
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               lr3.ScaleSystem, lr3.AssessmentDate, lr3.ReadingDelta, CAST(0 AS BIT)
+        FROM DimStudent s
+        INNER JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        UNION ALL
+        -- expected language with NO result in it (either cycle mode): current, enrolled students
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               el.ScaleSystem, CAST(NULL AS DATE), CAST(NULL AS INT), CAST(1 AS BIT)
+        FROM DimStudent s
+        INNER JOIN ExpectedLang el ON el.StudentNumber = s.StudentNumber
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
+                          INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
+                          WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
+        UNION ALL
+        -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS VARCHAR(20)), CAST(NULL AS DATE), CAST(NULL AS INT), CAST(0 AS BIT)
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
+                          WHERE fx2.StudentNumber = s.StudentNumber
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
+          AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     )
     SELECT
-        CAST(s.StudentKey AS VARCHAR(20)) AS StudentKey,
-        s.Grade,
-        s.Homeroom,
-        s.GroupKey                        AS HomeroomKey,   -- homeroom expansion key (per-group detail)
-        s.SchoolID,
+        CAST(b.StudentKey AS VARCHAR(20)) AS StudentKey,
+        b.Grade,
+        b.Homeroom,
+        b.GroupKey                        AS HomeroomKey,   -- homeroom expansion key (per-group detail)
+        b.SchoolID,
         sch.SchoolName,
+        b.Gender,                                           -- summary-view demographic filters (2026-11-10)
+        b.SelfIDAfrican,
+        b.SelfIDIndigenous,
         ipp.IsIPP                         AS ReadingIPPStatus,
-        lr.ScaleSystem,                                     -- language of THIS result; NULL = no reading result
-        lr.AssessmentDate                 AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
-        dal.AchievementLevelCode          AS AchievementLevelCode  -- band for THIS result; NULL = none/IPP/unresolved
-    FROM DimStudent s
-    INNER JOIN DimGrade g ON g.GradeCode = s.Grade
+        -- Measured flag (2026-11-17), lockstep with the dal join below + the Group/list feeds: the
+        -- client can't tell "no IPP row" from "unresolved" via ReadingIPPStatus (both NULL), and the
+        -- tree tallies need it so unconfirmed IPPs are excluded from EVERY measure and counted in
+        -- the hovers (trait/band denominators diverged without it).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleReading,
+        b.ScaleSystem,                                      -- language of THIS row; NULL = neither expected nor assessed
+        b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
+        dal.AchievementLevelCode          AS AchievementLevelCode, -- band for THIS result; NULL = none/IPP/unresolved
+        b.IsExpectedOnly                  AS IsExpectedOnly  -- 1 = expected in this language, no result yet (counts the student, not a result)
+    FROM Base b
+    INNER JOIN DimGrade g ON g.GradeCode = b.Grade
     CROSS JOIN GradeSpan gs
-    LEFT  JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
-    LEFT  JOIN ReadingIPP ipp ON ipp.StudentKey = s.StudentKey
-    -- one row per (student, language-with-a-result); NULL when the student has no reading result
-    LEFT  JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr ON lr.StudentNumber = s.StudentNumber
+    LEFT  JOIN DimSchool sch ON sch.SchoolID = b.SchoolID
+    LEFT  JOIN ReadingIPP ipp ON ipp.StudentNumber = b.StudentNumber
     -- Achievement band for this result's delta — same bound logic as tvf_StudentCohort (mutually exclusive
     -- bounds => at most one band per delta). No delta (no result / NULL) => no band.
     LEFT  JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
-          AND lr.ReadingDelta IS NOT NULL
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
+          AND b.ReadingDelta IS NOT NULL
           AND (dal.LowerBound IS NULL
-               OR (dal.LowerOp = '>=' AND lr.ReadingDelta >= dal.LowerBound)
-               OR (dal.LowerOp = '>'  AND lr.ReadingDelta >  dal.LowerBound)
-               OR (dal.LowerOp = '='  AND lr.ReadingDelta =  dal.LowerBound))
+               OR (dal.LowerOp = '>=' AND b.ReadingDelta >= dal.LowerBound)
+               OR (dal.LowerOp = '>'  AND b.ReadingDelta >  dal.LowerBound)
+               OR (dal.LowerOp = '='  AND b.ReadingDelta =  dal.LowerBound))
           AND (dal.UpperBound IS NULL
-               OR (dal.UpperOp = '<=' AND lr.ReadingDelta <= dal.UpperBound)
-               OR (dal.UpperOp = '<'  AND lr.ReadingDelta <  dal.UpperBound)
-               OR (dal.UpperOp = '='  AND lr.ReadingDelta =  dal.UpperBound))
-    WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-      AND g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
+               OR (dal.UpperOp = '<=' AND b.ReadingDelta <= dal.UpperBound)
+               OR (dal.UpperOp = '<'  AND b.ReadingDelta <  dal.UpperBound)
+               OR (dal.UpperOp = '='  AND b.ReadingDelta =  dal.UpperBound))
+    WHERE g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
       AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                  WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
+                  WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = b.SchoolID
                     AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
 );
 GO

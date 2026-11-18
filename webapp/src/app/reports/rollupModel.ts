@@ -36,6 +36,7 @@ export type WritingTraitKey = 'conventions' | 'organization' | 'ideas' | 'langua
 export interface RollupResult {
   en: boolean // true = English track, false = French
   code: number | null // achievement band for this result; null = no band (no delta/avg)
+  date?: string | null // result date — only needed on the all-cycles trend feed
   // Writing only — the four trait scores (1–4; null = SCR/'-'/unscored) + the 4-trait average, for the
   // per-trait roll-up measures. Reading results omit these.
   traits?: { conventions: number | null; organization: number | null; ideas: number | null; language: number | null }
@@ -49,8 +50,44 @@ export interface RollupStudent {
   schoolId: string
   schoolName: string
   ipp: boolean // confirmed subject IPP — excluded from the % (not measured against the benchmark)
+  unresolved: boolean // flagged-but-unconfirmed IPP — also unmeasured; tallied separately so counts reconcile
+  // Demographics for the summary-view filters (2026-11-10). null = unknown (e.g. the TVF predates the
+  // Gender/SelfID columns) — a filter option is only OFFERED when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
+  // Expected-but-unassessed languages (2026-11-12, from the feeds' IsExpectedOnly rows): the language
+  // view's population is expected UNION assessed, so these keep an unassessed student visible under
+  // the Language of Assessment filter without inventing a phantom result.
+  expectedEN: boolean
+  expectedFR: boolean
   results: RollupResult[]
 }
+
+// ── Demographic filters on the summary tree (2026-11-10): same semantics as the student list ──
+export type Tri = 'All' | 'Yes' | 'No'
+// BOTH Self-ID filters are YES vs NOT-YES. African (user 2026-11-17): the source field is Yes / N /
+// never answered, and the ingest stores only Yes=1 (N and unanswered both land NULL) — so "not Yes"
+// is the only honest complement. Indigenous (user 2026-11-18): mirrors African by ruling — its
+// source does store an answered No (2 → 0), but "Not Yes" groups that with never-answered (NULL).
+// The UI labels the option "Not Yes"; the stored Tri value stays 'No'.
+export function yesNotYes(sel: Tri, v: boolean | null): boolean {
+  if (sel === 'All') return true
+  if (sel === 'Yes') return v === true
+  return v !== true
+}
+export interface DemoFilter {
+  gradeMinRank: number
+  gradeMaxRank: number
+  gender: string // 'All' or a value
+  african: Tri
+  indigenous: Tri
+}
+export const demoPass = (f: DemoFilter) => (s: { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }): boolean =>
+  (s.grade == null || (gradeRank(s.grade) >= f.gradeMinRank && gradeRank(s.grade) <= f.gradeMaxRank)) &&
+  (f.gender === 'All' || s.gender === f.gender) &&
+  yesNotYes(f.african, s.selfIDAfrican) &&
+  yesNotYes(f.indigenous, s.selfIDIndigenous)
 export interface RollupSchool { id: string; name: string; students: RollupStudent[] }
 export interface RollupChild {
   id: string
@@ -75,7 +112,8 @@ export interface Counts {
   bandEN: number
   meetFR: number
   bandFR: number
-  ippExcluded: number // results with a band that were left out of the % because the student is IPP
+  ippExcluded: number // results left out of the % because the student has a confirmed IPP
+  unresolvedExcluded: number // results left out because the student's IPP is flagged but unconfirmed
 }
 
 // Distinct STUDENTS (a both-languages student counts once) vs total RESULTS (counts per language), and
@@ -83,25 +121,32 @@ export interface Counts {
 // the Math roll-up's treatment. IPP results are tallied in `ippExcluded` for the hover.
 //
 // `lang` narrows the view to one language of assessment (Slice 4): a specific language counts only that
-// language's results and DROPS students with none in it (so Students/Results reflect that language's
-// population); 'All' keeps everything incl. no-result students.
+// language's results, and its student population = students ASSESSED in it UNION students EXPECTED in it
+// (2026-11-12 — an expected-but-unassessed student stays visible, landing in the "no result" count);
+// students neither assessed nor expected in that language drop. 'All' keeps everything.
 export function tally(students: RollupStudent[], lang: LangFilter = 'All'): Counts {
   const c: Counts = {
     students: 0, studentsEN: 0, studentsFR: 0, studentsNone: 0,
     results: 0, resultsEN: 0, resultsFR: 0,
-    meet: 0, band: 0, meetEN: 0, bandEN: 0, meetFR: 0, bandFR: 0, ippExcluded: 0,
+    meet: 0, band: 0, meetEN: 0, bandEN: 0, meetFR: 0, bandFR: 0, ippExcluded: 0, unresolvedExcluded: 0,
   }
   for (const s of students) {
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
-    if (lang !== 'All' && rs.length === 0) continue // not part of this language's view
+    if (lang !== 'All' && rs.length === 0 && !(lang === 'EN' ? s.expectedEN : s.expectedFR))
+      continue // neither assessed nor expected in this language — not part of its view
     c.students++
     let hasEN = false
     let hasFR = false
     for (const r of rs) {
       c.results++
       if (r.en) { c.resultsEN++; hasEN = true } else { c.resultsFR++; hasFR = true }
+      // IPP/unresolved checks come BEFORE the band check: the feeds null these students' bands, so
+      // testing code first made both groups vanish from every tally line (found 2026-11-17 — the
+      // drill and the node could not be reconciled by counting). Now: results = band + IPP +
+      // unconfirmed + band-less, every term visible in the hovers.
+      if (s.ipp) { c.ippExcluded++; continue }
+      if (s.unresolved) { c.unresolvedExcluded++; continue }
       if (r.code == null) continue
-      if (s.ipp) { c.ippExcluded++; continue } // IPP: has a mark but isn't measured against the benchmark
       c.band++
       if (r.en) c.bandEN++
       else c.bandFR++
@@ -124,13 +169,13 @@ export const pctOf = (meet: number, band: number): number | null => (band === 0 
 // % Meeting/Exceeding inputs (meet/band) AND the Mean inputs (sum/count), so a client toggle can switch
 // between them without re-querying. IPP results are excluded (not measured) and counted in ippExcluded.
 export interface MeasureStat {
-  meet: number; band: number; sum: number; count: number; ippExcluded: number
+  meet: number; band: number; sum: number; count: number; ippExcluded: number; unresolvedExcluded: number
   // Per-language breakdown for the hover tooltip (parity with reading's Counts). EN = English results.
   meetEN: number; bandEN: number; sumEN: number; countEN: number
   meetFR: number; bandFR: number; sumFR: number; countFR: number
 }
 const zeroStat = (): MeasureStat => ({
-  meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0,
+  meet: 0, band: 0, sum: 0, count: 0, ippExcluded: 0, unresolvedExcluded: 0,
   meetEN: 0, bandEN: 0, sumEN: 0, countEN: 0, meetFR: 0, bandFR: 0, sumFR: 0, countFR: 0,
 })
 export interface Measure {
@@ -148,6 +193,10 @@ export function traitMeasure(students: RollupStudent[], lang: LangFilter, key: W
       const v = r.traits?.[key]
       if (v == null) continue
       if (s.ipp) { st.ippExcluded++; continue }
+      // Unresolved IPPs are unmeasured like confirmed ones — WITHOUT this, their trait scores counted
+      // here while the band column excluded them, giving the trait %s a different denominator than
+      // the Average column (the 2026-11-17 reconciliation bug).
+      if (s.unresolved) { st.unresolvedExcluded++; continue }
       const meets = v >= MEETING_MIN
       st.band++; st.count++; st.sum += v
       if (meets) st.meet++
@@ -165,7 +214,10 @@ export function avgMeasure(students: RollupStudent[], lang: LangFilter): Measure
     const rs = lang === 'All' ? s.results : s.results.filter((r) => r.en === (lang === 'EN'))
     for (const r of rs) {
       if (r.code == null && r.avgScore == null) continue
-      if (s.ipp) { if (r.code != null) st.ippExcluded++; continue }
+      // Count the excluded RESULT (not just banded ones — the feeds null these students' bands,
+      // which previously left this counter dead) so the hover reconciles against the drill.
+      if (s.ipp) { st.ippExcluded++; continue }
+      if (s.unresolved) { st.unresolvedExcluded++; continue }
       if (r.code != null) {
         const meets = r.code >= MEETING_MIN
         st.band++; if (meets) st.meet++

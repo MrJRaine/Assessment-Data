@@ -700,15 +700,17 @@ export async function getStaffRoleOverrideList(): Promise<StaffRoleOverrideRow[]
 export interface MaintenanceWindow {
   maintenanceAt: string | null // ISO-8601 UTC, or null = no window
   message: string | null
+  setBy: string | null // lowercased owner email (LOTO) — who opened the window; null when none
 }
 export async function getMaintenanceWindow(): Promise<MaintenanceWindow> {
-  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null }>(
-    'SELECT MaintenanceAt, Message FROM dbo.AppMaintenance WHERE Id = 1',
+  const rows = await query<{ MaintenanceAt: Date | string | null; Message: string | null; SetByEmail: string | null }>(
+    'SELECT MaintenanceAt, Message, SetByEmail FROM dbo.AppMaintenance WHERE Id = 1',
   )
   const at = rows[0]?.MaintenanceAt ?? null
   return {
     maintenanceAt: at == null ? null : at instanceof Date ? at.toISOString() : new Date(at).toISOString(),
     message: rows[0]?.Message ?? null,
+    setBy: at == null ? null : (rows[0]?.SetByEmail ?? null)?.toLowerCase() ?? null,
   }
 }
 
@@ -831,9 +833,15 @@ export interface ReadingRollupRow {
   schoolId: string | null
   schoolName: string | null
   readingIPP: boolean | null // true = reading IPP, false = not, null = unresolved
-  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result ("No data")
+  chartEligible: boolean // measured (not IPP/unresolved) — false + readingIPP false = unconfirmed IPP
+  scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = neither expected nor assessed ("No data")
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
+  isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
   achievementCode: number | null // band for THIS result (>=3 = Meeting/Exceeding); null = none/IPP/unresolved
+  // Summary-view demographic filters (2026-11-10). null until the TVF demographics deploy lands.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getReadingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<ReadingRollupRow[]> {
@@ -850,9 +858,17 @@ export async function getReadingCohortAll(upn: string, cycleGroupId: string | nu
     schoolId: (r.SchoolID as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleReading: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleReading == null
+      ? !(Number(r.ReadingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleReading) === true,
     scaleSystem: (r.ScaleSystem as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    isExpectedOnly: Boolean(r.IsExpectedOnly),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -868,6 +884,7 @@ export interface ReadingGroupRow {
   homeroom: string | null
   schoolName: string | null
   readingIPP: boolean | null
+  chartEligible: boolean // measured against the benchmark (not IPP/unresolved) — gates Expected/Diff like the list
   scaleSystem: string | null // 'EN_Reading' | 'FR_Reading'; null = no reading result
   levelCode: string | null // the reading level (e.g. 'M'); null = no result
   levelOrder: number | null
@@ -881,6 +898,10 @@ export interface ReadingGroupRow {
   achievementName: string | null
   achievementHexColor: string | null
   achievementHexColorTint: string | null // light tint for the level-cell background
+  // Summary-view demographic filters (2026-11-10) — the drill table matches the filtered tree counts.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getReadingGroup(
@@ -902,6 +923,11 @@ export async function getReadingGroup(
     homeroom: (r.Homeroom as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     readingIPP: r.ReadingIPPStatus == null ? null : Number(r.ReadingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleReading (column absent): treat non-IPP as
+    // eligible — same as the old behaviour except confirmed IPPs stop showing Expected/Diff.
+    chartEligible: r.IsChartEligibleReading == null
+      ? !(Number(r.ReadingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleReading) === true,
     scaleSystem: (r.ScaleSystem as string) ?? null,
     levelCode: (r.LevelCode as string) ?? null,
     levelOrder: r.LevelOrder == null ? null : Number(r.LevelOrder),
@@ -915,6 +941,9 @@ export async function getReadingGroup(
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -928,8 +957,10 @@ export interface WritingRollupRow {
   schoolId: string | null
   schoolName: string | null
   writingIPP: boolean | null
-  assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
+  chartEligible: boolean // measured (not IPP/unresolved) — false + writingIPP false = unconfirmed IPP
+  assessmentLanguage: string | null // 'English' | 'French'; null = neither expected nor assessed
   assessmentDate: string | null // date of THIS latest result (for the by-cycle trend); null = no result
+  isExpectedOnly: boolean // expected in this language with no result yet — counts the STUDENT, not a result
   // The four trait scores ('1'-'4' | 'SCR' | '-' | null) + the average, for the per-trait roll-up measures.
   ideasScore: string | null
   organizationScore: string | null
@@ -937,6 +968,10 @@ export interface WritingRollupRow {
   conventionsScore: string | null
   avgScore: number | null
   achievementCode: number | null // band of the latest writing average (>=3 = Meeting/Exceeding); null = none
+  // Summary-view demographic filters (2026-11-10). null until the TVF demographics deploy lands.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getWritingCohortAll(upn: string, cycleGroupId: string | null = null): Promise<WritingRollupRow[]> {
@@ -953,14 +988,22 @@ export async function getWritingCohortAll(upn: string, cycleGroupId: string | nu
     schoolId: (r.SchoolID as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleWriting: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleWriting == null
+      ? !(Number(r.WritingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleWriting) === true,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     assessmentDate: toDateStr(r.AssessmentDate as Date | string | null),
+    isExpectedOnly: Boolean(r.IsExpectedOnly),
     ideasScore: (r.IdeasScore as string) ?? null,
     organizationScore: (r.OrganizationScore as string) ?? null,
     languageScore: (r.LanguageScore as string) ?? null,
     conventionsScore: (r.ConventionsScore as string) ?? null,
     avgScore: r.AvgScore == null ? null : Number(r.AvgScore),
     achievementCode: r.AchievementLevelCode == null ? null : Number(r.AchievementLevelCode),
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -975,6 +1018,7 @@ export interface WritingGroupRow {
   homeroom: string | null
   schoolName: string | null
   writingIPP: boolean | null
+  chartEligible: boolean // measured (not IPP/unresolved) — false + writingIPP false = unconfirmed IPP
   assessmentLanguage: string | null // 'English' | 'French'; null = no writing result
   ideasScore: string | null // '1'-'4' | 'SCR' | '-' | null
   organizationScore: string | null
@@ -985,6 +1029,10 @@ export interface WritingGroupRow {
   achievementName: string | null
   achievementHexColor: string | null
   achievementHexColorTint: string | null // Avg-cell background tint (parity with the flat list)
+  // Summary-view demographic filters (2026-11-10) — the drill table matches the filtered tree counts.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getWritingGroup(
@@ -1006,6 +1054,10 @@ export async function getWritingGroup(
     homeroom: (r.Homeroom as string) ?? null,
     schoolName: (r.SchoolName as string) ?? null,
     writingIPP: r.WritingIPPStatus == null ? null : Number(r.WritingIPPStatus) === 1,
+    // Fallback while the TVF predates IsChartEligibleWriting: non-IPP treated as eligible.
+    chartEligible: r.IsChartEligibleWriting == null
+      ? !(Number(r.WritingIPPStatus) === 1)
+      : toBool(r.IsChartEligibleWriting) === true,
     assessmentLanguage: (r.AssessmentLanguage as string) ?? null,
     ideasScore: (r.IdeasScore as string) ?? null,
     organizationScore: (r.OrganizationScore as string) ?? null,
@@ -1016,6 +1068,9 @@ export async function getWritingGroup(
     achievementName: (r.AchievementLevelName as string) ?? null,
     achievementHexColor: (r.AchievementHexColor as string) ?? null,
     achievementHexColorTint: (r.AchievementHexColorTint as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -1627,6 +1682,11 @@ export interface MathCohortRow {
   description: string | null
   result: boolean | null // latest 0/1 (BIT), or null if never marked (a blank cell)
   mathIPPStatus: boolean | null // true = math IPP, false = not, null = unresolved
+  chartEligibleMath: boolean // measured (no IPP row, or resolved not-IPP) — false = confirmed OR unresolved IPP, no band
+  // Demographic filter fields (2026-11-18) — null until deploy_math_filter_demographics_2026-11-18.sql runs.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
 }
 
 export async function getMathCohort(upn: string, groupKey: string, cycleGroupId: string | null = null): Promise<MathCohortRow[]> {
@@ -1648,6 +1708,10 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     TaskDescription: string | null
     ExistingResult: boolean | null
     MathIPPStatus: boolean | null
+    IsChartEligibleMath?: number | boolean | null
+    Gender?: string | null
+    SelfIDAfrican?: boolean | number | null
+    SelfIDIndigenous?: boolean | number | null
   }>(
     upn,
     'SELECT * FROM dbo.tvf_StudentCohortMath(@UPN, @GroupKey, @CycleGroupID) ORDER BY LastName, FirstName, UnitOrder, DisplayOrder',
@@ -1671,6 +1735,12 @@ export async function getMathCohort(upn: string, groupKey: string, cycleGroupId:
     description: r.TaskDescription ?? null,
     result: r.ExistingResult ?? null,
     mathIPPStatus: r.MathIPPStatus ?? null,
+    // Fallback while the TVF predates IsChartEligibleMath: confirmed IPPs become unmeasured at once;
+    // unresolved ones follow when the TVF rerun lands (NULL status is ambiguous without it).
+    chartEligibleMath: r.IsChartEligibleMath == null ? r.MathIPPStatus !== true : toBool(r.IsChartEligibleMath) === true,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
   }))
 }
 
@@ -1686,6 +1756,12 @@ export interface MathRollupRow {
   schoolId: string
   schoolName: string | null
   mathIPP: boolean
+  mathEligible: boolean // measured — false = confirmed OR unresolved math IPP (no band anywhere)
+  // Demographic filter fields (2026-11-18) — null until deploy_math_filter_demographics_2026-11-18.sql
+  // runs; the tree only OFFERS the Gender / Self-ID filter groups when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   unitName: string | null
   unitOrder: number
   taskCount: number
@@ -1702,6 +1778,10 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     SchoolID: string
     SchoolName: string | null
     MathIPPStatus: number | null
+    IsChartEligibleMath?: number | null
+    Gender?: string | null
+    SelfIDAfrican?: boolean | number | null
+    SelfIDIndigenous?: boolean | number | null
     UnitName: string | null
     UnitOrder: number | null
     TaskCount: number
@@ -1716,8 +1796,64 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
     schoolId: r.SchoolID,
     schoolName: r.SchoolName ?? null,
     mathIPP: r.MathIPPStatus === 1,
+    // Same fallback rule as the matrix feed: without the TVF column, only confirmed IPPs are unmeasured.
+    mathEligible: r.IsChartEligibleMath == null ? r.MathIPPStatus !== 1 : Number(r.IsChartEligibleMath) === 1,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
     unitName: r.UnitName ?? null,
     unitOrder: Number(r.UnitOrder ?? 0),
+    taskCount: Number(r.TaskCount ?? 0),
+    scoredCount: Number(r.ScoredCount ?? 0),
+    canDoCount: Number(r.CanDoCount ?? 0),
+  }))
+}
+
+/**
+ * By-cycle feed for the Math summary tree's "Achievement by cycle" bars (1.4.0): one row per
+ * (started cycle × student × unit), COUNTS only — no names. Per cycle it is exactly what
+ * getMathCohortAll(upn, thatCycle) returns, so each bar reproduces the tree with that cycle selected.
+ */
+export interface MathTrendRow {
+  cycleGroupId: string
+  studentKey: string
+  grade: string
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
+  mathIPP: boolean
+  mathEligible: boolean
+  unitName: string | null
+  taskCount: number
+  scoredCount: number
+  canDoCount: number
+}
+
+export async function getMathCohortTrend(upn: string): Promise<MathTrendRow[]> {
+  const rows = await queryAsUser<{
+    CycleGroupID: string
+    StudentKey: string
+    Grade: string
+    Gender: string | null
+    SelfIDAfrican: boolean | number | null
+    SelfIDIndigenous: boolean | number | null
+    MathIPPStatus: number | null
+    IsChartEligibleMath: number | null
+    UnitName: string | null
+    TaskCount: number
+    ScoredCount: number
+    CanDoCount: number | null
+  }>(upn, 'SELECT * FROM dbo.tvf_StudentCohortMathTrend(@UPN)', {})
+  return rows.map((r) => ({
+    cycleGroupId: String(r.CycleGroupID),
+    studentKey: String(r.StudentKey),
+    grade: r.Grade,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
+    mathIPP: r.MathIPPStatus === 1,
+    mathEligible: Number(r.IsChartEligibleMath) === 1,
+    unitName: r.UnitName ?? null,
     taskCount: Number(r.TaskCount ?? 0),
     scoredCount: Number(r.ScoredCount ?? 0),
     canDoCount: Number(r.CanDoCount ?? 0),
@@ -1741,6 +1877,11 @@ export interface RWMStudent {
   programCode: string | null
   programFamily: string | null
   homeroom: string | null
+  // Demographics for the Summary tree's filter section (2026-11-10). null = unknown (e.g. the TVF
+  // predates the columns) — the Gender/Self-ID filter groups only appear when real values are present.
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   readingCode: number | null // most-recent reading achievement code (3-4 = meeting/exceeding)
   writingCode: number | null
   mathRollupPct: number | null // 0-1 current-year roll-up, blanks EXCLUDED (avg of unit averages)
@@ -1774,6 +1915,9 @@ export async function getStudentCohortRWM(upn: string, cycleGroupId: string | nu
     programCode: (r.ProgramCode as string) ?? null,
     programFamily: (r.ProgramFamily as string) ?? null,
     homeroom: (r.Homeroom as string) ?? null,
+    gender: (r.Gender as string) ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
     readingCode: r.ReadingCode == null ? null : Number(r.ReadingCode),
     writingCode: r.WritingCode == null ? null : Number(r.WritingCode),
     mathRollupPct: r.MathRollupPct == null ? null : Number(r.MathRollupPct),
@@ -1785,6 +1929,80 @@ export async function getStudentCohortRWM(upn: string, cycleGroupId: string | nu
     hasReading: Boolean(r.HasReading),
     hasWriting: Boolean(r.HasWriting),
     hasMath: Boolean(r.HasMath),
+  }))
+}
+
+// ── Reports > Missing results (1.4.0): Administrator/RegionalAnalyst-only completeness roll-up ──
+export type MissingSubject = 'Reading' | 'Writing' | 'Math'
+
+/**
+ * One EXPECTED data point (section × student × subject) for the selected cycle, with a missing
+ * bit — the feed for the Missing-results tree. Deliberately name-free (StudentNumber only, needed
+ * to count a multi-section student once in teacher/school totals); names load per-section via
+ * getMissingDataGroup. The TVF only has an Admin/RA branch, so other roles get zero rows.
+ */
+export interface MissingDataRow {
+  subject: MissingSubject
+  schoolId: string
+  schoolName: string
+  sectionId: string
+  courseName: string | null
+  sectionNumber: string | null
+  teacherEmail: string | null // null = no current Primary teacher on the section
+  teacherName: string | null
+  grade: string | null
+  studentNumber: string
+  missing: boolean
+}
+
+export async function getMissingDataAll(upn: string, cycleGroupId: string): Promise<MissingDataRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_MissingDataAll(@UPN, @CycleGroupID)',
+    { CycleGroupID: cycleGroupId },
+  )
+  return rows.map((r) => ({
+    subject: r.AssessmentType as MissingSubject,
+    schoolId: String(r.SchoolID),
+    schoolName: (r.SchoolName as string) ?? String(r.SchoolID),
+    sectionId: String(r.SectionID),
+    courseName: (r.CourseName as string) ?? null,
+    sectionNumber: (r.SectionNumber as string) ?? null,
+    teacherEmail: (r.TeacherEmail as string) ?? null,
+    teacherName: (r.TeacherName as string) ?? null,
+    grade: (r.Grade as string) ?? null,
+    studentNumber: String(r.StudentNumber),
+    missing: Boolean(r.IsMissing),
+  }))
+}
+
+/** One section's still-missing students for the drill — one row per (student × missing subject). */
+export interface MissingGroupRow {
+  subject: MissingSubject
+  studentNumber: string
+  firstName: string
+  lastName: string
+  grade: string | null
+  homeroom: string | null
+}
+
+export async function getMissingDataGroup(
+  upn: string,
+  cycleGroupId: string,
+  sectionId: string,
+): Promise<MissingGroupRow[]> {
+  const rows = await queryAsUser<Record<string, unknown>>(
+    upn,
+    'SELECT * FROM dbo.tvf_MissingDataGroup(@UPN, @CycleGroupID, @SectionID)',
+    { CycleGroupID: cycleGroupId, SectionID: sectionId },
+  )
+  return rows.map((r) => ({
+    subject: r.AssessmentType as MissingSubject,
+    studentNumber: String(r.StudentNumber),
+    firstName: (r.FirstName as string) ?? '',
+    lastName: (r.LastName as string) ?? '',
+    grade: (r.Grade as string) ?? null,
+    homeroom: (r.Homeroom as string) ?? null,
   }))
 }
 

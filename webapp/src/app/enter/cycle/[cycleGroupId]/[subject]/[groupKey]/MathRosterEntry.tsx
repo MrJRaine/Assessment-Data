@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import type { MathRosterRow } from '@/lib/data'
-import { saveMathAssessments, type MathEntry } from './actions'
+import { saveMathAssessments, confirmRosterIPPs, type MathEntry } from './actions'
 import { useEntryLock } from '@/components/maintenance/useEntryLock'
 import { draftKey, readDraft, writeDraft } from '@/components/entryDraft'
 
@@ -20,7 +20,10 @@ interface Task {
   answerKey: string | null
 }
 interface Unit { name: string; order: number; tasks: Task[] }
-interface Student { studentKey: string; studentNumber: string; name: string; mathIPP: boolean }
+// sortKey = "Last, First": column ordering matches the rest of the app (last-name sort, user
+// 2026-11-10). name = full "First Last" (user 2026-11-12 — "First L." collided for same-first-name
+// classmates); the column HEADER stacks first/last on two lines so columns stay narrow.
+interface Student { studentKey: string; studentNumber: string; name: string; first: string; last: string; sortKey: string; mathIPP: boolean; needsConfirm: boolean; ippProgramFamily: string | null }
 interface Grade { grade: string; order: number; label: string; students: Student[]; units: Unit[] }
 
 const GRADE_ORDER: Record<string, number> = { P: 0, PP: -1, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
@@ -40,8 +43,13 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
       grade.students.push({
         studentKey: r.studentKey,
         studentNumber: r.studentNumber,
-        name: `${r.firstName} ${r.lastName.charAt(0)}.`,
+        name: `${r.firstName} ${r.lastName}`,
+        first: r.firstName,
+        last: r.lastName,
+        sortKey: `${r.lastName}, ${r.firstName}`,
         mathIPP: r.mathIPPStatus === true,
+        needsConfirm: r.mathIPPNeedsConfirmation,
+        ippProgramFamily: r.ippProgramFamily,
       })
     }
     // A student whose grade has no tasks configured for this cycle's month comes back with NULL task
@@ -69,7 +77,7 @@ function buildGrades(rows: MathRosterRow[]): Grade[] {
   }
   const grades = [...byGrade.values()].sort((a, b) => a.order - b.order)
   for (const g of grades) {
-    g.students.sort((a, b) => a.name.localeCompare(b.name))
+    g.students.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     g.units.sort((a, b) => a.order - b.order)
     for (const u of g.units) u.tasks.sort((a, b) => a.displayOrder - b.displayOrder)
   }
@@ -127,6 +135,22 @@ export default function MathRosterEntry({
   // Grace-lock: read-only when locked; an override-holder flips it on for THIS group with a one-shot
   // toggle that reverts after the next save completes (see the save handler).
   const [override, setOverride] = useState(false)
+  // IPP CONFIRMATION GATE (2026-11-17 — parity with the reading/writing grids, previously MISSING
+  // here): a flagged-but-unconfirmed Math IPP BLOCKS entry for that student until the gate is
+  // resolved. Yes/No choices are STAGED (re-click un-stages) and committed on Save; a resolved
+  // student unlocks (No) or flips to IPP cells (Yes) without a refresh.
+  const [ippSel, setIppSel] = useState<Record<string, boolean>>({})
+  const [confirmedIpp, setConfirmedIpp] = useState<Record<string, boolean>>({})
+  const [ippErrors, setIppErrors] = useState<{ name: string; message: string }[]>([])
+  const unresolvedOf = (s: Student) => s.needsConfirm && !(s.studentKey in confirmedIpp)
+  function chooseIPP(studentKey: string, value: boolean) {
+    setIppSel((prev) => {
+      const next = { ...prev }
+      if (next[studentKey] === value) delete next[studentKey]
+      else next[studentKey] = value
+      return next
+    })
+  }
   const editable = !locked || override
   const ro = !editable
 
@@ -180,6 +204,8 @@ export default function MathRosterEntry({
     return p == null ? 'none' : p > 0.8 ? 'h4' : p >= 0.65 ? 'h3' : p >= 0.5 ? 'h2' : 'h1'
   }
   function unitBand(s: Student, u: Unit): { cls: string; label: string; partial: boolean } {
+    // Unconfirmed IPP: no derived level of any kind until the gate is resolved (2026-11-17).
+    if (unresolvedOf(s)) return { cls: 'bunres', label: 'IPP?', partial: false }
     const tasks = activeTasks(u)
     let inScope = 0, filled = 0, ones = 0, ippCount = 0
     for (const t of tasks) {
@@ -188,7 +214,11 @@ export default function MathRosterEntry({
       inScope++
       if (v === '1' || v === '0') { filled++; if (v === '1') ones++ }
     }
-    // All IPP -> plain IPP flag; no in-scope task scored -> —; too few scored -> Incomplete.
+    // IPP 80% threshold (user ruling 2026-11-17): the denominator is ALL of the unit's tasks —
+    // deleted (IPP-excluded) outcomes included — so a lightly-modified IPP can still earn a level
+    // while a heavily-modified one reads IPP, never a band off a sliver. Below threshold -> 'IPP',
+    // not 'Incomplete' (the shortfall is the plan's deletions, not missing entry).
+    if (ippCount > 0 && filled / (inScope + ippCount) < 0.8) return { cls: 'bipp', label: 'IPP', partial: false }
     if (inScope === 0) return { cls: 'bipp', label: 'IPP', partial: false }
     if (filled === 0) return { cls: 'inc', label: '—', partial: false }
     if (filled / inScope < 0.8) return { cls: 'inc', label: 'Incomplete', partial: false }
@@ -203,11 +233,12 @@ export default function MathRosterEntry({
 
   // --- dirty + save ---
   const dirtyKeys = Object.keys(marks).filter((k) => marks[k] !== committed[k])
+  const ippKeys = Object.keys(ippSel)
   const totalTasks = grades.reduce((a, g) => a + g.units.reduce((b, u) => b + u.tasks.length, 0), 0)
   const selTasks = totalTasks - deselected.size
 
   // Maintenance lock: math is per-task (cell-independent), so the T-1 auto-save is safe.
-  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyKeys.length > 0, onSave: () => save() })
+  const { inputsLocked, markSaved } = useEntryLock({ dirty: dirtyKeys.length > 0 || ippKeys.length > 0, onSave: () => save() })
 
   function save() {
     const entries: MathEntry[] = dirtyKeys.map((k) => {
@@ -221,6 +252,44 @@ export default function MathRosterEntry({
     })
     startSave(async () => {
       try {
+        // Staged IPP confirmations commit FIRST (they're what unblocks the cells). Partial failures
+        // are reported per student; successful ones resolve immediately without a refresh.
+        if (ippKeys.length > 0) {
+          const byKey = new Map(grades.flatMap((g) => g.students).map((s) => [s.studentKey, s] as const))
+          const ippEntries = ippKeys
+            .filter((k) => byKey.get(k)?.ippProgramFamily != null)
+            .map((k) => ({ studentKey: k, programFamily: byKey.get(k)!.ippProgramFamily!, isIPP: ippSel[k] }))
+          const ippRes = await confirmRosterIPPs(windowId, groupKey, ippEntries, 'Math')
+          const failed = new Set(ippRes.errors.map((e) => e.studentKey))
+          setIppErrors(ippRes.errors.map((e) => ({ name: byKey.get(e.studentKey)?.name ?? e.studentKey, message: e.message })))
+          const resolvedNow: Record<string, boolean> = {}
+          for (const k of ippKeys) if (!failed.has(k)) resolvedNow[k] = ippSel[k]
+          setConfirmedIpp((prev) => ({ ...prev, ...resolvedNow }))
+          setIppSel((prev) => {
+            const next = { ...prev }
+            for (const k of Object.keys(resolvedNow)) delete next[k]
+            return next
+          })
+          // Confirmed YES: the student's unscored cells become IPP cells (same as a fresh load).
+          const yesKeys = Object.keys(resolvedNow).filter((k) => resolvedNow[k])
+          if (yesKeys.length > 0) {
+            const flip = (m: Record<string, Mark>): Record<string, Mark> => {
+              const next = { ...m }
+              for (const k of yesKeys) {
+                const stu = byKey.get(k)
+                const grade = grades.find((g) => g.students.some((x) => x.studentKey === k))
+                if (!stu || !grade) continue
+                for (const u of grade.units) for (const t of u.tasks) {
+                  const ck = rk(k, t.mathTaskKey)
+                  if ((next[ck] ?? 'clear') === 'clear') next[ck] = 'ipp'
+                }
+              }
+              return next
+            }
+            setMarks(flip)
+            setCommitted(flip) // not dirty — 'ipp' is the default state, nothing to save per cell
+          }
+        }
         const res = await saveMathAssessments(windowId, groupKey, entries)
         setResult(res)
         if (res.errors.length === 0) setRestored(null) // restored marks are now saved — drop the banner
@@ -281,8 +350,12 @@ export default function MathRosterEntry({
       <button className={`btn-ghost${editMode ? ' editing' : ''}`} onClick={() => setEditMode((e) => !e)}>
         {editMode ? 'Done editing' : 'Edit checklist'}
       </button>
-      <button className="btn" disabled={saving || dirtyKeys.length === 0 || ro} onClick={save}>
-        {saving ? 'Saving…' : dirtyKeys.length > 0 ? `Save ${dirtyKeys.length} change${dirtyKeys.length === 1 ? '' : 's'}` : 'Save'}
+      <button className="btn" disabled={saving || (dirtyKeys.length === 0 && ippKeys.length === 0) || ro} onClick={save}>
+        {saving
+          ? 'Saving…'
+          : dirtyKeys.length + ippKeys.length > 0
+            ? `Save ${dirtyKeys.length + ippKeys.length} change${dirtyKeys.length + ippKeys.length === 1 ? '' : 's'}`
+            : 'Save'}
       </button>
     </>
   )
@@ -310,6 +383,53 @@ export default function MathRosterEntry({
           )}
         </div>
       )}
+      {/* IPP confirmation gate (2026-11-17): unconfirmed Math IPPs BLOCK entry for those students.
+          Choices stage here and commit on Save — parity with the reading/writing grids. */}
+      {(() => {
+        const unresolved = grades.flatMap((g) => g.students).filter(unresolvedOf)
+        if (unresolved.length === 0 && ippErrors.length === 0) return null
+        return (
+          <div className="no-tasks">
+            {unresolved.length > 0 && (
+              <>
+                <strong>
+                  {unresolved.length} student{unresolved.length === 1 ? ' needs' : 's need'} their Math IPP confirmed
+                  before marks can be entered.
+                </strong>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem 1.4rem', marginTop: '0.5rem' }}>
+                  {unresolved.map((s) => (
+                    <span key={s.studentKey} className="ipp-seg" style={{ whiteSpace: 'nowrap' }}>
+                      {s.sortKey}{' '}
+                      <button
+                        className={ippSel[s.studentKey] === true ? 'seg seg-yes-on' : 'seg'}
+                        disabled={saving || inputsLocked || ro}
+                        onClick={() => chooseIPP(s.studentKey, true)}
+                      >
+                        Yes (Math IPP)
+                      </button>
+                      <button
+                        className={ippSel[s.studentKey] === false ? 'seg seg-no-on' : 'seg'}
+                        disabled={saving || inputsLocked || ro}
+                        onClick={() => chooseIPP(s.studentKey, false)}
+                      >
+                        No
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <p className="muted small" style={{ margin: '0.4rem 0 0' }}>
+                  Choices are staged — click Save to commit them (re-click to un-stage).
+                </p>
+              </>
+            )}
+            {ippErrors.length > 0 && (
+              <p className="save-errors" style={{ color: 'var(--danger)', margin: '0.4rem 0 0' }}>
+                {ippErrors.map((e) => `${e.name}: ${e.message}`).join(' · ')}
+              </p>
+            )}
+          </div>
+        )
+      })()}
       {/* grade filter */}
       {multi && (
         <>
@@ -493,7 +613,10 @@ export default function MathRosterEntry({
                       <th className="col-task">Task</th>
                       <th className="col-pct">Class %</th>
                       {cols.map((s) => (
-                        <th className="stu" key={s.studentKey}>{s.name}</th>
+                        <th className="stu stu2" key={s.studentKey} title={s.name}>
+                          <span className="stu-first">{s.first}</span>
+                          <span className="stu-last">{s.last}</span>
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -528,6 +651,10 @@ export default function MathRosterEntry({
                                 </th>
                                 <td className={`col-pct ${hc}`}>{p == null ? '—' : Math.round(p * 100)}</td>
                                 {cols.map((s) => {
+                                  // Unconfirmed IPP: the cell is BLOCKED until the gate is resolved
+                                  // (confirm control in the banner above the grid) — parity with the
+                                  // reading/writing grids (2026-11-17).
+                                  const unres = unresolvedOf(s)
                                   const v = cellMark(s.studentKey, t.mathTaskKey)
                                   const cls = v === '1' ? 'yes' : v === '0' ? 'no' : v === 'ipp' ? 'ipp' : 'blank'
                                   // "Not yet" is a yellow OUTLINE circle, not a red ✗ — these are
@@ -543,11 +670,14 @@ export default function MathRosterEntry({
                                   // the ring. IPP stays real text.
                                   const glyph = v === 'ipp' ? 'IPP' : ''
                                   return (
-                                    <td className="cell stu" key={s.studentKey}>
+                                    // Blocked column greyed out so the no-entry state is visible at a
+                                    // glance, not just on click (user 2026-11-17).
+                                    <td className={`cell stu${unres ? ' unres-col' : ''}`} key={s.studentKey}>
                                       <button
                                         className={`mtoggle ${cls}`}
-                                        disabled={inputsLocked || ro}
-                                        onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP)}
+                                        disabled={inputsLocked || ro || unres}
+                                        title={unres ? 'Math IPP flagged but not confirmed — confirm it above before entering marks.' : undefined}
+                                        onClick={() => cycle(s.studentKey, t.mathTaskKey, s.mathIPP || confirmedIpp[s.studentKey] === true)}
                                         aria-label={`${t.questionNumber} ${s.name}`}
                                       >
                                         {v === '0' ? <span className="ring" aria-hidden="true" />

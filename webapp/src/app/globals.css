@@ -458,9 +458,25 @@ a { color: inherit; text-decoration: none; }
 .mlegend .sw.h3 { background: #eaf5da; border: 1px solid #4d6a1c; }
 .mlegend .sw.h2 { background: #fbeed6; border: 1px solid #8a5711; }
 .mlegend .sw.h1 { background: #f9dfe3; border: 1px solid #9a2f3d; }
-.mband { display: inline-block; min-width: 2rem; padding: .12rem .3rem; border-radius: 5px; color: #fff; font-size: .67rem; font-weight: 700; line-height: 1.15; text-align: center; }
+.mband { display: inline-block; min-width: 2rem; padding: .12rem .3rem; border-radius: 5px; color: #fff; font-size: .67rem; font-weight: 700; line-height: 1.15; text-align: center; white-space: nowrap; }
+/* The sticky % column is FIXED at 58px — tighten chip type there so the longest labels
+   ("Developing", "Incomplete") stay inside it instead of clipping. */
+.mgrid .col-pct .mband { font-size: .62rem; padding: .12rem .2rem; min-width: 0; }
+/* Literacy achievement chip (reports): same geometry as the math .mband, colour inline from
+   DimAchievementLevel. Standardizes Reading/Writing reports on chips (user 2026-11-17). */
+.ach-chip { display: inline-block; padding: .12rem .45rem; border-radius: 5px; color: #fff; font-size: .67rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
+.ach-chip.aipp { background: #6b4fbb; }
 .mband.b1 { background: #b23347; } .mband.b2 { background: #c07d16; } .mband.b3 { background: #2f8f4e; } .mband.b4 { background: #0092c9; }
 .mband.bipp { background: #6b4fbb; }
+/* Unconfirmed IPP — OUTLINED burnt orange, deliberately distinct from the solid amber b2 band. */
+.mband.bunres { background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-weight: 700; }
+/* Math entry: an unconfirmed-IPP student's BLOCKED column — greyed cells + dimmed marks so the
+   no-entry state reads at a glance (the confirm control sits in the banner above the grid). */
+.mgrid td.cell.unres-col { background: #eceeed; }
+.mgrid td.cell.unres-col .mtoggle { opacity: .45; cursor: not-allowed; }
+/* Same state as an inline badge on the Reading/Writing list + drill achievement cells.
+   EXACT .ach-chip geometry (padding minus the 1px border) so it sits flush with the band chips. */
+.ipp-unres { display: inline-block; padding: calc(.12rem - 1px) calc(.45rem - 1px); border-radius: 5px; background: #fff3e6; color: #c2410c; border: 1px solid #ea8a3c; font-size: .67rem; font-weight: 700; line-height: 1.15; white-space: nowrap; }
 .mband.inc { background: transparent; color: var(--muted); border: 1px dashed var(--border); font-weight: 600; }
 .mband.partial-ipp { box-shadow: 0 0 0 4px #6b4fbb; }
 .partial-swatch { display: inline-block; width: 1.1rem; height: 0.85rem; border-radius: 4px; background: var(--card); box-shadow: 0 0 0 3px #6b4fbb; }
@@ -523,7 +539,10 @@ a { color: inherit; text-decoration: none; }
    line instead of the fixed 84px .stu width, which clipped/overflowed long names and truncated the header. */
 .mgrid .ach { white-space: nowrap; width: auto; min-width: 96px; max-width: none; padding: .4rem .35rem; vertical-align: top; }
 .mgrid thead th.stu { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mgrid td.cell { padding: 0; text-align: center; }
+/* height: 1px makes the td's computed height the reference for the button's height: 100%, so the
+   clickable area fills the WHOLE cell even when the row is taller than the 44px minimum (rows grow
+   with the task-description column; without this the button floated centered with dead zones). */
+.mgrid td.cell { padding: 0; text-align: center; height: 1px; }
 /* Reports read-only matrix: give the sticky roll-up cell a solid ground (heat classes override it),
    and centre the transposed unit-group column header. */
 .mgrid td.col-pct { background: var(--card); }
@@ -559,7 +578,7 @@ a { color: inherit; text-decoration: none; }
 /* font-size drives every state mark: the ✓ directly, and the disc via its em-based size. The cell is
    44px tall and the marks were ~15px in it — small to read and small to hit. 1.5rem gives ~24px,
    still comfortably inside the row. */
-.mtoggle { width: 100%; min-height: 44px; border: none; background: transparent; cursor: pointer; font-size: 2.1rem; color: var(--muted); display: grid; place-items: center; font-family: inherit; line-height: 1; }
+.mtoggle { width: 100%; height: 100%; min-height: 44px; border: none; background: transparent; cursor: pointer; font-size: 2.1rem; color: var(--muted); display: grid; place-items: center; font-family: inherit; line-height: 1; }
 .mtoggle:hover { background: #eef6fb; }
 /* "Not yet" — a BRIGHT yellow disc inside a dark ring.
    Drawn in CSS rather than as the '○' glyph: a font character has no adjustable stroke, so the ring
@@ -619,16 +638,36 @@ a { color: inherit; text-decoration: none; }
 .mtree .tchev { color: var(--muted); font-size: .72rem; display: inline-block; width: .95rem; }
 .mgrid .tsub { color: var(--muted); font-size: .75rem; margin-left: .4rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .mtree tr.blockrow > td { padding: .75rem; background: var(--bg); }
-/* width:0 + min-width:100% keeps a wide grade block from stretching the tree's columns; the block's
-   own .mscroll scrolls horizontally instead. */
-.mtree .blockwrap { width: 0; min-width: 100%; }
-.mtree .blockwrap .mscroll { max-height: 60vh; }
+/* width:0 + min-width keeps a wide grade block from stretching the tree's columns; the block's
+   own .mscroll scrolls horizontally instead. The min() cap + sticky (2026-11-10) fix the MATH tree:
+   its unit columns make the tree table wider than the screen, so a drill pane spanning the full td
+   put its scrollbars past the viewport's right edge — an overflowing student list showed no visible
+   bars (reading/writing trees fit the viewport, so theirs showed). Capping the pane at the visible
+   width (mirrors .container: 960px max, 1.5rem side padding, 1px wrap borders — identical to the old
+   100% for reading/writing on normal screens) and pinning it sticky-left keeps its scrollbars
+   on-screen while the outer tree pans. 2026-11-18: the cap ALSO subtracts the blockrow td's own
+   .75rem side padding (the pane sits INSIDE it) — without that the pane ran 1.5rem past the visible
+   edge and its vertical scrollbar was clipped off-screen. */
+.mtree .blockwrap { width: 0; min-width: min(100%, calc(min(100vw - 1rem, 960px) - 4.5rem - 2px)); position: sticky; left: 0; }
+/* Higher-contrast bars on the drill pane so an overflowing student list reads as scrollable. */
+.mtree .blockwrap .mscroll { max-height: 60vh; scrollbar-color: #7b8794 #e4e8ee; }
 .mgrid td.rpct { text-align: center; font-weight: 700; font-size: .82rem; font-variant-numeric: tabular-nums; padding: .35rem .3rem; cursor: help; background: var(--card); }
 .mgrid td.rpct.h4 { background: #dbf1e4; color: #1c6b3b; }
 .mgrid td.rpct.h3 { background: #eaf5da; color: #4d6a1c; }
 .mgrid td.rpct.h2 { background: #fbeed6; color: #8a5711; }
 .mgrid td.rpct.h1 { background: #f9dfe3; color: #9a2f3d; }
 .mgrid td.rpct.none { color: var(--muted); font-weight: 500; cursor: default; }
+/* Missing-results tree (1.3.1): whole-row tint keyed off % REPORTED (user buckets <50/75/100),
+   reusing the standard h1–h4 tint family. Must out-rank the sticky .col-task's own background. */
+.mtree tr.miss-h1 > th, .mtree tr.miss-h1 > td { background: #f9dfe3; }
+.mtree tr.miss-h2 > th, .mtree tr.miss-h2 > td { background: #fbeed6; }
+.mtree tr.miss-h3 > th, .mtree tr.miss-h3 > td { background: #eaf5da; }
+.mtree tr.miss-h4 > th, .mtree tr.miss-h4 > td { background: #dbf1e4; }
+/* Math entry: students-as-columns header shows the FULL name on two lines — first on top,
+   last below — so same-first-name students are tellable apart without widening columns to
+   a one-line "First Last" (user 2026-11-12). */
+.mgrid th.stu2 { width: auto; min-width: 84px; max-width: 140px; padding: .4rem .3rem; vertical-align: bottom; }
+.mgrid th.stu2 .stu-first, .mgrid th.stu2 .stu-last { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 .mgrid tr.sumrow th.col-task { background: #e7edf1; }
 .mgrid tr.sumrow th.col-task .uname { font-size: .76rem; letter-spacing: .07em; text-transform: uppercase; color: var(--ink); font-weight: 700; }
 .mgrid tr.sumrow th.col-task .tsub { display: block; margin-left: 0; }

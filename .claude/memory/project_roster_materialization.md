@@ -56,6 +56,20 @@ Validated as a read-only preview (`diag_ches_fixed_membership_preview_*`) agains
 after a cycle closed can still be stranded off that cycle's card. Not yet fixed; same bug shape on the
 teacher dimension.
 
+**FOLLOW-ON FIX — enrollment close dates, LIVE 2026-10-30 (server-side patch under 1.3.0):** the
+ActiveFlag-blind date overlap above is only correct if `FactEnrollment.EndDate` is the student's ACTUAL
+departure — but PS fills `CC.DateLeft` with the SCHEDULED exit (term/year end), and `usp_MergeEnrollment`
+step 5's defensive close (row vanished from the export — transfers out, mid-year drops) flipped ActiveFlag
+WITHOUT touching EndDate. Result: departed-in-cycle-1 students bled into every later cycle through June.
+Fixed: step 5 now CAPS `EndDate = MIN(existing, @EffectiveDate)` (a real earlier PS exit date is kept);
+one-time repair `sql/scripts/fix_enrollment_close_dates_2026-10-30.sql` set EndDate = Atlantic date of
+`LastUpdated` on `ActiveFlag=0 AND (EndDate IS NULL OR EndDate > that date)` — the guard protects closed
+rows still in PS's rolling export, whose LastUpdated keeps getting touched (3258 live rows repaired,
+closes 2026-09-09→10-26) + membership rebuild. Paper-backfill keep is now correctly BOUNDED to the cycle
+the student left during. Residual edge: the repaired/stamped date is when the closing INGEST ran, not the
+true last-attended day — a close that straddles a cycle boundary can legitimately reach one cycle further.
+Diagnostic: `sql/scripts/diag_departed_student_cycle_bleed_2026-10-30.sql`.
+
 **Perf state (dev warm, 20-student):** original ~2050ms → base+dead-cut ~1461ms → teacher fast-path
 ~1157ms; Fabric per-query floor ≈ ~1015ms (the untouched groups TVF). LIVE app warm ~2.3s = ~1.4s SQL
 + ~0.9s connection/render. Remaining levers (both bigger, deferred): pre-warm/min-connections for the

@@ -6,13 +6,37 @@
  *          (student x reading-result language) + a NULL-language row for a student with no reading
  *          result (so they show as "No data"). The client pivots to one row per student (EN + FR cells).
  * Created: 2026-10-16
+ * Modified: 2026-11-17 — + IsChartEligibleReading output (the dal-join measured predicate), so the
+ *          drill can blank Expected/Diff for IPP/unresolved students in lockstep with the flat list.
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent reading result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          WindowMonth covers ALL active Reading windows (a prior-year result must still resolve its
+ *          Expected range — mirrors tvf_StudentCohort); AchievementLevelCode/Name/colours are NULL
+ *          for reading-IPP / unresolved students (not measured — the drill shows "IPP" instead).
+ * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
+ *          its header): an expected language (StudentExpectedAssessment) with no result emits a row
+ *          with ScaleSystem set and NULL level/delta, so the drill under a Language of Assessment
+ *          filter shows expected-but-unassessed students as "—" instead of dropping them; the
+ *          NULL-language "No data" row fires only when neither expected nor assessed.
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters: the drill table must match the filtered node counts above it).
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
+ *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
+ *          row's School/Grade/Homeroom (and so its @GroupKey membership) comes from the RESULT's frozen
+ *          DimStudent version and the oversight gate follows the ATTRIBUTED school; unassessed rows
+ *          stay current students. With no cycle ("Current" view) everything anchors on the current
+ *          version, as before. Display names come from the student's CURRENT version when one exists
+ *          (people keep their current name), falling back to the frozen name for district leavers.
  * Region: Canada East (PIIDPA compliant)
  *
  * Group-scoped + @UPN-scoped: same OR-across-EXISTS gate as tvf_StudentCohortMath (oversight via
- * StaffSchoolAccess; teacher via FactSectionTeachers — kept for parity though the reading tree is
- * oversight-only). @GroupKey shapes: 'GRADE:<SchoolID>:<Grade>', 'SEC:<SectionID>', else a homeroom
- * DimStudent.GroupKey — resolved exactly like tvf_StudentCohortMath. Students restricted to the selected
- * Reading windows' grade span so the detail matches the roll-up's counts.
+ * StaffSchoolAccess against the ATTRIBUTED school; teacher via FactSectionTeachers — kept for parity
+ * though the reading tree is oversight-only; the teacher branch remains current-roster, so it never
+ * surfaces a departed student). @GroupKey shapes: 'GRADE:<SchoolID>:<Grade>', 'SEC:<SectionID>', else a
+ * homeroom DimStudent.GroupKey — matched against the ATTRIBUTED version's values, so the drill's rows
+ * agree with the roll-up's counts. Students restricted to the selected Reading windows' grade span.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -43,8 +67,10 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
-    -- Effective benchmark month per selected reading window (BenchmarkMonth, else dominant calendar
-    -- month) — matched against DimReadingBenchmark for the Expected range (mirrors tvf_StudentCohort).
+    -- Effective benchmark month per ACTIVE reading window, ANY year (BenchmarkMonth, else dominant
+    -- calendar month) — matched against DimReadingBenchmark for the Expected range. Not restricted to
+    -- ReadWins: in "Current" (lifetime) mode a latest result can sit in a prior-year window and its
+    -- Expected range must still resolve (mirrors tvf_StudentCohort's WindowMonth).
     WindowMonth AS (
         SELECT w.AssessmentWindowID,
                COALESCE(w.BenchmarkMonth,
@@ -52,52 +78,123 @@ RETURN
                     WHERE dc.Date BETWEEN w.StartDate AND w.EndDate
                     GROUP BY dc.Month ORDER BY COUNT(*) DESC, dc.Month)) AS BenchMonth
         FROM DimAssessmentWindow w
-        WHERE w.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+        WHERE w.AssessmentType = 'Reading' AND w.ActiveFlag = 1
     ),
-    -- The group's students (current, in the reading grade span), intersected with the caller's scope.
-    GroupStudents AS (
+    LatestReading AS (   -- latest result per (student, language) across the selected windows.
+        -- far.StudentKey is the FROZEN version the result was recorded against — the attribution.
+        SELECT far.StudentNumber, far.StudentKey AS FactStudentKey, far.AssessmentWindowID,
+               drs.ScaleSystem, drs.LevelCode, drs.LevelOrder, far.ReadingDelta,
+               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
+                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
+        FROM FactAssessmentReading far
+        INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the *All feed and tvf_StudentCohort. A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
+    ),
+    ReadingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
+        SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
+        FROM FactStudentIPP fsi
+        INNER JOIN DimStudent dsi ON dsi.StudentKey = fsi.StudentKey
+        WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
+        GROUP BY dsi.StudentNumber
+    ),
+    -- Expected reading languages per student (cycle-scoped) — see StudentExpectedAssessment.
+    ExpectedLang AS (
+        SELECT DISTINCT sea.StudentNumber,
+               CASE sea.Language WHEN 'French' THEN 'FR_Reading' ELSE 'EN_Reading' END AS ScaleSystem
+        FROM StudentExpectedAssessment sea
+        WHERE sea.AssessmentType = 'Reading'
+          AND (@CycleGroupID IS NULL OR sea.CycleGroupID = @CycleGroupID)
+    ),
+    -- ATTRIBUTION IS CYCLE-SCOPED (mirrors tvf_StudentCohortReadingAll's Base so drill rows agree with
+    -- roll-up counts): cycle selected -> assessed rows from the result's frozen version, unassessed from
+    -- the current version; no cycle ("Current" view) -> everything anchors on the current version.
+    -- LANGUAGE SET (2026-11-12) = expected UNION assessed, in lockstep with the *All feed.
+    AttrStudents AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
+        SELECT fv.StudentKey, fv.StudentNumber, fv.FirstName, fv.LastName, fv.Grade, fv.Homeroom,
+               fv.SchoolID, fv.GroupKey AS HomeroomKey,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
+               lr.AssessmentWindowID, lr.ScaleSystem, lr.LevelCode, lr.LevelOrder, lr.ReadingDelta
+        FROM LatestReading lr
+        INNER JOIN DimStudent fv ON fv.StudentKey = lr.FactStudentKey
+        WHERE lr.rn = 1 AND @CycleGroupID IS NOT NULL
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
         SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
-               s.SchoolID, sch.SchoolName
+               s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               lr3.AssessmentWindowID, lr3.ScaleSystem, lr3.LevelCode, lr3.LevelOrder, lr3.ReadingDelta
         FROM DimStudent s
-        INNER JOIN DimGrade g ON g.GradeCode = s.Grade
-        CROSS JOIN GradeSpan gs
-        LEFT  JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
+        INNER JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr3 ON lr3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        UNION ALL
+        -- expected language with NO result in it (either cycle mode): current, enrolled students
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
+               s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS BIGINT), el.ScaleSystem, CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS INT), CAST(NULL AS INT)
+        FROM DimStudent s
+        INNER JOIN ExpectedLang el ON el.StudentNumber = s.StudentNumber
         WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-          AND g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
-          -- group membership by @GroupKey shape (mirrors tvf_StudentCohortMath)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx
+                          INNER JOIN DimReadingScale dx ON dx.ReadingScaleID = fx.ReadingScaleID
+                          WHERE fx.StudentNumber = s.StudentNumber AND dx.ScaleSystem = el.ScaleSystem
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
+        UNION ALL
+        -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
+        SELECT s.StudentKey, s.StudentNumber, s.FirstName, s.LastName, s.Grade, s.Homeroom,
+               s.SchoolID, s.GroupKey,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS BIGINT), CAST(NULL AS VARCHAR(20)), CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS INT), CAST(NULL AS INT)
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentReading fx2
+                          WHERE fx2.StudentNumber = s.StudentNumber
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)))
+          AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
+    ),
+    -- The group's attributed rows (in the reading grade span), intersected with the caller's scope.
+    GroupStudents AS (
+        SELECT a.StudentKey, a.StudentNumber,
+               COALESCE(cur.FirstName, a.FirstName) AS FirstName,   -- current name when one exists;
+               COALESCE(cur.LastName,  a.LastName)  AS LastName,    -- frozen name for district leavers
+               a.Grade, a.Homeroom, a.SchoolID, sch.SchoolName,
+               a.Gender, a.SelfIDAfrican, a.SelfIDIndigenous,
+               a.AssessmentWindowID, a.ScaleSystem, a.LevelCode, a.LevelOrder, a.ReadingDelta
+        FROM AttrStudents a
+        INNER JOIN DimGrade g ON g.GradeCode = a.Grade
+        CROSS JOIN GradeSpan gs
+        LEFT  JOIN DimSchool sch ON sch.SchoolID = a.SchoolID
+        LEFT  JOIN DimStudent cur ON cur.StudentNumber = a.StudentNumber AND cur.IsCurrent = 1
+        WHERE g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
+          -- group membership by @GroupKey shape, matched on the ATTRIBUTED version's values
           AND (
-                (LEFT(@GroupKey, 6) = 'GRADE:' AND 'GRADE:' + s.SchoolID + ':' + s.Grade = @GroupKey)
+                (LEFT(@GroupKey, 6) = 'GRADE:' AND 'GRADE:' + a.SchoolID + ':' + a.Grade = @GroupKey)
              OR (LEFT(@GroupKey, 4) = 'SEC:' AND EXISTS (
                      SELECT 1 FROM FactEnrollment e
                      INNER JOIN DimSection sec ON sec.SectionKey = e.SectionKey AND sec.IsCurrent = 1
-                     WHERE e.StudentKey = s.StudentKey AND e.ActiveFlag = 1 AND 'SEC:' + sec.SectionID = @GroupKey))
-             OR (LEFT(@GroupKey, 6) <> 'GRADE:' AND LEFT(@GroupKey, 4) <> 'SEC:' AND s.GroupKey = @GroupKey)
+                     WHERE e.StudentKey = a.StudentKey AND e.ActiveFlag = 1 AND 'SEC:' + sec.SectionID = @GroupKey))
+             OR (LEFT(@GroupKey, 6) <> 'GRADE:' AND LEFT(@GroupKey, 4) <> 'SEC:' AND a.HomeroomKey = @GroupKey)
           )
-          -- caller scope gate (oversight via StaffSchoolAccess OR teacher via FactSectionTeachers)
+          -- caller scope gate (oversight via StaffSchoolAccess against the ATTRIBUTED school
+          -- OR teacher via FactSectionTeachers — current roster, unchanged)
           AND (
                 EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
+                        WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = a.SchoolID
                           AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
              OR EXISTS (SELECT 1
                         FROM FactSectionTeachers fst
                         INNER JOIN DimSection sec2 ON sec2.SectionID = fst.SectionID AND sec2.IsCurrent = 1
                         INNER JOIN FactEnrollment e2 ON e2.SectionKey = sec2.SectionKey AND e2.ActiveFlag = 1
-                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e2.StudentKey = s.StudentKey)
+                        WHERE LOWER(fst.TeacherEmail) = LOWER(@UPN) AND fst.IsCurrent = 1 AND e2.StudentKey = a.StudentKey)
           )
-    ),
-    LatestReading AS (   -- latest result per (student, language) across the selected windows
-        SELECT far.StudentNumber, far.AssessmentWindowID, drs.ScaleSystem, drs.LevelCode, drs.LevelOrder, far.ReadingDelta,
-               ROW_NUMBER() OVER (PARTITION BY far.StudentNumber, drs.ScaleSystem
-                                  ORDER BY far.AssessmentDate DESC, far.ReadingAssessmentID DESC) AS rn
-        FROM FactAssessmentReading far
-        INNER JOIN DimReadingScale drs ON drs.ReadingScaleID = far.ReadingScaleID
-        WHERE far.AssessmentWindowID IN (SELECT AssessmentWindowID FROM ReadWins)
-    ),
-    ReadingIPP AS (
-        SELECT fsi.StudentKey, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
-        FROM FactStudentIPP fsi
-        WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Reading'
-        GROUP BY fsi.StudentKey
     )
     SELECT
         CAST(gs.StudentKey AS VARCHAR(20)) AS StudentKey,
@@ -107,52 +204,58 @@ RETURN
         gs.Grade,
         gs.Homeroom,
         gs.SchoolName,
+        gs.Gender,                                    -- summary-view demographic filters (2026-11-10)
+        gs.SelfIDAfrican,
+        gs.SelfIDIndigenous,
         ipp.IsIPP                 AS ReadingIPPStatus,
-        lr.ScaleSystem,                               -- language of THIS result; NULL = no reading result
-        lr.LevelCode,                                 -- the reading level (e.g. 'M'); NULL = no result
-        lr.LevelOrder,
-        lr.ReadingDelta,                              -- signed difference from the expected benchmark
+        -- Lockstep with the dal join below + the *All/list feeds: 1 = measured against the benchmark.
+        -- The client can't derive this from ReadingIPPStatus alone (NULL = no IPP row OR unresolved),
+        -- and it gates the drill's Expected/Diff cells exactly like the flat list (2026-11-17).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleReading,
+        gs.ScaleSystem,                               -- language of THIS result; NULL = no reading result
+        gs.LevelCode,                                 -- the reading level (e.g. 'M'); NULL = no result
+        gs.LevelOrder,
+        gs.ReadingDelta,                              -- signed difference from the expected benchmark
         drb.ExpectedMinLevel      AS ExpectedMinLevel, -- expected benchmark range for THIS result's language
         drb.ExpectedMaxLevel      AS ExpectedMaxLevel,
         expMin.LevelOrder         AS ExpectedMinOrder, -- order of ExpectedMinLevel (for sorting the Expected column)
         sp.StartingLevelCode      AS JuneReadingLevel,  -- prior-June starting level (same language); parity with the flat list
-        CASE WHEN lr.LevelOrder IS NOT NULL AND jrs.LevelOrder IS NOT NULL
-             THEN lr.LevelOrder - jrs.LevelOrder END AS DiffFromPrevJune,  -- signed growth since prior June
+        CASE WHEN gs.LevelOrder IS NOT NULL AND jrs.LevelOrder IS NOT NULL
+             THEN gs.LevelOrder - jrs.LevelOrder END AS DiffFromPrevJune,  -- signed growth since prior June
         dal.AchievementLevelCode  AS AchievementLevelCode,
         dal.AchievementLevelName  AS AchievementLevelName,
         dal.HexColor              AS AchievementHexColor,
         dal.HexColorTint          AS AchievementHexColorTint  -- cell-background tint (coloured cell, not text)
     FROM GroupStudents gs
-    LEFT JOIN ReadingIPP ipp ON ipp.StudentKey = gs.StudentKey
-    -- one row per (student, language-with-a-result); NULL when the student has no reading result
-    LEFT JOIN (SELECT * FROM LatestReading WHERE rn = 1) lr ON lr.StudentNumber = gs.StudentNumber
+    LEFT JOIN ReadingIPP ipp ON ipp.StudentNumber = gs.StudentNumber
     -- Expected benchmark range for THIS result's window month + the language's family (EN_Reading ->
     -- English, FR_Reading -> French Immersion), so a French result shows the French expectation.
-    LEFT JOIN WindowMonth wm ON wm.AssessmentWindowID = lr.AssessmentWindowID
+    LEFT JOIN WindowMonth wm ON wm.AssessmentWindowID = gs.AssessmentWindowID
     LEFT JOIN DimReadingBenchmark drb
            ON drb.GradeCode       = gs.Grade
           AND drb.AssessmentMonth = wm.BenchMonth
-          AND drb.ProgramFamily   = CASE lr.ScaleSystem WHEN 'EN_Reading' THEN 'English'
+          AND drb.ProgramFamily   = CASE gs.ScaleSystem WHEN 'EN_Reading' THEN 'English'
                                                          WHEN 'FR_Reading' THEN 'French Immersion' END
     LEFT JOIN DimReadingScale expMin
            ON expMin.LevelCode  = drb.ExpectedMinLevel
-          AND expMin.ScaleSystem = lr.ScaleSystem
+          AND expMin.ScaleSystem = gs.ScaleSystem
     -- Prior-June starting point for THIS result's language (mirrors tvf_StudentCohort) → Diff from Prev June.
     LEFT JOIN dbo.vw_StudentReadingStartingPoint sp
-           ON sp.StudentNumber = gs.StudentNumber AND sp.ScaleSystem = lr.ScaleSystem
+           ON sp.StudentNumber = gs.StudentNumber AND sp.ScaleSystem = gs.ScaleSystem
     LEFT JOIN DimReadingScale jrs
-           ON jrs.LevelCode = sp.StartingLevelCode AND jrs.ScaleSystem = lr.ScaleSystem
+           ON jrs.LevelCode = sp.StartingLevelCode AND jrs.ScaleSystem = gs.ScaleSystem
     LEFT JOIN DimAchievementLevel dal
            ON dal.ActiveFlag = 1
-          AND lr.ReadingDelta IS NOT NULL
+          AND (ipp.StudentNumber IS NULL OR ipp.IsIPP = 0)   -- IPP/unresolved: not measured, no band
+          AND gs.ReadingDelta IS NOT NULL
           AND (dal.LowerBound IS NULL
-               OR (dal.LowerOp = '>=' AND lr.ReadingDelta >= dal.LowerBound)
-               OR (dal.LowerOp = '>'  AND lr.ReadingDelta >  dal.LowerBound)
-               OR (dal.LowerOp = '='  AND lr.ReadingDelta =  dal.LowerBound))
+               OR (dal.LowerOp = '>=' AND gs.ReadingDelta >= dal.LowerBound)
+               OR (dal.LowerOp = '>'  AND gs.ReadingDelta >  dal.LowerBound)
+               OR (dal.LowerOp = '='  AND gs.ReadingDelta =  dal.LowerBound))
           AND (dal.UpperBound IS NULL
-               OR (dal.UpperOp = '<=' AND lr.ReadingDelta <= dal.UpperBound)
-               OR (dal.UpperOp = '<'  AND lr.ReadingDelta <  dal.UpperBound)
-               OR (dal.UpperOp = '='  AND lr.ReadingDelta =  dal.UpperBound))
+               OR (dal.UpperOp = '<=' AND gs.ReadingDelta <= dal.UpperBound)
+               OR (dal.UpperOp = '<'  AND gs.ReadingDelta <  dal.UpperBound)
+               OR (dal.UpperOp = '='  AND gs.ReadingDelta =  dal.UpperBound))
 );
 GO
 

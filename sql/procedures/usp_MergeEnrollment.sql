@@ -4,6 +4,11 @@
  *          FactEnrollment is NOT a Type 2 dimension — rows are
  *          inserted/updated/closed in place via ActiveFlag, not versioned.
  * Created: 2026-05-01
+ * Modified: 2026-10-30 — Step 5 defensive close now also CAPS EndDate at
+ *          @EffectiveDate (was: ActiveFlag only, leaving the scheduled PS
+ *          term-end EndDate in place, which bled departed students into every
+ *          later cycle's roster via the membership date-overlap). One-time
+ *          repair of existing rows: sql/scripts/fix_enrollment_close_dates_2026-10-30.sql.
  * Region: Canada East (PIIDPA compliant)
  *
  * Pipeline (set-based throughout — no row-by-row WHILE loops):
@@ -28,7 +33,11 @@
  *      SourceSystemID, not changed in step 2). Strict-less-than on
  *      LastUpdated avoids double-touching rows just updated.
  *   5. Close currently-Active rows in FactEnrollment that are absent from
- *      this import (set ActiveFlag=0). Spec says PS export includes
+ *      this import (set ActiveFlag=0, and cap EndDate at @EffectiveDate —
+ *      2026-10-30 fix: PS populates DateLeft with the SCHEDULED exit, so a
+ *      defensively-closed row otherwise keeps a term-end EndDate and the
+ *      roster-membership date-overlap carries the departed student into
+ *      every later cycle through term end). Spec says PS export includes
  *      currently-active AND recently-closed enrollments — anything still
  *      flagged active in the warehouse but missing from import is either:
  *        - a real closure that PS forgot to send (close defensively), or
@@ -241,9 +250,22 @@ BEGIN
     -- ------------------------------------------------------------------------
     -- Step 5: Close currently-Active rows in FactEnrollment that are absent
     -- from this import. Investigate any non-zero count.
+    --
+    -- EndDate CAP (2026-10-30): PS fills CC.DateLeft with the student's
+    -- SCHEDULED exit (term/year end), so a row that simply vanishes from the
+    -- export (transfer out, mid-year drop) still carries that future EndDate.
+    -- usp_RebuildRosterMembership keeps departed students on a window's roster
+    -- by date overlap alone (deliberate, 2026-10-13 paper-backfill decision),
+    -- so an uncapped EndDate bled the student into every later cycle through
+    -- term end. Cap EndDate at @EffectiveDate: a NULL or still-future scheduled
+    -- date becomes "the day we learned they were gone"; a real earlier exit
+    -- date PS already sent is preserved.
     -- ------------------------------------------------------------------------
     UPDATE f
     SET ActiveFlag  = 0,
+        EndDate     = CASE WHEN f.EndDate IS NULL OR f.EndDate > @EffectiveDate
+                           THEN @EffectiveDate
+                           ELSE f.EndDate END,
         LastUpdated = GETDATE()
     FROM FactEnrollment f
     LEFT JOIN Wrk_Enrollment w

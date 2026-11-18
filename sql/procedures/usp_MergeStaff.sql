@@ -828,3 +828,4 @@ BEGIN
         GETDATE()
     );
 END;
+GO

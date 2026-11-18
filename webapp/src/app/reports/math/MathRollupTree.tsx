@@ -1,15 +1,19 @@
 'use client'
 
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import type { MathCohortRow, MathRollupRow } from '@/lib/data'
+import type { MathCohortRow, MathRollupRow, MathTrendRow, ReportCycle } from '@/lib/data'
 import {
   type BlankMode, type Grade, type Mark, type Tally, type Unit,
   GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, meanOf,
-  emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct,
+  emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct, BANDS, BAND_HEX,
 } from './mathModel'
 import { BandCell, TaskCell } from './mathCells'
-import { loadMathGroup } from './actions'
+import { loadMathGroup, loadMathTrend } from './actions'
+import { demoPass, gradeRank, type DemoFilter, type Tri } from '../rollupModel'
+import { useSharedFilters } from '../sharedFilters'
+
+type DemoRow = { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }
 
 // ── Reports > Math OVERSIGHT roll-up tree (math-reports #2, Phase 1). Replaces the card picker for
 // Administrator / SpecialistTeacher / RegionalAnalyst; teachers keep the cards.
@@ -18,8 +22,9 @@ import { loadMathGroup } from './actions'
 //
 // School and Grade/Homeroom rows share one set of columns: Overall + one per unit, pooled by unit
 // NAME across grades (tasks differ by grade, unit names line up). Each cell = % of students at
-// Meeting or In-depth, out of students WITH a level; IPP / No data / Incomplete are left out of the
-// % and listed in the hover. Expanding a Grade/Homeroom row loads that group's matrix on demand and
+// Meeting or In-depth, out of students WITH a level — a level counts whoever earned it, including a
+// confirmed IPP's personal-progress band (user ruling 2026-11-17). "IPP" in the hover = the BADGE
+// state (nothing scorable); No data / Incomplete likewise have no level and sit out of the %. Expanding a Grade/Homeroom row loads that group's matrix on demand and
 // shows one block per grade, with that grade's own unit columns that expand into task columns.
 
 type SummarizeBy = 'Grade' | 'Homeroom'
@@ -32,6 +37,10 @@ interface TreeStudent {
   homeroomKey: string | null
   schoolId: string
   ipp: boolean
+  eligible: boolean // measured (no confirmed OR unresolved IPP) — unmeasured students get no band
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
   units: Map<string, UnitCounts>
 }
 interface School { id: string; name: string; students: TreeStudent[] }
@@ -46,6 +55,27 @@ interface ChildNode {
 interface Summary { n: number; overall: Tally; units: Record<string, Tally> }
 type BlockState = { status: 'loading' } | { status: 'done'; rows: MathCohortRow[] } | { status: 'error'; message: string }
 
+// ── Page-top charts (1.4.0): donut = the tree's own (filtered) students; bars = one per cycle ─────
+// One student's OVERALL bucket from their per-unit counts — the same arithmetic summarize() uses for
+// the tree's Overall column, so the charts and the table can never disagree.
+type Countable = { ipp: boolean; eligible: boolean; units: Map<string, { taskCount: number; scored: number; canDo: number }> }
+function overallOf(s: Countable, blankMode: BlankMode) {
+  const avgs: (number | null)[] = []
+  for (const c of s.units.values()) {
+    const ippCells = s.ipp ? c.taskCount - c.scored : 0
+    avgs.push(unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s).avg)
+  }
+  return overallBucket(meanOf(avgs), s.ipp)
+}
+function tallyOverall(students: Iterable<Countable>, blankMode: BlankMode): Tally {
+  const t = emptyTally()
+  for (const s of students) t[overallOf(s, blankMode)]++
+  return t
+}
+const withLevel = (t: Tally) => t.b1 + t.b2 + t.b3 + t.b4
+type TrendStudent = Countable & DemoRow
+type TrendState = { status: 'loading' } | { status: 'done'; rows: MathTrendRow[] } | { status: 'error'; message: string }
+
 function summarize(students: TreeStudent[], unitNames: string[], blankMode: BlankMode): Summary {
   const overall = emptyTally()
   const units: Record<string, Tally> = {}
@@ -55,7 +85,7 @@ function summarize(students: TreeStudent[], unitNames: string[], blankMode: Blan
     for (const [name, c] of s.units) {
       // An IPP student's unmarked task is an IPP cell (not in scope) — same rule as the matrix.
       const ippCells = s.ipp ? c.taskCount - c.scored : 0
-      const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode)
+      const st = unitStat({ inScope: c.taskCount - ippCells, filled: c.scored, ones: c.canDo, ipp: ippCells }, blankMode, s)
       units[name][unitBucket(st)]++
       avgs.push(st.avg)
     }
@@ -78,8 +108,8 @@ function RollupCell({ t, sticky }: { t: Tally; sticky?: boolean }) {
   )
 }
 
-export default function MathRollupTree({ rows, cycle, showAll = false }: { rows: MathRollupRow[]; cycle: string | null; showAll?: boolean }) {
-  const { schools, unitNames } = useMemo(() => {
+export default function MathRollupTree({ rows, cycle, cycles = [], showAll = false }: { rows: MathRollupRow[]; cycle: string | null; cycles?: ReportCycle[]; showAll?: boolean }) {
+  const { schools: allSchools, unitNames } = useMemo(() => {
     const byKey = new Map<string, TreeStudent>()
     const unitOrder = new Map<string, number>()
     const schoolNames = new Map<string, string>()
@@ -88,7 +118,9 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
       if (!s) {
         s = {
           key: r.studentKey, grade: r.grade, homeroom: r.homeroom, homeroomKey: r.homeroomKey,
-          schoolId: r.schoolId, ipp: r.mathIPP, units: new Map(),
+          schoolId: r.schoolId, ipp: r.mathIPP, eligible: r.mathEligible,
+          gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+          units: new Map(),
         }
         byKey.set(r.studentKey, s)
         schoolNames.set(r.schoolId, r.schoolName ?? r.schoolId)
@@ -115,10 +147,48 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
   }, [rows])
 
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
-  const [blankMode, setBlankMode] = useState<BlankMode>('exclude')
+
+  // ── Filter section (2026-11-18): the same demographic filters as the Reading/Writing/RWM trees,
+  // with the Blanks scoring toggle moved in beside them (as on RWM). Filters trim the tree rows,
+  // the counts, every % cell and the drill's student rows together. Gender / Self-ID are OFFERED
+  // only when the feed carries them (deploy_math_filter_demographics_2026-11-18.sql).
+  const allStudents = useMemo(() => allSchools.flatMap((s) => s.students), [allSchools])
+  const gradeOpts = useMemo(
+    () => [...new Set(allStudents.map((s) => s.grade))].sort((a, b) => gradeRank(a) - gradeRank(b)),
+    [allStudents],
+  )
+  const gradeRanks = useMemo(() => gradeOpts.map(gradeRank), [gradeOpts])
+  const genderOpts = useMemo(
+    () => [...new Set(allStudents.map((s) => s.gender).filter(Boolean) as string[])].sort(),
+    [allStudents],
+  )
+  const hasSelfID = useMemo(
+    () => allStudents.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
+    [allStudents],
+  )
+  // Values live in the tab-wide shared store (sharedFilters.ts) so they carry across cycle changes
+  // and across reports (2026-11-18) — this tree remounts on every cycle change.
+  const shared = useSharedFilters(gradeRanks, genderOpts, hasSelfID)
+  const {
+    gradeMinRank, gradeMaxRank, gender, african, indigenous, filtersOpen, blankMode,
+    setGradeMinRank, setGradeMaxRank, setGender, setAfrican, setIndigenous, setFiltersOpen, setBlankMode,
+  } = shared
+  const anyFilter = shared.anyDemo
+  // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as RWM).
+  const resetFilters = shared.resetDemo
+  const pass = useMemo(
+    () => demoPass({ gradeMinRank, gradeMaxRank, gender, african, indigenous } satisfies DemoFilter),
+    [gradeMinRank, gradeMaxRank, gender, african, indigenous],
+  )
+  // A school with nobody left after filtering drops out of the tree (as on the other trees).
+  const schools = useMemo(
+    () => allSchools.map((sch) => ({ ...sch, students: sch.students.filter(pass) })).filter((sch) => sch.students.length > 0),
+    [allSchools, pass],
+  )
+
   // A school admin with one school lands with it open; everyone else starts fully collapsed.
   const [openSchools, setOpenSchools] = useState<Set<string>>(
-    () => new Set(schools.length === 1 ? [schools[0].id] : []),
+    () => new Set(allSchools.length === 1 ? [allSchools[0].id] : []),
   )
   const [openNodes, setOpenNodes] = useState<Set<string>>(() => new Set())
   const [blocks, setBlocks] = useState<Record<string, BlockState>>({})
@@ -184,8 +254,140 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
   const colCount = 3 + unitNames.length
   const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
+  // ── Charts. Donut: overall Achievement Level of every student the tree currently shows (filters +
+  // Blanks applied). Bars: the same, once per cycle — each bar is what the tree shows with THAT cycle
+  // selected (that cycle's tasks, results recorded in it). The all-cycles feed loads after the tree.
+  const scopeLabel = cycles.find((c) => c.cycleGroupId === cycle)?.name ?? 'Current'
+  const donut = useMemo(() => {
+    const t = tallyOverall(schools.flatMap((s) => s.students), blankMode)
+    const total = withLevel(t)
+    let acc = 0
+    const slices = BANDS.map((b) => {
+      const count = t[b.cls]
+      const startPct = total ? (acc / total) * 100 : 0
+      acc += count
+      const endPct = total ? (acc / total) * 100 : 0
+      return { ...b, color: BAND_HEX[b.cls], count, pct: total ? (count / total) * 100 : 0, startPct, endPct }
+    })
+    const gradient = total
+      ? slices.filter((s) => s.count > 0).map((s) => `${s.color} ${s.startPct.toFixed(2)}% ${s.endPct.toFixed(2)}%`).join(', ')
+      : 'var(--border) 0% 100%'
+    return { slices, total, gradient, t }
+  }, [schools, blankMode])
+
+  const [trend, setTrend] = useState<TrendState>({ status: 'loading' })
+  useEffect(() => {
+    let live = true
+    loadMathTrend()
+      .then((res) => { if (live) setTrend(res.error ? { status: 'error', message: res.error } : { status: 'done', rows: res.rows }) })
+      .catch(() => { if (live) setTrend({ status: 'error', message: 'Could not load the by-cycle results. Please reload the page.' }) })
+    return () => { live = false }
+  }, [])
+  const trendByCycle = useMemo(() => {
+    const byCycle = new Map<string, Map<string, TrendStudent>>()
+    if (trend.status !== 'done') return byCycle
+    for (const r of trend.rows) {
+      let students = byCycle.get(r.cycleGroupId)
+      if (!students) byCycle.set(r.cycleGroupId, (students = new Map()))
+      let s = students.get(r.studentKey)
+      if (!s) {
+        s = {
+          grade: r.grade, gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+          ipp: r.mathIPP, eligible: r.mathEligible, units: new Map(),
+        }
+        students.set(r.studentKey, s)
+      }
+      if (r.unitName) s.units.set(r.unitName, { taskCount: r.taskCount, scored: r.scoredCount, canDo: r.canDoCount })
+    }
+    return byCycle
+  }, [trend])
+  // Same window rule as the Reading/Writing chart: up to 6 cycles, oldest → newest, and the SELECTED
+  // cycle is always the rightmost bar (no selection = through the most recent started cycle).
+  const cycleBars = useMemo(() => {
+    const idx = cycles.findIndex((c) => c.cycleGroupId === cycle)
+    const shown = (idx >= 0 ? cycles.slice(0, idx + 1) : cycles).slice(-6)
+    return shown.map((c) => {
+      const students = [...(trendByCycle.get(c.cycleGroupId)?.values() ?? [])].filter(pass)
+      const t = tallyOverall(students, blankMode)
+      return { id: c.cycleGroupId, label: c.name, t, total: withLevel(t) }
+    })
+  }, [cycles, cycle, trendByCycle, pass, blankMode])
+  const cycleMax = Math.max(1, ...cycleBars.map((b) => b.total))
+  const noLevelNote = (t: Tally) =>
+    [t.ipp ? `${t.ipp} IPP` : null, t.none ? `${t.none} no data` : null].filter(Boolean).join(' · ')
+
   return (
     <div className="math-entry">
+      {/* Data display first, controls second, tree third — same order as every other report. */}
+      <div className="cohort-charts">
+        <div className="chart-card">
+          <div className="chart-title">{scopeLabel} achievement distribution</div>
+          <div className="donut-wrap">
+            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
+              <div className="donut-hole">
+                <div className="donut-total">{donut.total}</div>
+                <div className="donut-label">STUDENTS</div>
+              </div>
+            </div>
+            <ul className="donut-legend">
+              {donut.slices.map((s) => (
+                <li key={s.cls}>
+                  <span className="swatch" style={{ background: s.color }} />
+                  <span className="legend-name">{s.name}</span>
+                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          {donut.total === 0 ? <div className="muted chart-empty">No students with an overall level match.</div> : null}
+          {noLevelNote(donut.t) ? (
+            <div className="muted small chart-empty">Not in the chart (no overall level): {noLevelNote(donut.t)}.</div>
+          ) : null}
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-title">Achievement by cycle</div>
+          {trend.status === 'loading' ? (
+            <div className="muted chart-empty">Loading results by cycle…</div>
+          ) : trend.status === 'error' ? (
+            <div className="muted chart-empty">Couldn&apos;t load the by-cycle chart. {trend.message}</div>
+          ) : cycleBars.length === 0 ? (
+            <div className="muted chart-empty">No cycles have started yet this year.</div>
+          ) : (
+            <>
+              <div className="monthbars">
+                {cycleBars.map((bar) => (
+                  <div key={bar.id} className="monthbar">
+                    <div className="monthbar-stack">
+                      {BANDS.map((b) => {
+                        const v = bar.t[b.cls]
+                        if (!v) return null
+                        return (
+                          <div
+                            key={b.cls}
+                            className="monthbar-seg"
+                            style={{ height: `${(v / cycleMax) * 100}%`, background: BAND_HEX[b.cls] }}
+                            title={`${b.name}: ${v}`}
+                          />
+                        )
+                      })}
+                    </div>
+                    <div className="monthbar-label" title={`${bar.total} with a level${noLevelNote(bar.t) ? ` · ${noLevelNote(bar.t)}` : ''}`}>
+                      {bar.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <ul className="bar-legend">
+                {BANDS.map((b) => (
+                  <li key={b.cls}><span className="swatch" style={{ background: BAND_HEX[b.cls] }} />{b.name}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="mtoolbar">
         <span className="muted">Summarize by</span>
         <div className="subject-toggle" style={{ margin: 0 }}>
@@ -195,11 +397,84 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
             </button>
           ))}
         </div>
+        <button className="btn-ghost" onClick={() => setFiltersOpen(!filtersOpen)}>
+          {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
+        </button>
+        {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset filters</button> : null}
         <span className="spacer" />
-        <button className="btn-ghost" onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}>
-          Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
+        {/* Close-only on purpose: an "expand all" would fire every node's lazy loadMathGroup at once. */}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}
+        >
+          Collapse all
         </button>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="filter-row">
+              <select value={gradeMinRank} onChange={(e) => setGradeMinRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+              <span className="muted">to</span>
+              <select value={gradeMaxRank} onChange={(e) => setGradeMaxRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {genderOpts.length > 1 ? (
+            <div className="filter-group">
+              <label>Gender</label>
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="All">All</option>
+                {genderOpts.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasSelfID ? (
+            <>
+              <div className="filter-group">
+                <label>Self-ID African Descent</label>
+                {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
+                <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Self-ID Indigenous Descent</label>
+                {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
+                <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+            </>
+          ) : null}
+
+          <div className="filter-group">
+            <label>Blanks</label>
+            <div className="subject-toggle" style={{ margin: 0 }} title="How un-recorded tasks affect the roll-up">
+              <button className={blankMode === 'exclude' ? 'toggle-on' : ''} onClick={() => setBlankMode('exclude')}>Excluded</button>
+              <button className={blankMode === 'zero' ? 'toggle-on' : ''} onClick={() => setBlankMode('zero')}>Count as 0</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="mlegend">
         <span className="grp"><strong>% Meeting or In-depth</strong></span>
@@ -228,11 +503,11 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
           <tbody>
             {showAll && schools.length > 1
               ? (() => {
-                  const allStudents = schools.flatMap((s) => s.students)
+                  const shown = schools.flatMap((s) => s.students)
                   const tOpen = openSchools.has('__TCRCE__')
-                  const ts = summarize(allStudents, unitNames, blankMode)
+                  const ts = summarize(shown, unitNames, blankMode)
                   const byGrade = new Map<string, TreeStudent[]>()
-                  for (const s of allStudents) byGrade.set(s.grade, [...(byGrade.get(s.grade) ?? []), s])
+                  for (const s of shown) byGrade.set(s.grade, [...(byGrade.get(s.grade) ?? []), s])
                   const grades = [...byGrade.entries()]
                     .map(([grade, students]) => ({ grade, students }))
                     .sort((a, b) => (GRADE_ORDER[a.grade] ?? 99) - (GRADE_ORDER[b.grade] ?? 99))
@@ -301,6 +576,7 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
                                   state={node.groupKey ? blocks[node.groupKey] : undefined}
                                   blankMode={blankMode}
                                   cycle={cycle}
+                                  pass={pass}
                                 />
                               </div>
                             </td>
@@ -321,8 +597,8 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
 
 // ── One expanded Grade/Homeroom: a block per grade (a split homeroom shows one per grade) ──────────
 function GroupBlock({
-  node, state, blankMode, cycle,
-}: { node: ChildNode; state: BlockState | undefined; blankMode: BlankMode; cycle: string | null }) {
+  node, state, blankMode, cycle, pass,
+}: { node: ChildNode; state: BlockState | undefined; blankMode: BlankMode; cycle: string | null; pass: (s: DemoRow) => boolean }) {
   if (!node.groupKey) {
     return (
       <p className="muted small" style={{ margin: 0 }}>
@@ -340,8 +616,10 @@ function GroupBlock({
       </div>
     )
   }
-  const grades = buildGrades(state.rows)
-  const marks = buildMarks(state.rows)
+  // The drill follows the tree's filters: same predicate, applied to the drill feed's own columns.
+  const rows = state.rows.filter(pass)
+  const grades = buildGrades(rows)
+  const marks = buildMarks(rows)
   const loaded = new Set(grades.map((g) => g.grade))
   const missing = node.grades.filter((g) => !loaded.has(g))
   const href = `/reports/math/${encodeURIComponent(node.groupKey)}${cycle ? `?cycle=${encodeURIComponent(cycle)}` : ''}`
@@ -375,7 +653,9 @@ function GradeBlock({
       return next
     })
   const mark = (studentKey: string, taskKey: string): Mark => marks[rk(studentKey, taskKey)] ?? 'blank'
-  const stat = (studentKey: string, u: Unit) => unitStat(countUnit((t) => mark(studentKey, t), u), blankMode)
+  // Per-student measured flag: unmeasured students (confirmed/unresolved IPP) keep visible marks, no band.
+  const meta = new Map(g.students.map((s) => [s.studentKey, { eligible: s.eligible, ipp: s.mathIPP }]))
+  const stat = (studentKey: string, u: Unit) => unitStat(countUnit((t) => mark(studentKey, t), u), blankMode, meta.get(studentKey))
 
   // Summary row tallies: overall + per unit (students), and per task (cells).
   const overall = emptyTally()
@@ -470,7 +750,7 @@ function GradeBlock({
                 if (collapsed.has(u.name)) {
                   return [
                     <td className="stu" key={`${u.name}-sum`}>
-                      <BandCell avg={st.avg} ipp={st.ipp} incomplete={st.incomplete} />
+                      <BandCell avg={st.avg} ipp={st.ipp} incomplete={st.incomplete} unresolved={!s.eligible && !s.mathIPP} />
                     </td>,
                   ]
                 }
@@ -481,8 +761,11 @@ function GradeBlock({
               const r = meanOf(avgs)
               return (
                 <tr key={s.studentKey}>
-                  <th className="col-task" scope="row" title={s.fullName}>{s.name}</th>
-                  <td className="col-pct"><BandCell avg={r} ipp={s.mathIPP && r == null} incomplete={false} /></td>
+                  {/* Students are ROWS here, so there's room for the full name — "Last, First" like
+                      every other report list. The compact "First L." stays only where students are
+                      COLUMN headers (the tasks-down class view + the entry grid). */}
+                  <th className="col-task" scope="row">{s.sortKey}</th>
+                  <td className="col-pct"><BandCell avg={r} ipp={s.mathIPP && r == null} incomplete={false} unresolved={!s.eligible && !s.mathIPP} /></td>
                   {cells}
                 </tr>
               )

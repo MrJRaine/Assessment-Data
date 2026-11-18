@@ -16,6 +16,76 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'feature',
+    summary:
+      'New "Missing results" report for school administrators and regional staff: pick a cycle and see which students do not yet have Reading, Writing or Math results entered. Open a class to see the full list. Rows are colour-coded by how complete each group is.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'feature',
+    summary:
+      'The Reading, Writing, Math and RWM summaries now have a "Show filters" section: trim the whole summary — counts, charts and expanded roster views together — by grade, gender or self-identification (and, for Reading and Writing, language of instruction). The student list adds the language filter too, and a "Collapse all" button closes every open branch on the summary trees. Your filter choices now stay in place when you change the cycle or move between reports.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-18',
+    kind: 'feature',
+    summary:
+      'The Math summary now opens with the same two charts as Reading and Writing: a donut of students at each overall achievement level, and bars showing that breakdown for each cycle. Both follow your filters.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      'Charts now follow your filters everywhere. On the student-list view, the donut and trend update with every filter you set instead of always showing the whole group, and filtering by language no longer hides students who are expected in that language but have no result yet.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      '"Current" on the Reading and Writing summaries now shows each student’s most recent result on record — any school year — matching the student list. Students with an IPP in a subject are no longer counted in that subject’s achievement percentages or charts, since they aren’t measured against a benchmark; they still appear in the lists, marked "IPP".',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-13',
+    kind: 'fix',
+    summary:
+      'Math data entry shows each student’s full name (first name over last name) in the column headers and sorts students by last name, like every other list — two classmates with the same first name and last initial are no longer indistinguishable.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'On a student’s detail page, switching between Reading and Writing could briefly show the other subject’s history — dashes in every column with a leftover achievement colour and a blank chart. The page now reloads the history for the subject you pick.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Math and IPPs: a student with a confirmed IPP earns a unit level once at least 80% of the unit’s full task list is marked — outcomes removed by their plan count toward that total — so lighter plan modifications can still earn levels, while heavier ones show “IPP” rather than a level based on only a few tasks. Earned levels now count in every math chart and percentage. A flagged-but-unconfirmed IPP shows marks but no level until it’s confirmed.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Students whose IPP is flagged but not yet confirmed now show an orange “IPP?” marker on the reports instead of a blank dash, so class counts reconcile and unconfirmed IPPs are easy to spot and follow up. Hover the marker for what to do.',
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-17',
+    kind: 'fix',
+    summary:
+      'Math entry now asks you to confirm a flagged IPP before marks can be entered for that student — the same Yes/No confirmation Reading and Writing entry already have. Unconfirmed students are listed above the grid; choices save with the Save button, and the student unlocks (or switches to IPP cells) right away.',
+  },
+  {
     version: '1.3.0',
     date: '2026-10-27',
     kind: 'feature',

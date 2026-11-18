@@ -22,6 +22,17 @@ said and which is the opposite of what they wanted (non-teachers see ALL mapped-
 'd normally see — a principal sees every ELA/FLA/Math section in their school). If a rule is
 load-bearing and I'm not quoting, confirm it before it goes in memory.
 
+**AN UNSURFACED IMPLEMENTATION DEFAULT IS A UNILATERAL DECISION — AND NEVER CITE A RECORDED
+DECISION WITHOUT RE-READING IT** (added 2026-11-13). Building the first report with a teacher
+axis (Missing results), I resolved the lead teacher `IsCurrent=1` without flagging that choice
+in the 50-ft view; when the user questioned it, I justified it by citing the recorded "admin
+side is current-only by design" convention — which, on actually reading the record, covers
+ACCESS SCOPE only, not displayed attribution. Two rules: (1) when a change introduces a NEW
+kind of display semantics (current-vs-historic resolution, labelling, exclusion), that choice
+goes in the 50-ft view as a decision point, even if an existing convention seems to cover it;
+(2) before citing a recorded decision as justification, re-read the memory/doc and check its
+actual scope — a convention cited from recollection is an inference, not a record.
+
 **A MID-TURN MESSAGE IS NOT AN ANSWER TO MY LATEST QUESTION** (added 2026-09-18). Messages that
 arrive while I am working were typed while I was still composing, so they respond to something
 EARLIER in the thread — not to the question I just asked. On 2026-09-18 I asked "JWT or server-side?"

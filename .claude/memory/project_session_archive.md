@@ -1927,3 +1927,162 @@ Full day of v1.3.0 dev acceptance testing. Everything committed/pushed to `dev` 
 **End-of-session dev data state:** 1000 students / 5 schools / unique surnames / current-year enrolments; demo results + dual-language sentinel seeded; StaffExport carries the 7.2 (Pat Willow `.0`) and 7.4 (Robin Sorrel id 82050) edits, reflected in dev.
 
 **Next:** §8 (maintenance/LOTO, app-only), §9 (write rule + role overrides + admin-assistant remap, ingest-driven), §10 (regression smoke), then a 1.3.0 LIVE deploy. Pre-live: consolidate the 1.3.0 SQL into one ordered idempotent bundle (ordering bit us twice — tint revert + the DQ proc add); rebuild awdev for the donut fix.
+
+---
+
+## Session 2026-10-27 — v1.3.0 SHIPPED TO LIVE (release ritual + cutover)
+
+Finished v1.3.0 testing (§8–§10), built the remaining features the user called for, cut over to live, and ran the full release ritual.
+
+**Features built/fixed this session (all on dev then live):**
+- **Maintenance role** (capability-only override on `/admin/staff-roles`, carries `CanMaintain`). Design churned a lot before landing: FIRST cut split Save (set flag) from a separate `usp_ApplyRoleOverrides` "Apply now" wrapper that fired the FULL staff merge — user rightly called it "a tank for a fly" AND flagged the flag was granted BEFORE any system check. Reworked to **Save-does-everything, per-email, scoped**: `usp_SetStaffRoleOverride` records the override + provisions that one email (placeholder DimStaff for not-in-PS, migrate-to-Staff-Access for found-in-PS, AccessLevel+StaffSchoolAccess for a coach, held for a not-in-PS coach), flag granted ONLY after the staging/DimStaff check; `usp_ApplyRoleOverrides` DROPPED. Then: **retire = DELETE from list** (not a lingering inactive row), `Migrated`→`Removed` flag.
+- **LOTO**: the blocked-non-owner clear showed NO error (overlay/banner swallowed `res.error`) — surfaced it; then the message was made to NAME the owner's email (so a blocked non-sysadmin can find them with no sysadmin around).
+- **Math reports → teachers get the roll-up tree** (not the card picker). The card picker showed BOTH a homeroom card and a redundant grade card for the same class ("Primary is not a class"). Routed teachers to `MathRollupTree`; `tvf_StudentCohortMathAll` gained a TAUGHT scope (own section students). Card-picker path (`tvf_MathCohortGroups`/`getMathCohortGroups`) now unused — left for cleanup.
+- **IPP confirm flip** (Reading+Writing entry): after confirming an IPP + Save, the prompt lingered until refresh. Optimistic `confirmedIpp` session map overrides `s.ippNeedsConfirmation`. REGRESSION-REPAIR (worked before, reverted) → git-history only, NOT public changelog, per [[feedback_changelog_as_you_go]].
+- **dev-impersonation bug**: switching to a locked-out teacher made the whole impersonation bar vanish — the expanded `.dev-impersonate` had no z-index, so the maintenance overlay (z 1000) covered it. Added `position:sticky; top:0; z-index:1001`. dev-impersonation-only.
+
+**Testing**: §1–§7 were signed off pre-session. This session: §8 (LOTO) + §9 (role overrides, Maintenance role, retire=delete, gating — 9.1 DimRole verify, 9.5/9.5b/9.6/9.7, C1–C4) + §10 smoke all signed off. **9.2–9.4 DEFERRED post-live** (no SupportStaff/admin-assistant in the dev generator).
+
+**Changelog/patchNotes brought current** (user caught it was behind): CHANGELOG [Unreleased]→[1.3.0], patchNotes got the teacher-facing math-tree entry (IPP-confirm excluded as a regression-repair; IPP/adaptation-persistence left out per user). Footer version bumped `1.3.0-dev`→`1.3.0`.
+
+**Cutover**: consolidated the loose increments into one `deploy_1.3.0.sql` (PART 4 = the 10-27 folds; base already had the 10-20/10-22 reports increments). User ran it on live + swapped the prod container (tar `assessment-webapp-1.3.0.tar`, 404M, from the **clean `:1.3.0`** image — NOT `:1.3.0-imp`; the user stopped a dangerously-worded step and I proved 0 vs 11 bypass refs). Release ritual: dev→main `0ef2e27`, tag `v1.3.0`, gh release (token via git credential), back-merge, imp reconcile `80d307c` (clean).
+
+**Process frustrations this session (user corrections → memories):** rebuild the **imp** container FIRST when the user tests via impersonation ([[feedback_imp_container_first]]); STOP and ask clarifying questions instead of charging off on assumptions (repeatedly — reinforces [[feedback_troubleshooting_method]]); forgot to rebuild containers after a commit (left What's New stale); kept re-asking for go on obvious fixes.
+
+**Backlog added** ([[project_feature_ideas_and_backlog]]): LOTO sysadmin-override confirm dialog, maintainer-only lockout-reason field, read-only Coach role (Administrator-pattern but view-only entry unless flagged).
+
+**End-of-session state:** v1.3.0 LIVE + verified by user ("deploy is good"). dev==main @ 0ef2e27. Local containers on 1.3.0/1.3.0-imp; prod on :1.3.0. Dev data: ~1000 students, demo results seeded.
+
+## Session 2026-10-30 — firefight day: enrollment close-dates, math-reports outage, write-rule first contact, Save dup bug; attribution rewrite + charts fix coded
+
+**1. Departed-student cycle bleed (live bug → FIXED live).** Students who left during cycle 1 kept
+appearing in cycle 2+. Root cause: `usp_MergeEnrollment` step 5 (defensive close for enrollments that
+vanish from the PS export) set ActiveFlag=0 but left EndDate at PS's SCHEDULED exit (term/year end), and
+the ActiveFlag-blind membership date-overlap (10-13 paper-backfill design) carried them through June.
+Fixed: step-5 EndDate cap at the ingest date (earlier real exits kept); one-time repair
+`fix_enrollment_close_dates_2026-10-30.sql` set EndDate = Atlantic date of LastUpdated on 3258 live rows
+(guard: only NULL/future EndDates — rows still in PS's rolling export keep getting touched) + membership
+rebuild. Verified live (example student: 1199 rows → EndDate 2026-09-09). CHANGELOG bullet under [1.3.0].
+
+**2. Historical school attribution (design decided + CODED; dev test pending).** User surfaced that
+reports attribute everything to the student's CURRENT school, so movers drag history (defeats the frozen
+StudentKey design). DECIDED (user): cycle-filtered reports attribute School/Grade/Homeroom + the access
+gate to the frozen version of the student's most recent result in that cycle (old school's admin sees it;
+new school's doesn't; district leavers stay in their recorded cycles); the no-cycle "Current" view stays
+current-anchored; late entry into a section a student left must bind to the SECTION's school version.
+Shipped-shape: server-side only (user choice; "bug fix to 1.3.0"). Built: SECTION-SCHOOL BINDING in the 3
+upsert procs (section inferred from Teacher/SectionRosterMembership, fallback = legacy effective-date
+join); 9 TVFs rewritten CYCLE-SCOPED (3 roll-up All + 3 drills in lockstep; flat lists one-attribution-
+per-student so client stacking keeps one demographic set; math one-per-student; IPP/section-language
+lookups rekeyed by StudentNumber; drill names prefer current version; teacher TAUGHT arms stay current-
+roster). Bundle `deploy_school_attribution_2026-10-30.sql` + dev mover sentinel `seed_mover_sentinel_dev.sql`.
+NOT yet run anywhere.
+
+**3. User guide 08 (docx).** `docs/user-guides/08-run-an-ingest-cycle.docx` built from guide 01 as
+template via PowerShell OOXML surgery (no node/python/pandoc on this machine; .NET zip with
+forward-slash entries — CreateFromDirectory emits backslashes, hand-roll the entries).
+
+**4. LIVE OUTAGE: math reports (Msg 208) — the bundle stowaway.** `usp_MergeStaff.sql` ended without GO;
+assembling deploy_1.3.0 PART 4 fused the next section's `DROP FUNCTION tvf_StudentCohortMathAll` INTO the
+proc BODY (silent — compiles clean). The bundle's own CREATE masked it on deploy day; the FIRST post-
+release live ingest (noon 10-30) executed the stowaway and deleted the TVF → "Couldn't load data" for all.
+Hotfix `hotfix_math_tree_restore_2026-10-30.sql` (clean proc + shipped TVF from git 2f0bf50) run live+dev.
+Bundle seam + source GO fixed; seam audit found no other bad seam in either bundle. Rule sharpened in
+[[feedback_idempotent_deploy_bundles]] (silent-stowaway mode; post-assembly seam audit; sys.sql_modules
+stowaway scan). CHANGELOG bullet under [1.3.0].
+
+**5. Write rule's first real-data contact (noon live ingest).** 351 staff deactivated, 175 sections
+excluded (teacher unresolvable), 199 enrollment rows orphaned. Verified via write-rule replay: all 310
+staged-email drops legitimately non-teaching (0 whitespace false drops) — §9.2/§9.4 effectively verified
+(§9.3 teaching-admin-assistant arm still has no live example). 28 section-owning teachers are MISSING
+from the PS staff export entirely (pre-existing gap, now named): SIS hand-off list
+`list_sections_teacher_not_in_staff_export.sql` (covers primary + co-teachers, [not in staff export] tags).
+A coach added to overrides AFTER the ingest was restored on the spot via the Save ("not in the system"
+path) — Save provisions from staging immediately, NO ingest needed (corrected my wrong claim).
+
+**6. Save marker-duplication bug (live DQ failures → FIXED live+dev).** Restoring a write-rule-dropped
+person via the Role-Overrides Save inserted a NEW current row beside the same-day deactivation marker
+(@HasCurrentDim tested current+ACTIVE only) → dup IsCurrent rows, FSA hung off the inactive key → DQ gate
+3 violations (15:03), re-fail at 15:23 after my first repair closed the marker as a 0-day [d,d] window
+(STILL overlaps [d,∞) — rule D counts any shared day; the merge avoids this via 4c-prime revival, which
+is why same-day dup markers must be DELETED, not closed). Final: `usp_SetStaffRoleOverride` marker
+handling (same-day marker revived in place / prior-day closed first; only when actually provisioning) +
+generic repair `fix_dimstaff_dup_current_2026-10-30.sql` (incl. PART 3b deletes). Live cycle then ran
+CLEAN end-to-end (gate passed, membership rebuilt). CHANGELOG bullet under [1.3.0]. OPEN GAP → backlog:
+not-in-export coach-role overrides have NO ingest rescue path (only Maintenance gets the Step-2 UNION) —
+re-dropped every ingest; needs a scope decision for a not-in-PS RegionalAnalyst (role without PS schools).
+
+**7. Project lead's PS role changed SIS-side (40→34).** Derived access faithfully demoted them:
+RegionalAnalyst→Administrator, TCRCE roll-up row gone, scope shrank. Remedy: IT restores group 40
+(Coordinators or Consultants → RegionalAnalyst); interim self-override gives role but PS still owns scope.
+The transient red error card was never reproduced after (likely caught mid-ingest during the
+StaffSchoolAccess TRUNCATE); `diag_report_objects_live_2026-10-30.sql` stands ready if it recurs.
+Also recurring: first-attempt token auth error on Fabric-editor EXEC of the ingest cycle, self-clears on
+retry (twice today) — exact Msg text still uncaptured.
+
+**8. Report-charts filter bug (1.3.0 defect → CODED, ship pending).** Oversight Student-list view's
+donut/trend were the PAGE-TOP pair fed from the ROLL-UP feed with `showCharts={false}` suppressing
+CohortView's own — so the charts ignored the filter chips entirely (teachers unaffected; donut lived in
+the list pre-1.3.0, hence "no longer"). Fix: list view renders CohortView's own charts from `filtered`
+(+ trendCohort fetch; roll-up fetch skipped on list view); trend now follows demographic chips (cycle-
+independent kept; Achievement chip excluded from trend). `assessment-webapp:1.3.1-wip` built GREEN; needs
+awdev/imp test + 1.3.1 release + CHANGELOG entry. NEXT-DAY work by user's call.
+
+**Diag/ops scripts added:** audit_latest_ingest_today (run log + merge summaries; failed-run semantics),
+diag_dq_latest_violations, diag_staff_write_rule_trace (per-email verdict + blast-radius replay),
+diag_override_respect, diag_report_objects_live (inventory + stowaway scan),
+diag_departed_student_cycle_bleed, diag_math_report_live.
+
+**End-of-session state:** LIVE healthy — enrollment dates repaired, math tree restored, Save fixed,
+dup rows cleaned, last full cycle green. Dev has the same hotfixes. Attribution bundle + 1.3.1 charts
+image awaiting next session. prod container still :1.3.0 (no app change shipped today — all SQL).
+
+## Session 2026-11-10 → 2026-11-12 — 1.3.1 reports patch (filters, Missing results, Current semantics)
+
+- **RWM Summary tree filter section**: Grade/Gender/Self-ID filters + the Student list's two scoring
+  toggles (Math blanks excluded/count-as-0, All-3-only) moved into the collapsible section;
+  tvf_StudentCohortRWM gained Gender/Self-ID columns.
+- **Missing results report** (Admin/RA ONLY, specialists excluded — user decision): TCRCE → School →
+  Lead teacher → Section → students-needing-data tree; counts R/W/M/Total + % missing; rows coloured
+  by % reported (<50 red / 50–74 yellow / 75–99 light green / 100 dark green); confirmed same-subject
+  IPP not expected; math reported at ≥80% of the grade's configured benchmark-month tasks (entry-grid
+  threshold); no student names in the roll-up feed (tvf_MissingDataAll), names only in the per-section
+  drill (tvf_MissingDataGroup). Selector = cycles only, newest started preselected (no "Current" —
+  report is inherently per-cycle).
+- **Math entry**: full names on two-line column headers (first/last), picker chips + notes full name;
+  math lists sort by last name; drill scrollbar fix.
+- **Language of Assessment filter fix**: all 4 reading/writing roll-up/drill TVFs now build the
+  language set as EXPECTED (StudentExpectedAssessment) ∪ assessed; IsExpectedOnly rows keep
+  expected-but-unassessed students visible under the language filter.
+- **Donut discrepancy → two rulings (memory `project_current_mode_semantics`)**: (1) "Current" has
+  ALWAYS meant each student's most recent evidence ON RECORD, any year — tvf_StudentCohort was on
+  spec; the roll-up TVFs' this-year-only gate was the defect (as was a tooltip I added unannounced —
+  own goal, fixed). (2) IPP students are never measured against a benchmark → no achievement band in
+  any feed; they leave the donut/by-cycle/% maths everywhere (TVF-side band gating, matching the
+  list's chart-eligible rule). Both shipped in the re-revised idempotent 5-TVF bundle
+  `deploy_summary_filter_demographics_2026-11-10.sql`.
+- **Build stumbles**: JSX comment inside a ternary's parenthesized branch broke the compile
+  (CycleSelector) — fixed c190199; imp worktree has NO .env files — --env-file must point at the MAIN
+  repo's webapp/.env.dev (dev-containers skill updated).
+- **End state**: dev @ c190199 pushed; imp worktree merged bf1b2c5; containers awdev-impersonation
+  :3002 (1.3.1-imp) + awdev :3001 (1.3.1-dev) Up/Ready. NOT yet run on dev warehouse: the revised
+  demographics bundle (rerun required) + deploy_missing_results_2026-11-12.sql. Morning plan:
+  docs/testing-plan-1.3.1.md. Parked: Math/RWM-math stay current-year in Current mode (deliberate);
+  missing-report IPP exclusion is subject-only (flagged).
+
+## Session 2026-11-16/17 — ingest-token diagnosis, CHES split classes, the IPP display-model wave, process reckoning
+
+(Two calendar days, one continued session across compaction; the 11-16 half had no wrap.)
+
+**2026-11-16:** Ingest "token problem" diagnosed WITH DATA: no per-account difference exists in the ingest path (every token is the SP's); the symptom is an intermittent COLD first-attempt OneLake token failure at the cycle's first COPY INTO, retry-cured — IngestRunLog showed App runs dying after Started with Fabric-editor reruns succeeding; flagged users never saw it because they never ran it. The 0.7.0-timing suspicion was already excluded by #1119's container A/B. LOTO visibility gap identified (app surfaces predated the proc's owner-or-sysadmin gate). Reusable cycle list SQL + the math-team benchmark-month handout artifact (print-tuned, https://claude.ai/artifact/2SzSUgjRSog79XPQAnSCdf).
+
+**2026-11-17 (dev commits 7f12ced→cb025e8 + the wrap):**
+- **Writing-correction script** `fix_writing_result_by_studentnumber.sql` (fill-in vars, lookup+EXEC upsert in-place, window/date narrowing). User ran it for 2 students. En route: corrected twice — the app has NO date picker (date is server-computed), and re-entry creates a new data point unless same-day.
+- **Student detail subject-toggle bug**: client cache keyed by studentKey only survived soft navs → other subject's rows under new columns. Fix: key={subj} remount.
+- **CHES provisioning end-to-end**: generator append-only additions (2/3 + 3/4 EN splits, 40 students on name-diagonal 20, hand-named teachers Ellis Wintergreen/Rafa Stonefield, Sept-effective ingest via @EffectiveDate=2026-09-01); on-disk exports turned out to pre-date the tracked script (dirty-tree generation) with two hand-edits — 9200000341 (IPP-test) and Robin Sorrel ID 82050 — both encoded as generator fixtures; the P-EN teacher email standardized .0→.p BY RULING (one-time section re-version). Course-seed ORDERING TRAP found+fixed: the cycle's final phase (roster rebuild) INNER JOINs DimCourseAssessment, so seed must run BEFORE ingest; standalone rebuild script added.
+- **LOTO visibility shipped**: /api/status carries setBy; banner/overlay/maintenance-page Clear render owner-or-sysadmin only (non-owner sees who holds the lock); clearMaintenance admits CanRunIngest; typecheck bug in this commit later caused the stale-container fiasco.
+- **THE IPP DISPLAY-MODEL WAVE** (user-driven, several rulings — see the distilled IPP bullet + [[math-ipp-display-rules]] + [[project_current_mode_semantics]]): drill/detail Expected leaks fixed (reading); math unified to ENTRY-grid semantics after two course-corrections (uniform 80%-of-all-tasks threshold incl. deleted outcomes; levels count everywhere incl. donut; IPP badge below threshold; unresolved unmeasured); IPP? orange chip on every surface; chips standardized across literacy reports (geometry-matched); writing AVERAGE suppressed for IPP states everywhere incl. entry; MATH ENTRY IPP GATE built (was missing entirely — cells blocked+greyed, banner confirm flow, confirmRosterIPPs subject Math); tree tallies rebuilt (trait vs band denominators diverged for unresolved; ippExcluded counter was dead; Results column now SHOWS the % denominator with exclusions named in hovers — node↔drill reconciles exactly, verified against CHES/Hillcrest grade-4 and the 55-donut); ΔJune ruled to STAY (growth vs self); Self-ID African = Yes/Not-Yes (source stores no No). TVF columns IsChartEligible{Reading,Writing,Math} added to Group/All/math feeds; 7 TVFs rerun on dev by the user.
+- **Generator demographics DECORRELATED**: the i%n scheme correlated every attribute (ALL African-Yes students were gender X with June birthdays — user: "racist data set"); per-attribute MD5 hashes now; 0 identity diffs, fixtures hold; ingest w/ @EffectiveDate=2026-09-01 PENDING at wrap (in-place via merge step 2b; straggler-count runbook `run_demographic_decorrelation_ingest_dev.sql`).
+- **Math-team 8 IPP students** flagged (generator fixture + direct SQL mirroring usp_MergeStudent 6b; converged with CSV).
+- **PROCESS RECKONING** (user: the pattern is "the last two months", not one day): five rebuilds had silently FAILED (piped builds masked exit codes; a LOTO typecheck error; stale containers served while fixes were claimed live — explained several "bugs"). New binding CLAUDE.md section "Claims require verification" + session-start standing rule + memories [[no-unverified-state-claims]], [[consult-entry-semantics-for-reports]] (entry defines semantics; sweeps include entry grids) + dev-containers skill pipe warning. All builds since: unpiped, tag-verified.
+- **Testing plan**: SS2 fully signed off; SS3 exercised in substance (unmarked); SS4-SS7 open. awlive up on 1.3.0 (:3000). Backlog: chip typography pass (post-1.0).

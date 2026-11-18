@@ -115,6 +115,16 @@ export default function StudentDetailView({
   // against benchmarks — suppress the achievement band/colour (and Δ for reading). Mirrors the roster.
   const measured = current.ippStatus === 'Not IPP' || current.ippStatus === 'N/A'
   const ippConfirmed = current.ippStatus === 'IPP'
+  // Unconfirmed IPP: explicit row marker, parity with the list/drills (user 2026-11-17) — the prose
+  // note above explains it, but the history rows must reconcile at a glance too.
+  const achFallback = ippConfirmed
+    ? <span className="ach-chip aipp">IPP</span>
+    : current.ippStatus === 'Unresolved'
+      ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+      : '—'
+  // Achievement as a CHIP (standardized with Math/data entry, user 2026-11-17).
+  const achChip = (name: string | null, color: string | null) =>
+    name ? (color ? <span className="ach-chip" style={{ background: color }}>{name}</span> : name) : '—'
 
   const meta = [
     `Grade ${current.grade ?? '—'}`,
@@ -186,9 +196,11 @@ export default function StudentDetailView({
                   <td>{h.organization ?? '—'}</td>
                   <td>{h.language ?? '—'}</td>
                   <td>{h.conventions ?? '—'}</td>
-                  <td>{h.avgScore == null ? '—' : h.avgScore.toFixed(2)}</td>
-                  <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
-                    {!measured ? (ippConfirmed ? 'IPP' : '—') : h.achievementName ?? '—'}
+                  {/* The average is writing's benchmark metric — unmeasured students show their IPP
+                      state here instead of the number (traits above stay visible as raw evidence). */}
+                  <td>{h.avgScore == null ? '—' : measured ? h.avgScore.toFixed(2) : achFallback}</td>
+                  <td>
+                    {!measured ? achFallback : achChip(h.achievementName, h.achievementHexColor)}
                   </td>
                 </tr>
               ))}
@@ -227,8 +239,10 @@ export default function StudentDetailView({
                   <td>{h.windowName}{h.windowSchoolYear ? ` · ${h.windowSchoolYear}` : ''}</td>
                   <td className="muted">{h.assessmentDate ?? '—'}</td>
                   <td>{h.levelCode ?? '—'}</td>
+                  {/* Expected gates on measured like Δ/Achievement: an IPP/unresolved student is not
+                      compared to the benchmark, so no expectation is shown (parity with list + drill). */}
                   <td>
-                    {h.expectedMin && h.expectedMax
+                    {measured && h.expectedMin && h.expectedMax
                       ? h.expectedMin === h.expectedMax
                         ? h.expectedMin
                         : `${h.expectedMin}–${h.expectedMax}`
@@ -237,7 +251,7 @@ export default function StudentDetailView({
                   <td style={measured && h.achievementHexColor ? { color: h.achievementHexColor, fontWeight: 600 } : undefined}>
                     {!measured ? (ippConfirmed ? 'IPP' : '—') : h.delta == null ? '—' : h.delta > 0 ? `+${h.delta}` : h.delta}
                   </td>
-                  <td>{!measured ? (ippConfirmed ? 'IPP' : '—') : h.achievementName ?? '—'}</td>
+                  <td>{!measured ? achFallback : achChip(h.achievementName, h.achievementHexColor)}</td>
                 </tr>
               ))}
             </tbody>

@@ -74,7 +74,17 @@ The branching is by `Caller.AccessLevel` inside each role-CTE's WHERE clause. Th
 
 **Performance note (MVP scale ok, watch at full rollout)**: each view evaluates the historical-reconciliation joins for every accessible window every time it's queried. At pilot scale (~6 windows × ~30 students per teacher) it should complete sub-second. At full rollout (10 years of windows × 200 teachers), monitor. If it becomes a bottleneck, materialize per-window-snapshot tables on `usp_UpsertReadingAssessment` and other mutation paths.
 
-**Important wrinkle — admin-side historical reconciliation is NOT applied**:
+**RULING 2026-11-13 — displayed teacher attribution on reports is HISTORIC.** Any report
+surface that *names a teacher* resolves them as of the cycle being viewed (e.g. the Missing
+results lead-teacher axis: most recent FactSectionTeachers Primary overlapping the cycle span),
+never `IsCurrent = 1`. The "admin side current-only" wrinkle below is about **ACCESS SCOPE
+ONLY** (which schools' data an admin may see) — it was mis-cited 2026-11-13 to justify a
+current-only lead teacher in tvf_MissingDataAll, which was in fact an unsurfaced implementation
+default, not a decision. Never cite it for anything displayed. Related: when a NEW kind of
+display surface first appears (first report with a teacher axis, etc.), its resolution
+semantics (current vs historic) are a USER decision to surface in the 50-ft view, not a default.
+
+**Important wrinkle — admin-side historical reconciliation is NOT applied (ACCESS SCOPE ONLY)**:
 - `StaffSchoolAccess` is treated as current-only. An admin who moved from School A to School B last year sees only School B's data, including historical windows from when they were at School A.
 - Rationale: admin role changes are operational, not analytical. We don't model admin career history; the model assumes "current admin authority = full authority over current scope." If this becomes a problem at full rollout, requires extending DimStaff history tracking and adding `vw_AdminHistoricalSchools` — out of scope for MVP.
 

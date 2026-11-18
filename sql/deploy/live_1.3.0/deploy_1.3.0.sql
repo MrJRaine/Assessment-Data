@@ -4931,6 +4931,10 @@ BEGIN
         GETDATE()
     );
 END;
+GO
+-- ^ GO added 2026-10-30: without it, PART 4.3's DROP FUNCTION fused into
+-- usp_MergeStaff's body and every ingest dropped tvf_StudentCohortMathAll
+-- (live math-reports outage; see hotfix_math_tree_restore_2026-10-30.sql).
 
 
 /*------------------------------------------------------------------------------

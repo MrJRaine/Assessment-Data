@@ -1,5 +1,7 @@
 /*******************************************************************************
  * Function: tvf_StudentCohortWritingAll  (INLINE table-valued function)
+ * Modified: 2026-11-17 — + IsChartEligibleWriting output (see the column comment): the tree tallies
+ *          exclude unconfirmed IPPs from every measure and name them in the hovers.
  * Purpose: READ-ONLY feed for the Reports > Writing OVERSIGHT roll-up tree (1.3.0 reports rebuild).
  *          Writing counterpart of tvf_StudentCohortReadingAll: one row per in-scope student PER WRITING
  *          LANGUAGE, carrying the achievement band of that language's latest writing AVERAGE (for the
@@ -7,22 +9,42 @@
  *          per language (EN/FR) + overall. Counts/measure only — no names (the per-group detail loads
  *          separately on expand).
  * Created: 2026-10-16
+ * Modified: 2026-11-12 (b) — "CURRENT" = LIFETIME + IPP NOT MEASURED, in lockstep with
+ *          tvf_StudentCohortReadingAll (see its header for the full rationale): @CycleGroupID NULL
+ *          now puts NO window restriction on the latest-pick (most recent writing result ON RECORD,
+ *          any year; GradeSpan stays current-year) and the NOT EXISTS probes follow the same scope;
+ *          AchievementLevelCode is NULL for writing-IPP / unresolved students (not measured).
+ * Modified: 2026-11-12 — EXPECTED-LANGUAGE rows, in lockstep with tvf_StudentCohortReadingAll (see
+ *          its header): language set = expected (StudentExpectedAssessment, Writing) UNION assessed;
+ *          an expected language with no result emits an IsExpectedOnly=1 row (NULL date/traits/avg);
+ *          the NULL-language fallback fires only when neither expected nor assessed.
+ * Modified: 2026-11-10 — + Gender / SelfIDAfrican / SelfIDIndigenous (summary-view demographic
+ *          filters), in lockstep with tvf_StudentCohortReadingAll.
+ * Modified: 2026-10-30 — HISTORICAL SCHOOL ATTRIBUTION, in lockstep with tvf_StudentCohortReadingAll
+ *          (see its header for the full rationale), CYCLE-SCOPED: with a cycle selected, an assessed
+ *          row's School/Grade/Homeroom comes from the RESULT's frozen DimStudent version and the
+ *          oversight gate follows the ATTRIBUTED school; a student with no writing result in that cycle
+ *          stays a current, enrolled student at their current school. With no cycle (the "Current"
+ *          view) everything anchors on the current version, as before. Non-movers are unchanged.
  * Region: Canada East (PIIDPA compliant)
  *
  * GRAIN — one row per (student x the language of a writing result they have this year):
  *   - FactAssessmentWriting.AssessmentLanguage IS part of the grain (unlike reading, which derives it
  *     from the scale), so a student with an English and a French writing result has TWO fact rows and
  *     gets TWO rows here ('English' / 'French'); one language => one row; no writing result => ONE row,
- *     AssessmentLanguage NULL ("No data").
+ *     AssessmentLanguage NULL ("No data"). A mover assessed at two schools shows under EACH school that
+ *     recorded a (latest-per-language) result.
  *
  * MEASURE: the band CODE of the latest writing AVERAGE for that (student, language), by the SAME cut
  *   scores as tvf_StudentCohortWriting (avg>=3.50->4, >=2.75->3, >=1.75->2, else 1; NULL avg->NULL code).
  *   Client % Meeting/Exceeding = rows with code >= 3 / rows with ANY code, IPP excluded (via the flag).
  *   Average counts ONLY explicit '1'-'4' traits (SCR / '-' / NULL dropped from numerator AND denominator).
  *
- * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess.
- * @CycleGroupID NULL = all current-year Writing windows; a cycle id restricts the latest-pick. Grades =
- *   the span of the selected Writing windows' MinGrade..MaxGrade.
+ * Scope: OVERSIGHT ONLY — Administrator / SpecialistTeacher / RegionalAnalyst via StaffSchoolAccess,
+ *   matched against the row's ATTRIBUTED school.
+ * @CycleGroupID NULL = LIFETIME most-recent writing per language ("Current" — any school year, lockstep
+ *   with the flat list); a cycle id restricts the latest-pick. Grades = the span of the CURRENT-YEAR
+ *   (or selected cycle's) Writing windows' MinGrade..MaxGrade, checked against the ATTRIBUTED grade.
  *
  * SECURITY: trusts @UPN; SELECT granted to the SP only. ORDER BY omitted (caller sorts).
  ******************************************************************************/
@@ -53,8 +75,9 @@ RETURN
         INNER JOIN DimGrade gmin ON gmin.GradeCode = rw.MinGrade
         INNER JOIN DimGrade gmax ON gmax.GradeCode = rw.MaxGrade
     ),
-    LatestWriting AS (   -- latest result per (student, language) across the selected windows + its average
-        SELECT faw.StudentNumber, faw.AssessmentLanguage, faw.AssessmentDate,
+    LatestWriting AS (   -- latest result per (student, language) across the selected windows + its average.
+        -- faw.StudentKey is the FROZEN version the result was recorded against — the attribution.
+        SELECT faw.StudentNumber, faw.StudentKey AS FactStudentKey, faw.AssessmentLanguage, faw.AssessmentDate,
             faw.IdeasScore, faw.OrganizationScore, faw.LanguageScore, faw.ConventionsScore,  -- per-trait rollup (score >= 3 = Meeting/Exceeding)
             CAST(
                 (COALESCE(CASE WHEN faw.IdeasScore        IN ('1','2','3','4') THEN CAST(faw.IdeasScore        AS INT) END, 0)
@@ -69,44 +92,124 @@ RETURN
             ROW_NUMBER() OVER (PARTITION BY faw.StudentNumber, faw.AssessmentLanguage
                                ORDER BY faw.AssessmentDate DESC, faw.WritingAssessmentID DESC) AS rn
         FROM FactAssessmentWriting faw
-        WHERE faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
+        -- No cycle ("Current") = NO window restriction: the most recent result ON RECORD, any year —
+        -- lockstep with the flat list (user ruling 2026-11-12). A cycle restricts to its windows.
+        WHERE @CycleGroupID IS NULL OR faw.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)
     ),
-    WritingIPP AS (
-        SELECT fsi.StudentKey, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
+    WritingIPP AS (    -- keyed by StudentNumber (frozen StudentKeys predate IPP repointing)
+        SELECT dsi.StudentNumber, MAX(CAST(fsi.IsIPP AS INT)) AS IsIPP
         FROM FactStudentIPP fsi
+        INNER JOIN DimStudent dsi ON dsi.StudentKey = fsi.StudentKey
         WHERE fsi.IsCurrent = 1 AND fsi.Subject = 'Writing'
-        GROUP BY fsi.StudentKey
+        GROUP BY dsi.StudentNumber
+    ),
+    -- Expected writing languages per student (cycle-scoped; config-derived — StudentExpectedAssessment).
+    ExpectedLang AS (
+        SELECT DISTINCT sea.StudentNumber, sea.Language
+        FROM StudentExpectedAssessment sea
+        WHERE sea.AssessmentType = 'Writing'
+          AND (@CycleGroupID IS NULL OR sea.CycleGroupID = @CycleGroupID)
+    ),
+    -- ATTRIBUTION IS CYCLE-SCOPED: with a cycle selected, assessed rows come from the RESULT's frozen
+    -- student version (includes movers' old-school rows and district leavers) and unassessed rows are
+    -- CURRENT, enrolled students ("No data" at their current school); with NO cycle (the "Current"
+    -- view) everything anchors on the current version, as before.
+    -- LANGUAGE SET (2026-11-12) = expected UNION assessed (tvf_StudentCohort's LangSet union): an
+    -- expected language with no result emits an IsExpectedOnly row from the CURRENT version; the
+    -- NULL-language fallback fires only when neither expected nor assessed. The NOT EXISTS probes hit
+    -- the fact directly — cheaper than re-running LatestWriting (Fabric inlines a CTE per reference).
+    Base AS (
+        -- cycle selected, assessed: attributed by that result's frozen version
+        SELECT fv.StudentKey, fv.StudentNumber, fv.Grade, fv.Homeroom, fv.GroupKey, fv.SchoolID,
+               fv.Gender, fv.SelfIDAfrican, fv.SelfIDIndigenous,
+               lw.AssessmentLanguage, lw.AssessmentDate,
+               lw.IdeasScore, lw.OrganizationScore, lw.LanguageScore, lw.ConventionsScore, lw.AvgScore,
+               CAST(0 AS BIT) AS IsExpectedOnly
+        FROM LatestWriting lw
+        INNER JOIN DimStudent fv ON fv.StudentKey = lw.FactStudentKey
+        WHERE lw.rn = 1 AND @CycleGroupID IS NOT NULL
+        UNION ALL
+        -- no cycle ("Current"): current students with their per-language latest (original semantics)
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               lw3.AssessmentLanguage, lw3.AssessmentDate,
+               lw3.IdeasScore, lw3.OrganizationScore, lw3.LanguageScore, lw3.ConventionsScore, lw3.AvgScore,
+               CAST(0 AS BIT)
+        FROM DimStudent s
+        INNER JOIN (SELECT * FROM LatestWriting WHERE rn = 1) lw3 ON lw3.StudentNumber = s.StudentNumber
+        WHERE @CycleGroupID IS NULL
+          AND s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+        UNION ALL
+        -- expected language with NO result in it (either cycle mode): current, enrolled students
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               el.Language, CAST(NULL AS DATE),
+               CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS VARCHAR(10)), CAST(NULL AS DECIMAL(5,2)),
+               CAST(1 AS BIT)
+        FROM DimStudent s
+        INNER JOIN ExpectedLang el ON el.StudentNumber = s.StudentNumber
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx
+                          WHERE fx.StudentNumber = s.StudentNumber
+                            AND fx.AssessmentLanguage = el.Language
+                            AND (@CycleGroupID IS NULL
+                                 OR fx.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
+        UNION ALL
+        -- neither expected nor assessed (either cycle mode): one NULL-language "No data" row
+        SELECT s.StudentKey, s.StudentNumber, s.Grade, s.Homeroom, s.GroupKey, s.SchoolID,
+               s.Gender, s.SelfIDAfrican, s.SelfIDIndigenous,
+               CAST(NULL AS VARCHAR(10)), CAST(NULL AS DATE),
+               CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)), CAST(NULL AS VARCHAR(10)),
+               CAST(NULL AS VARCHAR(10)), CAST(NULL AS DECIMAL(5,2)),
+               CAST(0 AS BIT)
+        FROM DimStudent s
+        WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
+          AND NOT EXISTS (SELECT 1 FROM FactAssessmentWriting fx2
+                          WHERE fx2.StudentNumber = s.StudentNumber
+                            AND (@CycleGroupID IS NULL
+                                 OR fx2.AssessmentWindowID IN (SELECT AssessmentWindowID FROM WriteWins)))
+          AND NOT EXISTS (SELECT 1 FROM ExpectedLang el2 WHERE el2.StudentNumber = s.StudentNumber)
     )
     SELECT
-        CAST(s.StudentKey AS VARCHAR(20)) AS StudentKey,
-        s.Grade,
-        s.Homeroom,
-        s.GroupKey                        AS HomeroomKey,
-        s.SchoolID,
+        CAST(b.StudentKey AS VARCHAR(20)) AS StudentKey,
+        b.Grade,
+        b.Homeroom,
+        b.GroupKey                        AS HomeroomKey,
+        b.SchoolID,
         sch.SchoolName,
+        b.Gender,                                            -- summary-view demographic filters (2026-11-10)
+        b.SelfIDAfrican,
+        b.SelfIDIndigenous,
         ipp.IsIPP                         AS WritingIPPStatus,
-        lw.AssessmentLanguage,                               -- 'English' | 'French'; NULL = no writing result
-        lw.AssessmentDate                 AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
-        lw.IdeasScore                     AS IdeasScore,        -- the four trait scores ('1'-'4'/'SCR'/'-'/NULL)
-        lw.OrganizationScore              AS OrganizationScore, -- for the per-trait roll-up (% Meeting/Exceeding or Mean)
-        lw.LanguageScore                  AS LanguageScore,
-        lw.ConventionsScore               AS ConventionsScore,
-        lw.AvgScore                       AS AvgScore,          -- the 4-trait average (for the Mean measure)
-        CASE WHEN lw.AvgScore IS NULL THEN NULL
-             WHEN lw.AvgScore >= 3.50 THEN 4
-             WHEN lw.AvgScore >= 2.75 THEN 3
-             WHEN lw.AvgScore >= 1.75 THEN 2
-             ELSE 1 END                   AS AchievementLevelCode
-    FROM DimStudent s
-    INNER JOIN DimGrade g ON g.GradeCode = s.Grade
+        -- Measured flag (2026-11-17), lockstep with the band CASE below + the Group/list feeds: the
+        -- client can't tell "no IPP row" from "unresolved" via WritingIPPStatus (both NULL), and the
+        -- tree tallies need it so unconfirmed IPPs are excluded from EVERY measure and counted in
+        -- the hovers (trait/band denominators diverged without it).
+        CASE WHEN ipp.StudentNumber IS NULL OR ipp.IsIPP = 0 THEN 1 ELSE 0 END AS IsChartEligibleWriting,
+        b.AssessmentLanguage,                                -- 'English' | 'French'; NULL = no writing result
+        b.AssessmentDate                  AS AssessmentDate, -- date of THIS latest result (drives the by-cycle trend); NULL = no result
+        b.IdeasScore                      AS IdeasScore,        -- the four trait scores ('1'-'4'/'SCR'/'-'/NULL)
+        b.OrganizationScore               AS OrganizationScore, -- for the per-trait roll-up (% Meeting/Exceeding or Mean)
+        b.LanguageScore                   AS LanguageScore,
+        b.ConventionsScore                AS ConventionsScore,
+        b.AvgScore                        AS AvgScore,          -- the 4-trait average (for the Mean measure)
+        CASE WHEN b.AvgScore IS NULL THEN NULL
+             -- IPP/unresolved: not measured, no band (lockstep with the flat list's chart-eligible rule)
+             WHEN ipp.StudentNumber IS NOT NULL AND (ipp.IsIPP IS NULL OR ipp.IsIPP = 1) THEN NULL
+             WHEN b.AvgScore >= 3.50 THEN 4
+             WHEN b.AvgScore >= 2.75 THEN 3
+             WHEN b.AvgScore >= 1.75 THEN 2
+             ELSE 1 END                   AS AchievementLevelCode,
+        b.IsExpectedOnly                  AS IsExpectedOnly  -- 1 = expected in this language, no result yet (counts the student, not a result)
+    FROM Base b
+    INNER JOIN DimGrade g ON g.GradeCode = b.Grade
     CROSS JOIN GradeSpan gs
-    LEFT  JOIN DimSchool sch ON sch.SchoolID = s.SchoolID
-    LEFT  JOIN WritingIPP ipp ON ipp.StudentKey = s.StudentKey
-    LEFT  JOIN (SELECT * FROM LatestWriting WHERE rn = 1) lw ON lw.StudentNumber = s.StudentNumber
-    WHERE s.IsCurrent = 1 AND s.EnrollStatus IN (0, -1)
-      AND g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
+    LEFT  JOIN DimSchool sch ON sch.SchoolID = b.SchoolID
+    LEFT  JOIN WritingIPP ipp ON ipp.StudentNumber = b.StudentNumber
+    WHERE g.GradeOrder BETWEEN gs.MinOrd AND gs.MaxOrd
       AND EXISTS (SELECT 1 FROM StaffSchoolAccess ssa
-                  WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = s.SchoolID
+                  WHERE LOWER(ssa.Email) = LOWER(@UPN) AND ssa.SchoolID = b.SchoolID
                     AND ssa.AccessLevel IN ('Administrator', 'SpecialistTeacher', 'RegionalAnalyst'))
 );
 GO

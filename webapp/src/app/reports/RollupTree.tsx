@@ -1,12 +1,15 @@
 'use client'
 
-import { Fragment, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
+import type { AchievementBand, ReportCycle } from '@/lib/data'
 import {
   type Counts, type RollupSchool, type RollupStudent, type SummarizeBy, type LangFilter,
-  type Measure, type MeasureStat,
-  tally, pctOf, childrenOf, gradeLabel, gradeRank,
+  type Measure, type MeasureStat, type Tri, type DemoFilter,
+  tally, pctOf, childrenOf, gradeLabel, gradeRank, demoPass,
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
+import CohortCharts from './CohortCharts'
+import { useSharedFilters } from './sharedFilters'
 
 type MeasureMode = 'pct' | 'mean'
 
@@ -21,41 +24,54 @@ function StudentsCell({ c }: { c: Counts }) {
   return <td className="rn" title={title}>{c.students}</td>
 }
 function ResultsCell({ c }: { c: Counts }) {
-  return <td className="rn" title={`EN ${c.resultsEN} · FR ${c.resultsFR}`}>{c.results}</td>
+  // The displayed number IS the denominator of the % on the same line (user 2026-11-17: showing a
+  // Results count that includes IPP/unconfirmed results invites recomputing the % wrong — "a recipe
+  // for angry e-mails"). Assessed-but-unmeasured results are NAMED in the hover, never dropped.
+  const extra: string[] = []
+  if (c.ippExcluded > 0) extra.push(`${c.ippExcluded} IPP`)
+  if (c.unresolvedExcluded > 0) extra.push(`${c.unresolvedExcluded} unconfirmed IPP`)
+  const unbanded = c.results - c.band - c.ippExcluded - c.unresolvedExcluded
+  if (unbanded > 0) extra.push(`${unbanded} without a level`)
+  const title = `EN ${c.bandEN} · FR ${c.bandFR}${extra.length ? `\nnot counted in the %: ${extra.join(' · ')}` : ''}`
+  return <td className="rn" title={title}>{c.band}</td>
+}
+// Every excluded result gets NAMED in the hover (never a silent omission): IPP + unconfirmed-IPP
+// lines make Results = band + IPP + unconfirmed (+ band-less) reconcile against the drill.
+function exclNote(ipp: number, unresolved: number): string {
+  const parts: string[] = []
+  if (ipp > 0) parts.push(`${ipp} IPP result${ipp === 1 ? '' : 's'} excluded`)
+  if (unresolved > 0) parts.push(`${unresolved} unconfirmed-IPP result${unresolved === 1 ? '' : 's'} excluded`)
+  return parts.length ? `\n${parts.join('\n')}` : ''
 }
 function MeetCell({ c }: { c: Counts }) {
   const p = pctOf(c.meet, c.band)
+  const note = exclNote(c.ippExcluded, c.unresolvedExcluded)
   if (p == null) {
-    const t = c.ippExcluded > 0 ? `No results with a benchmark level here (${c.ippExcluded} IPP excluded)` : 'No results with a level here'
-    return <td className="rpct none" title={t}>—</td>
+    return <td className="rpct none" title={`No results with a level here${note}`}>—</td>
   }
-  const ippNote = c.ippExcluded > 0 ? `\n${c.ippExcluded} IPP result${c.ippExcluded === 1 ? '' : 's'} excluded` : ''
-  const title = `Meeting/Exceeding ${c.meet} of ${c.band} results with a level\nEN ${c.meetEN}/${c.bandEN} · FR ${c.meetFR}/${c.bandFR}${ippNote}`
+  const title = `Meeting/Exceeding ${c.meet} of ${c.band} results with a level\nEN ${c.meetEN}/${c.bandEN} · FR ${c.meetFR}/${c.bandFR}${note}`
   return <td className={`rpct ${heatClass(p)}`} title={title}>{fmtPct(p)}</td>
 }
 // One rolled-up measure cell, rendered as either % Meeting/Exceeding or the Mean score (toggle). Mean is
 // heat-coloured by normalising the 1–4 scale to 0..1 so it uses the same heat ramp as the %.
 function MeasureCell({ stat, mode }: { stat: MeasureStat; mode: MeasureMode }) {
+  const note = exclNote(stat.ippExcluded, stat.unresolvedExcluded)
   if (mode === 'mean') {
     const m = stat.count > 0 ? stat.sum / stat.count : null
     if (m == null) {
-      const t = stat.ippExcluded > 0 ? `No scored results here (${stat.ippExcluded} IPP excluded)` : 'No scored results here'
-      return <td className="rpct none" title={t}>—</td>
+      return <td className="rpct none" title={`No scored results here${note}`}>—</td>
     }
-    const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
     const meanEN = stat.countEN > 0 ? (stat.sumEN / stat.countEN).toFixed(2) : '—'
     const meanFR = stat.countFR > 0 ? (stat.sumFR / stat.countFR).toFixed(2) : '—'
     const enfr = `\nEN ${meanEN} (${stat.countEN}) · FR ${meanFR} (${stat.countFR})`
-    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${enfr}${ippNote}`}>{m.toFixed(2)}</td>
+    return <td className={`rpct ${meanHeat(m)}`} title={`Mean ${m.toFixed(2)} over ${stat.count} scored${enfr}${note}`}>{m.toFixed(2)}</td>
   }
   const p = pctOf(stat.meet, stat.band)
   if (p == null) {
-    const t = stat.ippExcluded > 0 ? `No results with a level here (${stat.ippExcluded} IPP excluded)` : 'No results with a level here'
-    return <td className="rpct none" title={t}>—</td>
+    return <td className="rpct none" title={`No results with a level here${note}`}>—</td>
   }
-  const ippNote = stat.ippExcluded > 0 ? `\n${stat.ippExcluded} IPP excluded` : ''
   const enfr = `\nEN ${stat.meetEN}/${stat.bandEN} · FR ${stat.meetFR}/${stat.bandFR}`
-  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${enfr}${ippNote}`}>{fmtPct(p)}</td>
+  return <td className={`rpct ${heatClass(p)}`} title={`Meeting/Exceeding ${stat.meet} of ${stat.band}${enfr}${note}`}>{fmtPct(p)}</td>
 }
 
 // Generic School → Grade/Homeroom → (expand) student-detail roll-up. The subject wrapper supplies the
@@ -72,14 +88,15 @@ function gradeGroups(students: RollupStudent[]): { grade: string; students: Roll
 const TCRCE_ID = '__TCRCE__'
 
 export function RollupTree<T>({
-  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, measures, showAll = false,
+  schools, cycle, loadGroup, renderDetail, toolbarExtra, viewToggle, measures, showAll = false, charts,
 }: {
   schools: RollupSchool[]
   cycle: string | null
   loadGroup: (groupKey: string, cycle: string | null) => Promise<{ rows: T[]; error: string | null }>
   // summarizeBy lets the detail drop the column already given by the node (a Grade node's drill shows
-  // Homeroom, a Homeroom node's drill shows Grade — neither repeats School).
-  renderDetail: (rows: T[], lang: LangFilter, summarizeBy: SummarizeBy) => ReactNode
+  // Homeroom, a Homeroom node's drill shows Grade — neither repeats School). demo carries the active
+  // demographic filters so the drill table matches the (filtered) node counts above it.
+  renderDetail: (rows: T[], lang: LangFilter, summarizeBy: SummarizeBy, demo: DemoFilter) => ReactNode
   toolbarExtra?: ReactNode // extra control in the toolbar (e.g. the writing COIL/IOLC toggle)
   viewToggle?: ReactNode // page-level Summary/Student-list switch, rendered inline at the start of the toolbar
   // Per-node measure columns. When supplied (writing = 4 traits + avg), they REPLACE the single
@@ -87,15 +104,76 @@ export function RollupTree<T>({
   // benchmark-% column (with EN/FR hover) is used.
   measures?: Measure[]
   showAll?: boolean // region-wide caller → show the TCRCE all-schools roll-up row (grade-only)
+  // Page-top charts (donut = the tree's own cycle-scoped students; trend = the all-cycles copy).
+  // Rendered INSIDE the tree so both follow its Language of Assessment toggle AND the demographic
+  // filters — the displays always represent the data displayed (user rule 2026-11-10).
+  charts?: { trendStudents: RollupStudent[]; bands: AchievementBand[]; cycles: ReportCycle[] }
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
-  const [lang, setLang] = useState<LangFilter>('All')
   const [measureMode, setMeasureMode] = useState<MeasureMode>('pct')
   const [openSchools, setOpenSchools] = useState<Set<string>>(
     () => new Set(schools.length === 1 ? [schools[0].id] : []),
   )
   const [openNodes, setOpenNodes] = useState<Set<string>>(() => new Set())
   const [blocks, setBlocks] = useState<Record<string, BlockState<T>>>({})
+
+  // ── Demographic filters (2026-11-10): collapsible section mirroring the student list's. Grade +
+  // Language work from the tree's own rows; Gender / Self-ID groups are OFFERED only when the feed
+  // carries values (the *All TVFs need the demographics columns deployed first).
+  const allStudentsRaw = useMemo(() => schools.flatMap((s) => s.students), [schools])
+  const gradeOpts = useMemo(
+    () => [...new Set(allStudentsRaw.map((s) => s.grade).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b)),
+    [allStudentsRaw],
+  )
+  const gradeRanks = useMemo(() => gradeOpts.map(gradeRank), [gradeOpts])
+  const genderOpts = useMemo(
+    () => [...new Set(allStudentsRaw.map((s) => s.gender).filter(Boolean) as string[])].sort(),
+    [allStudentsRaw],
+  )
+  const hasSelfID = useMemo(
+    () => allStudentsRaw.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
+    [allStudentsRaw],
+  )
+  // Filter values live in the tab-wide shared store (sharedFilters.ts) so they carry across cycle
+  // changes and across reports (2026-11-18) — this tree remounts on every cycle change.
+  const shared = useSharedFilters(gradeRanks, genderOpts, hasSelfID)
+  const {
+    gradeMinRank, gradeMaxRank, gender, african, indigenous, filtersOpen, anyDemo,
+    setGradeMinRank, setGradeMaxRank, setGender, setAfrican, setIndigenous, setFiltersOpen,
+  } = shared
+  const lang: LangFilter = shared.lang
+  const setLang = shared.setLang
+  const demo: DemoFilter = { gradeMinRank, gradeMaxRank, gender, african, indigenous }
+  const resetFilters = () => {
+    shared.resetDemo()
+    setLang('All')
+  }
+  // The tree, its counts, and the donut all come from the FILTERED schools (empty schools drop out).
+  const filteredSchools = useMemo(() => {
+    const pass = demoPass(demo)
+    return schools
+      .map((sch) => ({ ...sch, students: sch.students.filter(pass) }))
+      .filter((sch) => sch.students.length > 0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schools, gradeMinRank, gradeMaxRank, gender, african, indigenous])
+
+  // Chart feeds: demographic filters + the Language toggle (donut = the filtered tree's own results;
+  // trend = the all-cycles students through the same filters).
+  const chartDonutRows = useMemo(
+    () =>
+      filteredSchools
+        .flatMap((sch) => sch.students)
+        .flatMap((s) => s.results.filter((r) => lang === 'All' || (lang === 'EN') === r.en).map((r) => ({ code: r.code }))),
+    [filteredSchools, lang],
+  )
+  const chartTrendRows = useMemo(() => {
+    if (!charts) return []
+    const pass = demoPass(demo)
+    return charts.trendStudents
+      .filter(pass)
+      .flatMap((s) => s.results.filter((r) => lang === 'All' || (lang === 'EN') === r.en).map((r) => ({ code: r.code, date: r.date ?? null })))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charts, lang, gradeMinRank, gradeMaxRank, gender, african, indigenous])
 
   const toggleSchool = (id: string) =>
     setOpenSchools((prev) => {
@@ -126,7 +204,7 @@ export function RollupTree<T>({
     }
   }
 
-  const noHomeroomCount = schools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
+  const noHomeroomCount = filteredSchools.reduce((n, sch) => n + sch.students.filter((s) => !s.homeroomKey).length, 0)
 
   // Measure columns: writing supplies 4 traits + avg (with a %/Mean toggle); reading uses the single
   // benchmark % column.
@@ -149,6 +227,9 @@ export function RollupTree<T>({
 
   return (
     <div className="math-entry">
+      {/* Data display first, controls second, tree third — the charts live inside the tree so they
+          follow the Language of Assessment toggle below. */}
+      {charts ? <CohortCharts donutRows={chartDonutRows} trendRows={chartTrendRows} bands={charts.bands} cycles={charts.cycles} /> : null}
       <div className="mtoolbar">
         {viewToggle ? <span className="mtoolbar-view">{viewToggle}</span> : null}
         <span className="mtoolbar-pair">
@@ -161,16 +242,12 @@ export function RollupTree<T>({
             ))}
           </div>
         </span>
-        <span className="mtoolbar-pair">
-          <span className="muted">Language of Assessment</span>
-          <div className="subject-toggle" style={{ margin: 0 }}>
-            {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
-              <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </span>
+        <button className="btn-ghost" onClick={() => setFiltersOpen(!filtersOpen)}>
+          {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && (anyDemo || lang !== 'All') ? ' (active)' : ''}
+        </button>
+        {anyDemo || lang !== 'All' ? (
+          <button className="btn-ghost" onClick={resetFilters}>Reset filters</button>
+        ) : null}
         {measures ? (
           <span className="mtoolbar-pair">
             <span className="muted">Show</span>
@@ -180,8 +257,83 @@ export function RollupTree<T>({
             </div>
           </span>
         ) : null}
-        {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : null}
+        {toolbarExtra ? <><span className="spacer" />{toolbarExtra}</> : <span className="spacer" />}
+        {/* Close-only on purpose: an "expand all" would fire every node's lazy loadGroup at once. */}
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}
+        >
+          Collapse all
+        </button>
       </div>
+
+      {filtersOpen ? (
+        <div className="filter-bar">
+          <div className="filter-group">
+            <label>Grade</label>
+            <div className="filter-row">
+              <select value={gradeMinRank} onChange={(e) => setGradeMinRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+              <span className="muted">to</span>
+              <select value={gradeMaxRank} onChange={(e) => setGradeMaxRank(Number(e.target.value))}>
+                {gradeOpts.map((g) => (
+                  <option key={g} value={gradeRank(g)}>{gradeLabel(g)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {genderOpts.length > 1 ? (
+            <div className="filter-group">
+              <label>Gender</label>
+              <select value={gender} onChange={(e) => setGender(e.target.value)}>
+                <option value="All">All</option>
+                {genderOpts.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {hasSelfID ? (
+            <>
+              <div className="filter-group">
+                <label>Self-ID African Descent</label>
+                {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
+                <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Self-ID Indigenous Descent</label>
+                {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
+                <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
+                  <option>All</option>
+                  <option>Yes</option>
+                  <option value="No">Not Yes</option>
+                </select>
+              </div>
+            </>
+          ) : null}
+
+          <div className="filter-group">
+            <label>Language of Assessment</label>
+            <div className="subject-toggle" style={{ margin: 0 }}>
+              {([['All', 'All'], ['EN', 'English'], ['FR', 'French']] as [LangFilter, string][]).map(([v, label]) => (
+                <button key={v} className={lang === v ? 'toggle-on' : ''} onClick={() => setLang(v)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {measures && measureMode === 'mean' ? (
         <div className="mlegend">
@@ -207,6 +359,11 @@ export function RollupTree<T>({
         </p>
       ) : null}
 
+      {filteredSchools.length === 0 ? (
+        <div className="notice notice-empty">
+          <div className="notice-title">No students match the current filters.</div>
+        </div>
+      ) : (
       <div className="mtree-wrap">
         <table className="mgrid mtree">
           <thead>
@@ -218,9 +375,9 @@ export function RollupTree<T>({
             </tr>
           </thead>
           <tbody>
-            {showAll && schools.length > 1
+            {showAll && filteredSchools.length > 1
               ? (() => {
-                  const allStudents = schools.flatMap((s) => s.students)
+                  const allStudents = filteredSchools.flatMap((s) => s.students)
                   const tOpen = openSchools.has(TCRCE_ID)
                   const tc = tally(allStudents, lang)
                   if (lang !== 'All' && tc.students === 0) return null
@@ -243,7 +400,7 @@ export function RollupTree<T>({
                             // tree below).
                             const gradeNodeId = `${TCRCE_ID}:G:${g.grade}`
                             const gOpen = openNodes.has(gradeNodeId)
-                            const schoolsForGrade = schools
+                            const schoolsForGrade = filteredSchools
                               .map((sch) => ({ sch, students: sch.students.filter((s) => s.grade === g.grade) }))
                               .filter((x) => x.students.length > 0)
                             return (
@@ -282,7 +439,7 @@ export function RollupTree<T>({
                   )
                 })()
               : null}
-            {schools.map((sch) => {
+            {filteredSchools.map((sch) => {
               const open = openSchools.has(sch.id)
               const c = tally(sch.students, lang)
               if (lang !== 'All' && c.students === 0) return null
@@ -325,7 +482,7 @@ export function RollupTree<T>({
                                         <div className="muted">{block.message}</div>
                                       </div>
                                     ) : (
-                                      renderDetail(block.rows, lang, summarizeBy)
+                                      renderDetail(block.rows, lang, summarizeBy, demo)
                                     )}
                                   </div>
                                 </td>
@@ -341,6 +498,7 @@ export function RollupTree<T>({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }

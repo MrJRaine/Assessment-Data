@@ -6,7 +6,9 @@ import { PageHeader } from '@/components/ui'
 import type { RWMStudent, RWMHistoryRow } from '@/lib/data'
 
 const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
-const SCORE_HEX: Record<number, string> = { 0: '#b23347', 1: '#c07d16', 2: '#2f8f4e', 3: '#0092c9' }
+// Standard 4-pt achievement palette (DimAchievementLevel HexColor, levels 1-4):
+// 0 of 3 areas → Not Yet Meeting red … 3 of 3 → Exceeding green.
+const SCORE_HEX: Record<number, string> = { 0: '#D1495B', 1: '#E8A33D', 2: '#8FB339', 3: '#2E7D5B' }
 
 // Dependency-free SVG trend of the 0–3 score over the year's cycles.
 function ScoreTrend({ points }: { points: { value: number; label: string }[] }) {
@@ -157,8 +159,8 @@ export default function RWMStudentView({
               {cycles.map((h) => (
                 <tr key={h.cycleDate ?? h.cycleLabel}>
                   <td>{h.cycleLabel}</td>
-                  <td className={h.readingMeeting ? 'rwm-meet' : 'muted'}>{h.readingCode == null ? '—' : h.readingMeeting ? 'Meeting+' : 'Not yet'}</td>
-                  <td className={h.writingMeeting ? 'rwm-meet' : 'muted'}>{h.writingCode == null ? '—' : h.writingMeeting ? 'Meeting+' : 'Not yet'}</td>
+                  <td className={h.readingMeeting ? 'rwm-meet' : 'muted'}>{h.readingCode == null ? '—' : h.readingMeeting ? 'Meeting or exceeding' : 'Not yet'}</td>
+                  <td className={h.writingMeeting ? 'rwm-meet' : 'muted'}>{h.writingCode == null ? '—' : h.writingMeeting ? 'Meeting or exceeding' : 'Not yet'}</td>
                   <td className={h.mMeet ? 'rwm-meet' : 'muted'}>{h.mPct == null ? '—' : `${(h.mPct * 100).toFixed(1)}%`}</td>
                   <td><span className="rwm-score sm" style={{ background: SCORE_HEX[h.score] }}>{h.score}</span></td>
                 </tr>

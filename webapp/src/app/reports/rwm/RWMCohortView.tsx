@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { RWMStudent } from '@/lib/data'
+import { readSharedFilters, writeSharedFilters } from '../sharedFilters'
 
 // RWM = a 0–3 score per Primary–5 student: how many of Reading / Writing / Math they're currently
 // meeting or exceeding. Cohort-wide (like the Reading/Writing report), IPP-in-any students already
@@ -10,17 +11,20 @@ import type { RWMStudent } from '@/lib/data'
 
 const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
 const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? 'Pre-Primary' : `Grade ${g}`)
-const SCORE_HEX: Record<number, string> = { 0: '#b23347', 1: '#c07d16', 2: '#2f8f4e', 3: '#0092c9' }
+// Standard 4-pt achievement palette (DimAchievementLevel HexColor, levels 1-4):
+// 0 of 3 areas → Not Yet Meeting red … 3 of 3 → Exceeding green. Shared with the RWM roll-up tree.
+export const SCORE_HEX: Record<number, string> = { 0: '#D1495B', 1: '#E8A33D', 2: '#8FB339', 3: '#2E7D5B' }
 
-// Meeting pill for one area: ✓ meeting / — not meeting / no result yet.
+// Meeting pill for one area: ✓ meeting / — not meeting / no result yet. "Meeting or exceeding" is
+// the app-wide phrasing (roll-up legends, student snapshots) — match it, don't coin variants.
 function AreaCell({ meeting, has }: { meeting: boolean; has: boolean }) {
   if (!has) return <span className="rwm-area none">no result</span>
   return meeting
-    ? <span className="rwm-area yes">Meeting+</span>
+    ? <span className="rwm-area yes">Meeting or exceeding</span>
     : <span className="rwm-area no">Not yet</span>
 }
 
-export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
+export default function RWMCohortView({ cohort, viewToggle }: { cohort: RWMStudent[]; viewToggle?: ReactNode }) {
   const allGrades = useMemo(
     () => [...new Set(cohort.map((s) => s.grade).filter((g): g is string => !!g))]
       .sort((a, b) => (GRADE_ORDER[a] ?? 99) - (GRADE_ORDER[b] ?? 99)),
@@ -42,7 +46,11 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
   // The Math component's roll-up (and therefore the 0–3 score) depends on how blanks are treated.
   // Reading/Writing are single most-recent results and unaffected. Recompute client-side so the
   // toggle flips instantly. Default: blanks excluded (matches the Math report's default).
-  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+  // The Blanks mode is shared with the RWM + Math summary trees for the tab (sharedFilters.ts,
+  // 2026-11-18): restored on mount, mirrored on every change.
+  const [blankMode, setBlankModeRaw] = useState<'exclude' | 'zero'>('exclude')
+  useEffect(() => { setBlankModeRaw(readSharedFilters().blankMode === 'zero' ? 'zero' : 'exclude') }, [])
+  const setBlankMode = (v: 'exclude' | 'zero') => { setBlankModeRaw(v); writeSharedFilters({ blankMode: v }) }
   // "Complete" = has an actual result in ALL THREE areas (not everyone does — the report is P-5 and
   // areas roll out at different times). Independent of the blanks toggle: this is about evidence
   // existing at all, not how it's scored.
@@ -124,14 +132,39 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
 
   return (
     <>
+      {/* Data display first, controls second, table third — same order as every other report. */}
+      <div className="cohort-charts">
+        <div className="chart-card">
+          <div className="chart-title">RWM score distribution</div>
+          <div className="donut-wrap">
+            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
+              <div className="donut-hole">
+                <div className="donut-total">{donut.total}</div>
+                <div className="donut-label">STUDENTS</div>
+              </div>
+            </div>
+            <ul className="donut-legend">
+              {donut.slices.map((s) => (
+                <li key={s.score}>
+                  <span className="swatch" style={{ background: s.color }} />
+                  <span className="legend-name">{s.score} of 3 areas Meeting or exceeding</span>
+                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <div className="cohort-bar">
+        {viewToggle}
         <span className="muted">{filtered.length} of {cohort.length} students</span>
         <button className="btn-ghost" onClick={() => setExpanded((e) => !e)}>
           {expanded ? 'Hide filters' : 'Show filters'}{!expanded && anyFilter ? ' (active)' : ''}
         </button>
         <button
           className="btn-ghost"
-          onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}
+          onClick={() => setBlankMode(blankMode === 'exclude' ? 'zero' : 'exclude')}
           title="How un-recorded Math tasks affect the roll-up (Reading/Writing are unaffected)"
         >
           Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}
@@ -197,29 +230,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
         </div>
       ) : null}
 
-      <div className="cohort-charts">
-        <div className="chart-card">
-          <div className="chart-title">RWM score distribution</div>
-          <div className="donut-wrap">
-            <div className="donut" style={{ background: `conic-gradient(${donut.gradient})` }}>
-              <div className="donut-hole">
-                <div className="donut-total">{donut.total}</div>
-                <div className="donut-label">STUDENTS</div>
-              </div>
-            </div>
-            <ul className="donut-legend">
-              {donut.slices.map((s) => (
-                <li key={s.score}>
-                  <span className="swatch" style={{ background: s.color }} />
-                  <span className="legend-name">{s.score} of 3 meeting+</span>
-                  <span className="legend-val">{s.pct.toFixed(1)}% · {s.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-
       {filtered.length === 0 ? (
         <div className="notice notice-empty"><div className="notice-title">No students match the current filters.</div></div>
       ) : (
@@ -228,7 +238,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
             <tr>
               <th>Student</th>
               <th>Grade</th>
-              <th>Program</th>
               <th>School</th>
               <th>Reading</th>
               <th>Writing</th>
@@ -241,7 +250,6 @@ export default function RWMCohortView({ cohort }: { cohort: RWMStudent[] }) {
               <tr key={s.studentKey}>
                 <td><Link href={`/reports/rwm/${s.studentKey}`}>{s.fullName}</Link></td>
                 <td>{gradeLabel(s.grade ?? '—')}</td>
-                <td>{s.programFamily ?? '—'}</td>
                 <td>{s.schoolAbbrev ?? s.schoolName ?? '—'}</td>
                 <td><AreaCell meeting={s.readingMeeting} has={s.hasReading} /></td>
                 <td><AreaCell meeting={s.writingMeeting} has={s.hasWriting} /></td>

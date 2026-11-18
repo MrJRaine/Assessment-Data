@@ -17,7 +17,12 @@ export interface Task {
   description: string
 }
 export interface Unit { name: string; order: number; tasks: Task[] }
-export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; mathIPP: boolean }
+// sortKey = "Last, First": the display name stays compact ("First L.") but ordering matches the
+// rest of the app, which sorts students by last name (user 2026-11-10).
+// eligible = measured against the benchmark (no IPP row, or resolved not-IPP). A CONFIRMED IPP or an
+// UNRESOLVED (flagged, unconfirmed) one is NOT eligible: results stay visible, bands are suppressed —
+// the same rule Reading/Writing apply (user ruling 2026-11-17).
+export interface Student { studentKey: string; studentNumber: string; name: string; fullName: string; sortKey: string; mathIPP: boolean; eligible: boolean }
 export interface Grade { grade: string; order: number; label: string; students: Student[]; units: Unit[] }
 
 export const GRADE_ORDER: Record<string, number> = { PP: -1, P: 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6 }
@@ -25,6 +30,8 @@ export const gradeLabel = (g: string) => (g === 'P' ? 'Primary' : g === 'PP' ? '
 
 // Entry-grid achievement bands, applied to an average in [0,1].
 export type BandCls = 'b1' | 'b2' | 'b3' | 'b4'
+// Deliberately NOT the DimAchievementLevel palette — the math team specifically asked for this set
+// (confirmed 2026-11-10). Mirrors seed_DimMathComprehensionBand.sql + globals.css .mband.
 export const BAND_HEX: Record<BandCls, string> = { b1: '#b23347', b2: '#c07d16', b3: '#2f8f4e', b4: '#0092c9' }
 export const BANDS: { cls: BandCls; name: string }[] = [
   { cls: 'b1', name: 'Emerging' },
@@ -54,7 +61,23 @@ export interface UnitStat { avg: number | null; ipp: boolean; incomplete: boolea
  * unmarked task); `filled` = cells with a 0/1. Null avg = nothing scorable (all IPP, or nothing scored
  * in exclude mode). `incomplete` mirrors the entry grid's <80%-filled nudge.
  */
-export function unitStat(c: { inScope: number; filled: number; ones: number; ipp: number }, blankMode: BlankMode): UnitStat {
+export function unitStat(
+  c: { inScope: number; filled: number; ones: number; ipp: number },
+  blankMode: BlankMode,
+  student?: { eligible: boolean; ipp: boolean },
+): UnitStat {
+  // UNRESOLVED IPP (flagged, unconfirmed): not measured at all — marks stay visible, no band
+  // (avg null ripples to cells/buckets/charts), matching Reading/Writing. A CONFIRMED IPP falls
+  // through to the normal computation: entry-grid parity — their IPP cells drop from the 80%
+  // denominator and a sufficiently-assessed unit EARNS a level that counts everywhere a level
+  // counts (bars, %, donut, cohort means); 'IPP' in tallies = the badge state, nothing scorable
+  // (user ruling 2026-11-17).
+  if (student && !student.eligible && !student.ipp) return { avg: null, ipp: false, incomplete: false }
+  // CONFIRMED-IPP 80% threshold (user ruling 2026-11-17): the denominator is ALL tasks in scope —
+  // the IPP's deleted outcomes included. Assessed >= 80% of the total -> a real level (counts
+  // everywhere); below -> the IPP badge, NOT "Incomplete" (the shortfall is the plan's deletions,
+  // and a heavily-modified IPP shouldn't band off a sliver). Same rule as the entry grid.
+  if (c.ipp > 0 && c.filled / (c.inScope + c.ipp) < 0.8) return { avg: null, ipp: true, incomplete: false }
   if (c.inScope === 0) return { avg: null, ipp: c.ipp > 0, incomplete: false } // all IPP
   const denom = blankMode === 'zero' ? c.inScope : c.filled
   if (denom === 0) return { avg: null, ipp: false, incomplete: false } // nothing scored
@@ -74,7 +97,8 @@ export type Bucket = BandCls | 'inc' | 'ipp' | 'none'
 export type Tally = Record<Bucket, number>
 export const emptyTally = (): Tally => ({ b1: 0, b2: 0, b3: 0, b4: 0, inc: 0, ipp: 0, none: 0 })
 
-/** Bucket for a unit cell. */
+/** Bucket for a unit cell. A level is a level, whoever earned it — a confirmed IPP's banded unit
+ *  counts in the %; the 'ipp' bucket is the BADGE state (nothing scorable this unit). */
 export function unitBucket(s: UnitStat): Bucket {
   if (s.avg == null) return s.ipp ? 'ipp' : 'none'
   if (s.incomplete) return 'inc'
@@ -119,7 +143,9 @@ export function buildGrades(rows: MathCohortRow[]): Grade[] {
         studentNumber: r.studentNumber,
         name: `${r.firstName} ${r.lastName.charAt(0)}.`,
         fullName: `${r.firstName} ${r.lastName}`,
+        sortKey: `${r.lastName}, ${r.firstName}`,
         mathIPP: r.mathIPPStatus === true,
+        eligible: r.chartEligibleMath,
       })
     }
     let unit = grade.units.find((u) => u.name === (r.unitName ?? ''))
@@ -141,7 +167,7 @@ export function buildGrades(rows: MathCohortRow[]): Grade[] {
   }
   const grades = [...byGrade.values()].sort((a, b) => a.order - b.order)
   for (const g of grades) {
-    g.students.sort((a, b) => a.name.localeCompare(b.name))
+    g.students.sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     g.units.sort((a, b) => a.order - b.order)
     for (const u of g.units) u.tasks.sort((a, b) => a.displayOrder - b.displayOrder)
   }

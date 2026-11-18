@@ -44,6 +44,10 @@ cd webapp && MSYS_NO_PATHCONV=1 podman build -t assessment-webapp:<ver>-wip .
 ```
 
 - `MSYS_NO_PATHCONV=1` stops Git Bash mangling the build args — keep it.
+- **NEVER pipe the build** (`| tail`, `| grep`) when acting on its result: the pipeline's exit code
+  is the pipe's, not podman's, so a FAILED build reads as success while the old tag keeps running —
+  this shipped stale containers through five "rebuilds" on 2026-11-17. Run the build unpiped and
+  verify the tag's CreatedAt moved (`podman images`) or the log ends `Successfully tagged`.
 - `<ver>` is the in-progress version, e.g. `1.3.0`. The `-wip` tag is a scratch tag for the typecheck.
 - For a long build, run it in the background and wait for the completion notification rather than polling.
 - **This same image is what you run as `awdev`** — no separate build. After a green typecheck, just tag
@@ -116,6 +120,10 @@ podman images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | he
 - **`MSYS_NO_PATHCONV=1`** on every `podman build`/`run` where args contain paths or `=`, or Git Bash
   mangles them.
 - **Env-file path is relative to your CWD.** From repo root use `webapp/.env` / `webapp/.env.dev`.
+- **Env files exist ONLY in the main repo** (`/c/Git-Repos/Assessment-Data/webapp/.env*`). The
+  `-imp` worktree has NO `.env.dev` — its branch supplies the *image*, not the env. When launching
+  `awdev-impersonation`, point `--env-file` at the MAIN repo's `webapp/.env.dev` (bit us 2026-11-12:
+  exit 125 "cannot find the file" pointing at the worktree copy).
 - **Ports are fixed by convention**: live 3000, dev 3001, impersonation 3002 — don't swap them; the Entra
   redirect URIs and `AUTH_URL` in the env files assume them.
 - **A fresh warehouse deploy isn't picked up by a rebuild** — the container reads schema/procs live, so new

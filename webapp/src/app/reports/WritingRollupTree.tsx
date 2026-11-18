@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { useMemo, useState, type ReactNode } from 'react'
-import type { WritingRollupRow, WritingGroupRow } from '@/lib/data'
-import { type RollupStudent, type LangFilter, type SummarizeBy, type Measure, buildSchools, traitMeasure, avgMeasure, gradeRank } from './rollupModel'
+import type { WritingRollupRow, WritingGroupRow, AchievementBand, ReportCycle } from '@/lib/data'
+import { type RollupStudent, type LangFilter, type SummarizeBy, type Measure, type DemoFilter, buildSchools, traitMeasure, avgMeasure, gradeRank, demoPass } from './rollupModel'
 import { RollupTree } from './RollupTree'
 import { loadWritingGroup } from './actions'
 import { traitsInOrder, type TraitMeta, type WritingTraitKey } from '@/lib/writingTraits'
@@ -21,38 +21,63 @@ const scoreFor = (r: WritingGroupRow, key: WritingTraitKey): string | null =>
       : key === 'language' ? r.languageScore
         : r.conventionsScore
 
-export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: { rows: WritingRollupRow[]; cycle: string | null; showAll?: boolean; viewToggle?: ReactNode }) {
+// Rows → one RollupStudent per student, results tagged with language + date (date feeds the trend).
+function buildStudents(rows: WritingRollupRow[]): RollupStudent[] {
+  const byKey = new Map<string, RollupStudent>()
+  for (const r of rows) {
+    if (!r.schoolId) continue
+    let s = byKey.get(r.studentKey)
+    if (!s) {
+      s = {
+        key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
+        schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.writingIPP === true,
+        unresolved: !r.chartEligible && r.writingIPP !== true,
+        gender: r.gender, selfIDAfrican: r.selfIDAfrican, selfIDIndigenous: r.selfIDIndigenous,
+        expectedEN: false, expectedFR: false, results: [],
+      }
+      byKey.set(r.studentKey, s)
+    }
+    if (r.isExpectedOnly && (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French')) {
+      // Expected in this language, no result yet: keeps the student in that language's view
+      // (tally counts them under Students / "no result") without inventing a phantom result.
+      if (r.assessmentLanguage === 'English') s.expectedEN = true
+      else s.expectedFR = true
+    } else if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
+      s.results.push({
+        en: r.assessmentLanguage === 'English',
+        code: r.achievementCode,
+        date: r.assessmentDate,
+        avgScore: r.avgScore,
+        traits: {
+          conventions: traitNum(r.conventionsScore),
+          organization: traitNum(r.organizationScore),
+          ideas: traitNum(r.ideasScore),
+          language: traitNum(r.languageScore),
+        },
+      })
+    }
+  }
+  return [...byKey.values()]
+}
+
+export default function WritingRollupTree({ rows, trendRows, bands, cycles, cycle, showAll, viewToggle }: {
+  rows: WritingRollupRow[]
+  // All-cycles rows for the by-cycle trend (rows are cycle-scoped); bands/cycles feed the charts.
+  trendRows: WritingRollupRow[]
+  bands: AchievementBand[]
+  cycles: ReportCycle[]
+  cycle: string | null
+  showAll?: boolean
+  viewToggle?: ReactNode
+}) {
   const [traitMode, setTraitMode] = useTraitOrder()
   const traits = useMemo(() => traitsInOrder(traitMode), [traitMode])
 
-  const schools = useMemo(() => {
-    const byKey = new Map<string, RollupStudent>()
-    for (const r of rows) {
-      if (!r.schoolId) continue
-      let s = byKey.get(r.studentKey)
-      if (!s) {
-        s = {
-          key: r.studentKey, grade: r.grade ?? '', homeroom: r.homeroom, homeroomKey: r.homeroomKey,
-          schoolId: r.schoolId, schoolName: r.schoolName ?? r.schoolId, ipp: r.writingIPP === true, results: [],
-        }
-        byKey.set(r.studentKey, s)
-      }
-      if (r.assessmentLanguage === 'English' || r.assessmentLanguage === 'French') {
-        s.results.push({
-          en: r.assessmentLanguage === 'English',
-          code: r.achievementCode,
-          avgScore: r.avgScore,
-          traits: {
-            conventions: traitNum(r.conventionsScore),
-            organization: traitNum(r.organizationScore),
-            ideas: traitNum(r.ideasScore),
-            language: traitNum(r.languageScore),
-          },
-        })
-      }
-    }
-    return buildSchools([...byKey.values()])
-  }, [rows])
+  const schools = useMemo(() => buildSchools(buildStudents(rows)), [rows])
+  const charts = useMemo(
+    () => ({ trendStudents: buildStudents(trendRows), bands, cycles }),
+    [trendRows, bands, cycles],
+  )
 
   // Roll-up measure columns in the active COIL/IOLC order: one per trait (% at score >= 3, or mean) + the
   // overall average. The %/Mean toggle lives in RollupTree; these just supply the stats + labels.
@@ -71,9 +96,10 @@ export default function WritingRollupTree({ rows, cycle, showAll, viewToggle }: 
       showAll={showAll}
       loadGroup={loadWritingGroup}
       toolbarExtra={<TraitOrderToggle mode={traitMode} onChange={setTraitMode} />}
-      renderDetail={(groupRows, lang, summarizeBy) => <WritingDetail rows={groupRows} traits={traits} lang={lang} summarizeBy={summarizeBy} />}
+      renderDetail={(groupRows, lang, summarizeBy, demo) => <WritingDetail rows={groupRows} traits={traits} lang={lang} summarizeBy={summarizeBy} demo={demo} />}
       viewToggle={viewToggle}
       measures={measures}
+      charts={charts}
     />
   )
 }
@@ -106,10 +132,12 @@ function WSortHead({ label, col, sort, onSort, className = 'stu' }: { label: str
   return <th className={`${className} sortable`} onClick={() => onSort(col)}>{label}{ind}</th>
 }
 
-function WritingDetail({ rows, traits, lang, summarizeBy }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter; summarizeBy: SummarizeBy }) {
+function WritingDetail({ rows, traits, lang, summarizeBy, demo }: { rows: WritingGroupRow[]; traits: TraitMeta[]; lang: LangFilter; summarizeBy: SummarizeBy; demo: DemoFilter }) {
   const [sort, setSort] = useState<WSortState>({ key: 'student', dir: 'asc' })
-  const filtered = lang === 'All' ? rows : rows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French'))
-  if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group for this language.</p>
+  // Demographic filters first (so the drill matches the filtered node counts above it), then language.
+  const demoRows = rows.filter(demoPass(demo))
+  const filtered = lang === 'All' ? demoRows : demoRows.filter((r) => r.assessmentLanguage === (lang === 'EN' ? 'English' : 'French'))
+  if (filtered.length === 0) return <p className="muted small" style={{ margin: 0 }}>No students in this group match the current filters.</p>
   // The node already pins one axis: a Grade node drills to Homeroom; a Homeroom node drills to Grade.
   // (Neither repeats School — the drill is always inside one school.)
   const demoAxis: 'grade' | 'homeroom' = summarizeBy === 'Grade' ? 'homeroom' : 'grade'
@@ -175,10 +203,29 @@ function WritingDetail({ rows, traits, lang, summarizeBy }: { rows: WritingGroup
         )}
         <td className="stu" title={r.achievementName ?? undefined}
             style={hasResult && r.achievementHexColorTint ? { background: r.achievementHexColorTint } : undefined}>
-          {r.avgScore == null ? <span className="muted">—</span> : r.avgScore.toFixed(2)}
+          {/* The AVERAGE is writing's benchmark metric — an unmeasured student's traits stay visible
+              (raw evidence) but the average shows the IPP state instead (user 2026-11-17). */}
+          {r.avgScore == null
+            ? <span className="muted">—</span>
+            : r.writingIPP
+              ? <span className="ach-chip aipp">IPP</span>
+              : !r.chartEligible
+                ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                : r.avgScore.toFixed(2)}
         </td>
-        <td className="ach" style={hasResult && r.achievementHexColor ? { color: r.achievementHexColor, fontWeight: 600 } : undefined}>
-          {hasResult ? (r.achievementName ?? <span className="muted">—</span>) : (r.writingIPP ? 'IPP' : <span className="muted">—</span>)}
+        {/* Keyed off the band, not the avg: an IPP student's result keeps its traits/avg but the feed
+            gives it no band (not measured) — show "IPP" there, like the flat list. */}
+        <td className="ach">
+          {/* Achievement as a CHIP (standardized with Math, user 2026-11-17); IPP purple, IPP? orange. */}
+          {r.achievementName
+            ? (r.achievementHexColor
+                ? <span className="ach-chip" style={{ background: r.achievementHexColor }}>{r.achievementName}</span>
+                : r.achievementName)
+            : r.writingIPP
+              ? <span className="ach-chip aipp">IPP</span>
+              : !r.chartEligible
+                ? <span className="ipp-unres" title="IPP flagged but not confirmed — no achievement is shown until the IPP is confirmed (roster or Programming screen).">IPP?</span>
+                : <span className="muted">—</span>}
         </td>
       </tr>
     )

@@ -11,7 +11,291 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [1.4.0] — 2026-11-18
+
+> Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
+> Missing results report and the Summary-tree filter sections are new features, so this shipped as a
+> minor release. Live 2026-11-18 (container `assessment-webapp:1.4.0`).
+
+### SQL deployed to live for 1.4.0 (in this order)
+1. `sql/deploy/live_1.4.0/deploy_1.4.0_prereq_expected_table.sql` — creates `StudentExpectedAssessment`,
+   redeploys `usp_RebuildRosterMembership` (adds the step that fills it) and runs the rebuild. **This
+   table was built on dev 2026-10-20 but was never in the 1.3.0 live bundle**; six of the 1.4.0
+   functions read it, so the first run of the main bundle failed on them (Msg 208) and left the Reading
+   and Writing report functions dropped on live for about three minutes until this ran.
+2. `sql/deploy/live_1.4.0/deploy_1.4.0.sql` — 9 report functions replaced + 3 new
+   (`tvf_StudentCohortMathTrend`, `tvf_MissingDataAll`, `tvf_MissingDataGroup`); read-only functions,
+   no table data written.
+
+Not shipped (held): the 2026-10-30 section-school binding change to the three
+`usp_Upsert*Assessment` procedures — server-side only, no dev test on record.
+
+### Fixed
+- **Math data entry now enforces the IPP confirmation gate.** A student flagged for a Math IPP but
+  not yet confirmed could be marked like any other student — the math grid never consumed the
+  needs-confirmation state the feed already carried, unlike the Reading/Writing grids which block
+  entry and prompt for confirmation. Math entry now works the same way: an unconfirmed student's
+  task cells are blocked (existing marks stay visible), their band cells show the orange **IPP?**,
+  and a banner above the grid lists them with staged **Yes (Math IPP)/No** choices committed on
+  Save — resolving to No unlocks the cells, Yes flips them to IPP cells, both without a refresh.
+  Web only, no SQL (the same IPP confirmation proc the other grids use).
+- **Writing: the average is not computed for IPP students — anywhere.** Entered trait scores stay
+  visible as raw evidence, but the derived average is writing's benchmark metric, so an IPP
+  student's Avg cell shows their IPP state instead of a number: the purple IPP chip when confirmed,
+  the orange IPP? when unconfirmed — on the Student list, the summary expanded roster view, the student detail
+  history, AND the data-entry grid (which previously showed an unconfirmed student's computed
+  average). Mirrors reading, where the level stays but Expected/Δ are never computed for IPPs.
+- **Self-ID filters are Yes / Not Yes, and are labelled "Descent".** For African Descent the source
+  field is Yes, N, or never-answered, and the warehouse stores only the Yes (an answered N and an
+  unanswered both land as unknown) — so the old "No" option, which demanded an explicit
+  answered-No, could never match anything. The option is now labelled **Not Yes** and matches
+  everyone without an explicit Yes, on the summary trees, the Student list, and RWM. Indigenous
+  Descent mirrors it (ruled 2026-11-18): **Not Yes** = an answered No or never answered. The filter
+  labels now read **Self-ID African Descent** and **Self-ID Indigenous Descent**.
+- **Charts on the Math Summary tree.** The Math summary now opens with the same two page-top charts
+  as Reading/Writing: a **donut** of students at each overall Achievement Level (Emerging /
+  Developing / Meeting / In-depth) over everything the tree currently shows, and **Achievement by
+  cycle** bars — one stacked bar per started cycle (up to 6, the selected cycle rightmost), each
+  being what the tree shows with THAT cycle selected (that cycle's tasks, the results recorded in
+  it). Both follow the filter section and the Blanks mode, and both compute levels with the tree's
+  own rules (80% threshold, IPP handling). Students with no overall level (IPP badge / no data) are
+  left out of the slices and named under the donut and in each bar's hover. The by-cycle feed loads
+  after the tree, so the page is not slowed. **SQL:** new read-only
+  `sql/security/tvf_StudentCohortMathTrend.sql`; until it runs, the bars card says it couldn't load
+  (the donut and tree work without it).
+- **Wording: "expanded roster view".** What the app and this changelog used to call a "drill" /
+  "drill-down" (the student rows shown when a grade or homeroom is opened on a summary tree) is now
+  called an **expanded roster view** in user-facing text.
+- **Report filters carry across cycles and across reports.** The summary trees held their filters
+  in memory only and are rebuilt on every cycle change, so a selection reverted to defaults. One
+  saved filter set per browser tab (cleared when the tab closes) is now shared by the Reading,
+  Writing, RWM and Math summary trees and the Reading/Writing Student list: **Grade range, Gender,
+  both Self-ID filters** carry everywhere; **Language of Assessment** carries between Reading and
+  Writing; the **Blanks** mode carries between Math and RWM (and is still left alone by Reset
+  filters); the filter panel stays open or closed as you left it. A grade range is fitted to each
+  report's own grades without overwriting what you chose (Grade 7–9 picked in Writing shows Math's
+  nearest grade, and comes back as 7–9 in Writing). A saved Gender/Self-ID choice is not applied on
+  a report that cannot show that filter. The Student list's School, Homeroom, Program and
+  Achievement chips stay its own; the RWM student list's chip filters are unchanged. Web only.
+- **"Reset" is now "Reset filters"** on every report filter bar (Reading/Writing/RWM summary trees
+  and the Student list; the RWM student list already said so) — the bare word didn't say what it
+  reset, sitting beside "Reset sort order".
+- **Summary-tree Results column now shows the % denominator.** The Results number included IPP and
+  unconfirmed-IPP results that the percentage beside it deliberately excludes, so recomputing the %
+  from the visible numbers gave a different answer. The column now shows measured results only —
+  the number the % is actually over — with the assessed-but-unmeasured results named in its hover
+  ("not counted in the %: N IPP · N unconfirmed IPP").
+- **Summary-tree percentages: unconfirmed IPPs excluded from every column, and every exclusion is
+  named.** The Reading/Writing trees' trait columns counted an unconfirmed IPP's scores while the
+  Average/band column excluded them — different denominators per column, so the node's numbers could
+  not be reconciled against the expanded roster view. Unconfirmed IPPs are now out of every measure (per the
+  unresolved-unmeasured rule), and the % hovers gain explicit "IPP excluded" / "unconfirmed-IPP
+  excluded" lines (the old IPP counter had gone dead), so Results = banded + IPP + unconfirmed adds
+  up on every node. **SQL:** rerun `sql/security/tvf_StudentCohortReadingAll.sql` and
+  `tvf_StudentCohortWritingAll.sql`.
+- **Math: one IPP rule across entry and reports.** An **unresolved** math IPP (flagged, unconfirmed)
+  is unmeasured — marks stay visible, band cells show "—", out of every chart and percentage,
+  matching Reading/Writing. A **confirmed** IPP earns a unit level when **at least 80% of the unit's
+  full task list** is marked — the plan's deleted outcomes count the denominator — so a
+  lightly-modified IPP can still earn levels while a heavily-modified one reads **IPP**, never a
+  band off a sliver (below threshold now shows IPP, not "Incomplete": the shortfall is the plan's
+  deletions, not missing entry — entry grid and report both). An earned level **counts wherever a
+  level counts** — unit bars, the roll-up tree's percentages, cohort means, and now the donut too
+  (which previously excluded every confirmed IPP outright, even banded ones). "IPP" in tallies and
+  hovers means the badge state: no earnable level. RWM is unchanged by design. **SQL:** rerun
+  `sql/security/tvf_StudentCohortMath.sql` and `tvf_StudentCohortMathAll.sql` (adds the measured
+  flag that distinguishes "no IPP" from "unresolved").
+- **IPP students no longer show an Expected range on the summary expanded roster view or the student detail page.**
+  The flat Student list already blanked Expected and Diff for students not measured against the
+  benchmark (IPP / unconfirmed IPP), but the Reading summary expanded roster view and the student detail history
+  still rendered the expectation. Both now gate Expected exactly like the list (the expanded roster view's Expected
+  and Diff sorts treat them as blank too). **SQL:** rerun
+  `sql/security/tvf_StudentCohortReadingGroup.sql` — it now exposes the measured flag the expanded roster view
+  needs; until it runs, confirmed IPPs are handled and unconfirmed ones follow once it's in.
+- **Maintenance clear controls now follow the lock-out rule (LOTO) everywhere.** The warehouse has
+  locked clearing to the window's opener or a sysadmin since 1.3.0, but the app's surfaces missed the
+  patch: the banner and down-overlay "Clear now" showed for every maintenance-capable user (whose
+  click would then be refused), the Maintenance page offered everyone "Cancel / all clear", and the
+  app-side gate refused ingest-flagged users the clear the warehouse allows them on their own windows.
+  Now `/api/status` carries the window owner's work email (public staff info), the Clear buttons
+  render only for the owner or a sysadmin, a non-owner on the Maintenance page sees who holds the
+  lock instead of a silently missing button, and ingest-flagged owners can clear their own windows.
+  Web only, no SQL — the proc's gate was already right.
+- **Student detail page: switching Reading ⟷ Writing no longer shows the other subject's history.**
+  The subject toggle kept the previous subject's already-loaded rows (its own and the Prev/Next
+  prefetches, cached per student without the subject in the key), so the table rendered the new
+  subject's columns full of "—" with the old subject's achievement band carried over, and the trend
+  chart went blank. The view now remounts on a subject switch, so the history and the prefetches
+  reload for the right subject. Web only, no SQL.
+- **Student-list charts now follow the filters.** On the Reports Student-list view (oversight roles),
+  the achievement donut and trend chart ignored every filter chip while the table below filtered —
+  they were fed from the page-top roll-up feed. The list view now renders its own charts from the
+  **filtered** rows (and skips the unused roll-up fetch — one less warehouse query). The trend follows
+  the demographic chips too; the Achievement chip is deliberately excluded from the trend, since it
+  describes the current band. Teachers were unaffected. Web only, no SQL.
+- **Reading–Writing–Math (RWM) score colours match the standard achievement palette.** The RWM
+  report's 0–3 score (pie slices, score chips, trend dots) used its own red/amber/green/cyan set;
+  it now uses the same four colours as the reading/writing achievement levels
+  (`DimAchievementLevel`): 0 → Not Yet Meeting red through 3 → Exceeding green. Web only, no SQL.
+
+### Added
+- **"IPP?" marker for unconfirmed IPPs across the reports.** A student flagged for an IPP that
+  hasn't been confirmed showed the same "—" as a student with no results — headcounts didn't
+  reconcile and the unconfirmed state was invisible. They now get an outlined orange **IPP?** badge
+  (deliberately distinct from the solid achievement colours) in the Reading/Writing Student list and
+  summary expanded roster views and in every math band cell, with a hover explaining that achievement is hidden
+  until the IPP is confirmed on the roster or Programming screen. **SQL:** rerun
+  `sql/security/tvf_StudentCohortWritingGroup.sql` (the writing expanded roster view needs the measured flag);
+  reading/math already have theirs.
+- **Achievement renders as chips on every Reading/Writing report surface.** The Student list, both
+  summary expanded roster views, and the student detail history now show the achievement band as a solid chip in
+  the band's colour (same shape as the Math/data-entry chips) instead of coloured text — one visual
+  language across subjects. Confirmed IPP is the purple chip, unconfirmed the outlined orange
+  **IPP?**, no data stays a plain dash. Math's fixed-width Overall column gets slightly tighter chip
+  type so the longest labels ("Developing", "Incomplete") never clip. Web only, no SQL.
+- **"Collapse all" on the Reports summary trees.** One click closes every open school/grade/homeroom
+  branch on the Reading/Writing and Math roll-up trees (close-only by design — already-loaded groups
+  stay cached, so re-expanding is instant). Web only, no SQL.
+- **Language of Assessment filter on the Student-list view.** A new chip group alongside the other
+  filters trims a dual-language student's stacked EN/FR rows to the selected language — and, like
+  every filter, the charts follow it. Web only, no SQL.
+- **Filter section on the Reading/Writing Summary trees.** A collapsible **Show filters** section
+  (right of *Summarize by*, same controls as the Student list): **Grade**, **Gender**, **Self-ID
+  African Descent**, **Self-ID Indigenous Descent**, and **Language of Assessment** (moved in from the toolbar). The
+  filters trim the whole display together — the school/grade/homeroom counts, the page-top charts,
+  and the expanded roster views. **SQL:** `deploy_summary_filter_demographics_2026-11-10.sql`
+  adds Gender + Self-ID columns to the oversight roll-up TVFs; until it runs, those two filter
+  groups stay hidden (Grade + Language work without it).
+- **Filter section on the RWM Summary tree.** The same collapsible section as the Reading/Writing
+  trees — **Grade**, **Gender**, **Self-ID African Descent**, **Self-ID Indigenous Descent** — plus the Student
+  list's two scoring toggles moved in with it: **Math blanks** (excluded vs count as 0, which
+  re-scores every student's 0–3) and **All 3 areas only**. Filters trim the donut, the counts, and
+  the expanded roster views together. **SQL:** `tvf_StudentCohortRWM` is included in the same
+  `deploy_summary_filter_demographics_2026-11-10.sql` (now five TVFs); until it runs, the RWM
+  Gender/Self-ID groups stay hidden (Grade + both toggles work without it).
+- **Filter section on the Math Summary tree.** The same collapsible **Show filters** section —
+  **Grade**, **Gender**, **Self-ID African Descent**, **Self-ID Indigenous Descent** — with the
+  **Blanks** scoring toggle (excluded vs count as 0) moved in from the toolbar, as on RWM. Filters
+  trim the school/grade/homeroom rows, the counts, every % cell, and the expanded roster view's student rows
+  together; **Reset filters** leaves the Blanks mode alone. No Language filter (math results carry
+  no language of assessment). **SQL:** `deploy_math_filter_demographics_2026-11-18.sql` adds
+  Gender + Self-ID columns to `tvf_StudentCohortMathAll` and `tvf_StudentCohortMath`; until it
+  runs, the Gender/Self-ID groups stay hidden (Grade + Blanks work without it).
+- **Missing results report (Administrators + Regional Analysts only).** New Reports tab: for the
+  selected cycle, a TCRCE → School → Lead teacher → Section roll-up of students who still need a
+  result entered (students with a confirmed IPP in a subject are not expected in it). Columns =
+  missing-student counts for Reading / Writing / Math / Total plus **% reported** of expected
+  data points; rows are colour-coded to match (<50% red · 50–74% yellow · 75–99% light green ·
+  100% dark green). Opening a section lists exactly who still needs data entered. Math counts as
+  reported at **80% of the cycle's tasks** — the entry grid's own unit-level threshold. Teacher,
+  school, and TCRCE totals count a multi-section student once. The lead teacher a section lists
+  under is **the cycle's** Primary teacher — the most recent one assigned during that cycle's
+  dates, named even if they've since left — not whoever holds the section today (teacher
+  attribution on reports is historic, as of the cycle viewed); a section with no Primary at any
+  point in the cycle appears under a visible "No lead teacher" row. The tab is hidden from every other role,
+  the page 404s for them, and the TVFs have no non-Admin/RA branch. **SQL:**
+  `deploy_missing_results_2026-11-12.sql` creates `tvf_MissingDataAll` + `tvf_MissingDataGroup`.
+
+### Fixed (reports/entry consistency)
+- **Language of Assessment filter no longer drops expected-but-unassessed students.** On the
+  Reading/Writing Summary trees, filtering by language showed only students with a RESULT tagged
+  in that language — a student who should be assessed in French but hasn't been yet vanished from
+  the counts and the grade/homeroom expanded roster view. The trees now build each language's population the same
+  way the Student list always has: students **expected** in the language (from their mapped-course
+  enrolment, `StudentExpectedAssessment`) **union** students assessed in it — so the unassessed
+  show under Students / "no result" and appear in the expanded roster view as "—" rows, without inventing a
+  phantom result (the % and Results counts are unchanged). **SQL:** included in the revised
+  `deploy_summary_filter_demographics_2026-11-10.sql` — run it (again, if the earlier revision
+  already ran; it is idempotent).
+- **Summary trees' "Current" now means what it says — and IPP students leave the achievement
+  maths.** The Reading/Writing Summary trees' "Current" view silently limited each student's
+  most-recent result to THIS school year, while the Student list (on spec) shows the most current
+  evidence on record from any year — so the summary donut counted fewer assessed students than the
+  list. The roll-up and expanded-roster-view feeds now pick the latest result with no year restriction ("Current" =
+  each student's most recent result on record; a selected cycle still scopes exactly as before), and
+  the Current chip's tooltip says so. In the same revision, students with an IPP in the subject
+  (confirmed or unresolved) are no longer given an achievement band by the roll-up feeds — they were
+  never measured against a benchmark, so they're now excluded from the achievement-distribution
+  donut, the by-cycle chart, and every % Meeting/Exceeding, matching the Student list; they still
+  appear in the counts and expanded roster view, labelled "IPP". **SQL:** the same revised
+  `deploy_summary_filter_demographics_2026-11-10.sql` (one run covers both fixes).
+- **Missing results cycle selector shows cycles only.** The report is inherently per-cycle, so its
+  selector drops the "Current" chip and lands on the newest started cycle by default.
+- Opening a grade/homeroom on the **Math** summary
+  tree gave no visible scrollbars when the student list spilled over — the math tree's unit columns
+  make it wider than the screen, so the expanded roster view pane stretched to the full table width and its
+  scrollbars (the same in-pane bars Reading/Writing show) rendered past the right edge. The pane now
+  pins to the visible area, putting its bars back on screen; Reading/Writing are unchanged.
+  (2026-11-18 follow-up: the first cut still ran 1.5rem past the edge — it didn't subtract the expanded roster view
+  row's own padding — so the vertical bar stayed clipped; corrected, and the expanded roster view pane's bars now
+  use a higher-contrast colour.)
+- **Math sorts students by last name, like everything else.** The math matrices (summary expanded roster view, full
+  class view, and the data-entry grid) kept the compact "First L." display name but sorted on it —
+  first-name order, unlike every other list (the feeds already order by last name; the client
+  re-sort was undoing it). They now sort by "Last, First" with the display unchanged.
+- **Math data entry shows full last names.** Two classmates sharing a first name and last initial
+  were indistinguishable as "First L." column headers. The entry grid's student columns now show
+  the full name on two lines — first name on top, last name below — so columns stay narrow; the
+  student-picker chips and "can't be marked" notes use the full name too.
+
+- **RWM Summary roll-up.** The RWM report now opens on a School → Grade/Homeroom summary tree for
+  oversight roles (same Summarize-by toggle as the other reports; Regional Analysts get the TCRCE
+  all-schools row), with the flat student list as the second view. Columns are the **count of
+  students at each RWM score (0–3)** plus **"% in all 3"** — students Meeting or exceeding in
+  Reading, Writing AND Math. A grade/homeroom opens inline to its students; built from the same data
+  the list already loads, so no extra warehouse reads. Web only, no SQL.
+
+### Changed
+- **RWM report polish.** The legend, area pills, and cycle-history cells all say **"Meeting or
+  exceeding"** in full (the app-wide phrasing) instead of "meeting+"; the **Program column** is gone
+  from the student list (still filterable), matching the other reports.
+- **Math reports show full student names where students are rows.** The summary expanded roster view and the class
+  view's students-down layout now show "Last, First" like every other report list; the compact
+  "First L." stays only in the reports' tasks-down view, where students are column headers (the
+  entry grid's columns got full two-line names — see Fixed above).
+- **Every chart respects every non-cycle filter on its page.** The by-cycle bar graph now follows the
+  Achievement chip too (each bar filters by that cycle's own band), and the Summary-view charts moved
+  inside the tree so they obey its filters — the displays always represent the data displayed.
+- **The bar graph's right edge is the selected cycle.** Selecting a cycle drops the bars after it, so
+  the rightmost bar always matches the data on display, with the earlier cycles alongside for
+  comparison; no selection keeps the full year through the current cycle.
+- **Consistent report layout: data display → controls → list.** The Summary/Student-list switch and
+  filter controls now sit *between* the charts and the roll-up/student list on every report (they
+  were above the charts on the Student list and below them on the Summary, jumping around the page
+  on each switch). The RWM donut moved above its controls to match.
+
 ## [1.3.0] — 2026-10-27
+
+> **Server-side patches since 1.3.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
+> - **2026-10-30 — Students who left a class no longer appear in later cycles.** A student who leaves
+>   during a cycle deliberately stays on *that* cycle's entry roster (the teacher may have paper results
+>   to enter) — but they were also showing up in every *later* cycle through the end of the year. Cause:
+>   PowerSchool records the *scheduled* exit date (term/year end) on an enrolment, so when a student's
+>   enrolment vanished from the export (transfer out, mid-year drop) the ingest closed it but left that
+>   future exit date in place, and the roster keeps students by date overlap. The ingest now stamps the
+>   actual close date when it closes a vanished enrolment, and a one-time repair corrected the 3258
+>   live enrolment rows closed this way since September (then rebuilt the rosters). Students keep their
+>   place in the cycle they left during; they drop off every cycle after it. SQL:
+>   `sql/procedures/usp_MergeEnrollment.sql` (step 5 redeploy) +
+>   `sql/scripts/fix_enrollment_close_dates_2026-10-30.sql` (one-time repair + roster rebuild).
+> - **2026-10-30 — Math reports restored ("Couldn't load data" for everyone).** A 1.3.0 **deploy defect**:
+>   the staff-merge procedure's source file ended without a `GO` batch separator, so when the release
+>   bundle was assembled the next section's `DROP FUNCTION … tvf_StudentCohortMathAll` statement was
+>   compiled *into the procedure's body*. The bundle still created the function afterwards, so math
+>   reports worked at cutover — but **every ingest after that silently deleted it**, and the math tree
+>   failed for all users once the first post-release ingest ran. Fixed by redeploying the procedure
+>   cleanly (identical logic, stowaway statement gone) and recreating the shipped function; the bundle
+>   and the source file are corrected so a re-run can't re-introduce it. SQL:
+>   `sql/deploy/live_1.3.0/hotfix_math_tree_restore_2026-10-30.sql`.
+> - **2026-10-30 — Restoring a dropped person via Role Overrides no longer duplicates their staff
+>   record.** The staff-ingest write rule (1.3.0) deactivates people who no longer need an account by
+>   stamping a *marker* record. The Role Overrides **Save** — used the same day to restore two coaches the
+>   first post-release ingest had dropped — checked only for an *active* record, so it inserted a fresh
+>   one **beside** the marker: two current records per person, and the next ingest attached an assignment
+>   to the inactive one, failing the data-quality gate (3 violations). The Save now revives the marker in
+>   place (or closes an older one first), mirroring the ingest's own same-day rules; a one-time repair
+>   removed the duplicates and the following live ingest ran clean end to end. SQL: redeploy
+>   `usp_SetStaffRoleOverride` + `sql/scripts/fix_dimstaff_dup_current_2026-10-30.sql` (generic repair).
 
 ### Added
 - **Maintenance mode: broader access + lock-out/tag-out (LOTO).** Setting a maintenance window is no

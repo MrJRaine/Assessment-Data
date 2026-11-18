@@ -17,7 +17,6 @@ import {
   type WritingRollupRow,
 } from '@/lib/data'
 import CohortView from './CohortView'
-import CohortCharts from './CohortCharts'
 import ReadingRollupTree from './ReadingRollupTree'
 import WritingRollupTree from './WritingRollupTree'
 import CycleSelector from './CycleSelector'
@@ -52,27 +51,36 @@ export default async function StudentsPage({
   let cycles: ReportCycle[] = []
   let oversight = false
   let regionWide = false // RegionalAnalyst = sees all schools → gets the TCRCE all-schools roll-up row
+  let adminRA = false // Administrator/RegionalAnalyst only → Missing results tab (NOT SpecialistTeacher)
   let error: string | null = null
   try {
     const accessLevel = await getCallerAccessLevel(upn)
     oversight = accessLevel != null && OVERSIGHT.has(accessLevel)
     regionWide = accessLevel === 'RegionalAnalyst'
+    adminRA = accessLevel === 'Administrator' || regionWide
     cycles = await getReportCycles()
     bands = await getAchievementLevels()
     if (oversight) {
-      // Roll-up feed: cycle-scoped (donut + tree). The trend is cycle-INDEPENDENT, so pull an all-cycles
-      // copy too — but only when a cycle is actually selected; otherwise they're identical (one read).
-      if (!isWriting) {
-        rollup = await getReadingCohortAll(upn, cycle)
-        rollupAll = cycle == null ? rollup : await getReadingCohortAll(upn, null)
-      } else {
-        writingRollup = await getWritingCohortAll(upn, cycle)
-        writingRollupAll = cycle == null ? writingRollup : await getWritingCohortAll(upn, null)
-      }
-      // The flat student list is a second view, loaded only when selected.
       if (view === 'list') {
+        // Student-list view: the charts are CohortView's own, fed from the FILTERED rows (2026-10-30 fix —
+        // the page-top roll-up-fed charts ignored the list's filter chips, so the donut/trend sat frozen
+        // while the table filtered). The roll-up feed isn't rendered here, so don't fetch it.
         cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
         assessableRange = await getAssessableGradeRange(isWriting ? 'Writing' : 'Reading', cycle)
+        // By-cycle trend is cycle-independent: all-cycles copy (reuse `cohort` when no cycle is selected).
+        trendCohort = cycle == null
+          ? undefined
+          : isWriting ? await getStudentCohortWriting(upn, null) : await getStudentCohort(upn, null)
+      } else {
+        // Summary view — roll-up feed: cycle-scoped (donut + tree). The trend is cycle-INDEPENDENT, so pull
+        // an all-cycles copy too — but only when a cycle is actually selected; otherwise identical (one read).
+        if (!isWriting) {
+          rollup = await getReadingCohortAll(upn, cycle)
+          rollupAll = cycle == null ? rollup : await getReadingCohortAll(upn, null)
+        } else {
+          writingRollup = await getWritingCohortAll(upn, cycle)
+          writingRollupAll = cycle == null ? writingRollup : await getWritingCohortAll(upn, null)
+        }
       }
     } else {
       cohort = isWriting ? await getStudentCohortWriting(upn, cycle) : await getStudentCohort(upn, cycle)
@@ -85,10 +93,6 @@ export default async function StudentsPage({
   } catch (e) {
     error = e instanceof Error ? e.message : String(e)
   }
-
-  // Chart feeds for the oversight top charts: donut = cycle-scoped rollup; trend = all-cycles rollup.
-  const donutRows = (isWriting ? writingRollup : rollup).map((r) => ({ code: r.achievementCode }))
-  const trendRows = (isWriting ? writingRollupAll : rollupAll).map((r) => ({ code: r.achievementCode, date: r.assessmentDate }))
 
   // View-switch hrefs, preserving subject + cycle.
   const viewHref = (v: 'summary' | 'list') => {
@@ -135,6 +139,11 @@ export default async function StudentsPage({
           <ToggleLink href="/reports/rwm" className="toggle">
             RWM
           </ToggleLink>
+          {adminRA ? (
+            <ToggleLink href="/reports/missing" className="toggle">
+              Missing results
+            </ToggleLink>
+          ) : null}
         </div>
         {cycles.length > 0 ? <CycleSelector cycles={cycles} /> : null}
       </div>
@@ -142,20 +151,23 @@ export default async function StudentsPage({
         <ErrorNote message={error} />
       ) : oversight ? (
         <>
-          {/* Two charts on top of BOTH views: donut follows the cycle selector; the by-cycle trend is
-              independent of it (always the full year). The Summary/Student-list toggle rides inside the
-              roll-up toolbar on Summary, and standalone above the table on the list view. */}
-          <CohortCharts donutRows={donutRows} trendRows={trendRows} bands={bands} cycles={cycles} />
           {view === 'list' ? (
             <>
-              <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
               {cohort.length === 0 ? (
-                <EmptyState
-                  title="No students in your scope"
-                  hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
-                />
+                <>
+                  {/* No CohortView to carry the switch here, so render it standalone — otherwise an
+                      empty list would strand the viewer with no way back to Summary. */}
+                  <div style={{ margin: '0 0 0.75rem' }}>{viewToggle}</div>
+                  <EmptyState
+                    title="No students in your scope"
+                    hint={`${isWriting ? 'Writing' : 'Reading'} results and demographics appear here for students you can see.`}
+                  />
+                </>
               ) : (
-                // Charts render at the page top for oversight, so suppress CohortView's own copy.
+                // CohortView renders its OWN charts here, fed from the FILTERED rows — the donut and trend
+                // follow the filter chips (2026-10-30 fix; the page-top roll-up-fed copy ignored them). The
+                // Summary/Student-list switch rides its control bar, so the page order is charts →
+                // controls → table on both views (2026-11-10).
                 <CohortView
                   key={`${isWriting ? 'writing' : 'reading'}:${cycle ?? 'current'}:list`}
                   cohort={cohort}
@@ -163,14 +175,18 @@ export default async function StudentsPage({
                   cycles={cycles}
                   subject={isWriting ? 'Writing' : 'Reading'}
                   assessableRange={assessableRange}
-                  showCharts={false}
+                  trendCohort={trendCohort}
+                  viewToggle={viewToggle}
                 />
               )}
             </>
           ) : isWriting ? (
-            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
+            // Summary view: the tree renders the two page-top charts itself, so they follow its
+            // Language of Assessment toggle and demographic filters (donut = the filtered cycle-scoped
+            // feed; trend = the all-cycles copy through the same filters, right edge = selected cycle).
+            <WritingRollupTree key={`writing:${cycle ?? 'current'}`} rows={writingRollup} trendRows={writingRollupAll} bands={bands} cycles={cycles} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           ) : (
-            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
+            <ReadingRollupTree key={`reading:${cycle ?? 'current'}`} rows={rollup} trendRows={rollupAll} bands={bands} cycles={cycles} cycle={cycle} showAll={regionWide} viewToggle={viewToggle} />
           )}
         </>
       ) : cohort.length === 0 ? (

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-27T18:43:07.416Z
+  modified: 2026-11-17T16:23:14.081Z
 ---
 
 **Triaged by the user 2026-09-18.** Release targets are THEIR calls. Work top-down within a section;
@@ -39,8 +39,57 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 ---
 
+# ACTIVE QUEUE — user priorities set 2026-11-10 (work in this order)
+
+1. **Reports hotfix (1.4.0)** — list-view charts follow filter chips (coded 10-30), RWM score colours
+   → standard DimAchievementLevel palette + roll-up tree "Collapse all" (both coded 2026-11-10).
+   Awaiting user test on imp/awdev → bump → prod swap + release ritual. Math band palette alignment
+   REJECTED 2026-11-10: the math-band colours are the math team's specific request — a deliberate
+   deviation; see [[stakeholder-preferences]]. Do not re-propose.
+2. **Split-grade math pacing delivery** — promoted from post-launch; new UI direction + structural
+   delta (section-scoped exceptions) in [[project_math_split_pacing_model]] §2026-11-10.
+3. **Math task chains / carry-forward** — promoted from post-launch; additions (flagged-role editing,
+   fill-on-cycle-open, earliest-origin provenance) in [[project_math_split_pacing_model]] §2026-11-10.
+4. **Quick QoL + finishable in-flight items** — e.g. HS one-list-per-section entry fix (below; needs a
+   50-ft decision on save routing across cycle instances), LOTO confirm dialog, maintainer note.
+
+- **Repo review 2026-11-09 — PARKED (user 2026-11-10) until a full feature set is out.** Removal triage
+  (~215 files), flag→state transition plan, congruence findings + streamlining plan:
+  `docs/repo-review-2026-11-09.md` (committed 7843929). Nothing in it actioned; don't act unprompted.
+- **ONE feed per subject + client-held cohort (user floated 2026-11-10, Claude agreed directionally).**
+  Replace the per-subject trio (tvf_StudentCohort / *All / *Group) with ONE TVF per assessment type,
+  fetch once, derive Summary AND Student list client-side → instant view switching, no Fabric trip per
+  switch, drills free. Joins the parked review's C-8/C-5 streamlining; trade-offs flagged: heavier
+  single query/payload (region-wide with names for analysts), the all-cycles trend copy is still a
+  second read (or a per-cycle grain), freshness vs TTL caching. DESIGN with the review follow-ups
+  after the feature set is out — the 2026-11-10 summary-filter work widened the duplication (the
+  demographics now live in 4 TVFs), which strengthens the case.
+
 # OPEN — near-term (not release-bound)
 
+- **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
+  per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
+  separate lists by their program; they should be ONE list per section on the page. User wants this
+  bundled into the next version worked on (1.4.0 candidate, alongside the pending charts fix).
+- **Write-rule rescue path for NOT-in-export coach-role overrides (gap found 2026-10-30).** usp_MergeStaff
+  Step 2's not-in-staging rescue UNION covers ONLY `Maintenance` overrides — an active
+  Administrator/RegionalAnalyst/SpecialistTeacher override for someone absent from the PS staff export is
+  re-dropped by EVERY ingest (the Save can restore them only while they're in the latest staging). Fix =
+  widen the UNION — but it needs a USER scope decision first: a not-in-PS RegionalAnalyst would have the
+  role with NO PS-derived schools (empty StaffSchoolAccess) — synthesize all-schools scope, or require a
+  PS record for region-wide access?
+- **Section-merge gate vs on-leave teachers w/ subs (census done 2026-11-06, decision pending).** A section
+  whose PRIMARY fails the merge's resolve gate (current+active DimStaff) is excluded, killing even
+  good-standing CO-TEACHERS' assignments (`usp_MergeSectionTeachers` current-DimSection check). Real case:
+  long-term sub Sarah Thornton lost 15 Meadowfields sections because on-leave primary (jocelyne.veinot@,
+  on the 28-email SIS hand-off list) dropped from the staff export. Census
+  (`sql/scripts/count_sections_inactive_primary_trap.sql`): this is the ONLY instance with a resolvable
+  co-teacher stranded; every other trapped section is a stale not-purged PS section the gate is CORRECTLY
+  filtering. **PARKED by user 2026-11-06** — follow up later if the leave-with-sub pattern recurs; do not
+  build the gate relaxation unprompted (it would resurrect the stale sections as live DimSection rows).
+  **Chosen remedy (user, SIS-side): make the SUB the section LEAD teacher in PS for those sections** — the
+  better records-keeping fix (export then names who is actually teaching), and the sections self-heal on
+  the next ingest. Not "add the on-leave teacher back to the staff export."
 - **Maintenance + ingest end-to-end dry-run on dev.** The lockout + ingest flow ship in the containers
   but have never been run start-to-finish. Prove on dev (schedule → land → `/enter` locks while
   `/ingest` + `/admin/maintenance` stay usable → clear) BEFORE any live use.
@@ -70,16 +119,18 @@ we're not blocked and it's not our queue item.)*
 
 - **Math reporting** *(user: "skip for now, only relevant in SCoR 2")*. Cohort/reporting for Math
   (by-task proportion + by-student achievement level). Entry is built; reporting is not.
-- **Split-grade math pacing** — a split-grade class runs different pacing per grade, so the task set
-  must follow that grade's pacing, not just grade+month. Revisit `tvf_TeacherRosterMath` selection.
-  Design in [[project_math_split_pacing_model]]; confirm against what the math team actually delivers.
-- **Linked math tasks carry mastery forward** — a task LINKED to a later one should start the later
-  cycle already Meeting. Needs a task-link model in `DimMathTask` + carry-forward logic.
+- ~~Split-grade math pacing~~ / ~~Linked math tasks carry mastery forward~~ — **PROMOTED 2026-11-10 to
+  the ACTIVE QUEUE (priorities 2 & 3 above)**; full design + new direction in
+  [[project_math_split_pacing_model]].
 
 ---
 
 # Post-1.0
 
+- **Achievement-chip typography/shape pass** *(user 2026-11-17, cosmetic)*. 1.4.0 standardized every
+  Reading/Writing report achievement cell on chips (`.ach-chip`, matching Math's `.mband` geometry;
+  `IPP?` orange, `IPP` purple). "Fine for now" — revisit font size / chip shape in a future version so
+  the chips better fill the column space (they currently sit small inside the row height). Pure CSS.
 - **LOTO sysadmin-override confirm dialog** *(user 2026-10-27, QoL/safety)*. When a **sysadmin** clears a
   maintenance window they did **not** open, prompt a confirm first naming the owner — e.g. "You are
   cancelling a maintenance window set by user: XYZ" (XYZ = `AppMaintenance.SetByEmail`). Fires ONLY on the
@@ -113,11 +164,8 @@ we're not blocked and it's not our queue item.)*
   `StaffAppAccess`, same shape as `CanMaintain`, or a flag on the override) that lifts the lock. Pairs with the
   role-override work shipped in 1.3.0 ([[project_assessment_language_tracks]] has the course-based WRITE-scoping
   precedent for gating entry).
-- **Roll-up tree: "Collapse all" button** *(user 2026-10-26, QoL)*. Add a one-click button on the reports
-  roll-up trees (`RollupTree`/`MathRollupTree`) to **close all open school/grade/homeroom branches** at once.
-  **CLOSE-ONLY — do NOT add an "expand all"**: expanding every node would fire the per-node lazy-load
-  (`loadGroup`) for all branches simultaneously, hammering Fabric. Collapse is free (client-state only —
-  clear `openSchools`/`openNodes`; keep the loaded `blocks` cached so re-expanding is instant).
+- ~~Roll-up tree "Collapse all" button~~ — **CODED 2026-11-10** into the 1.4.0 candidate (close-only as
+  specified; commit 0811582). Ships with the reports hotfix.
 - **Design/aesthetics pass + WCAG 2.1 AA sweep** *(user: "post 1.0")*. Flag a11y in passing, collect
   here, do NOT stop to fix. Math cell marks are already AA-compliant. **Reusable technique:** SC 1.4.11
   wants 3:1 against ADJACENT colours, not the page — a fill too light to pass alone works if a

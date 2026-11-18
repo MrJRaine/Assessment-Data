@@ -490,3 +490,36 @@ Hard-won gotchas:
   user COPY INTO has always worked (the interim workaround). Reaching the DQ gate from the editor proves
   NOTHING. Only the **app run (SP connection)** exercises the SP path.
 See [[reference_it_modifies_sps_and_copyinto_auth]].
+
+## Missing GO fuses the next statement INTO a proc body — silently (2026-10-30, live outage)
+
+A `CREATE PROCEDURE` definition extends to the END OF ITS BATCH, not to its `END;`. If a source file
+ends at `END;` without a trailing `GO` and another statement is concatenated after it (bundle
+assembly), that statement COMPILES INTO THE PROC BODY with zero errors — and executes on every call.
+deploy_1.3.0 fused `DROP FUNCTION tvf_StudentCohortMathAll` into `usp_MergeStaff` this way: the
+bundle's own later CREATE masked it on deploy day, then every ingest silently deleted the TVF
+(Msg 208 for all /reports/math users three days later).
+
+- Every proc/function source file must END with `GO` (most end `GRANT … GO`; inner procs with no
+  GRANT are the trap — usp_MergeStaff / usp_MergeEnrollment-class files).
+- After assembling ANY bundle, SEAM-AUDIT: every `DROP`'s nearest preceding CODE line (comments and
+  blanks don't count — they don't end a batch) must be `GO`.
+- After a bundle deploys, stowaway-scan: `SELECT o.name FROM sys.sql_modules m JOIN sys.objects o
+  ON o.object_id = m.object_id WHERE o.type = 'P' AND m.definition LIKE '%DROP %'` — our procs
+  legitimately contain NO DROPs, so any hit is a poisoned proc.
+
+## SCD windows must never share a day — same-day corrections REVIVE or DELETE, never close+insert (2026-10-30)
+
+Rule D (the DQ overlap check) counts ANY shared day as an overlap: a 0-day closed window
+`[d, d]` still overlaps a replacement's `[d, ∞)`. That is exactly why the merge's same-day paths
+work IN PLACE (4a-prime update, 4c-prime revival) instead of close+insert. Two corollaries learned
+on live:
+- Any out-of-band writer that provisions identity rows (e.g. `usp_SetStaffRoleOverride`'s Save) must
+  handle a CURRENT DEACTIVATION MARKER (IsCurrent=1, ActiveFlag=0) the same way: revive a same-day
+  marker in place / close a prior-day marker FIRST — testing only for a current ACTIVE row inserts a
+  duplicate current beside the marker (dup IsCurrent rows + assignments hung off the inactive key →
+  DQ gate failure).
+- A REMEDIATION cannot "close" a same-day duplicate marker into a 0-day window — it still violates
+  rule D. A same-day artifact row must be DELETED (it is an error corrected within the day, not
+  history). Predicate that makes the delete safe: ActiveFlag=0 AND StartDate=EndDate (legitimate
+  same-day closures keep ActiveFlag=1).

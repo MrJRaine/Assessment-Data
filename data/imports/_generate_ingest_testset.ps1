@@ -118,7 +118,18 @@ function Get-Program($tier,$stream) {
     }
 }
 
-$birthYear = @{ 'P'=2020; '1'=2019; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
+$birthYear = @{ 'P'=2020; '1'=2019; '2'=2018; '3'=2017; '4'=2016; '5'=2015; '7'=2013; '8'=2012; '10'=2010; '11'=2009 }
+
+# Per-attribute deterministic hash (2026-11-17). Demographics/flags used to ride the shared index
+# ($i % n), which CORRELATED every attribute with every other — e.g. all African-Yes students were
+# gender X with June birthdays, making equity-lens filter combinations untestable (and indefensible
+# as a dataset). Each attribute now draws from its OWN hash of the stable StudentNumber + a salt:
+# same rates, independent attributes, identical output on every regen.
+$script:md5 = [System.Security.Cryptography.MD5]::Create()
+function Get-AttrHash([string]$studentNum, [string]$attr) {
+    $b = $script:md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("$studentNum`:$attr"))
+    [math]::Abs([System.BitConverter]::ToInt32($b, 0))
+}
 
 # 50 x 50 = 2500 unique (first,last) pairs — more than the whole dev population, so every student gets a
 # UNIQUE name (no more 17 "Ash, Avery"s). Pairing below cycles first every student, last every 50.
@@ -157,6 +168,10 @@ function New-SecClasses($school,$tag,$tpfx) {
 
 $classes = @(
     # ---- Elementary English (school 0716): 1 teacher/class, Math + ELA ----
+    # NB: dev historically held 'teach.elem.en.0@' for this teacher (a pre-script-convention
+    # generation); ruled 2026-11-17 to standardize on the '.p' grade token like every other staff
+    # email. The first re-ingest after that ruling closes the '.0' identity and re-versions the two
+    # P-EN sections to '.p' — intentional, one-time.
     @{ Label='STR-P-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'P'=20};        Sections=@((Sec 'MAT' 'MAT-P-EN' 'teach.elem.en.p@tcrce.ca'),  (Sec 'ELA' 'ELA-P-EN' 'teach.elem.en.p@tcrce.ca')) }
     @{ Label='STR-1-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'1'=20};        Sections=@((Sec 'MAT' 'MAT-1-EN' 'teach.elem.en.1@tcrce.ca'),  (Sec 'ELA' 'ELA-1-EN' 'teach.elem.en.1@tcrce.ca')) }
     @{ Label='STR-4-EN';  Tier='ELEM'; School=$ELEM; Stream='EN'; Grades=[ordered]@{'4'=20};        Sections=@((Sec 'MAT' 'MAT-4-EN' 'teach.elem.en.4@tcrce.ca'),  (Sec 'ELA' 'ELA-4-EN' 'teach.elem.en.4@tcrce.ca')) }
@@ -197,6 +212,15 @@ $classes = @(
 )
 # Add the two extra schools (2 of each tier): CHES elementary + BMHS full 7-12 secondary.
 $classes = $classes + (New-ElemClasses $ELEM2 'CHES' 'teach.ches') + (New-SecClasses $SEC2 'BMHS' 'teach.bmhs')
+
+# 2/3 + 3/4 split EN homerooms at CHES (2026-11-17) — grades 2 and 3 are NEW to the population.
+# APPEND-ONLY: these stay LAST in $classes so every pre-existing student/section keeps its exact
+# number, name and ID on regen (section IDs, student numbers and the name-pair index $i are all
+# assigned in list order). Their teachers are hand-named in $chesSplitTeachers below.
+$classes = $classes + @(
+    @{ Label='SPL-23-EN-CHES'; Tier='ELEM'; School=$ELEM2; Stream='EN'; Grades=[ordered]@{'2'=10;'3'=10}; Sections=@((Sec 'MAT' 'MAT-23-EN-CHES' 'teach.ches.en.23@tcrce.ca'),(Sec 'ELA' 'ELA-23-EN-CHES' 'teach.ches.en.23@tcrce.ca')) }
+    @{ Label='SPL-34-EN-CHES'; Tier='ELEM'; School=$ELEM2; Stream='EN'; Grades=[ordered]@{'3'=10;'4'=10}; Sections=@((Sec 'MAT' 'MAT-34-EN-CHES' 'teach.ches.en.34@tcrce.ca'),(Sec 'ELA' 'ELA-34-EN-CHES' 'teach.ches.en.34@tcrce.ca')) }
+)
 
 # course_name (human label) from subject + code
 function Course-Name($subj,$code) {
@@ -245,15 +269,19 @@ foreach ($c in $classes) {
             # sort bug): index by (block + i). With equal pools this is (floor(i/N)+i) % N = (block+first)%N,
             # so each block of 50 walks a different diagonal and every (first,last) pair stays unique.
             $last   = $lasts[([math]::Floor($i / $firsts.Count) + $i) % $lasts.Count]
-            $middle = if ($i % 4 -eq 0) { $firsts[($i * 3) % $firsts.Count] } else { '' }
+            # Independent per-attribute hashes of the StudentNumber (see Get-AttrHash) — rates match
+            # the old index scheme (gender 1/3 each; African-Yes 1/12; Indigenous '1' 1/9, '2' 1/15;
+            # IPP 1/10; Adap 1/8; middle name 1/4) with NO cross-attribute correlation.
+            $middle = if ((Get-AttrHash $studentNum 'middle') % 4 -eq 0) { $firsts[(Get-AttrHash $studentNum 'middlename') % $firsts.Count] } else { '' }
             $gl     = Get-GradeLevel $g
             $by     = $birthYear[$g]
-            $dob    = '{0:D2}/{1:D2}/{2}' -f (($i % 12) + 1), (($i % 28) + 1), $by
-            $gender = @('M','F','X')[$i % 3]
-            $afr    = if ($i % 12 -eq 5) { 'Yes' } else { '' }
-            $abo    = if ($i % 9 -eq 2) { '1' } elseif ($i % 15 -eq 7) { '2' } else { '' }
-            $ipp    = if ($i % 10 -eq 0) { 'Y' } else { 'N' }
-            $adap   = if ($i % 8 -eq 3) { 'Y' } else { 'N' }
+            $dob    = '{0:D2}/{1:D2}/{2}' -f (((Get-AttrHash $studentNum 'dobmonth') % 12) + 1), (((Get-AttrHash $studentNum 'dobday') % 28) + 1), $by
+            $gender = @('M','F','X')[(Get-AttrHash $studentNum 'gender') % 3]
+            $afr    = if ((Get-AttrHash $studentNum 'african') % 12 -eq 0) { 'Yes' } else { '' }
+            $aboH   = (Get-AttrHash $studentNum 'indigenous') % 45
+            $abo    = if ($aboH -lt 5) { '1' } elseif ($aboH -lt 8) { '2' } else { '' }
+            $ipp    = if ((Get-AttrHash $studentNum 'ipp') % 10 -eq 0) { 'Y' } else { 'N' }
+            $adap   = if ((Get-AttrHash $studentNum 'adap') % 8 -eq 0) { 'Y' } else { 'N' }
 
             $studentRows += @($studentNum, $studentDcid, $first, $middle, $last, $c.School, $gl, $prog, $c.Label, $gender, $dob, $afr, $abo, $ipp, $adap, '0') -join $DELIM
 
@@ -265,6 +293,30 @@ foreach ($c in $classes) {
         }
     }
 }
+
+# FIXTURE PRESERVATION (2026-11-17): student 9200000341 was hand-edited in the ingested CSV
+# (grade 7 -> 8, CurrentIPP Y -> N) to exercise the IPP change paths, and dev's SCD history now
+# holds that state. Keep emitting those values so a regen + re-ingest is a NO-OP for this student
+# (reverting under a backdated @EffectiveDate would insert a version dated BEFORE the change it
+# reverts). Remove this block only in a normal, non-backdated ingest once the fixture is retired.
+$studentRows = @($studentRows | ForEach-Object {
+    if ($_ -like "9200000341$DELIM*") {
+        $f = $_ -split [regex]::Escape($DELIM)
+        $f[6] = '8'; $f[13] = 'N'   # Grade_Level, CurrentIPP
+        $f -join $DELIM
+    } else { $_ }
+})
+
+# MATH-TEAM IPP FIXTURES (2026-11-17): CurrentIPP -> 'Y' for these 8 students, per the math team's
+# request (teacher/class per the request: Hollis Tide CHES-5; Morgan Hazel HIA-4/5; Rafa Stonefield
+# CHES-3/4; Ellis Wintergreen CHES-2/3; Alex Cedar HIA-P/1 grade-P half). They ingest as FLAGGED
+# (unresolved) gates and show IPP? until confirmed in the app. Encoded HERE, not hand-edited in the
+# CSV, so regens never wipe them (the Odin Bramble lesson).
+$mathTeamIppY = @('9200000083','9200000105','9200000113','9200000566','9200001008','9200001012','9200001022','9200001033')
+$studentRows = @($studentRows | ForEach-Object {
+    $f = $_ -split [regex]::Escape($DELIM)
+    if ($mathTeamIppY -contains $f[0]) { $f[13] = 'Y'; $f -join $DELIM } else { $_ }
+})
 
 # -----------------------------------------------------------------------------
 # Staff (16 teachers, Group 47 = Teacher) + 1 regional itinerant (Group 32, multi-school)
@@ -285,12 +337,24 @@ $tierTeachers = @(
 )
 foreach ($t in ($elemTeachers + $tierTeachers)) {
     $staffId++
-    $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $staffId) -join $DELIM
+    # FIXTURE PRESERVATION (2026-11-17): teach.elem.en.1's PS staff ID was hand-edited to 82050 in
+    # the ingested file (SourceSystemID-churn test) and dev's FactStaffAssignment holds it; keep
+    # emitting it so a re-ingest doesn't close+reinsert the assignment row. 82002 stays unused.
+    $emitId = if ($t[0] -eq 'teach.elem.en.1@tcrce.ca') { 82050 } else { $staffId }
+    $staffRows += @($t[0], $t[1], $t[2], 'Teacher', $t[3], $t[3], '', '47', $emitId) -join $DELIM
 }
+# CHES 2/3 + 3/4 split-class teachers — hand-named OUTSIDE the student first/last pools (the
+# auto-derived names below walk the same pools and can collide with a student's pair). Their
+# rows are emitted at the very END of the staff list so every pre-existing staff ID is unchanged.
+$chesSplitTeachers = [ordered]@{
+    'teach.ches.en.23@tcrce.ca' = @('Ellis','Wintergreen')
+    'teach.ches.en.34@tcrce.ca' = @('Rafa','Stonefield')
+}
+
 # Teachers for the ADDED schools (CHES/BMHS), Group 47 — derived from their section teacher emails so
 # every referenced teacher exists (names generated; the BMHS ELA teacher is the cross-band 7-12 case).
 $addedTeachers = [ordered]@{}
-foreach ($c in $classes) { if ($c.School -eq $ELEM2 -or $c.School -eq $SEC2) { foreach ($s in $c.Sections) { if (-not $addedTeachers.Contains($s.Teacher)) { $addedTeachers[$s.Teacher] = $c.School } } } }
+foreach ($c in $classes) { if ($c.School -eq $ELEM2 -or $c.School -eq $SEC2) { foreach ($s in $c.Sections) { if (-not $addedTeachers.Contains($s.Teacher) -and -not $chesSplitTeachers.Contains($s.Teacher)) { $addedTeachers[$s.Teacher] = $c.School } } } }
 $ti = 0
 foreach ($em in $addedTeachers.Keys) {
     $staffId++
@@ -320,6 +384,20 @@ $staffRows += @('analyst.region@tcrce.ca', 'Rue', 'Ellery', 'Board Director', $E
 # Project lead's own account, as a region-wide RegionalAnalyst, so they can sign in and test on dev as themselves.
 $staffId++
 $staffRows += @('jeffrey.raine@tcrce.ca', 'Jeffrey', 'Raine', 'Board Director', $ELEM, $ELEM, $allSchools, '41', $staffId) -join $DELIM
+
+# Resource Teacher (Group 45 -> SpecialistTeacher) at JR 0716 — the SpecialistTeacher impersonation
+# persona (same identity seed_dev_resource_teacher.sql creates by hand; in the export it survives
+# every re-ingest instead of being closed out as absent). Teaches no sections by design.
+# Emitted AFTER the analysts (2026-11-17): dev was last ingested from a pre-resource-teacher export,
+# so analyst/project-lead hold IDs 82039/82040 — inserting this row earlier would shift them.
+$staffId++
+$staffRows += @('resource.teacher.0716@tcrce.ca', 'Quinn', 'Larch', 'Resource Teacher', $JR, $JR, '', '45', $staffId) -join $DELIM
+
+# CHES 2/3 + 3/4 split teachers (2026-11-17) — APPENDED LAST so existing staff IDs never shift on regen.
+foreach ($em in $chesSplitTeachers.Keys) {
+    $staffId++
+    $staffRows += @($em, $chesSplitTeachers[$em][0], $chesSplitTeachers[$em][1], 'Teacher', $ELEM2, $ELEM2, '', '47', $staffId) -join $DELIM
+}
 
 # -----------------------------------------------------------------------------
 # Co-Teachers (sqlReport: comma-delimited, CRLF, quote the "Last, First" name)
@@ -362,7 +440,11 @@ $seedLines += ' * Purpose: Course-scoped entry mapping for the synthetic ingest 
 $seedLines += ' *          (generated by data/imports/_generate_ingest_testset.ps1). Every'
 $seedLines += ' *          MAT-* -> Math (Language EN/FR by -EN/-EI course track); ELA-* -> English Literacy;'
 $seedLines += ' *          FLA-* -> French Literacy. Idempotent: clears then re-seeds.'
-$seedLines += ' *          Run on DEV after ingesting the test set so entry resolves courses.'
+$seedLines += ' *          Run on DEV BEFORE the ingest cycle (or rerun'
+$seedLines += ' *          usp_RebuildRosterMembership after seeding): the cycle''s final phase'
+$seedLines += ' *          materializes roster membership and INNER JOINs this table, so a'
+$seedLines += ' *          section whose course code is not seeded yet is silently dropped'
+$seedLines += ' *          from every roster until the next rebuild (bitten 2026-11-17).'
 $seedLines += ' * Region: Canada East (PIIDPA compliant)'
 $seedLines += ' ******************************************************************************/'
 $seedLines += ''
@@ -388,7 +470,7 @@ $seedLines += 'SELECT Language, Kind, COUNT(*) AS Courses FROM DimCourseAssessme
 # -----------------------------------------------------------------------------
 "Generated ingest test set [Format=$Format]:"
 "  students     : {0} rows" -f $studentRows.Count
-"  staff        : {0} rows ({1} base + {2} added-school teachers + itinerant x3 + {3} principals + 2 analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count), $addedTeachers.Count, $adminSchools.Count
+"  staff        : {0} rows ({1} base + {2} added-school teachers + itinerant x3 + {3} principals + 1 resource teacher + 2 analysts incl. project lead)" -f $staffRows.Count, ($elemTeachers.Count + $tierTeachers.Count), $addedTeachers.Count, $adminSchools.Count
 "  schools      : {0} ({1} elementary + {2} secondary)" -f 5, 2, 3
 "  sections     : {0} rows" -f $sectionRows.Count
 "  enrollments  : {0} rows" -f $enrollRows.Count

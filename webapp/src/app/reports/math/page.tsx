@@ -38,6 +38,9 @@ export default async function MathReportsPage({ searchParams }: { searchParams: 
       <ToggleLink href="/reports?subject=writing" className="toggle">Writing</ToggleLink>
       <ToggleLink href="/reports/math" className="toggle-on">Math</ToggleLink>
       <ToggleLink href="/reports/rwm" className="toggle">RWM</ToggleLink>
+      {accessLevel === 'Administrator' || accessLevel === 'RegionalAnalyst' ? (
+        <ToggleLink href="/reports/missing" className="toggle">Missing results</ToggleLink>
+      ) : null}
     </div>
   )
 
@@ -58,7 +61,7 @@ export default async function MathReportsPage({ searchParams }: { searchParams: 
         />
       ) : (
         // Remount on cycle change so no expanded block from the previous cycle lingers.
-        <MathRollupTree key={cycle ?? 'current'} rows={rows} cycle={cycle} showAll={accessLevel === 'RegionalAnalyst'} />
+        <MathRollupTree key={cycle ?? 'current'} rows={rows} cycle={cycle} cycles={cycles} showAll={accessLevel === 'RegionalAnalyst'} />
       )}
     </>
   )

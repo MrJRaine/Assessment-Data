@@ -27,6 +27,13 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   const [focusKey, setFocusKey] = useState<string | null>(null)
 
   const mark = (studentKey: string, taskKey: string): Mark => marks[rk(studentKey, taskKey)] ?? 'blank'
+  // Per-student measured flag for unitStat: a confirmed/unresolved IPP keeps their marks visible but
+  // gets no band anywhere (same rule as Reading/Writing — user ruling 2026-11-17).
+  const studentMeta = useMemo(() => {
+    const m = new Map<string, { eligible: boolean; ipp: boolean }>()
+    for (const g of grades) for (const s of g.students) m.set(s.studentKey, { eligible: s.eligible, ipp: s.mathIPP })
+    return m
+  }, [grades])
   const uk = (g: Grade, u: Unit) => `${g.grade}:${u.name}`
   const toggleUnit = (key: string) =>
     setCollapsedUnits((prev) => {
@@ -39,7 +46,7 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   // Returns null when the student has no scorable data in the unit (all blank in exclude mode, or
   // all IPP). `incomplete` mirrors the entry grid's <80%-filled nudge for the DISPLAYED band only.
   function unitAvg(studentKey: string, u: Unit): { avg: number | null; ipp: boolean; incomplete: boolean } {
-    return unitStat(countUnit((t) => mark(studentKey, t), u), blankMode)
+    return unitStat(countUnit((t) => mark(studentKey, t), u), blankMode, studentMeta.get(studentKey))
   }
 
   // The per-student roll-up = the mean of that student's unit averages (units with data only).
@@ -57,6 +64,8 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
     return scored === 0 ? null : ones / scored
   }
   // Cohort roll-up for a unit = mean of the students' unit averages (colours the collapsed unit row).
+  // Any non-null average counts (a confirmed IPP's earned level included); unresolved IPPs are
+  // suppressed to null in unitStat, so they drop out here on their own.
   function unitCohort(students: Student[], u: Unit): number | null {
     const avgs: number[] = []
     for (const s of students) {
@@ -67,14 +76,17 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   }
 
   // Per-student band cell (unit or overall roll-up) + a read-only task cell — shared with the tree.
-  const bandCell = (avg: number | null, ipp: boolean, incomplete: boolean) => (
-    <BandCell avg={avg} ipp={ipp} incomplete={incomplete} />
+  const bandCell = (avg: number | null, ipp: boolean, incomplete: boolean, unresolved = false) => (
+    <BandCell avg={avg} ipp={ipp} incomplete={incomplete} unresolved={unresolved} />
   )
   const taskCell = (v: Mark) => <TaskCell v={v} />
 
   // ── charts (group view): donut of overall roll-ups + stacked bars by unit name ────────────────
   const measuredStudents = useMemo(
-    () => grades.flatMap((g) => g.students.filter((s) => !s.mathIPP).map((s) => ({ s, g }))),
+    // A level counts wherever it exists, confirmed-IPP or not (user ruling 2026-11-17) — only an
+    // UNRESOLVED IPP is excluded outright (they can never band). Null roll-ups drop out downstream,
+    // so an under-assessed IPP (badge state) never reaches a chart anyway.
+    () => grades.flatMap((g) => g.students.filter((s) => s.eligible || s.mathIPP).map((s) => ({ s, g }))),
     [grades],
   )
   const donut = useMemo(() => {
@@ -274,7 +286,7 @@ function TasksDown({
   rollup: (s: string, g: Grade) => number | null
   taskPct: (students: Student[], t: string) => number | null
   unitCohort: (students: Student[], u: Unit) => number | null
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onFocus: (key: string) => void
 }) {
@@ -303,7 +315,7 @@ function TasksDown({
             <td className={`col-pct ${heatClass(overallCohort)}`}>{overallCohort == null ? '—' : Math.round(overallCohort * 100)}</td>
             {students.map((s) => {
               const r = rollup(s.studentKey, g)
-              return <td className="stu" key={s.studentKey}>{bandCell(r, s.mathIPP && r == null, false)}</td>
+              return <td className="stu" key={s.studentKey}>{bandCell(r, s.mathIPP && r == null, false, !s.eligible && !s.mathIPP)}</td>
             })}
           </tr>
           {g.units.map((u) => {
@@ -320,7 +332,7 @@ function TasksDown({
                   <td className={`col-pct ${heatClass(cohort)}`}>{cohort == null ? '—' : Math.round(cohort * 100)}</td>
                   {students.map((s) => {
                     const a = unitAvg(s.studentKey, u)
-                    return <td className="stu" key={s.studentKey}>{bandCell(a.avg, a.ipp, a.incomplete)}</td>
+                    return <td className="stu" key={s.studentKey}>{bandCell(a.avg, a.ipp, a.incomplete, !s.eligible && !s.mathIPP)}</td>
                   })}
                 </tr>
                 {!coll && u.tasks.map((t) => {
@@ -360,7 +372,7 @@ function StudentsDown({
   mark: (s: string, t: string) => Mark
   unitAvg: (s: string, u: Unit) => { avg: number | null; ipp: boolean; incomplete: boolean }
   rollup: (s: string, g: Grade) => number | null
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onFocus: (key: string) => void
 }) {
@@ -422,15 +434,17 @@ function StudentsDown({
             const r = rollup(s.studentKey, g)
             return (
               <tr key={s.studentKey}>
+                {/* Students are ROWS in this orientation → full "Last, First" name; the tasks-down
+                    view keeps the compact name (students are column headers there). */}
                 <th className="col-task" scope="row">
-                  <button className="linkbtn" onClick={() => onFocus(s.studentKey)}>{s.name}</button>
+                  <button className="linkbtn" onClick={() => onFocus(s.studentKey)}>{s.sortKey}</button>
                 </th>
-                <td className="col-pct">{bandCell(r, s.mathIPP && r == null, false)}</td>
+                <td className="col-pct">{bandCell(r, s.mathIPP && r == null, false, !s.eligible && !s.mathIPP)}</td>
                 {g.units.flatMap((u) => {
                   const coll = collapsed.has(uk(g, u))
                   if (coll) {
                     const a = unitAvg(s.studentKey, u)
-                    return [<td className="stu" key={`${u.name}-sum`}>{bandCell(a.avg, a.ipp, a.incomplete)}</td>]
+                    return [<td className="stu" key={`${u.name}-sum`}>{bandCell(a.avg, a.ipp, a.incomplete, !s.eligible && !s.mathIPP)}</td>]
                   }
                   return u.tasks.map((t) => (
                     <td className="cell stu" key={t.mathTaskKey}>{taskCell(mark(s.studentKey, t.mathTaskKey))}</td>
@@ -461,7 +475,7 @@ function StudentGrid({
   rollup: number | null
   unitAvg: (s: string, u: Unit) => { avg: number | null; ipp: boolean; incomplete: boolean }
   mark: (s: string, t: string) => Mark
-  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean) => React.ReactNode
+  bandCell: (avg: number | null, ipp: boolean, incomplete: boolean, unresolved?: boolean) => React.ReactNode
   taskCell: (v: Mark) => React.ReactNode
   onBack: () => void
 }) {
@@ -482,7 +496,7 @@ function StudentGrid({
       <div className="mghead">
         <h3>{student.fullName}</h3>
         <span className="gc">· {grade.label} · Roll-up: </span>
-        {bandCell(rollup, student.mathIPP && rollup == null, false)}
+        {bandCell(rollup, student.mathIPP && rollup == null, false, !student.eligible && !student.mathIPP)}
       </div>
       <div className="mscroll">
         <table className="mgrid">
@@ -503,7 +517,7 @@ function StudentGrid({
                       <span className="chev">{coll ? '▸' : '▾'}</span>
                       <span className="uname">{u.name} · {u.tasks.length} tasks</span>
                     </th>
-                    <td className="col-pct">{bandCell(a.avg, a.ipp, a.incomplete)}</td>
+                    <td className="col-pct">{bandCell(a.avg, a.ipp, a.incomplete, !student.eligible && !student.mathIPP)}</td>
                   </tr>
                   {!coll && u.tasks.map((t) => (
                     <tr key={t.mathTaskKey}>
