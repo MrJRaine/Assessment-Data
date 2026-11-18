@@ -88,21 +88,21 @@ plain Entra behaviour.
 
 ## 3. IPP students out of the achievement maths (summary trees)
 
-- [ ] An IPP student's result shows in the drill with level/traits but **"IPP"** in the
+- [X] An IPP student's result shows in the drill with level/traits but **"IPP"** in the
       Achievement column and no Diff from Expected.
-- [ ] They are absent from the donut count, the donut slices, the by-cycle bars, and the
+- [X] They are absent from the donut count, the donut slices, the by-cycle bars, and the
       % Meeting/Exceeding — but still counted in the Students column.
 
 ## 4. Language of Assessment filter keeps expected-but-unassessed students
 
-- [ ] Filter a summary tree to French: students expected in French with no French result
+- [X] Filter a summary tree to French: students expected in French with no French result
       stay in the grade/homeroom counts (as "no result") and appear in the drill as "—"
       rows. Same for English. % and Results counts unchanged by their presence.
 
 ## 5. Filter sections on the summary trees
 
-- [ ] **Reading/Writing trees**: Show filters → Grade / Gender / Self-ID African / Self-ID
-      Indigenous / Language; everything (node counts, charts, drills) trims together;
+- [X] **Reading/Writing trees**: Show filters → Grade / Gender / Self-ID African
+      Descent / Self-ID Indigenous Descent (both **Yes / Not Yes**) / Language; everything (node counts, charts, drills) trims together;
       Reset restores. Gender/Self-ID groups appear only after the SQL bundle runs.
 - [ ] **RWM tree**: same section plus the two scoring toggles moved in — **Math blanks**
       (Excluded vs Count-as-0 re-scores the 0–3) and **All 3 areas only**. Reset leaves the

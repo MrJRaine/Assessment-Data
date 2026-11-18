@@ -260,7 +260,7 @@ export default function RWMRollupTree({
         <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
           {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
         </button>
-        {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset</button> : null}
+        {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset filters</button> : null}
         <span className="spacer" />
         {/* Close-only on purpose, matching the other trees. */}
         <button type="button" className="btn-ghost" onClick={() => { setOpenSchools(new Set()); setOpenNodes(new Set()) }}>
@@ -302,7 +302,7 @@ export default function RWMRollupTree({
           {hasSelfID ? (
             <>
               <div className="filter-group">
-                <label>Self-ID African</label>
+                <label>Self-ID African Descent</label>
                 {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
                 <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
                   <option>All</option>
@@ -311,11 +311,12 @@ export default function RWMRollupTree({
                 </select>
               </div>
               <div className="filter-group">
-                <label>Self-ID Indigenous</label>
+                <label>Self-ID Indigenous Descent</label>
+                {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
                 <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
                   <option>All</option>
                   <option>Yes</option>
-                  <option>No</option>
+                  <option value="No">Not Yes</option>
                 </select>
               </div>
             </>

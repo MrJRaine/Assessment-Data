@@ -42,14 +42,10 @@ function readCohortFilters(): CohortPersist {
   }
 }
 
-function triMatch(sel: Tri, v: boolean | null): boolean {
-  if (sel === 'All') return true
-  if (sel === 'Yes') return v === true
-  return v === false
-}
-// Self-ID African filters YES vs NOT-YES (user 2026-11-17): the source is Yes / N / unanswered and
-// the warehouse stores only Yes=1 (N and unanswered both NULL) — "not Yes" is the only honest
-// complement. Indigenous keeps the true tri-state (it has genuine answered-No values).
+// BOTH Self-ID filters are YES vs NOT-YES. African (user 2026-11-17): the source is Yes / N /
+// unanswered and the warehouse stores only Yes=1 (N and unanswered both NULL) — "not Yes" is the
+// only honest complement. Indigenous (user 2026-11-18) mirrors it by ruling: an answered No and a
+// never-answered both fall under "Not Yes".
 function yesNotYes(sel: Tri, v: boolean | null): boolean {
   if (sel === 'All') return true
   if (sel === 'Yes') return v === true
@@ -334,7 +330,7 @@ export default function CohortView({
     (except === 'grade' || s.gradeOrder == null || (s.gradeOrder >= gradeMin && s.gradeOrder <= gradeMax)) &&
     (except === 'gender' || gender === 'All' || s.gender === gender) &&
     (except === 'african' || yesNotYes(african, s.selfIDAfrican)) &&
-    (except === 'indigenous' || triMatch(indigenous, s.selfIDIndigenous)) &&
+    (except === 'indigenous' || yesNotYes(indigenous, s.selfIDIndigenous)) &&
     (except === 'hr' || !oneSchool || hr.size === 0 || (s.homeroom != null && hr.has(s.homeroom))) &&
     (except === 'prog' || prog.size === 0 || (s.programFamily != null && prog.has(s.programFamily))) &&
     (except === 'sch' || sch.size === 0 || (s.schoolId != null && sch.has(s.schoolId))) &&
@@ -530,7 +526,7 @@ export default function CohortView({
           {expanded ? 'Hide filters' : 'Show filters'}
         </button>
         <button className="btn-ghost" onClick={reset}>
-          Reset
+          Reset filters
         </button>
         {sortKey ? (
           <button
@@ -577,7 +573,7 @@ export default function CohortView({
           ) : null}
 
           <div className="filter-group">
-            <label>Self-ID African</label>
+            <label>Self-ID African Descent</label>
             {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
             <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
               <option>All</option>
@@ -587,11 +583,12 @@ export default function CohortView({
           </div>
 
           <div className="filter-group">
-            <label>Self-ID Indigenous</label>
+            <label>Self-ID Indigenous Descent</label>
+            {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
             <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
               <option>All</option>
               <option>Yes</option>
-              <option>No</option>
+              <option value="No">Not Yes</option>
             </select>
           </div>
 

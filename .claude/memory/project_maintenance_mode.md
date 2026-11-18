@@ -119,3 +119,5 @@ auto-save net is for.
 5. Sysadmin set-window / start-countdown page (isSysAdmin-gated) + cancel / all-clear.
 
 Related: [[project_webapp_fabric_connection]], [[feedback_loading_states]], [[project_assessment_platform]].
+
+**LOTO UI parity SHIPPED 2026-11-17 (1.4.0 candidate, dev):** the app surfaces missed the 1.3.0 LOTO patch — banner/overlay Clear + the maintenance page's Cancel now render ONLY for the window OWNER or a sysadmin (/api/status carries setBy — staff work email, public); a non-owner on the page sees who holds the lock; clearMaintenance's app gate also admits CanRunIngest (ingest-flagged owners clear their own windows; the proc stays the authority).
