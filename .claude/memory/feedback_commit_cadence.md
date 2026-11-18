@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: cc5fc7f0-3ff9-4368-a158-ef0c6bf09cbb
-  modified: 2026-10-20T14:09:29.965Z
+  modified: 2026-11-18T15:58:01.656Z
 ---
 
 Commit at **logical checkpoints** — whenever a discrete piece of work is solved or a coherent unit works (a bug fixed, a feature path proven, a deploy completed) — proactively, without being asked. Do NOT micro-commit after every tiny edit, and do NOT stop committing altogether.
@@ -32,6 +32,12 @@ change lands in dev ([[feedback_changelog_as_you_go]]), so the cutover only drop
 user's trigger"; the user corrected: *"I don't trigger that ritual, the successful deployment to live
 sets that ritual off."* This is the one release-side exception to "PRs only when instructed" — the ritual
 uses a direct merge + tag + GitHub *release* (not a PR), so it's squarely mine once the deploy is live.
+
+**`dev-impersonation` IS BACKED UP TOO (2026-11-18).** I had left it 83 commits ahead of origin and
+asked whether to push. The user: *"yes, dev impersonation should be kept up to date on GH as we work
+through things in case I ever need to switch to my laptop to work from."* So: whenever I merge `dev`
+into `dev-impersonation` (each reconcile, each `-imp` build), push that branch in the same step — don't
+ask. The remote must be enough to resume on another machine.
 
 **How to apply:** after finishing a meaningful chunk, `git commit` with a clear message and `git push`;
 batch trivial/in-progress edits into the next checkpoint rather than doing each one separately; open a
