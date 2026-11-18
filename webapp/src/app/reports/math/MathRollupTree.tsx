@@ -11,6 +11,7 @@ import {
 import { BandCell, TaskCell } from './mathCells'
 import { loadMathGroup } from './actions'
 import { demoPass, gradeRank, type DemoFilter, type Tri } from '../rollupModel'
+import { useSharedFilters } from '../sharedFilters'
 
 type DemoRow = { grade: string | null; gender: string | null; selfIDAfrican: boolean | null; selfIDIndigenous: boolean | null }
 
@@ -125,25 +126,17 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
   }, [rows])
 
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
-  const [blankMode, setBlankMode] = useState<BlankMode>('exclude')
 
   // ── Filter section (2026-11-18): the same demographic filters as the Reading/Writing/RWM trees,
   // with the Blanks scoring toggle moved in beside them (as on RWM). Filters trim the tree rows,
   // the counts, every % cell and the drill's student rows together. Gender / Self-ID are OFFERED
   // only when the feed carries them (deploy_math_filter_demographics_2026-11-18.sql).
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const allStudents = useMemo(() => allSchools.flatMap((s) => s.students), [allSchools])
   const gradeOpts = useMemo(
     () => [...new Set(allStudents.map((s) => s.grade))].sort((a, b) => gradeRank(a) - gradeRank(b)),
     [allStudents],
   )
-  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
-  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
-  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
-  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
-  const [gender, setGender] = useState('All')
-  const [african, setAfrican] = useState<Tri>('All')
-  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const gradeRanks = useMemo(() => gradeOpts.map(gradeRank), [gradeOpts])
   const genderOpts = useMemo(
     () => [...new Set(allStudents.map((s) => s.gender).filter(Boolean) as string[])].sort(),
     [allStudents],
@@ -152,17 +145,16 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
     () => allStudents.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
     [allStudents],
   )
-  const anyFilter =
-    gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail ||
-    gender !== 'All' || african !== 'All' || indigenous !== 'All'
-  const resetFilters = () => {
-    setGradeMinRank(minRankAvail)
-    setGradeMaxRank(maxRankAvail)
-    setGender('All')
-    setAfrican('All')
-    setIndigenous('All')
-    // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as RWM).
-  }
+  // Values live in the tab-wide shared store (sharedFilters.ts) so they carry across cycle changes
+  // and across reports (2026-11-18) — this tree remounts on every cycle change.
+  const shared = useSharedFilters(gradeRanks, genderOpts, hasSelfID)
+  const {
+    gradeMinRank, gradeMaxRank, gender, african, indigenous, filtersOpen, blankMode,
+    setGradeMinRank, setGradeMaxRank, setGender, setAfrican, setIndigenous, setFiltersOpen, setBlankMode,
+  } = shared
+  const anyFilter = shared.anyDemo
+  // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as RWM).
+  const resetFilters = shared.resetDemo
   const pass = useMemo(
     () => demoPass({ gradeMinRank, gradeMaxRank, gender, african, indigenous } satisfies DemoFilter),
     [gradeMinRank, gradeMaxRank, gender, african, indigenous],
@@ -252,7 +244,7 @@ export default function MathRollupTree({ rows, cycle, showAll = false }: { rows:
             </button>
           ))}
         </div>
-        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+        <button className="btn-ghost" onClick={() => setFiltersOpen(!filtersOpen)}>
           {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
         </button>
         {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset filters</button> : null}

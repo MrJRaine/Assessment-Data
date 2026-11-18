@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { RWMStudent } from '@/lib/data'
+import { readSharedFilters, writeSharedFilters } from '../sharedFilters'
 
 // RWM = a 0–3 score per Primary–5 student: how many of Reading / Writing / Math they're currently
 // meeting or exceeding. Cohort-wide (like the Reading/Writing report), IPP-in-any students already
@@ -45,7 +46,11 @@ export default function RWMCohortView({ cohort, viewToggle }: { cohort: RWMStude
   // The Math component's roll-up (and therefore the 0–3 score) depends on how blanks are treated.
   // Reading/Writing are single most-recent results and unaffected. Recompute client-side so the
   // toggle flips instantly. Default: blanks excluded (matches the Math report's default).
-  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
+  // The Blanks mode is shared with the RWM + Math summary trees for the tab (sharedFilters.ts,
+  // 2026-11-18): restored on mount, mirrored on every change.
+  const [blankMode, setBlankModeRaw] = useState<'exclude' | 'zero'>('exclude')
+  useEffect(() => { setBlankModeRaw(readSharedFilters().blankMode === 'zero' ? 'zero' : 'exclude') }, [])
+  const setBlankMode = (v: 'exclude' | 'zero') => { setBlankModeRaw(v); writeSharedFilters({ blankMode: v }) }
   // "Complete" = has an actual result in ALL THREE areas (not everyone does — the report is P-5 and
   // areas roll out at different times). Independent of the blanks toggle: this is about evidence
   // existing at all, not how it's scored.
@@ -159,7 +164,7 @@ export default function RWMCohortView({ cohort, viewToggle }: { cohort: RWMStude
         </button>
         <button
           className="btn-ghost"
-          onClick={() => setBlankMode((m) => (m === 'exclude' ? 'zero' : 'exclude'))}
+          onClick={() => setBlankMode(blankMode === 'exclude' ? 'zero' : 'exclude')}
           title="How un-recorded Math tasks affect the roll-up (Reading/Writing are unaffected)"
         >
           Blanks: {blankMode === 'exclude' ? 'excluded' : 'count as 0'}

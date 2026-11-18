@@ -9,6 +9,7 @@ import {
 } from './rollupModel'
 import { heatClass, fmtPct } from './math/mathModel' // shared heat scale + % format (cross-subject consistency)
 import CohortCharts from './CohortCharts'
+import { useSharedFilters } from './sharedFilters'
 
 type MeasureMode = 'pct' | 'mean'
 
@@ -109,7 +110,6 @@ export function RollupTree<T>({
   charts?: { trendStudents: RollupStudent[]; bands: AchievementBand[]; cycles: ReportCycle[] }
 }) {
   const [summarizeBy, setSummarizeBy] = useState<SummarizeBy>('Grade')
-  const [lang, setLang] = useState<LangFilter>('All')
   const [measureMode, setMeasureMode] = useState<MeasureMode>('pct')
   const [openSchools, setOpenSchools] = useState<Set<string>>(
     () => new Set(schools.length === 1 ? [schools[0].id] : []),
@@ -120,19 +120,12 @@ export function RollupTree<T>({
   // ── Demographic filters (2026-11-10): collapsible section mirroring the student list's. Grade +
   // Language work from the tree's own rows; Gender / Self-ID groups are OFFERED only when the feed
   // carries values (the *All TVFs need the demographics columns deployed first).
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const allStudentsRaw = useMemo(() => schools.flatMap((s) => s.students), [schools])
   const gradeOpts = useMemo(
     () => [...new Set(allStudentsRaw.map((s) => s.grade).filter(Boolean))].sort((a, b) => gradeRank(a) - gradeRank(b)),
     [allStudentsRaw],
   )
-  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
-  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
-  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
-  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
-  const [gender, setGender] = useState('All')
-  const [african, setAfrican] = useState<Tri>('All')
-  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const gradeRanks = useMemo(() => gradeOpts.map(gradeRank), [gradeOpts])
   const genderOpts = useMemo(
     () => [...new Set(allStudentsRaw.map((s) => s.gender).filter(Boolean) as string[])].sort(),
     [allStudentsRaw],
@@ -141,14 +134,18 @@ export function RollupTree<T>({
     () => allStudentsRaw.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
     [allStudentsRaw],
   )
+  // Filter values live in the tab-wide shared store (sharedFilters.ts) so they carry across cycle
+  // changes and across reports (2026-11-18) — this tree remounts on every cycle change.
+  const shared = useSharedFilters(gradeRanks, genderOpts, hasSelfID)
+  const {
+    gradeMinRank, gradeMaxRank, gender, african, indigenous, filtersOpen, anyDemo,
+    setGradeMinRank, setGradeMaxRank, setGender, setAfrican, setIndigenous, setFiltersOpen,
+  } = shared
+  const lang: LangFilter = shared.lang
+  const setLang = shared.setLang
   const demo: DemoFilter = { gradeMinRank, gradeMaxRank, gender, african, indigenous }
-  const anyDemo = gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail || gender !== 'All' || african !== 'All' || indigenous !== 'All'
   const resetFilters = () => {
-    setGradeMinRank(minRankAvail)
-    setGradeMaxRank(maxRankAvail)
-    setGender('All')
-    setAfrican('All')
-    setIndigenous('All')
+    shared.resetDemo()
     setLang('All')
   }
   // The tree, its counts, and the donut all come from the FILTERED schools (empty schools drop out).
@@ -245,7 +242,7 @@ export function RollupTree<T>({
             ))}
           </div>
         </span>
-        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+        <button className="btn-ghost" onClick={() => setFiltersOpen(!filtersOpen)}>
           {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && (anyDemo || lang !== 'All') ? ' (active)' : ''}
         </button>
         {anyDemo || lang !== 'All' ? (

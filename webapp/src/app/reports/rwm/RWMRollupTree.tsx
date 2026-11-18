@@ -6,6 +6,7 @@ import type { RWMStudent } from '@/lib/data'
 import { gradeLabel, gradeRank, gradeSpanLabel, demoPass, type SummarizeBy, type Tri, type DemoFilter } from '../rollupModel'
 import { heatClass, fmtPct } from '../math/mathModel' // shared heat scale + 2-dp % (cross-report consistency)
 import { SCORE_HEX } from './RWMCohortView'
+import { useSharedFilters } from '../sharedFilters'
 
 // RWM oversight roll-up (user ask 2026-11-10): School → Grade|Homeroom (same toggle as the other
 // summary trees, TCRCE all-schools row for Regional Analysts). Columns = COUNTS of students at each
@@ -129,20 +130,12 @@ export default function RWMRollupTree({
 }: { cohort: RWMStudent[]; showAll?: boolean; viewToggle?: ReactNode }) {
   // ── Filter section (2026-11-10): demographics (as on the Reading/Writing trees) + the two RWM
   // scoring toggles from the Student list. Math blanks re-SCORES (pct source flips); the rest FILTER.
-  const [filtersOpen, setFiltersOpen] = useState(false)
-  const [blankMode, setBlankMode] = useState<'exclude' | 'zero'>('exclude')
   const [completeOnly, setCompleteOnly] = useState(false)
   const gradeOpts = useMemo(
     () => [...new Set(cohort.map((s) => s.grade).filter((g): g is string => !!g))].sort((a, b) => gradeRank(a) - gradeRank(b)),
     [cohort],
   )
-  const minRankAvail = gradeOpts.length ? gradeRank(gradeOpts[0]) : 0
-  const maxRankAvail = gradeOpts.length ? gradeRank(gradeOpts[gradeOpts.length - 1]) : 0
-  const [gradeMinRank, setGradeMinRank] = useState(minRankAvail)
-  const [gradeMaxRank, setGradeMaxRank] = useState(maxRankAvail)
-  const [gender, setGender] = useState('All')
-  const [african, setAfrican] = useState<Tri>('All')
-  const [indigenous, setIndigenous] = useState<Tri>('All')
+  const gradeRanks = useMemo(() => gradeOpts.map(gradeRank), [gradeOpts])
   const genderOpts = useMemo(
     () => [...new Set(cohort.map((s) => s.gender).filter(Boolean) as string[])].sort(),
     [cohort],
@@ -151,16 +144,17 @@ export default function RWMRollupTree({
     () => cohort.some((s) => s.selfIDAfrican != null || s.selfIDIndigenous != null),
     [cohort],
   )
+  // Demographic filters + the Blanks mode + the panel's open state live in the tab-wide shared store
+  // (sharedFilters.ts) so they carry across cycle changes and across reports (2026-11-18).
+  const shared = useSharedFilters(gradeRanks, genderOpts, hasSelfID)
+  const {
+    gradeMinRank, gradeMaxRank, gender, african, indigenous, filtersOpen, blankMode,
+    setGradeMinRank, setGradeMaxRank, setGender, setAfrican, setIndigenous, setFiltersOpen, setBlankMode,
+  } = shared
   const demo: DemoFilter = { gradeMinRank, gradeMaxRank, gender, african, indigenous }
-  const anyFilter =
-    gradeMinRank !== minRankAvail || gradeMaxRank !== maxRankAvail ||
-    gender !== 'All' || african !== 'All' || indigenous !== 'All' || completeOnly
+  const anyFilter = shared.anyDemo || completeOnly
   const resetFilters = () => {
-    setGradeMinRank(minRankAvail)
-    setGradeMaxRank(maxRankAvail)
-    setGender('All')
-    setAfrican('All')
-    setIndigenous('All')
+    shared.resetDemo()
     setCompleteOnly(false)
     // blankMode is a scoring MODE, not a filter — Reset leaves it alone (same as the Student list).
   }
@@ -257,7 +251,7 @@ export default function RWMRollupTree({
             ))}
           </div>
         </span>
-        <button className="btn-ghost" onClick={() => setFiltersOpen((v) => !v)}>
+        <button className="btn-ghost" onClick={() => setFiltersOpen(!filtersOpen)}>
           {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && anyFilter ? ' (active)' : ''}
         </button>
         {anyFilter ? <button className="btn-ghost" onClick={resetFilters}>Reset filters</button> : null}
