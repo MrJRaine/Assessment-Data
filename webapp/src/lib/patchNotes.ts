@@ -16,6 +16,13 @@ export interface PatchNote {
 
 export const PATCH_NOTES: PatchNote[] = [
   {
+    version: '1.5.0',
+    date: '2026-11-18',
+    kind: 'fix',
+    summary:
+      'Math report: the "% can do" figure for each task now follows the Blanks setting. With Blanks set to "Count as 0", students who have no mark on a task are counted as not yet able to do it — the same way the unit and overall figures already worked. Hover a task figure to see how many students were not scored.',
+  },
+  {
     version: '1.4.0',
     date: '2026-11-13',
     kind: 'feature',

@@ -90,6 +90,28 @@ export function meanOf(avgs: (number | null)[]): number | null {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null
 }
 
+/**
+ * Class "% can do" for ONE task, from the students' marks on it. The ONE place this is computed for
+ * the reports (expanded roster view + class view), so it cannot drift from the Blanks mode again —
+ * the task cells used to hard-code yes / (yes + no) and ignored the toggle (fixed 1.5.0).
+ *   'exclude' — yes / (yes + no): an unmarked student is left out.
+ *   'zero'    — yes / (yes + no + blank): an unmarked student counts as a miss, the same way
+ *               unitStat widens a unit's denominator.
+ * An 'ipp' cell (a task a confirmed IPP's plan deletes) is never in the denominator, in either mode.
+ */
+export interface TaskStat { p: number | null; yes: number; no: number; ipp: number; blank: number }
+export function taskStat(marks: Iterable<Mark>, blankMode: BlankMode): TaskStat {
+  let yes = 0, no = 0, ipp = 0, blank = 0
+  for (const v of marks) {
+    if (v === '1') yes++
+    else if (v === '0') no++
+    else if (v === 'ipp') ipp++
+    else blank++
+  }
+  const denom = yes + no + (blankMode === 'zero' ? blank : 0)
+  return { p: denom === 0 ? null : yes / denom, yes, no, ipp, blank }
+}
+
 // ── Roll-up tallies (oversight tree + block summary rows) ────────────────────────────────────────
 // Every student in a node lands in exactly one bucket. The % is Meeting-or-In-depth over students
 // WITH a level — IPP / No data / Incomplete are left out of it and shown in the hover instead.

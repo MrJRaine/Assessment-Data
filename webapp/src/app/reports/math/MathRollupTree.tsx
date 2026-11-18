@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { MathCohortRow, MathRollupRow, MathTrendRow, ReportCycle } from '@/lib/data'
 import {
   type BlankMode, type Grade, type Mark, type Tally, type Unit,
-  GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, meanOf,
+  GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, taskStat, meanOf,
   emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct, BANDS, BAND_HEX,
 } from './mathModel'
 import { BandCell, TaskCell } from './mathCells'
@@ -669,17 +669,11 @@ function GradeBlock({
     })
     overall[overallBucket(meanOf(avgs), s.mathIPP)]++
   }
+  // Task cells follow the Blanks mode like every other % in this block (shared taskStat).
   function taskSummary(taskKey: string) {
-    let yes = 0, no = 0, ipp = 0, blank = 0
-    for (const s of g.students) {
-      const v = mark(s.studentKey, taskKey)
-      if (v === '1') yes++
-      else if (v === '0') no++
-      else if (v === 'ipp') ipp++
-      else blank++
-    }
-    const p = yes + no === 0 ? null : yes / (yes + no)
-    return { p, title: `Can do: ${yes}\nCannot: ${no}\nIPP: ${ipp}\nNot scored: ${blank}` }
+    const t = taskStat(g.students.map((s) => mark(s.studentKey, taskKey)), blankMode)
+    const blanks = blankMode === 'zero' ? `Not scored (counted as 0): ${t.blank}` : `Not scored (excluded): ${t.blank}`
+    return { p: t.p, title: `Can do: ${t.yes}\nCannot: ${t.no}\nIPP: ${t.ipp}\n${blanks}` }
   }
 
   return (
