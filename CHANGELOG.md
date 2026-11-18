@@ -11,6 +11,18 @@ that must be deployed to the live warehouse alongside it.
 Entries before `0.3.0` are reconstructed retroactively — formal tracking starts
 with `0.3.0`, so earlier detail is approximate.
 
+## [Unreleased] — 1.5.0-dev
+
+### Fixed
+- **Math report task cells now follow the Blanks setting.** With Blanks set to "Count as 0", the
+  per-task "% can do" cells in an expanded roster view (and in the class view) kept showing
+  can-do ÷ students marked, while every unit, Overall, tree, donut and by-cycle figure around them
+  switched — the task cells had their own hard-coded formula that never read the setting (wrong
+  since the toggle shipped). Both views now share one `taskStat` in `mathModel.ts`: excluded =
+  can-do ÷ (can-do + cannot); count as 0 = can-do ÷ (can-do + cannot + not scored). A task an IPP
+  deletes stays out of the denominator in both modes. The task cell's hover now says whether the
+  not-scored students were excluded or counted as 0. Web only — no SQL.
+
 ## [1.4.0] — 2026-11-18
 
 > Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
