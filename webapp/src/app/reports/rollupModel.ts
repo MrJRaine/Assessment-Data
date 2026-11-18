@@ -66,14 +66,11 @@ export interface RollupStudent {
 
 // ── Demographic filters on the summary tree (2026-11-10): same semantics as the student list ──
 export type Tri = 'All' | 'Yes' | 'No'
-export function triMatch(sel: Tri, v: boolean | null): boolean {
-  if (sel === 'All') return true
-  if (sel === 'Yes') return v === true
-  return v === false
-}
-// Self-ID African is filtered YES vs NOT-YES (user 2026-11-17): the source field is Yes / N / never
-// answered, and the ingest stores only Yes=1 (N and unanswered both land NULL) — so "not Yes" is the
-// only honest complement. The UI labels this option "Not Yes".
+// BOTH Self-ID filters are YES vs NOT-YES. African (user 2026-11-17): the source field is Yes / N /
+// never answered, and the ingest stores only Yes=1 (N and unanswered both land NULL) — so "not Yes"
+// is the only honest complement. Indigenous (user 2026-11-18): mirrors African by ruling — its
+// source does store an answered No (2 → 0), but "Not Yes" groups that with never-answered (NULL).
+// The UI labels the option "Not Yes"; the stored Tri value stays 'No'.
 export function yesNotYes(sel: Tri, v: boolean | null): boolean {
   if (sel === 'All') return true
   if (sel === 'Yes') return v === true
@@ -90,7 +87,7 @@ export const demoPass = (f: DemoFilter) => (s: { grade: string | null; gender: s
   (s.grade == null || (gradeRank(s.grade) >= f.gradeMinRank && gradeRank(s.grade) <= f.gradeMaxRank)) &&
   (f.gender === 'All' || s.gender === f.gender) &&
   yesNotYes(f.african, s.selfIDAfrican) &&
-  triMatch(f.indigenous, s.selfIDIndigenous)
+  yesNotYes(f.indigenous, s.selfIDIndigenous)
 export interface RollupSchool { id: string; name: string; students: RollupStudent[] }
 export interface RollupChild {
   id: string

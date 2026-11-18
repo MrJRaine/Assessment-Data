@@ -31,12 +31,16 @@ with `0.3.0`, so earlier detail is approximate.
   the orange IPP? when unconfirmed — on the Student list, the summary drill, the student detail
   history, AND the data-entry grid (which previously showed an unconfirmed student's computed
   average). Mirrors reading, where the level stays but Expected/Δ are never computed for IPPs.
-- **Self-ID African filter is Yes / Not Yes.** The source field is Yes, N, or never-answered, and
-  the warehouse stores only the Yes (an answered N and an unanswered both land as unknown) — so the
-  old "No" option, which demanded an explicit answered-No, could never match anything. The option is
-  now labelled **Not Yes** and matches everyone without an explicit Yes, on the summary trees, the
-  Student list, and RWM. Self-ID Indigenous keeps its true Yes/No/unknown behaviour (its source
-  distinguishes an answered No).
+- **Self-ID filters are Yes / Not Yes, and are labelled "Descent".** For African Descent the source
+  field is Yes, N, or never-answered, and the warehouse stores only the Yes (an answered N and an
+  unanswered both land as unknown) — so the old "No" option, which demanded an explicit
+  answered-No, could never match anything. The option is now labelled **Not Yes** and matches
+  everyone without an explicit Yes, on the summary trees, the Student list, and RWM. Indigenous
+  Descent mirrors it (ruled 2026-11-18): **Not Yes** = an answered No or never answered. The filter
+  labels now read **Self-ID African Descent** and **Self-ID Indigenous Descent**.
+- **"Reset" is now "Reset filters"** on every report filter bar (Reading/Writing/RWM summary trees
+  and the Student list; the RWM student list already said so) — the bare word didn't say what it
+  reset, sitting beside "Reset sort order".
 - **Summary-tree Results column now shows the % denominator.** The Results number included IPP and
   unconfirmed-IPP results that the percentage beside it deliberately excludes, so recomputing the %
   from the visible numbers gave a different answer. The column now shows measured results only —
@@ -118,13 +122,13 @@ with `0.3.0`, so earlier detail is approximate.
   every filter, the charts follow it. Web only, no SQL.
 - **Filter section on the Reading/Writing Summary trees.** A collapsible **Show filters** section
   (right of *Summarize by*, same controls as the Student list): **Grade**, **Gender**, **Self-ID
-  African**, **Self-ID Indigenous**, and **Language of Assessment** (moved in from the toolbar). The
+  African Descent**, **Self-ID Indigenous Descent**, and **Language of Assessment** (moved in from the toolbar). The
   filters trim the whole display together — the school/grade/homeroom counts, the page-top charts,
   and the drill-down student tables. **SQL:** `deploy_summary_filter_demographics_2026-11-10.sql`
   adds Gender + Self-ID columns to the oversight roll-up TVFs; until it runs, those two filter
   groups stay hidden (Grade + Language work without it).
 - **Filter section on the RWM Summary tree.** The same collapsible section as the Reading/Writing
-  trees — **Grade**, **Gender**, **Self-ID African**, **Self-ID Indigenous** — plus the Student
+  trees — **Grade**, **Gender**, **Self-ID African Descent**, **Self-ID Indigenous Descent** — plus the Student
   list's two scoring toggles moved in with it: **Math blanks** (excluded vs count as 0, which
   re-scores every student's 0–3) and **All 3 areas only**. Filters trim the donut, the counts, and
   the drill tables together. **SQL:** `tvf_StudentCohortRWM` is included in the same

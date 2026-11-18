@@ -249,7 +249,7 @@ export function RollupTree<T>({
           {filtersOpen ? 'Hide filters' : 'Show filters'}{!filtersOpen && (anyDemo || lang !== 'All') ? ' (active)' : ''}
         </button>
         {anyDemo || lang !== 'All' ? (
-          <button className="btn-ghost" onClick={resetFilters}>Reset</button>
+          <button className="btn-ghost" onClick={resetFilters}>Reset filters</button>
         ) : null}
         {measures ? (
           <span className="mtoolbar-pair">
@@ -305,7 +305,7 @@ export function RollupTree<T>({
           {hasSelfID ? (
             <>
               <div className="filter-group">
-                <label>Self-ID African</label>
+                <label>Self-ID African Descent</label>
                 {/* "Not Yes" = answered-N or never answered — the source can't distinguish them. */}
                 <select value={african} onChange={(e) => setAfrican(e.target.value as Tri)}>
                   <option>All</option>
@@ -314,11 +314,12 @@ export function RollupTree<T>({
                 </select>
               </div>
               <div className="filter-group">
-                <label>Self-ID Indigenous</label>
+                <label>Self-ID Indigenous Descent</label>
+                {/* "Not Yes" = answered-No or never answered — mirrors African (user 2026-11-18). */}
                 <select value={indigenous} onChange={(e) => setIndigenous(e.target.value as Tri)}>
                   <option>All</option>
                   <option>Yes</option>
-                  <option>No</option>
+                  <option value="No">Not Yes</option>
                 </select>
               </div>
             </>
