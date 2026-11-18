@@ -94,10 +94,16 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   (4) SELECTIONS are fresh each visit "to start for now" (no saved/named sets yet); (5) SPLIT
   HOMEROOMS show under EVERY grade they hold, but ONLY the students of the picked grade enter the
   roll-up; (6) rows are labelled by the HOMEROOM IDENTIFIER only — no teacher names; (7) the % =
-  share of students who can do the task, OMITTING anyone with a Math IPP AND anyone with an
-  UNCONFIRMED Math IPP (user: "omitting anyone with an IPP in that field, and omitting anyone who has
-  an unconfirmed IPP") — i.e. the existing IsChartEligibleMath rule; per [[feedback_never_silently_omit]]
-  the report must SAY how many were left out.
+  share of students who can do the task — user's exact words: "percentage, yes, omitting anyone with
+  an IPP in that field, and omitting anyone who has an unconfirmed IPP." CORRECTED 2026-11-18 (I
+  first recorded this as "omit every Math-IPP student = the existing rule"; the user: "That is not
+  what I said and it is not the existing math report rule" — both true). *My corrected reading, to be
+  CONFIRMED before building:* "that field" = the TASK cell — a CONFIRMED-IPP student is left out of a
+  task's % only for the tasks their plan deletes, and still counts on every other task; a student with
+  an UNCONFIRMED IPP is left out of every task. The existing rule is in [[math-ipp-display-rules]]
+  (confirmed IPP COUNTS with deleted outcomes dropped from the numerator; unresolved = unmeasured) —
+  READ IT before describing it. Per [[feedback_never_silently_omit]] the report must SAY how many were
+  left out.
   *My reading, unconfirmed:* the colour thresholds =
   the same band cut-offs the Math unit cells already use (math-team palette — do NOT re-propose the
   standard palette, see item 1 above); task-grain like the item above, so the two likely share one
