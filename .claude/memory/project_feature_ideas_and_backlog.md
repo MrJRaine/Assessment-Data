@@ -41,11 +41,10 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # ACTIVE QUEUE — user priorities set 2026-11-10 (work in this order)
 
-1. **Reports hotfix (1.4.0)** — list-view charts follow filter chips (coded 10-30), RWM score colours
-   → standard DimAchievementLevel palette + roll-up tree "Collapse all" (both coded 2026-11-10).
-   Awaiting user test on imp/awdev → bump → prod swap + release ritual. Math band palette alignment
-   REJECTED 2026-11-10: the math-band colours are the math team's specific request — a deliberate
-   deviation; see [[stakeholder-preferences]]. Do not re-propose.
+1. ~~Reports release (1.4.0)~~ — **SHIPPED, LIVE 2026-11-18** (tag v1.4.0; Missing results, filters on
+   every report tree incl. Math, Math donut + by-cycle bars, filter carry-over). Math band palette
+   alignment REJECTED 2026-11-10: the math-band colours are the math team's specific request — a
+   deliberate deviation; see [[stakeholder-preferences]]. Do not re-propose.
 2. **Split-grade math pacing delivery** — promoted from post-launch; new UI direction + structural
    delta (section-scoped exceptions) in [[project_math_split_pacing_model]] §2026-11-10.
 3. **Math task chains / carry-forward** — promoted from post-launch; additions (flagged-role editing,
