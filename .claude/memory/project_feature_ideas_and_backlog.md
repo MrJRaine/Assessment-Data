@@ -104,9 +104,14 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   (confirmed IPP COUNTS with deleted outcomes dropped from the numerator; unresolved = unmeasured) —
   READ IT before describing it. Per [[feedback_never_silently_omit]] the report must SAY how many were
   left out.
-  *My reading, unconfirmed:* the colour thresholds =
-  the same band cut-offs the Math unit cells already use (math-team palette — do NOT re-propose the
-  standard palette, see item 1 above); task-grain like the item above, so the two likely share one
+  (8) COLOUR — user 2026-11-18: "colour coded the same way it is for the tasks in data entry." Read
+  from the code that day: `heatClass` in `MathRosterEntry.tsx` (same function exported from
+  `reports/math/mathModel.ts`) — >80% h4, >=65% h3, >=50% h2, below 50% h1, no scored marks = none.
+  These are the TASK heat cut-offs, NOT the unit band cut-offs (50/75/90) I had assumed. The entry
+  grid's `taskPct` = can-do / students with a 0 or 1 mark on that task (IPP-deleted cells and blanks
+  out of the denominator) — consistent with ruling 7; whether Blanks "count as 0" changes the
+  denominator here follows ruling 3 and needs spelling out in the proposal.
+  *My reading, unconfirmed:* task-grain like the item above, so the two likely share one
   task-grain feed; "Current" for Math is current-year (task x grade x month model,
   [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.
 
