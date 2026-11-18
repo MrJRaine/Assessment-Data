@@ -37,6 +37,7 @@
 - [Select all / Clear all Labels](feedback_select_clear_all_labels.md) â€” EXACT labels "Select all" / "Clear all" app-wide.
 - [Never Silently Omit](feedback_never_silently_omit.md) â€” anything filtered, dropped or unavailable must SAY SO, name who/what is affected, and say what to do. A silent omission is a defect even when the filter is correct.
 - [Avoid the term "assessment"](feedback_avoid_assessment_term.md) â€” keep "assessment" out of user-facing text; prefer "results"/"Short Cycle". Internal identifiers stay.
+- [Say "expanded roster view"](feedback_expanded_roster_view_term.md) — user-facing text + public change log say "expanded roster view", never "drill"/"drill-down", for the student rows opened under a grade/homeroom on a summary tree.
 
 ## Data residency / PII / environments
 - [Live PII Boundary](feedback_live_pii_boundary.md) â€” never query row-level STUDENT PII against LIVE; schema + synthetic only. Staff name + work email are public, NOT PII.

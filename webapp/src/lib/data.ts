@@ -1853,6 +1853,57 @@ export async function getMathCohortAll(upn: string, cycleGroupId: string | null 
   }))
 }
 
+/**
+ * By-cycle feed for the Math summary tree's "Achievement by cycle" bars (1.4.0): one row per
+ * (started cycle × student × unit), COUNTS only — no names. Per cycle it is exactly what
+ * getMathCohortAll(upn, thatCycle) returns, so each bar reproduces the tree with that cycle selected.
+ */
+export interface MathTrendRow {
+  cycleGroupId: string
+  studentKey: string
+  grade: string
+  gender: string | null
+  selfIDAfrican: boolean | null
+  selfIDIndigenous: boolean | null
+  mathIPP: boolean
+  mathEligible: boolean
+  unitName: string | null
+  taskCount: number
+  scoredCount: number
+  canDoCount: number
+}
+
+export async function getMathCohortTrend(upn: string): Promise<MathTrendRow[]> {
+  const rows = await queryAsUser<{
+    CycleGroupID: string
+    StudentKey: string
+    Grade: string
+    Gender: string | null
+    SelfIDAfrican: boolean | number | null
+    SelfIDIndigenous: boolean | number | null
+    MathIPPStatus: number | null
+    IsChartEligibleMath: number | null
+    UnitName: string | null
+    TaskCount: number
+    ScoredCount: number
+    CanDoCount: number | null
+  }>(upn, 'SELECT * FROM dbo.tvf_StudentCohortMathTrend(@UPN)', {})
+  return rows.map((r) => ({
+    cycleGroupId: String(r.CycleGroupID),
+    studentKey: String(r.StudentKey),
+    grade: r.Grade,
+    gender: r.Gender ?? null,
+    selfIDAfrican: toBool(r.SelfIDAfrican),
+    selfIDIndigenous: toBool(r.SelfIDIndigenous),
+    mathIPP: r.MathIPPStatus === 1,
+    mathEligible: Number(r.IsChartEligibleMath) === 1,
+    unitName: r.UnitName ?? null,
+    taskCount: Number(r.TaskCount ?? 0),
+    scoredCount: Number(r.ScoredCount ?? 0),
+    canDoCount: Number(r.CanDoCount ?? 0),
+  }))
+}
+
 // ---- Reports > RWM (0.7.0, item 5): Reading·Writing·Math achievement roll-up ------------------
 // Cohort-wide (like Reading/Writing), P-5 only, IPP-in-any-area students excluded (in the TVF).
 
