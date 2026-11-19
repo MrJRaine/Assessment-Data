@@ -17,6 +17,13 @@ export interface PatchNote {
 export const PATCH_NOTES: PatchNote[] = [
   {
     version: '1.5.0',
+    date: '2026-11-19',
+    kind: 'fix',
+    summary:
+      'Math report: a student whose IPP is flagged but not yet confirmed is no longer counted in each task’s "% can do" figure — they were already left out of the unit and overall levels. Once the IPP is confirmed Yes or No, their marks count the usual way. Hover a task figure to see how many students were left out.',
+  },
+  {
+    version: '1.5.0',
     date: '2026-11-18',
     kind: 'fix',
     summary:

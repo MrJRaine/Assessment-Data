@@ -22,6 +22,13 @@ with `0.3.0`, so earlier detail is approximate.
   can-do ÷ (can-do + cannot); count as 0 = can-do ÷ (can-do + cannot + not scored). A task an IPP
   deletes stays out of the denominator in both modes. The task cell's hover now says whether the
   not-scored students were excluded or counted as 0. Web only — no SQL.
+- **Math report task cells leave out students whose IPP is not yet confirmed.** A student flagged for
+  a Math IPP but not yet confirmed Yes/No is unmeasured — they already got no unit or overall level —
+  but any marks they held from before the flag still counted in each task's "% can do" (class view
+  and expanded roster view). Those students are now left out of the task figure, numerator and
+  denominator, until the teacher confirms: a "No" counts their marks normally again, a "Yes" applies
+  the IPP rule. Their marks stay visible in their own row with the "IPP?" marker, and the task cell's
+  hover says how many were left out. Web only — no SQL.
 
 ## [1.4.0] — 2026-11-18
 

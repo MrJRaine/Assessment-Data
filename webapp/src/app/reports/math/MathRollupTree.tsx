@@ -5,7 +5,7 @@ import Link from 'next/link'
 import type { MathCohortRow, MathRollupRow, MathTrendRow, ReportCycle } from '@/lib/data'
 import {
   type BlankMode, type Grade, type Mark, type Tally, type Unit,
-  GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, taskStat, meanOf,
+  GRADE_ORDER, gradeLabel, heatClass, rk, buildGrades, buildMarks, countUnit, unitStat, taskStat, isUnresolvedIPP, meanOf,
   emptyTally, unitBucket, overallBucket, pctMeeting, tallyTitle, fmtPct, BANDS, BAND_HEX,
 } from './mathModel'
 import { BandCell, TaskCell } from './mathCells'
@@ -669,11 +669,15 @@ function GradeBlock({
     })
     overall[overallBucket(meanOf(avgs), s.mathIPP)]++
   }
-  // Task cells follow the Blanks mode like every other % in this block (shared taskStat).
+  // Task cells follow the Blanks mode like every other % in this block (shared taskStat). Students
+  // with an unconfirmed IPP are unmeasured, so they are left out of the task % (the hover says so).
+  const taskStudents = g.students.filter((s) => !isUnresolvedIPP(s))
+  const unconfirmed = g.students.length - taskStudents.length
   function taskSummary(taskKey: string) {
-    const t = taskStat(g.students.map((s) => mark(s.studentKey, taskKey)), blankMode)
+    const t = taskStat(taskStudents.map((s) => mark(s.studentKey, taskKey)), blankMode)
     const blanks = blankMode === 'zero' ? `Not scored (counted as 0): ${t.blank}` : `Not scored (excluded): ${t.blank}`
-    return { p: t.p, title: `Can do: ${t.yes}\nCannot: ${t.no}\nIPP: ${t.ipp}\n${blanks}` }
+    const left = unconfirmed > 0 ? `\nUnconfirmed IPP (left out): ${unconfirmed}` : ''
+    return { p: t.p, title: `Can do: ${t.yes}\nCannot: ${t.no}\nIPP: ${t.ipp}\n${blanks}${left}` }
   }
 
   return (
