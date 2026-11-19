@@ -39,15 +39,19 @@ with `0.3.0`, so earlier detail is approximate.
 >   school, shown correctly, but a correction would have saved a second copy). Only the link to the
 >   student record changed — no score, date or entry details. Every changed row is logged in
 >   `dbo.RepairLog_FactStudentKeyRebind_20261118` (old and new link), which is also the rollback source.
->   Not moved: 1 Reading result of that third kind, because a second copy already exists on the newer
->   record (logged, left as it was; reports use the newer copy). Verified on live by the procedure check
->   (3 of 3 carry the binding) and the repair's own check (821 applied, 1 skipped by design). The
+>   Removed: 1 Reading result of that third kind that had already been duplicated — the same level saved
+>   twice on 2026-09-29 by the same person, once either side of that day's ingest. The older copy was
+>   deleted after being copied in full to `dbo.RepairLog_DeletedReadingDuplicate_20261119`; the copy on
+>   the newer record stays. Verified on live by the procedure check (3 of 3 carry the binding), the
+>   repair's own check (821 applied, 1 skipped by design) and the removal check (1 backed up, removed
+>   row gone, kept copy present). The
 >   transfer path was not exercised on dev before going live — dev has no students who changed schools.
 >   Known gap, shelved: the save procedures still find a result to correct by student record, so a
 >   result saved before a same-day ingest can still be duplicated by a later correction.
 >   SQL: `sql/deploy/live_1.4.0/patch_upsert_section_school_binding_2026-11-18.sql`, then
 >   `repair_rebind_1_capture_and_precheck.sql`, `repair_rebind_1b_capture_same_day_reversion.sql` and
->   `repair_rebind_2_apply.sql` (rollback: `repair_rebind_3_rollback.sql`).
+>   `repair_rebind_2_apply.sql` (rollback: `repair_rebind_3_rollback.sql`), then
+>   `repair_rebind_4_remove_duplicate_reading.sql`.
 
 > Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
 > Missing results report and the Summary-tree filter sections are new features, so this shipped as a
