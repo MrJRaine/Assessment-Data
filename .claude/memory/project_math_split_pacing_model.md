@@ -184,6 +184,19 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
   task shows BLANK in its default cycle (a miss under Blanks = count as 0, and against the 80% rule)
   and its result is NOT listed in the cycle it was actually done in; "Current" shows everything.
   No `AssessmentMonth` reference in webapp/src.
+- **REPORT RULING (user 2026-11-19, supersedes "no report change"):** "Display in the reports will need
+  to expand to anything with a default or override for that benchmark month." I.e. a cycle view's task
+  list = tasks whose DEFAULT month is the cycle's month UNION tasks with any OVERRIDE (regional or
+  homeroom) to that month. *My reading, to confirm:* a task that is not due for a given student in
+  that cycle is NOT a blank/miss for them - it is left out of their denominators.
+- **UNITS -> TOPICS PIVOT COMING (user 2026-11-19, context - do NOT build now):** the current unit
+  layout is inherited from the math team's hand-made single-class system, forced to line up so results
+  tally at many levels; in practice each SPLIT had its own unit/question numbering. From December 2026
+  the user starts working with the math team on moving from arbitrary units to grouping by TOPIC -
+  "likely keeping the table structure we have already and just creating a numbered reference chart to
+  equate numbers in the unit column to a specific topic." *My reading:* keep `UnitName`/`UnitOrder`
+  display-only, never key anything new on them, and label groupings generically in new screens so a
+  unit->topic relabel is a lookup, not a rebuild.
 - STILL OPEN: where section/homeroom-scoped teacher overrides live (scope column vs parallel table) -
   pros/cons given 2026-11-19, awaiting the user's choice.
 
