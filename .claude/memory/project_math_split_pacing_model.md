@@ -197,7 +197,24 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
   equate numbers in the unit column to a specific topic." *My reading:* keep `UnitName`/`UnitOrder`
   display-only, never key anything new on them, and label groupings generically in new screens so a
   unit->topic relabel is a lookup, not a rebuild.
-- STILL OPEN: where section/homeroom-scoped teacher overrides live (scope column vs parallel table) -
+- **DECISIONS 2026-11-19 (user, via question dialog):**
+  (1) Teacher overrides = their OWN table, keyed school + homeroom + task (not a scope column).
+  (2) New regional pacing role = a `StaffAppAccess` capability (staff-access admin page).
+  (3) MONTHS: regional editor may pick ANY month, with a WARNING popup on save when the month is not
+  one of this school year's currently-active cycles' months; a classroom teacher may pick ONLY the
+  benchmark months of cycles in the current school year.
+  (4) TEACHER TAG + YEAR-END FLUSH + RE-USE (verbatim): "Tag the teacher onto any override entries and
+  then at end of year, we will flush the teacher overrides to a backup table marking them with the
+  year and then the next year, if a teacher is teaching the same split, they will have an option to
+  re-use last year's task arrangement and we'll just copy it into the new year's override from the
+  backup."
+  (5) Chain structure (empty `MathTaskLink` + 3 fact columns) goes in 1.5.0 - taken from "as much as
+  possible"; stated back to the user 2026-11-19, not contradicted.
+  (6) NOT-DUE CELLS in cycle views - user's answer, verbatim: "we need to know what to expect from that
+  homeroom and tally it that way first, or better yet, when they save an assessment we tag it with the
+  number of items left in that section and pull from that?" -> tally against the homeroom's EXPECTED
+  task set; the stamp-a-count-on-save idea was floated as a question - my recommendation given
+  2026-11-19 (expected set from the dated pacing tables; no per-result count), awaiting the user.
   pros/cons given 2026-11-19, awaiting the user's choice.
 
 ## OPEN — none; footprint locked
