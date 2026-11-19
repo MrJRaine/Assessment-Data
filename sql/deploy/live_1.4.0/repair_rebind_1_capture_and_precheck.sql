@@ -41,7 +41,7 @@ CREATE TABLE dbo.RepairLog_FactStudentKeyRebind_20261118 (
     AssessmentDate      DATE          NOT NULL,
     OldStudentKey       BIGINT        NOT NULL,   -- the key on the fact row when captured
     NewStudentKey       BIGINT        NOT NULL,   -- the key the rule picks
-    RepairGroup         VARCHAR(10)   NOT NULL,   -- 'Transfer' | 'Relinked'
+    RepairGroup         VARCHAR(10)   NOT NULL,   -- 'Transfer' | 'Relinked' | 'SameDay' (added by step 1b)
     WouldCollide        BIT           NOT NULL,   -- 1 = a row already exists at the new key (skipped)
     CapturedAt          DATETIME2(0)  NOT NULL
 );

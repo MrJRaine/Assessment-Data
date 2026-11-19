@@ -130,6 +130,16 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   task-grain feed; "Current" for Math is current-year (task x grade x month model,
   [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.
 
+- **Save procedures: match an existing result by StudentNumber, not StudentKey — SHELVED (user
+  2026-11-19: "for the future when we try to tighten things up").** The three `usp_Upsert*Assessment`
+  procs find the row to correct by `StudentKey + AssessmentWindowID (+ language / MathTaskKey) +
+  AssessmentDate` (read 2026-11-19: `usp_UpsertReadingAssessment.sql` ~L486). If the stored row sits on a
+  different version than the one the save now picks, a correction INSERTS a second copy. Known route:
+  a result saved on an ingest day BEFORE that day's ingest re-versions the student (merge closes the
+  old version as of yesterday, new one starts today) - 10 such rows on live, repaired one-off by
+  `sql/deploy/live_1.4.0/repair_rebind_1b_capture_same_day_reversion.sql`. Will recur at a low rate
+  until this ships. Needs a 50-ft proposal + a dev test when picked up; do not re-propose before then.
+
 - **FIX, NEXT VERSION WE WORK ON (user 2026-11-04): secondary data-entry splits a section into
   per-program lists.** On the data-entry page, a SECONDARY (HS) section's students are divided into
   separate lists by their program; they should be ONE list per section on the page. User wants this
