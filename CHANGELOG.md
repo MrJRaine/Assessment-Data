@@ -32,17 +32,22 @@ with `0.3.0`, so earlier detail is approximate.
 >   school. The three save procedures (`usp_UpsertReadingAssessment`, `usp_UpsertWritingAssessment`,
 >   `usp_UpsertMathAssessment`) now bind a result to the student's record at the school of the class it
 >   was entered from (coded 2026-10-30, held out of the 1.4.0 release, now live). A one-time repair moved
->   812 stored results onto the record they belong to: 12 saved after a transfer (Math 6, Reading 4,
->   Writing 2) and 800 that the 2026-10-13 recovery had pointed at a later record of the same student
->   (Math 702, Reading 74, Writing 24). Only the link to the student record changed — no score, date or
->   entry details. Every changed row is logged in `dbo.RepairLog_FactStudentKeyRebind_20261118` (old and
->   new link), which is also the rollback source. Not included: 10 results whose linked record ended
->   before the result date at the same school (unexplained, left as they were). Verified on live by the
->   procedure check (3 of 3 carry the binding) and the repair's own check (812 of 812 applied). The
+>   821 stored results onto the record they belong to: 12 saved after a transfer (Math 6, Reading 4,
+>   Writing 2), 800 that the 2026-10-13 recovery had pointed at a later record of the same student
+>   (Math 702, Reading 74, Writing 24), and 9 saved on an ingest day before that day's ingest updated
+>   the student, which left them on the record that ingest closed (Math 1, Reading 1, Writing 7 — same
+>   school, shown correctly, but a correction would have saved a second copy). Only the link to the
+>   student record changed — no score, date or entry details. Every changed row is logged in
+>   `dbo.RepairLog_FactStudentKeyRebind_20261118` (old and new link), which is also the rollback source.
+>   Not moved: 1 Reading result of that third kind, because a second copy already exists on the newer
+>   record (logged, left as it was; reports use the newer copy). Verified on live by the procedure check
+>   (3 of 3 carry the binding) and the repair's own check (821 applied, 1 skipped by design). The
 >   transfer path was not exercised on dev before going live — dev has no students who changed schools.
+>   Known gap, shelved: the save procedures still find a result to correct by student record, so a
+>   result saved before a same-day ingest can still be duplicated by a later correction.
 >   SQL: `sql/deploy/live_1.4.0/patch_upsert_section_school_binding_2026-11-18.sql`, then
->   `repair_rebind_1_capture_and_precheck.sql` and `repair_rebind_2_apply.sql` (rollback:
->   `repair_rebind_3_rollback.sql`).
+>   `repair_rebind_1_capture_and_precheck.sql`, `repair_rebind_1b_capture_same_day_reversion.sql` and
+>   `repair_rebind_2_apply.sql` (rollback: `repair_rebind_3_rollback.sql`).
 
 > Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
 > Missing results report and the Summary-tree filter sections are new features, so this shipped as a
