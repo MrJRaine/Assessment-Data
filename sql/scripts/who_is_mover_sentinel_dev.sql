@@ -6,7 +6,7 @@
  *          result for the 2026-11-18 section-school binding patch.
  * SCD Type: n/a (read-only)
  * Created: 2026-11-19
- * READS:  DimStudent, DimSchool, TeacherRosterMembership, DimAssessmentWindow.
+ * READS:  DimStudent, DimSchool, TeacherRosterMembership, DimStaff, DimAssessmentWindow.
  * WRITES: nothing.
  * Region: Canada East (PIIDPA compliant) - synthetic dev data only; returns student
  *         names, so do NOT run on live.
@@ -37,6 +37,7 @@ SELECT m.FirstName, m.LastName, m.StudentNumber, m.MoveDate,
        ns.SchoolName        AS NewSchool,
        trm.Grade            AS OldGrade,
        trm.Homeroom         AS OldHomeroom,
+       st.FirstName + ' ' + st.LastName AS TeacherToImpersonate,
        trm.TeacherEmail,
        trm.SectionID,
        w.AssessmentType     AS Subject,
@@ -51,6 +52,7 @@ LEFT JOIN DimSchool os ON os.SchoolID = m.PreviousSchoolID
 LEFT JOIN DimSchool ns ON ns.SchoolID = m.CurrentSchoolID
 LEFT JOIN TeacherRosterMembership trm ON trm.StudentNumber = m.StudentNumber
                                      AND trm.SchoolID = m.PreviousSchoolID
+LEFT JOIN DimStaff st ON LOWER(st.Email) = trm.TeacherEmail AND st.IsCurrent = 1
 LEFT JOIN DimAssessmentWindow w ON w.AssessmentWindowID = trm.AssessmentWindowID
 ORDER BY m.LastName, m.FirstName, w.StartDate DESC, w.AssessmentType, trm.TeacherEmail;
 GO
