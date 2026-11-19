@@ -144,6 +144,21 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
   walking `CarriedFromMathTaskKey` links at read time (immediate-predecessor column already in the
   footprint). Raise before building.
 
+
+## 2026-11-19 — build starts as the main 1.5.0 feature; user rulings (verbatim where quoted)
+
+- **Regional editing = a NEW ROLE** ("it needs to be a new role") — not an existing role with a flag.
+- **Teachers of triple-grade splits or non-contiguous 2-grade splits "automatically see it for those
+  homerooms"** — no flag/grant; visibility is derived from the homeroom's composition.
+- **Reports:** results are dated, so "within a cycle it's going to look a little messy but as we move
+  through the year, the current will start to fill out and give a full picture" of all three groups'
+  performance on a task. I.e. NO special report handling for off-cycle split tasks - accept the
+  per-cycle unevenness; "Current" converges. Do not design a report-side correction.
+- **Scope:** "as much as possible but the chains will likely wait for 1.6.0" - build split pacing in
+  1.5.0 and lay as much shared structure as is sensible; task chains / carry-forward = 1.6.0.
+- STILL OPEN: where section/homeroom-scoped teacher overrides live (scope column vs parallel table) -
+  pros/cons given 2026-11-19, awaiting the user's choice.
+
 ## OPEN — none; footprint locked
 
 All user-authored tables carry actor tracking per the app-wide rule [[project_user_authored_is_auditable]]
