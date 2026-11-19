@@ -5,6 +5,8 @@
  *          for the job scheduler, manual full ingests, and dev rebuilds
  *          from the lakehouse files.
  * Created: 2026-05-01
+ * Modified: 2026-11-19 (1.5.0) - + Phase 3.6: EXEC usp_RebuildHomerooms after the roster rebuild
+ *           (homeroom split detection for split-grade math pacing). File now ends with GO.
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an orchestrator (vs inline cascade between merge procs):
@@ -184,6 +186,15 @@ BEGIN
     EXEC usp_RebuildRosterMembership;
 
     -- ------------------------------------------------------------------------
+    -- Phase 3.6 (1.5.0): Rebuild the homeroom picture - which homerooms are split
+    -- classes (DimHomeroom / DimHomeroomComposition) and which Math + Literacy
+    -- sections make up each homeroom (DimHomeroomSection). Split-grade math pacing
+    -- reads these. Derived from DimStudent, so it runs after the data quality gate
+    -- like the roster rebuild. (See usp_RebuildHomerooms.sql.)
+    -- ------------------------------------------------------------------------
+    EXEC usp_RebuildHomerooms @EffectiveDate = @EffectiveDate;
+
+    -- ------------------------------------------------------------------------
     -- Phase 4: Cycle-level success audit. Written only on a fully clean run
     -- (data quality gate passed) — useful as a "cycle boundary" marker when
     -- scanning the audit log.
@@ -213,3 +224,4 @@ BEGIN
     VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', NULL, NULL, 'Completed',
             CONCAT('cycle complete | duration ', CAST(DATEDIFF(SECOND, @CycleStart, GETDATE()) AS VARCHAR(10)), 's'), GETDATE());
 END;
+GO
