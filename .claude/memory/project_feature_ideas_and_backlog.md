@@ -124,8 +124,8 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
   2026-11-18: the Blanks setting should always have carried into the nested table's task cells.
   FIXED on dev for 1.5.0 (commit `3785ec7`): both views now use the shared `taskStat` in
   `mathModel.ts` — count-as-0 = can-do / (can-do + cannot + not scored); IPP cells out in both modes.
-  The homeroom report's task cells MUST use `taskStat` too (ruling 3 settled). STILL OPEN, to put to
-  the user with both behaviours named: ruling 7 (unconfirmed IPP out of every task) vs (c).
+  The homeroom report's task cells MUST use `taskStat` too (ruling 3 settled). (c) RESOLVED - user 2026-11-19 ("it both exists and
+  does not exist until we observe if they are on an IPP"): unconfirmed-IPP students are OUT of every task % in the existing views too. Built on dev for 1.5.0 (commit `0f44db8`): `isUnresolvedIPP` in `mathModel.ts` filters students before `taskStat` in both views; the homeroom report must pass measurable students the same way.
   *My reading, unconfirmed:* task-grain like the item above, so the two likely share one
   task-grain feed; "Current" for Math is current-year (task x grade x month model,
   [[project_current_mode_semantics]]). Still needs the 50-ft proposal (tables/fields) before building.
