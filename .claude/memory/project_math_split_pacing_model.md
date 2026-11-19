@@ -156,6 +156,19 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
   per-cycle unevenness; "Current" converges. Do not design a report-side correction.
 - **Scope:** "as much as possible but the chains will likely wait for 1.6.0" - build split pacing in
   1.5.0 and lay as much shared structure as is sensible; task chains / carry-forward = 1.6.0.
+- **Split detection (user 2026-11-19):** read homerooms BY SCHOOL on ingest, grades P-9, and build the
+  split guide from the homeroom's grade set - sections can't tell (each PS math section is ONE grade
+  because it carries grade-level outcomes). Teacher overrides therefore key to the HOMEROOM
+  (SchoolID + Homeroom). **ONE student of another grade makes a split** ("There are 1 student splits
+  in small schools we have so it needs to be 1 student") - no minimum-count threshold; surface the
+  homeroom's grade make-up + counts on the pacing screens so a stray PS record is visible.
+- **`DimHomeroomSection` (user idea 2026-11-19):** companion to DimHomeroom listing the mapped Math +
+  Literacy sections that make up each homeroom; also the basis for a one-click HOMEROOM card in the
+  entry picker (split teachers currently tick several sections). Saves stay section-based. Proposed:
+  table + ingest step with pacing in 1.5.0; the picker card as its own 50-ft item. Awaiting assent.
+- **Found while reading (must be handled in the build):** tvf_TeacherGroups' Math DoneStudentCount uses
+  each grade's tasks at the window's DEFAULT month - every default-month consumer (incl. Missing
+  results) needs listing before building split pacing.
 - STILL OPEN: where section/homeroom-scoped teacher overrides live (scope column vs parallel table) -
   pros/cons given 2026-11-19, awaiting the user's choice.
 
