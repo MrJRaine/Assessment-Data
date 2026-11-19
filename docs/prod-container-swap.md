@@ -1,10 +1,21 @@
 # Production Image Swap — `aw` container
 
+> **Currently live: `assessment-webapp:1.4.0`** (deployed 2026-11-18; git tag `v1.4.0`).
+> This is the version production should be running, and the version the
+> [disaster-recovery relaunch command](#5-disaster-recovery--relaunch-the-container) brings back.
+> It is updated in the release commit every time a new version goes live — if this line and the
+> newest release in [`CHANGELOG.md`](../CHANGELOG.md) disagree, trust neither and check the host
+> (step 1's `podman inspect`).
+>
+> **Previous version (rollback target): `assessment-webapp:1.3.0`** (live 2026-10-27 to 2026-11-18).
+
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.7.0` → `1.0.0` on 2026-10-02
-(writing trait exclusion — **requires live SQL first**, see the prerequisite section below; this
-cutover also forced the move to `-p 0.0.0.0:3000:3000` and surfaced the WSL recovery gotchas —
-see the Troubleshooting section).
+running Podman container for a new one, and how to bring the container back if it stops or goes
+missing (section 5). Most recent cutover: `1.3.0` → `1.4.0` on 2026-11-18.
+
+Two things every cutover has to respect, both learned on the `1.0.0` cutover (2026-10-02): some
+releases **require live SQL first** (see the prerequisite section below), and the port binding must be
+`-p 0.0.0.0:3000:3000` because of how WSL forwards traffic (see the Troubleshooting section).
 
 ## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
 
@@ -127,16 +138,55 @@ Expect `aw  localhost/assessment-webapp:<NEW>  Up …` and `HTTP/1.1 200 OK` wit
 Then open **https://data.tcrce.ca**, sign in with Microsoft Entra, and click into a data screen
 (e.g. Students) to confirm real data renders on the new build.
 
-## 5. Update the disaster-recovery runbook
+## 5. Disaster recovery — relaunch the container
 
-IT's "container missing" relaunch command pins the image by reference. Update its final image argument
-to the **new** version tag, or a future full relaunch will revert the deploy:
+**This section is the disaster-recovery runbook.** There is no separate copy to keep in step: the
+commands below carry the real live version, not a placeholder, and are updated with every release.
+
+Use it when the site is down and the `aw` container is the problem. First see what state it is in
+(run on the prod host as Administrator):
 
 ```powershell
-wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 0.0.0.0:3000:3000 localhost/assessment-webapp:<NEW>"
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman ps -a --format '{{.Names}}  {{.Image}}  {{.Status}}'"
 ```
 
-Everything else in the DR runbook (IIS check, `podman start aw`, `/api/health`) is unchanged.
+**A. `aw` is listed but not `Up` (stopped / exited)** — start it; do not recreate it:
+
+```powershell
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman start aw"
+```
+
+If that fails with `Failed to get rootless runtime dir … /run/user/1001`, the host was rebooted or WSL
+was shut down — recreate the runtime dir first (see **Troubleshooting** below), then start it.
+
+**B. `aw` is not listed at all (container missing)** — relaunch it on the live version:
+
+```powershell
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman run -d --name aw --restart=unless-stopped --env-file /mnt/c/temp/.env.live --secret aw_auth_secret -e AUTH_SECRET_FILE=/run/secrets/aw_auth_secret --secret aw_login_secret -e AUTH_ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_login_secret --secret aw_wh_secret -e ENTRA_CLIENT_SECRET_FILE=/run/secrets/aw_wh_secret -p 0.0.0.0:3000:3000 localhost/assessment-webapp:1.4.0"
+```
+
+If that fails because the image is not on the host (`image not known`), load it from the release tar
+first, then run the command above again:
+
+```powershell
+wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman load -i /mnt/c/temp/assessment-webapp-1.4.0.tar"
+```
+
+If the three secrets are missing (`podman secret ls` shows none of `aw_auth_secret`,
+`aw_login_secret`, `aw_wh_secret`), stop and contact the project lead — the secrets are not in this
+repo and the container cannot start without them.
+
+**Then verify** exactly as in step 4: `podman ps` shows `aw  localhost/assessment-webapp:1.4.0  Up …`,
+`/api/health` returns `200 {"status":"ok"}`, and https://data.tcrce.ca loads after sign-in. A 502 from
+IIS while the container is healthy is the WSL relay issue in **Troubleshooting**, not the image.
+
+> **Release step (keeps this section true).** When a new version goes live, the release commit changes
+> the version everywhere it is written out in this file: the **Currently live** and **Previous
+> version** lines and the "Most recent cutover" sentence at the top; in this section the relaunch
+> command in **B**, the tar name under it, and the verify line; and the rollback image named in the
+> **Rollback** section. (Search the file for both version numbers — `<NEW>` / `<PREV>` placeholders
+> elsewhere stay as they are.)
+> A relaunch with a stale version would silently put production back on an old build.
 
 ---
 
@@ -187,7 +237,10 @@ wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw 
 ```
 
 If `:<PREV>` was pruned, reload it first: `podman load -i /mnt/c/temp/assessment-webapp-<PREV>.tar`.
-The previous prod build is `c30095b` (SHA-tagged); its rollback reference is `:c30095b`.
+`<PREV>` is the **Previous version** named at the top of this file (`1.3.0` while `1.4.0` is live), so
+today's rollback image is `localhost/assessment-webapp:1.3.0` and its tar is
+`assessment-webapp-1.3.0.tar`. Check the release's notes in [`CHANGELOG.md`](../CHANGELOG.md) before
+rolling back: if the release deployed live SQL, the older app may not match the warehouse any more.
 
 ## Cleanup (optional, once the new build is proven)
 
@@ -204,8 +257,9 @@ Keep at least the immediately-previous image for rollback.
 - **The image carries no secrets** — they're always supplied at run time via the env-file + podman
   secrets, so the same tar is safe to move between machines.
 - **Reboot recovery is separate** from a deploy: a Windows reboot stops WSL2 and rootless containers.
-  Bringing them back (`Start-Service W3SVC`, `podman start aw`) is covered in IT's server-recovery doc,
-  not here.
+  Bringing them back is in this file: make sure IIS is running (`Start-Service W3SVC` in an
+  Administrator PowerShell), then follow **section 5, case A** to start `aw` — including the
+  runtime-dir fix in **Troubleshooting** that this host needs after every reboot or `wsl --shutdown`.
 - Deploy and roll back by **version tag** (e.g. `:0.3.0`), which matches the release in `CHANGELOG.md`.
   The legacy `:token` tag is retired as of `0.3.0`; SHA-tagged builds before `0.3.0` remain valid
   rollback references (`:c30095b`, …).
