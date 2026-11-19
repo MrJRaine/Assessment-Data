@@ -50,7 +50,12 @@ ORDER BY COUNT(*) DESC;
 SELECT @NewAbbrev = Abbreviation FROM DimSchool WHERE SchoolID = @NewSchoolID;
 
 -- PREVIEW: who is being moved, from where to where.
-SELECT @StudentNumber AS StudentNumber, @OldSchoolID AS FromSchool, @NewSchoolID AS ToSchool, @Today AS MoveDate;
+SELECT s.FirstName, s.LastName, s.StudentNumber, s.Grade, s.Homeroom,
+       os.SchoolName AS FromSchool, ns.SchoolName AS ToSchool, @Today AS MoveDate
+FROM DimStudent s
+LEFT JOIN DimSchool os ON os.SchoolID = @OldSchoolID
+LEFT JOIN DimSchool ns ON ns.SchoolID = @NewSchoolID
+WHERE s.StudentNumber = @StudentNumber AND s.IsCurrent = 1;
 
 -- 1) Close the current version (yesterday), exactly as usp_MergeStudent would on a transfer.
 UPDATE DimStudent

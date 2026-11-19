@@ -25,6 +25,25 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [1.4.0] — 2026-11-18
 
+> **Server-side patches since 1.4.0 shipped** — warehouse-only SQL, deployed live, **no new container or version bump**:
+> - **2026-11-19 — A result saved for a student who has changed schools now stays with the school that
+>   recorded it.** When a teacher saved a result for a student who had since transferred, it was attached
+>   to the student's record at the *new* school, so a cycle-filtered report could show it under the wrong
+>   school. The three save procedures (`usp_UpsertReadingAssessment`, `usp_UpsertWritingAssessment`,
+>   `usp_UpsertMathAssessment`) now bind a result to the student's record at the school of the class it
+>   was entered from (coded 2026-10-30, held out of the 1.4.0 release, now live). A one-time repair moved
+>   812 stored results onto the record they belong to: 12 saved after a transfer (Math 6, Reading 4,
+>   Writing 2) and 800 that the 2026-10-13 recovery had pointed at a later record of the same student
+>   (Math 702, Reading 74, Writing 24). Only the link to the student record changed — no score, date or
+>   entry details. Every changed row is logged in `dbo.RepairLog_FactStudentKeyRebind_20261118` (old and
+>   new link), which is also the rollback source. Not included: 10 results whose linked record ended
+>   before the result date at the same school (unexplained, left as they were). Verified on live by the
+>   procedure check (3 of 3 carry the binding) and the repair's own check (812 of 812 applied). The
+>   transfer path was not exercised on dev before going live — dev has no students who changed schools.
+>   SQL: `sql/deploy/live_1.4.0/patch_upsert_section_school_binding_2026-11-18.sql`, then
+>   `repair_rebind_1_capture_and_precheck.sql` and `repair_rebind_2_apply.sql` (rollback:
+>   `repair_rebind_3_rollback.sql`).
+
 > Reports release. Renamed from the 1.3.1 candidate 2026-11-13: the burst grew past a patch — the
 > Missing results report and the Summary-tree filter sections are new features, so this shipped as a
 > minor release. Live 2026-11-18 (container `assessment-webapp:1.4.0`).
@@ -39,8 +58,8 @@ with `0.3.0`, so earlier detail is approximate.
    (`tvf_StudentCohortMathTrend`, `tvf_MissingDataAll`, `tvf_MissingDataGroup`); read-only functions,
    no table data written.
 
-Not shipped (held): the 2026-10-30 section-school binding change to the three
-`usp_Upsert*Assessment` procedures — server-side only, no dev test on record.
+The 2026-10-30 section-school binding change to the three `usp_Upsert*Assessment` procedures was held
+out of the release itself and went live on 2026-11-19 as the server-side patch above.
 
 ### Fixed
 - **Math data entry now enforces the IPP confirmation gate.** A student flagged for a Math IPP but

@@ -21,8 +21,8 @@
  * WRITES: creates and fills ONE new table, dbo.RepairLog_FactStudentKeyRebind_20261118
  *         (one row per result to re-bind: fact id, student number, old key, new key).
  *         It is the audit record and the rollback source. Not granted to the app.
- *         RUN-ONCE: the CREATE fails with "already exists" on a second run - that is
- *         intended, so a rerun can never overwrite the record of the old keys.
+ *         RERUN: the CREATE fails with "already exists" (harmless) and the capture
+ *         skips any result already logged, so the old keys are never overwritten or duplicated.
  * Region: Canada East (PIIDPA compliant)
  *
  * RULE (the same as the patched save procedures): entry school = the saver's roster
@@ -124,7 +124,11 @@ SELECT c.Subject, c.FactID, c.StudentNumber, c.AssessmentWindowID, c.AssessmentD
                  THEN 1 ELSE 0 END AS BIT),
        CAST(GETDATE() AS DATETIME2(0))
 FROM Candidates c
-WHERE c.RepairGroup IS NOT NULL;
+WHERE c.RepairGroup IS NOT NULL
+  -- Rerun guard: a result already in the log is never captured twice (the CREATE above
+  -- failing on a rerun does NOT stop this batch).
+  AND NOT EXISTS (SELECT 1 FROM dbo.RepairLog_FactStudentKeyRebind_20261118 x2
+                  WHERE x2.Subject = c.Subject AND x2.FactID = c.FactID);
 GO
 
 /*******************************************************************************
