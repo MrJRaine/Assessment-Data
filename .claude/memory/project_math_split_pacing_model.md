@@ -144,6 +144,79 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
   walking `CarriedFromMathTaskKey` links at read time (immediate-predecessor column already in the
   footprint). Raise before building.
 
+
+## 2026-11-19 — build starts as the main 1.5.0 feature; user rulings (verbatim where quoted)
+
+- **Regional editing = a NEW ROLE** ("it needs to be a new role") — not an existing role with a flag.
+- **Teachers of triple-grade splits or non-contiguous 2-grade splits "automatically see it for those
+  homerooms"** — no flag/grant; visibility is derived from the homeroom's composition.
+- **Reports:** results are dated, so "within a cycle it's going to look a little messy but as we move
+  through the year, the current will start to fill out and give a full picture" of all three groups'
+  performance on a task. I.e. NO special report handling for off-cycle split tasks - accept the
+  per-cycle unevenness; "Current" converges. Do not design a report-side correction.
+- **Scope:** "as much as possible but the chains will likely wait for 1.6.0" - build split pacing in
+  1.5.0 and lay as much shared structure as is sensible; task chains / carry-forward = 1.6.0.
+- **Split detection (user 2026-11-19):** read homerooms BY SCHOOL on ingest, grades P-9, and build the
+  split guide from the homeroom's grade set - sections can't tell (each PS math section is ONE grade
+  because it carries grade-level outcomes). Teacher overrides therefore key to the HOMEROOM
+  (SchoolID + Homeroom). **ONE student of another grade makes a split** ("There are 1 student splits
+  in small schools we have so it needs to be 1 student") - no minimum-count threshold; surface the
+  homeroom's grade make-up + counts on the pacing screens so a stray PS record is visible.
+- **`DimHomeroomSection` (user idea 2026-11-19):** companion to DimHomeroom listing the mapped Math +
+  Literacy sections that make up each homeroom; also the basis for a one-click HOMEROOM card in the
+  entry picker (split teachers currently tick several sections). Saves stay section-based. Proposed:
+  table + ingest step with pacing in 1.5.0; the picker card as its own 50-ft item. Awaiting assent.
+- **Found while reading (must be handled in the build):** tvf_TeacherGroups' Math DoneStudentCount uses
+  each grade's tasks at the window's DEFAULT month - every default-month consumer (incl. Missing
+  results) needs listing before building split pacing.
+- **2026-11-19 decisions:** `DimHomeroomSection` companion table = YES ("Companion table works").
+  Data-entry migration back to HOMEROOM cards = pushed to **1.6.0** (user: "Changes to data entry to
+  migrate back to homerooms like we originally had will get pushed to 1.6.0").
+- **DEFAULT-MONTH CONSUMERS (swept 2026-11-19 by grep `AssessmentMonth` on DimMathTask joins; the
+  reading-benchmark `drb.AssessmentMonth` hits are unrelated):**
+  MUST follow the effective month or split pacing breaks/misreports: `usp_UpsertMathAssessment`
+  (THROW 51018 rejects a task whose default month <> the cycle month - a split save would FAIL),
+  `tvf_TeacherRosterMath` (entry grid), `tvf_TeacherGroups` (Math done count), `tvf_UserAssessmentWindows`
+  (cycle-card applicable-task count), `tvf_MissingDataAll` / `tvf_MissingDataGroup` (configured vs filled).
+  REPORT feeds (user decision pending): `tvf_StudentCohortMath`, `tvf_StudentCohortMathAll`,
+  `tvf_StudentCohortMathTrend`, `tvf_StudentCohortRWM`, `tvf_StudentRWMHistory` - in CYCLE view they
+  list tasks at the cycle's default month and read results only from that cycle's windows, so a moved
+  task shows BLANK in its default cycle (a miss under Blanks = count as 0, and against the 80% rule)
+  and its result is NOT listed in the cycle it was actually done in; "Current" shows everything.
+  No `AssessmentMonth` reference in webapp/src.
+- **REPORT RULING (user 2026-11-19, supersedes "no report change"):** "Display in the reports will need
+  to expand to anything with a default or override for that benchmark month." I.e. a cycle view's task
+  list = tasks whose DEFAULT month is the cycle's month UNION tasks with any OVERRIDE (regional or
+  homeroom) to that month. *My reading, to confirm:* a task that is not due for a given student in
+  that cycle is NOT a blank/miss for them - it is left out of their denominators.
+- **UNITS -> TOPICS PIVOT COMING (user 2026-11-19, context - do NOT build now):** the current unit
+  layout is inherited from the math team's hand-made single-class system, forced to line up so results
+  tally at many levels; in practice each SPLIT had its own unit/question numbering. From December 2026
+  the user starts working with the math team on moving from arbitrary units to grouping by TOPIC -
+  "likely keeping the table structure we have already and just creating a numbered reference chart to
+  equate numbers in the unit column to a specific topic." *My reading:* keep `UnitName`/`UnitOrder`
+  display-only, never key anything new on them, and label groupings generically in new screens so a
+  unit->topic relabel is a lookup, not a rebuild.
+- **DECISIONS 2026-11-19 (user, via question dialog):**
+  (1) Teacher overrides = their OWN table, keyed school + homeroom + task (not a scope column).
+  (2) New regional pacing role = a `StaffAppAccess` capability (staff-access admin page).
+  (3) MONTHS: regional editor may pick ANY month, with a WARNING popup on save when the month is not
+  one of this school year's currently-active cycles' months; a classroom teacher may pick ONLY the
+  benchmark months of cycles in the current school year.
+  (4) TEACHER TAG + YEAR-END FLUSH + RE-USE (verbatim): "Tag the teacher onto any override entries and
+  then at end of year, we will flush the teacher overrides to a backup table marking them with the
+  year and then the next year, if a teacher is teaching the same split, they will have an option to
+  re-use last year's task arrangement and we'll just copy it into the new year's override from the
+  backup."
+  (5) Chain structure (empty `MathTaskLink` + 3 fact columns) goes in 1.5.0 - taken from "as much as
+  possible"; stated back to the user 2026-11-19, not contradicted.
+  (6) NOT-DUE CELLS in cycle views - user's answer, verbatim: "we need to know what to expect from that
+  homeroom and tally it that way first, or better yet, when they save an assessment we tag it with the
+  number of items left in that section and pull from that?" -> tally against the homeroom's EXPECTED
+  task set; the stamp-a-count-on-save idea was floated as a question - my recommendation given
+  2026-11-19 (expected set from the dated pacing tables; no per-result count), awaiting the user.
+  pros/cons given 2026-11-19, awaiting the user's choice.
+
 ## OPEN — none; footprint locked
 
 All user-authored tables carry actor tracking per the app-wide rule [[project_user_authored_is_auditable]]
@@ -158,3 +231,10 @@ leadership GUI. Also flagged for soon: operational audit logs (maintenance / ing
 - `DimMathTask` = SCD Type 1 (+ `ActiveFlag` soft-retire); MUST stay Type 1 (Type 2 mints a new `MathTaskKey`,
   breaking links/rollup/provenance).
 - `usp_LoadMathTasks` seeds tasks from CSV (incremental, upsert on natural key); `OutcomeCode` already loaded.
+
+## Build log (1.5.0)
+- 2026-11-19: steps 1-2 WRITTEN (not yet run on dev at time of writing): `sql/deploy/live_1.5.0/step1_structure.sql`,
+  `step2_homeroom_ingest.sql`. User confirmed: active students only (EnrollStatus = 0), Pre-Primary left out,
+  and "any failure should pop a flag" -> the ingest cycle THROWs 51060 + logs an IngestRunLog 'Failed' row when
+  the homeroom rebuild yields no homerooms while active P-9 students have homerooms; a normal run logs a
+  'Load' / 'homerooms' row with the current homeroom count. Next: step 3 (shared effective-month lookup).

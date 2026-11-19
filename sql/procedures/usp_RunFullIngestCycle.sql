@@ -5,6 +5,8 @@
  *          for the job scheduler, manual full ingests, and dev rebuilds
  *          from the lakehouse files.
  * Created: 2026-05-01
+ * Modified: 2026-11-19 (1.5.0) - + Phase 3.6: EXEC usp_RebuildHomerooms after the roster rebuild
+ *           (homeroom split detection for split-grade math pacing). File now ends with GO.
  * Region: Canada East (PIIDPA compliant)
  *
  * Why an orchestrator (vs inline cascade between merge procs):
@@ -184,6 +186,40 @@ BEGIN
     EXEC usp_RebuildRosterMembership;
 
     -- ------------------------------------------------------------------------
+    -- Phase 3.6 (1.5.0): Rebuild the homeroom picture - which homerooms are split
+    -- classes (DimHomeroom / DimHomeroomComposition) and which Math + Literacy
+    -- sections make up each homeroom (DimHomeroomSection). Split-grade math pacing
+    -- reads these. Derived from DimStudent, so it runs after the data quality gate
+    -- like the roster rebuild. (See usp_RebuildHomerooms.sql.)
+    -- ------------------------------------------------------------------------
+    EXEC usp_RebuildHomerooms @EffectiveDate = @EffectiveDate;
+
+    -- Flag a homeroom rebuild that produced nothing while there ARE active P-9 students with a
+    -- homeroom (user 2026-11-19: any failure should pop a flag). Fabric has no TRY/CATCH, so an
+    -- ERROR inside the rebuild already aborts the cycle here; this catches the silent case. The
+    -- run-log row below also marks how far a run got: 'Started' with no 'Homerooms' row and no
+    -- 'Completed' row = it died in the roster or homeroom rebuild.
+    DECLARE @HomeroomCount INT;
+    SELECT @HomeroomCount = COUNT(*) FROM dbo.DimHomeroom WHERE IsCurrent = 1;
+
+    IF @HomeroomCount = 0
+       AND EXISTS (SELECT 1
+                   FROM DimStudent s
+                   INNER JOIN DimGrade g ON g.GradeCode = s.Grade
+                   WHERE s.IsCurrent = 1 AND s.EnrollStatus = 0
+                     AND g.GradeOrder BETWEEN 0 AND 9
+                     AND s.Homeroom IS NOT NULL AND LTRIM(RTRIM(s.Homeroom)) <> '')
+    BEGIN
+        INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+        VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', 'homerooms', 0, 'Failed',
+                'homeroom rebuild produced no current homerooms although active P-9 students have homerooms', GETDATE());
+        ;THROW 51060, 'usp_RunFullIngestCycle halted: the homeroom rebuild produced no homerooms. Student data merged, but split-grade math pacing has no homeroom picture. See IngestRunLog.', 1;
+    END;
+
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'homerooms', @HomeroomCount, 'Loaded', NULL, GETDATE());
+
+    -- ------------------------------------------------------------------------
     -- Phase 4: Cycle-level success audit. Written only on a fully clean run
     -- (data quality gate passed) — useful as a "cycle boundary" marker when
     -- scanning the audit log.
@@ -213,3 +249,4 @@ BEGIN
     VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', NULL, NULL, 'Completed',
             CONCAT('cycle complete | duration ', CAST(DATEDIFF(SECOND, @CycleStart, GETDATE()) AS VARCHAR(10)), 's'), GETDATE());
 END;
+GO
