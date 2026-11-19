@@ -6,12 +6,16 @@
 > It is updated in the release commit every time a new version goes live — if this line and the
 > newest release in [`CHANGELOG.md`](../CHANGELOG.md) disagree, trust neither and check the host
 > (step 1's `podman inspect`).
+>
+> **Previous version (rollback target): `assessment-webapp:1.3.0`** (live 2026-10-27 to 2026-11-18).
 
 How to deploy a new web-app image to the production server (`data.tcrce.ca`) by swapping the
-running Podman container for a new one. Most recent cutover: `0.7.0` → `1.0.0` on 2026-10-02
-(writing trait exclusion — **requires live SQL first**, see the prerequisite section below; this
-cutover also forced the move to `-p 0.0.0.0:3000:3000` and surfaced the WSL recovery gotchas —
-see the Troubleshooting section).
+running Podman container for a new one, and how to bring the container back if it stops or goes
+missing (section 5). Most recent cutover: `1.3.0` → `1.4.0` on 2026-11-18.
+
+Two things every cutover has to respect, both learned on the `1.0.0` cutover (2026-10-02): some
+releases **require live SQL first** (see the prerequisite section below), and the port binding must be
+`-p 0.0.0.0:3000:3000` because of how WSL forwards traffic (see the Troubleshooting section).
 
 ## Streaming / response-buffering settings (must persist — re-apply on any IIS/host rebuild)
 
@@ -177,9 +181,11 @@ repo and the container cannot start without them.
 IIS while the container is healthy is the WSL relay issue in **Troubleshooting**, not the image.
 
 > **Release step (keeps this section true).** When a new version goes live, the release commit changes
-> the version everywhere it is written out in this file: the **Currently live** line at the top, and
-> in this section the relaunch command in **B**, the tar name under it, and the verify line. (Search
-> the file for the old version number — `<NEW>` / `<PREV>` placeholders elsewhere stay as they are.)
+> the version everywhere it is written out in this file: the **Currently live** and **Previous
+> version** lines and the "Most recent cutover" sentence at the top; in this section the relaunch
+> command in **B**, the tar name under it, and the verify line; and the rollback image named in the
+> **Rollback** section. (Search the file for both version numbers — `<NEW>` / `<PREV>` placeholders
+> elsewhere stay as they are.)
 > A relaunch with a stale version would silently put production back on an old build.
 
 ---
@@ -231,7 +237,10 @@ wsl -u appuser bash -c "export XDG_RUNTIME_DIR=/run/user/1001 && podman stop aw 
 ```
 
 If `:<PREV>` was pruned, reload it first: `podman load -i /mnt/c/temp/assessment-webapp-<PREV>.tar`.
-The previous prod build is `c30095b` (SHA-tagged); its rollback reference is `:c30095b`.
+`<PREV>` is the **Previous version** named at the top of this file (`1.3.0` while `1.4.0` is live), so
+today's rollback image is `localhost/assessment-webapp:1.3.0` and its tar is
+`assessment-webapp-1.3.0.tar`. Check the release's notes in [`CHANGELOG.md`](../CHANGELOG.md) before
+rolling back: if the release deployed live SQL, the older app may not match the warehouse any more.
 
 ## Cleanup (optional, once the new build is proven)
 
@@ -248,8 +257,9 @@ Keep at least the immediately-previous image for rollback.
 - **The image carries no secrets** — they're always supplied at run time via the env-file + podman
   secrets, so the same tar is safe to move between machines.
 - **Reboot recovery is separate** from a deploy: a Windows reboot stops WSL2 and rootless containers.
-  Bringing them back (`Start-Service W3SVC`, `podman start aw`) is covered in IT's server-recovery doc,
-  not here.
+  Bringing them back is in this file: make sure IIS is running (`Start-Service W3SVC` in an
+  Administrator PowerShell), then follow **section 5, case A** to start `aw` — including the
+  runtime-dir fix in **Troubleshooting** that this host needs after every reboot or `wsl --shutdown`.
 - Deploy and roll back by **version tag** (e.g. `:0.3.0`), which matches the release in `CHANGELOG.md`.
   The legacy `:token` tag is retired as of `0.3.0`; SHA-tagged builds before `0.3.0` remain valid
   rollback references (`:c30095b`, …).

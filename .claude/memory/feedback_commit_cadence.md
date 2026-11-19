@@ -30,7 +30,7 @@ change lands in dev ([[feedback_changelog_as_you_go]]), so the cutover only drop
 `gh release create` (borrow the token via `git credential fill` → `GH_TOKEN` — [[reference_gh_cli_token_via_git]]),
 `main→dev` back-merge, and reconcile `dev-impersonation`. **ALSO in the release commit (added
 2026-11-19, user-approved): update `docs/prod-container-swap.md` to the new version** — the "Currently
-live" line at the top and every written-out version in section 5 (the DR relaunch command, the tar name,
+live" + "Previous version" lines and the "Most recent cutover" sentence at the top, the rollback image named in the Rollback section, and every written-out version in section 5 (the DR relaunch command, the tar name,
 the verify line). **Why:** that section IS the disaster-recovery runbook (user 2026-11-18: IT "are now
 just using the documentation that is kept in the GH"); I had silently dropped the old "update the DR
 runbook" hand-off step for ~3 months, leaving a placeholder where the live version should be. I wrongly deferred the v1.0.0 ritual as "the
