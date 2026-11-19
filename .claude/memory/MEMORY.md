@@ -22,7 +22,7 @@
 - [No Wrap Prompts](feedback_no_wrap_prompts.md) — never suggest wrapping; only run wrap on explicit trigger.
 - [Left Off Notes Newest-First](feedback_left_off_newest_first.md) — insert each Left Off note at the TOP of the chain in docs/implementation-plan.md; keep .claude/ + .github/ skill mirrors in sync.
 - [Entra-Only Auth (dev + live)](feedback_entra_only_auth.md) — dev/main have NO dev-auth bypass; it lives ONLY on dev-impersonation — revert the removal commit there on each dev merge.
-- [Commit Cadence](feedback_commit_cadence.md) — commit AND push at logical checkpoints (incl. `dev-impersonation` on every reconcile); PRs only when instructed; the release ritual fires automatically on a successful LIVE deploy.
+- [Commit Cadence](feedback_commit_cadence.md) — commit AND push at logical checkpoints (incl. `dev-impersonation` on every reconcile); PRs only when instructed; the release ritual fires automatically on a successful LIVE deploy and ALSO updates the live/previous version in `docs/prod-container-swap.md` (the DR runbook).
 - [Changelog As We Go](feedback_changelog_as_you_go.md) — update CHANGELOG.md (+ patchNotes.ts if user-visible) AS each change lands; rules for repairs vs Fixed and for between-release server-side patches are in the file.
 - [v1.0.0 Release Changelog](project_v1_release_changelog.md) — TWO surfaces, don't conflate: in-app What's New holds the current release only; CHANGELOG.md keeps full history.
 - [No Unilateral Scope Decisions](feedback_no_unilateral_scope_decisions.md) — surface scope tradeoffs as questions; never hardcode ASSESSMENT-METHODOLOGY rules — build the config knob.
@@ -70,7 +70,7 @@
 - [Assessment Types](project_assessment_types.md) — Reading / Writing / Math; one type per window; Math in 1.0. ScaleSystem reading-only.
 - [Math IPP Display Rules](project_math_ipp_display_rules.md) — RULED 2026-11-17: uniform 80%-of-ALL-tasks threshold; earned levels count everywhere; below threshold = IPP badge; unresolved = unmeasured.
 - [Math P-6 Assessment Model](project_math_assessment_model.md) — task-based binary mastery; open TODOs in the file.
-- [Math Split-Grade Pacing Model](project_math_split_pacing_model.md) — DESIGN 2026-09-21 (not built): default month on task + SCD composition exceptions; footprint locked.
+- [Math Split-Grade Pacing Model](project_math_split_pacing_model.md) — BUILD IN PROGRESS (1.5.0 main feature): split = HOMEROOM grade set per school (one student counts); regional guide by grade combination + teacher overrides in their own table; READ the 2026-11-19 rulings + build log before touching it.
 - [Math Report Blank-Roster Bug](project_math_report_blank_roster_bug.md) — grades with no seeded math tasks drop the whole class; app-side fix DEFERRED (user call), don't re-propose.
 - [Math Task Month Mis-coding](project_math_task_month_miscoding.md) — SCoR months = 9,11,1,3,4,6; Math team mis-codes Feb/May for Jan/Apr → fix at CONVERSION time, before ingest.
 - [User-Authored Data Is Auditable](project_user_authored_is_auditable.md) — anything a user authors/edits tracks WHO created, changed or removed it. TODO: extend to maintenance/ingest/cycles ops.

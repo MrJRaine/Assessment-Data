@@ -523,3 +523,18 @@ on live:
   rule D. A same-day artifact row must be DELETED (it is an error corrected within the day, not
   history). Predicate that makes the delete safe: ActiveFlag=0 AND StartDate=EndDate (legitimate
   same-day closures keep ActiveFlag=1).
+
+## A statement cannot mix catalog views with user tables (Msg 15816, 2026-11-19)
+
+`SELECT ... FROM sys.objects JOIN sys.sql_modules ... UNION ALL SELECT ... FROM dbo.SomeUserTable` fails
+with `Msg 15816: The query references an object that is not supported in distributed processing mode.`
+Catalog views (`sys.objects`, `sys.sql_modules`, `sys.columns`, `sys.tables`) run on the front end; a user
+table runs distributed - one statement cannot do both (UNION, JOIN or subquery). **Split into separate
+statements / result grids.** Catalog-only statements are fine, and so is `IF NOT EXISTS (SELECT 1 FROM
+sys.columns ...) ALTER TABLE ...`. Also treat `OBJECT_NAME()` as unproven - join `sys.tables` for the name.
+
+## A failed CREATE does not stop the next batch (2026-11-19)
+
+"Run-once" protection by letting `CREATE TABLE` fail on a rerun is NOT protection: the error ends only that
+batch, and every later batch after `GO` still runs (an `INSERT` appended duplicate rows to a repair log).
+Guard the data statement itself (`WHERE NOT EXISTS (...)`), never rely on an earlier batch failing.
