@@ -169,6 +169,21 @@ re-grouping, `DimHomeroom` + its ingest step, the leadership GUI.
 - **Found while reading (must be handled in the build):** tvf_TeacherGroups' Math DoneStudentCount uses
   each grade's tasks at the window's DEFAULT month - every default-month consumer (incl. Missing
   results) needs listing before building split pacing.
+- **2026-11-19 decisions:** `DimHomeroomSection` companion table = YES ("Companion table works").
+  Data-entry migration back to HOMEROOM cards = pushed to **1.6.0** (user: "Changes to data entry to
+  migrate back to homerooms like we originally had will get pushed to 1.6.0").
+- **DEFAULT-MONTH CONSUMERS (swept 2026-11-19 by grep `AssessmentMonth` on DimMathTask joins; the
+  reading-benchmark `drb.AssessmentMonth` hits are unrelated):**
+  MUST follow the effective month or split pacing breaks/misreports: `usp_UpsertMathAssessment`
+  (THROW 51018 rejects a task whose default month <> the cycle month - a split save would FAIL),
+  `tvf_TeacherRosterMath` (entry grid), `tvf_TeacherGroups` (Math done count), `tvf_UserAssessmentWindows`
+  (cycle-card applicable-task count), `tvf_MissingDataAll` / `tvf_MissingDataGroup` (configured vs filled).
+  REPORT feeds (user decision pending): `tvf_StudentCohortMath`, `tvf_StudentCohortMathAll`,
+  `tvf_StudentCohortMathTrend`, `tvf_StudentCohortRWM`, `tvf_StudentRWMHistory` - in CYCLE view they
+  list tasks at the cycle's default month and read results only from that cycle's windows, so a moved
+  task shows BLANK in its default cycle (a miss under Blanks = count as 0, and against the 80% rule)
+  and its result is NOT listed in the cycle it was actually done in; "Current" shows everything.
+  No `AssessmentMonth` reference in webapp/src.
 - STILL OPEN: where section/homeroom-scoped teacher overrides live (scope column vs parallel table) -
   pros/cons given 2026-11-19, awaiting the user's choice.
 
