@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import type { MathCohortRow } from '@/lib/data'
 import {
   type Mark, type Task, type Unit, type Student, type Grade, type BlankMode,
-  rk, BAND_HEX, BANDS, bandForAvg, heatClass, buildGrades, buildMarks, unitStat, taskStat, countUnit, meanOf,
+  rk, BAND_HEX, BANDS, bandForAvg, heatClass, buildGrades, buildMarks, unitStat, taskStat, isUnresolvedIPP, countUnit, meanOf,
 } from '../mathModel'
 import { BandCell, TaskCell } from '../mathCells'
 
@@ -57,7 +57,8 @@ export default function MathCohortView({ rows }: { rows: MathCohortRow[] }) {
   // Class % for a single task across the given students — follows the Blanks mode (shared taskStat):
   // excluded = share of scored (1/0) cells that are 1; count-as-0 = unmarked students are misses.
   function taskPct(students: Student[], taskKey: string): number | null {
-    return taskStat(students.map((s) => mark(s.studentKey, taskKey)), blankMode).p
+    // A student with an unconfirmed IPP is unmeasured, so they are left out of the task % entirely.
+    return taskStat(students.filter((s) => !isUnresolvedIPP(s)).map((s) => mark(s.studentKey, taskKey)), blankMode).p
   }
   // Cohort roll-up for a unit = mean of the students' unit averages (colours the collapsed unit row).
   // Any non-null average counts (a confirmed IPP's earned level included); unresolved IPPs are

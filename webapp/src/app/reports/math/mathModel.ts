@@ -98,7 +98,12 @@ export function meanOf(avgs: (number | null)[]): number | null {
  *   'zero'    — yes / (yes + no + blank): an unmarked student counts as a miss, the same way
  *               unitStat widens a unit's denominator.
  * An 'ipp' cell (a task a confirmed IPP's plan deletes) is never in the denominator, in either mode.
+ * Callers pass MEASURABLE students only (see isUnresolvedIPP): a flagged-but-unconfirmed IPP is
+ * unmeasured until the teacher answers, so any marks they already hold count toward nothing.
  */
+/** Flagged for an IPP but not yet confirmed Yes/No: unmeasured everywhere - no level, and (1.5.0,
+ * user ruling 2026-11-19) left out of every task % too. Their marks stay visible in their own row. */
+export const isUnresolvedIPP = (s: { eligible: boolean; mathIPP: boolean }) => !s.eligible && !s.mathIPP
 export interface TaskStat { p: number | null; yes: number; no: number; ipp: number; blank: number }
 export function taskStat(marks: Iterable<Mark>, blankMode: BlankMode): TaskStat {
   let yes = 0, no = 0, ipp = 0, blank = 0
