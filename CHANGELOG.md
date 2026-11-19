@@ -13,6 +13,19 @@ with `0.3.0`, so earlier detail is approximate.
 
 ## [Unreleased] — 1.5.0-dev
 
+### In progress — split-grade math pacing (not user-visible yet)
+- **Steps 1–2 written 2026-11-19, on dev only once run.** Structure for split-grade pacing: new tables
+  `DimHomeroomComposition`, `DimHomeroom` (dated history of each school homeroom's grade
+  combination), `DimHomeroomSection` (the Math + Literacy sections that make up a homeroom),
+  `MathTaskPacingException` (regional guide), `MathTaskPacingHomeroomOverride` (+ `…Archive`, a
+  teacher's own pacing for one homeroom) and `MathTaskLink`; new columns
+  `StaffAppAccess.CanManageMathPacing` and three empty chain columns on `FactAssessmentMath`
+  (`CarriedFromMathTaskKey`, `CarriedFromMonth`, `OutcomeCode` — unused until task chains, 1.6.0).
+  New `usp_RebuildHomerooms`, called from `usp_RunFullIngestCycle` after the roster rebuild: a
+  homeroom is a split when its active P–9 students span more than one grade (one student is
+  enough). Nothing reads these yet, so entry and reports are unchanged.
+  SQL: `sql/deploy/live_1.5.0/step1_structure.sql`, `step2_homeroom_ingest.sql`.
+
 ### Fixed
 - **Math report task cells now follow the Blanks setting.** With Blanks set to "Count as 0", the
   per-task "% can do" cells in an expanded roster view (and in the class view) kept showing
