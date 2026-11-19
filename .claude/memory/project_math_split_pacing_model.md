@@ -231,3 +231,10 @@ leadership GUI. Also flagged for soon: operational audit logs (maintenance / ing
 - `DimMathTask` = SCD Type 1 (+ `ActiveFlag` soft-retire); MUST stay Type 1 (Type 2 mints a new `MathTaskKey`,
   breaking links/rollup/provenance).
 - `usp_LoadMathTasks` seeds tasks from CSV (incremental, upsert on natural key); `OutcomeCode` already loaded.
+
+## Build log (1.5.0)
+- 2026-11-19: steps 1-2 WRITTEN (not yet run on dev at time of writing): `sql/deploy/live_1.5.0/step1_structure.sql`,
+  `step2_homeroom_ingest.sql`. User confirmed: active students only (EnrollStatus = 0), Pre-Primary left out,
+  and "any failure should pop a flag" -> the ingest cycle THROWs 51060 + logs an IngestRunLog 'Failed' row when
+  the homeroom rebuild yields no homerooms while active P-9 students have homerooms; a normal run logs a
+  'Load' / 'homerooms' row with the current homeroom count. Next: step 3 (shared effective-month lookup).

@@ -444,6 +444,31 @@ BEGIN
     -- ------------------------------------------------------------------------
     EXEC usp_RebuildHomerooms @EffectiveDate = @EffectiveDate;
 
+    -- Flag a homeroom rebuild that produced nothing while there ARE active P-9 students with a
+    -- homeroom (user 2026-11-19: any failure should pop a flag). Fabric has no TRY/CATCH, so an
+    -- ERROR inside the rebuild already aborts the cycle here; this catches the silent case. The
+    -- run-log row below also marks how far a run got: 'Started' with no 'Homerooms' row and no
+    -- 'Completed' row = it died in the roster or homeroom rebuild.
+    DECLARE @HomeroomCount INT;
+    SELECT @HomeroomCount = COUNT(*) FROM dbo.DimHomeroom WHERE IsCurrent = 1;
+
+    IF @HomeroomCount = 0
+       AND EXISTS (SELECT 1
+                   FROM DimStudent s
+                   INNER JOIN DimGrade g ON g.GradeCode = s.Grade
+                   WHERE s.IsCurrent = 1 AND s.EnrollStatus = 0
+                     AND g.GradeOrder BETWEEN 0 AND 9
+                     AND s.Homeroom IS NOT NULL AND LTRIM(RTRIM(s.Homeroom)) <> '')
+    BEGIN
+        INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+        VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Cycle', 'homerooms', 0, 'Failed',
+                'homeroom rebuild produced no current homerooms although active P-9 students have homerooms', GETDATE());
+        ;THROW 51060, 'usp_RunFullIngestCycle halted: the homeroom rebuild produced no homerooms. Student data merged, but split-grade math pacing has no homeroom picture. See IngestRunLog.', 1;
+    END;
+
+    INSERT INTO dbo.IngestRunLog (CycleStart, LoggedAt, CallerUPN, Source, Phase, Topic, RowsLoaded, Status, Message, LastUpdated)
+    VALUES (@CycleStart, GETDATE(), @Caller, @Source, 'Load', 'homerooms', @HomeroomCount, 'Loaded', NULL, GETDATE());
+
     -- ------------------------------------------------------------------------
     -- Phase 4: Cycle-level success audit. Written only on a fully clean run
     -- (data quality gate passed) — useful as a "cycle boundary" marker when
