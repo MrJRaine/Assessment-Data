@@ -20,6 +20,8 @@
  *       already closed: NOT explained by timing; needs a closer look.
  *   DaysEndedBeforeResult - how far the version's end date sits before the result
  *       date (1 = closed "as of yesterday" on the day the result was dated).
+ *   ResultDate / SavedOnUTC / StoredVersionEnd / StoredVersionClosedOnUTC - the actual
+ *       dates, to match against the days an ingest ran (dates only, no identifiers).
  *   WhatChanged - which fields differ between the stored version and the one in
  *       force on the result date.
  ******************************************************************************/
@@ -72,7 +74,10 @@ Target AS (
     WHERE i.EntrySchoolID IS NOT NULL
 ),
 Judged AS (
-    SELECT i.Subject, i.StudentNumber,
+    SELECT i.Subject, i.StudentNumber, i.AssessmentDate AS ResultDate,
+           CAST(i.SubmissionTimestamp AS DATE) AS SavedOnUTC,
+           sv.EffectiveEndDate AS StoredVersionEnd,
+           CAST(sv.LastUpdated AS DATE) AS StoredVersionClosedOnUTC,
            CASE WHEN i.SubmissionTimestamp < sv.LastUpdated THEN 'SavedBeforeVersionClosed'
                 ELSE 'SavedAfterVersionClosed' END AS SavedVsClose,
            DATEDIFF(DAY, sv.EffectiveEndDate, i.AssessmentDate) AS DaysEndedBeforeResult,
@@ -89,12 +94,14 @@ Judged AS (
       AND sv.SchoolID = tv.SchoolID
       AND sv.EffectiveEndDate < i.AssessmentDate
 )
-SELECT j.Subject, j.SavedVsClose, j.DaysEndedBeforeResult, j.NewVersionStartsOnResultDate,
+SELECT j.Subject, j.ResultDate, j.SavedOnUTC, j.StoredVersionEnd, j.StoredVersionClosedOnUTC,
+       j.SavedVsClose, j.DaysEndedBeforeResult, j.NewVersionStartsOnResultDate,
        CASE WHEN j.WhatChanged = '' THEN '(none of grade/homeroom/program/status)' ELSE j.WhatChanged END AS WhatChanged,
        COUNT(*)                        AS FactRows,
        COUNT(DISTINCT j.StudentNumber) AS Students
 FROM Judged j
-GROUP BY j.Subject, j.SavedVsClose, j.DaysEndedBeforeResult, j.NewVersionStartsOnResultDate,
+GROUP BY j.Subject, j.ResultDate, j.SavedOnUTC, j.StoredVersionEnd, j.StoredVersionClosedOnUTC,
+         j.SavedVsClose, j.DaysEndedBeforeResult, j.NewVersionStartsOnResultDate,
          CASE WHEN j.WhatChanged = '' THEN '(none of grade/homeroom/program/status)' ELSE j.WhatChanged END
-ORDER BY j.Subject, j.SavedVsClose, j.DaysEndedBeforeResult;
+ORDER BY j.ResultDate, j.Subject;
 GO
