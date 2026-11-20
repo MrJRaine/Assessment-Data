@@ -2105,3 +2105,18 @@ image awaiting next session. prod container still :1.3.0 (no app change shipped 
 - Default-month consumers swept (list in the pacing memory): usp_UpsertMathAssessment 51018, tvf_TeacherRosterMath, tvf_TeacherGroups, tvf_UserAssessmentWindows, tvf_MissingDataAll/Group + five report feeds.
 
 **End state:** awlive `1.4.0` (:3000), awdev `1.5.0-dev` (:3001), awdev-impersonation `1.5.0-imp` (:3002) - both dev containers carry the two Math fixes, no pacing code yet. `main` = v1.4.0 + the docs hotfix; `dev` and `dev-impersonation` pushed.
+
+## Session 2026-11-20 — split pacing steps 1-2 run on dev; step 3 proposed; off-Fabric sizing talk; two report quick fixes queued
+
+**Accomplished**
+- User ran `step1_structure.sql` (8 tables + 4 columns confirmed) and `step2_homeroom_ingest.sql` on dev: 41 homerooms, 25 Straight / 16 AdjacentPair / 0 TeacherPaced; 48 Literacy + 26 Math homeroom-section rows.
+- New read-only scripts: `sql/scripts/diag_homeroom_section_coverage_dev.sql` (per-homeroom section coverage; NOT run), `sql/scripts/list_tables.sql` (table count + names, catalog only; NOT run).
+- Step 3 (shared month lookup) proposed as a 50-ft view; NOT approved; two questions open (cycle as-of date; seeding a TeacherPaced homeroom on dev).
+- Backlog: two post-1.5.0 report quick fixes recorded (writing student-list % meeting / not meeting at the column tops; sortable columns in the math drill + teacher report).
+
+**Decisions and discoveries**
+- User correction: sections-per-homeroom will not match grades-per-homeroom, because IPP students sit in separate IPP sections of the same course; IPP courses already show as entry cards (so they are mapped). Diagnostic header corrected.
+- Off-Fabric sizing discussion (exploratory, NO decision): my estimate for a regular SQL Server = 4 cores / 16 GB / 100 GB SSD, or Azure SQL General Purpose 2-4 vCores; Express's binding limit would be 4 cores + no parallel queries, not IOPS or size. User reported math storage at 1.48 MB after 2 cycles. Repo defines 60 tables (52 expected on live + repair tables; live count unverified).
+- "SQL database in Fabric" raised by the user as an alternative: my recommendation = a dev proof of concept on the roster + cohort reads, decided at the capacity right-sizing review, not during 1.5.0. To check first: 1 CU = 0.383 vCores (F8 about 3 vCores, F2 under 1), Canada East availability (docs suggest yes, unconfirmed), no customer-managed keys / VNet / geo-restore, the COPY INTO replacement, 15-minute idle release. Would reverse the "Warehouse, not SQL Database" decision - user has not opened it.
+
+**End state:** containers unchanged (awlive `1.4.0`, awdev `1.5.0-dev`, awdev-impersonation `1.5.0-imp`); no app code changed this session. Dev warehouse now has the 1.5.0 structure + filled homeroom tables; live untouched.

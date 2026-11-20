@@ -66,6 +66,15 @@ don't promote, defer, or re-order an item without asking. Prune this list as ite
 
 # OPEN — near-term (not release-bound)
 
+- **POST-1.5.0 QUICK FIXES — Report Modifications (user 2026-11-20, verbatim asks; NOT built, do
+  after 1.5.0 ships):**
+  1. "Add a roll up % of meeting and not meeting to the top of the columns in the student
+     list/teacher view of the writing reports."
+  2. "Make the columns in the math drill and teacher report sortable."
+  Before building either: read how the existing surfaces count (writing roll-up `RollupTree` %
+  measures + IPP exclusions; the reading drill is already sortable) and bring a 50-ft view - which
+  columns get the %, and what "not meeting" covers, are the user's call.
+
 - **Math report: expand a unit to see task-level achievement roll-ups when filtered to ONE grade
   (user 2026-11-18, NOT yet triaged to a release).** User's words: "when we filter down to a single
   grade in the math report … we can then expand the units to see the achievement roll ups of the

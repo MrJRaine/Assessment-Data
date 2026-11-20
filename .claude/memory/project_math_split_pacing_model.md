@@ -238,3 +238,20 @@ leadership GUI. Also flagged for soon: operational audit logs (maintenance / ing
   and "any failure should pop a flag" -> the ingest cycle THROWs 51060 + logs an IngestRunLog 'Failed' row when
   the homeroom rebuild yields no homerooms while active P-9 students have homerooms; a normal run logs a
   'Load' / 'homerooms' row with the current homeroom count. Next: step 3 (shared effective-month lookup).
+- 2026-11-20: steps 1-2 RUN ON DEV by the user. Step 1 grids: 8 tables, 4 columns. Step 2 grids: 41 current
+  homerooms = 25 Straight (480 students) + 16 AdjacentPair (320); combinations P / 1 / 4 / 5 / 7 / 8 straight,
+  'P,1' x4, '2,3', '3,4', '4,5' x4, '7,8' x6 - strings in grade order; sections attached: 48 Literacy, 26 Math.
+  **Dev has NO TeacherPaced homeroom** (no triple, no non-adjacent pair) - the teacher pacing path cannot be
+  tested on dev until one is seeded.
+- **Section count never equals grade count (user 2026-11-20):** students on an IPP are often in a separate IPP
+  section of the same course (so the PowerSchool grade book can carry different outcomes), so a homeroom
+  legitimately has MORE math sections than grades, on live especially. IPP courses already show as section
+  cards in data entry, i.e. they are mapped in DimCourseAssessment. Never use sections-per-homeroom = grades
+  as a check; `sql/scripts/diag_homeroom_section_coverage_dev.sql` compares students enrolled vs in the room.
+- **STEP 3 PROPOSED 2026-11-20, NOT approved, nothing written:** one inline function returning only the MOVED
+  tasks for a homeroom as of a date (school, homeroom, task, month, source teacher/regional); reads DimHomeroom
+  (version in force), MathTaskPacingHomeroomOverride (wins), MathTaskPacingException (by the homeroom's
+  CompositionKey); writes nothing; the 11 default-month consumers then use moved-month-else-default, student
+  matched by current school + homeroom. TWO OPEN QUESTIONS put to the user: (1) which date decides a cycle's
+  pacing - my recommendation: today while the cycle is open, the cycle's last day once closed; (2) seed a
+  TeacherPaced homeroom on dev (dev-only script making one triple + one non-adjacent pair).
