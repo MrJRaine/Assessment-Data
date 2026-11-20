@@ -13,13 +13,15 @@
  * ONE grid, one row per current homeroom (41 on dev). School and homeroom names
  * only - no students.
  * How to read it:
- *   MathSections = GradeCount for every P-5 homeroom  -> the low total is only
- *       because grade 7 / 8 homerooms have no mapped math course. Nothing to fix.
- *   MathSections = 0 on a P-5 homeroom                -> those students' math course
- *       is not in DimCourseAssessment (a dev seed gap), or they have no active math
- *       enrolment.
- *   MathSections = 1 on a split (GradeCount 2)        -> both grades sit in ONE math
- *       section on dev, or one grade's course is unmapped.
+ *   MathSections is NOT expected to equal GradeCount. Students on an IPP often sit
+ *   in a separate IPP section of the same course (so PowerSchool's grade book can
+ *   carry different outcomes), so a homeroom can legitimately have MORE math
+ *   sections than grades - on live especially (user 2026-11-20). The only signals:
+ *   MathSections = 0 on a P-5 homeroom -> those students' math course is not in
+ *       DimCourseAssessment, or they have no active math enrolment.
+ *   MathStudentsEnrolled < StudentCount on a P-5 homeroom -> some students' math
+ *       course (e.g. an IPP course code) is not in DimCourseAssessment.
+ *   Grade 7 / 8 homerooms show 0 - there is no mapped math course for them.
  ******************************************************************************/
 SELECT sch.SchoolName,
        h.Homeroom,
